@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Hasilan Code icon">
+  <g id="hasilan-code-icon">
+    <rect x="8" y="8" width="112" height="112" rx="24" fill="#05060a"/>
+    <rect x="8.5" y="8.5" width="111" height="111" rx="23.5" fill="none" stroke="#2c303b"/>
+    <path d="M64 22L104 44L64 66L24 44Z" fill="#6c6ff6"/>
+    <path d="M24 44L64 66L64 106L24 84Z" fill="#262a5f"/>
+    <path d="M104 44L64 66L64 106L104 84Z" fill="#4b8dff"/>
+    <path d="M24 44L64 66L64 82L24 60Z" fill="#8588ff" opacity="0.55"/>
+    <path d="M104 44L64 66L64 82L104 60Z" fill="#72a6ff" opacity="0.52"/>
+    <path d="M64 66L83 55L64 98Z" fill="#05060a" opacity="0.88"/>
+    <path d="M64 22L64 66L104 44Z" fill="#c8cbff" opacity="0.18"/>
+    <path d="M35 84L64 100L93 84" fill="none" stroke="#414753" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>
+  </g>
+</svg>

@@ -56,5 +56,5 @@
 		}
 	},
 	"include": ["scripts/model-catalog-protocol.ts", "scripts/model-catalog-protocol.test.ts", "packages/*/src/**/*", "packages/*/test/**/*", "packages/coding-agent/examples/**/*", "packages/agent/examples/**/*"],
-	"exclude": ["**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**"]
+	"exclude": ["**/dist/**", "packages/coding-agent/examples/extensions/gondolin/**", "packages/web-harness/**"]
 }
