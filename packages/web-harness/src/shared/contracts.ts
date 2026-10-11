@@ -9,14 +9,39 @@ export const modelSchema = Type.Object(
 	{ provider: Type.String({ minLength: 1 }), id: Type.String({ minLength: 1 }) },
 	{ additionalProperties: false },
 );
+export const thinkingSchema = Type.Object(
+	{
+		level: Type.Union([
+			Type.Literal("off"),
+			Type.Literal("minimal"),
+			Type.Literal("low"),
+			Type.Literal("medium"),
+			Type.Literal("high"),
+			Type.Literal("xhigh"),
+			Type.Literal("max"),
+		]),
+	},
+	{ additionalProperties: false },
+);
 export const sessionCreateSchema = Type.Object(
-	{ workspaceId: Type.String({ minLength: 1 }), model: Type.Optional(modelSchema) },
+	{
+		workspaceId: Type.String({ minLength: 1 }),
+		model: Type.Optional(modelSchema),
+		thinkingLevel: Type.Optional(thinkingSchema.properties.level),
+	},
 	{ additionalProperties: false },
 );
 export const promptSchema = Type.Object(
 	{
 		text: Type.String({ minLength: 1, maxLength: 1024 * 1024 }),
 		mode: Type.Union([Type.Literal("prompt"), Type.Literal("steer"), Type.Literal("followUp")]),
+	},
+	{ additionalProperties: false },
+);
+export const teamMessageSchema = Type.Object(
+	{
+		agentId: Type.String({ minLength: 1 }),
+		message: Type.String({ minLength: 1, maxLength: 1024 * 1024 }),
 	},
 	{ additionalProperties: false },
 );

@@ -6,7 +6,9 @@ import {
 	modelSchema,
 	promptSchema,
 	sessionCreateSchema,
+	teamMessageSchema,
 	terminalCreateSchema,
+	thinkingSchema,
 	workspaceCreateSchema,
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
@@ -66,6 +68,7 @@ async function main() {
 			] as unknown as ToolDefinition[],
 	});
 	teams = new TeamManager(registry, {
+		agentDir,
 		getLimits: () => settings.get().teams,
 		onStopSession: (id) => browser.closeSession(id),
 	});
@@ -143,8 +146,17 @@ async function main() {
 					if (parts[3] === "prompt" && method === "POST")
 						return reply(await teams.prompt(id, await readJson(request, promptSchema)), 202);
 					if (parts[3] === "abort" && method === "POST") return reply(await teams.stop(id));
+					if (parts[3] === "team-message" && parts.length === 4 && method === "POST") {
+						const { agentId, message } = await readJson(request, teamMessageSchema);
+						return reply(await teams.send(id, agentId, message), 202);
+					}
 					if (parts[3] === "model" && (method === "POST" || method === "PATCH")) {
 						await registry.setModel(id, await readJson(request, modelSchema));
+						return reply(registry.get(id));
+					}
+					if (parts[3] === "thinking" && method === "PATCH") {
+						const { level } = await readJson(request, thinkingSchema);
+						await registry.setThinkingLevel(id, level);
 						return reply(registry.get(id));
 					}
 				}
@@ -173,7 +185,8 @@ async function main() {
 					}
 				}
 				if (parts[1] === "credentials" && parts[2] === "search" && parts[3]) {
-					if (parts[3] !== "brave" && parts[3] !== "tavily") throw new HttpError(400, "Unknown search provider");
+					if (parts[3] !== "brave" && parts[3] !== "tavily" && parts[3] !== "exa" && parts[3] !== "firecrawl")
+						throw new HttpError(400, "Unknown search provider");
 					const provider: SearchProviderId = parts[3];
 					if (method === "PUT") {
 						const { key } = await readJson(request, credentialSchema);

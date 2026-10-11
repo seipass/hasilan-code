@@ -101,7 +101,7 @@ export function OAuthLogin({ provider, label, onComplete, onActiveChange, disabl
 		catch {
 			if (mounted.current) {
 				setRefreshFailed(true);
-				setError("ログインは完了しましたが、モデル一覧の更新または選択に失敗しました。もう一度反映してください。");
+				setError("ログインは完了しましたが、認証状態の更新に失敗しました。もう一度反映してください。");
 			}
 		} finally { if (mounted.current) setRefreshing(false); }
 	}

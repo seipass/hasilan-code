@@ -54,7 +54,7 @@ export async function searchJson(
 
 export function normalizeResults(
 	value: unknown,
-	snippetField: "description" | "content",
+	snippetField: "description" | "content" | "highlights",
 	limit: number,
 ): SearchResult["results"] {
 	if (!Array.isArray(value)) throw new Error("Search provider returned an invalid results list");
@@ -73,7 +73,12 @@ export function normalizeResults(
 		results.push({
 			title: result.title,
 			url: url.href,
-			snippet: typeof result[snippetField] === "string" ? result[snippetField] : "",
+			snippet:
+				typeof result[snippetField] === "string"
+					? result[snippetField]
+					: Array.isArray(result[snippetField])
+						? result[snippetField].filter((item): item is string => typeof item === "string").join(" ")
+						: "",
 		});
 		if (results.length >= limit) break;
 	}

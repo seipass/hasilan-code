@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { AgentSessionEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
+import { loadTeamProfiles } from "./team-profiles.ts";
+import { validateWorkflow, type WorkflowTask } from "./team-workflow.ts";
 
 export type RunStatus =
 	| "queued"
@@ -45,9 +47,12 @@ export interface PendingInput {
 	fromAgentId?: string;
 	status: "pending" | "undelivered";
 	delivered?: boolean;
+	/** Child completion status for which this input is the authoritative notice. */
+	completionRunId?: string;
 }
 export interface TeamOptions {
 	getLimits?: () => { maxConcurrentAgents: number; maxDepth: number };
+	agentDir?: string;
 	onStopSession?: (sessionId: string) => Promise<void>;
 }
 export interface AdmissionResult {
@@ -69,6 +74,7 @@ export interface SpawnTask {
 	task: string;
 	context?: string;
 	systemPrompt?: string;
+	profile?: string;
 	model?: ModelSelection;
 	tools?: string[];
 }
@@ -89,6 +95,7 @@ interface RuntimeRun {
 interface Waiter {
 	callerRunId: string;
 	targets: string[];
+	mode: "all" | "any";
 	finish: (timedOut: boolean) => void;
 }
 const terminalStatus: Record<RunStatus, boolean> = {
@@ -101,26 +108,32 @@ const terminalStatus: Record<RunStatus, boolean> = {
 	cancelled: true,
 	interrupted: true,
 };
+const taskSchema = Type.Object({
+	name: Type.String({ minLength: 1 }),
+	task: Type.String({ minLength: 1 }),
+	context: Type.Optional(Type.String()),
+	systemPrompt: Type.Optional(Type.String()),
+	profile: Type.Optional(Type.String({ minLength: 1 })),
+	model: Type.Optional(Type.Object({ provider: Type.String(), id: Type.String() })),
+	tools: Type.Optional(Type.Array(Type.String())),
+});
 const teamParameters = Type.Union([
+	Type.Object({ action: Type.Literal("spawn"), tasks: Type.Array(taskSchema, { minItems: 1, maxItems: 32 }) }),
 	Type.Object({
-		action: Type.Literal("spawn"),
+		action: Type.Literal("workflow"),
 		tasks: Type.Array(
-			Type.Object({
-				name: Type.String({ minLength: 1 }),
-				task: Type.String({ minLength: 1 }),
-				context: Type.Optional(Type.String()),
-				systemPrompt: Type.Optional(Type.String()),
-				model: Type.Optional(Type.Object({ provider: Type.String(), id: Type.String() })),
-				tools: Type.Optional(Type.Array(Type.String())),
-			}),
+			Type.Object({ ...taskSchema.properties, dependsOn: Type.Optional(Type.Array(Type.String())) }),
 			{ minItems: 1, maxItems: 32 },
 		),
+		timeoutMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 300000 })),
 	}),
+	Type.Object({ action: Type.Literal("profiles") }),
 	Type.Object({ action: Type.Literal("list") }),
 	Type.Object({ action: Type.Literal("send"), agentId: Type.String(), message: Type.String({ minLength: 1 }) }),
 	Type.Object({
 		action: Type.Literal("wait"),
 		agentIds: Type.Array(Type.String(), { minItems: 1 }),
+		mode: Type.Optional(Type.Union([Type.Literal("all"), Type.Literal("any")])),
 		timeoutMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 300000 })),
 	}),
 	Type.Object({ action: Type.Literal("stop"), agentId: Type.String() }),
@@ -322,6 +335,53 @@ export class TeamManager {
 			error instanceof Error ? error.message : String(error),
 		);
 	}
+	private async notifyParent(run: RunRecord): Promise<void> {
+		const child = this.agentById(run.agentId);
+		if (!child.parentAgentId) return;
+		const parent = this.agentById(child.parentAgentId);
+		if (!this.accepting || this.fenced.has(parent.agentId)) return;
+		const inputId = randomUUID();
+		const text = `[Team message inputId=${inputId} from=${child.agentId}]\nRun ${run.runId} (${child.name}) ${run.status}${run.result === undefined ? "" : `\nResult:\n${run.result}`}${run.error === undefined ? "" : `\nError:\n${run.error}`}`;
+		const current = this.current(parent);
+		if (current) {
+			const pending: PendingInput = {
+				inputId,
+				sessionId: parent.sessionId,
+				runId: current.runId,
+				text,
+				mode: "followUp",
+				fromAgentId: child.agentId,
+				status: "pending",
+				delivered: false,
+				completionRunId: run.runId,
+			};
+			this.registry.state.pendingInput.push(pending);
+			await this.registry.persist();
+			if (current.status === "running" && this.started.has(current.runId)) {
+				try {
+					await this.registry.deliver(parent.sessionId, text, "followUp");
+					pending.delivered = true;
+				} catch {
+					pending.status = "undelivered";
+				}
+			}
+		} else {
+			const continuation = this.newRun(parent, text);
+			this.registry.state.pendingInput.push({
+				inputId,
+				sessionId: parent.sessionId,
+				runId: continuation.runId,
+				text,
+				mode: "followUp",
+				fromAgentId: child.agentId,
+				status: "pending",
+				delivered: true,
+				completionRunId: run.runId,
+			});
+			this.enqueue(parent.teamId, { runId: continuation.runId });
+		}
+		this.changed(parent);
+	}
 	private async settle(runId: string, status: RunStatus, result?: string, error?: string): Promise<void> {
 		await this.registry.mutate(async () => {
 			const run = this.runById(runId);
@@ -334,12 +394,29 @@ export class TeamManager {
 			this.permits.delete(runId);
 			this.started.delete(runId);
 			this.initialConsumed.delete(runId);
+			const stranded = this.registry.state.pendingInput.filter(
+				(input) => input.runId === runId && input.status === "pending" && input.completionRunId,
+			);
 			for (const input of this.registry.state.pendingInput) if (input.runId === runId) input.status = "undelivered";
-			await this.registry.persist();
 			const agent = this.agentById(run.agentId);
+			if (status === "completed" && stranded.length > 0 && this.accepting && !this.fenced.has(agent.agentId)) {
+				const continuation = this.newRun(agent, stranded[0].text);
+				for (const [index, input] of stranded.entries()) {
+					input.runId = continuation.runId;
+					input.status = "pending";
+					input.delivered = index === 0;
+				}
+				this.enqueue(agent.teamId, { runId: continuation.runId });
+			}
+			if (status !== "interrupted") await this.notifyParent(run);
+			await this.registry.persist();
 			this.changed(agent);
 			for (const waiter of [...this.waiters])
-				if (waiter.targets.every((id) => terminalStatus[this.runById(id).status])) waiter.finish(false);
+				if (
+					(waiter.mode === "any" && waiter.targets.some((id) => terminalStatus[this.runById(id).status])) ||
+					waiter.targets.every((id) => terminalStatus[this.runById(id).status])
+				)
+					waiter.finish(false);
 			this.runtime.get(runId)?.resolveDone();
 			this.runtime.delete(runId);
 			this.pump(agent.teamId);
@@ -386,7 +463,7 @@ export class TeamManager {
 		};
 		this.registry.state.pendingInput.push(pending);
 		await this.registry.persist();
-		if (this.started.has(run.runId) && run.status !== "queued") {
+		if (this.started.has(run.runId) && run.status === "running") {
 			await this.registry.deliver(agent.sessionId, text, mode);
 			pending.delivered = true;
 			await this.registry.persist();
@@ -394,11 +471,37 @@ export class TeamManager {
 		this.changed(agent);
 		return { inputId, runId: run.runId, disposition: run.status === "queued" ? "queued" : "started" };
 	}
+	private async profiles(sessionId: string) {
+		if (!this.options.agentDir) return [];
+		const workspace = this.registry.descriptor(sessionId).workspaceId;
+		try {
+			return await loadTeamProfiles(this.registry.getWorkspaceRoot(workspace), this.options.agentDir);
+		} catch (error) {
+			throw new HarnessError(error instanceof Error ? error.message : String(error), 400);
+		}
+	}
+	private async resolveTasks(sessionId: string, tasks: SpawnTask[]): Promise<SpawnTask[]> {
+		const profiles = tasks.some((task) => task.profile) ? await this.profiles(sessionId) : [];
+		return tasks.map((task) => {
+			if (!task.profile) return task;
+			const profile = profiles.find((entry) => entry.name === task.profile);
+			if (!profile) throw new HarnessError(`Unknown agent profile: ${task.profile}`, 400);
+			if (task.tools && profile.tools && task.tools.some((tool) => !profile.tools?.includes(tool)))
+				throw new HarnessError(`Child tools must be a subset of profile ${profile.name}`, 400);
+			return {
+				...task,
+				systemPrompt: [profile.systemPrompt, task.systemPrompt].filter(Boolean).join("\n\n"),
+				model: task.model ?? profile.model,
+				tools: task.tools ?? profile.tools,
+			};
+		});
+	}
 	async spawn(
 		sessionId: string,
 		tasks: SpawnTask[],
 	): Promise<{ agents: { agentId: string; sessionId: string; runId: string; name: string; status: RunStatus }[] }> {
 		if (tasks.length === 0 || tasks.length > 32) throw new HarnessError("Spawn requires 1..32 tasks");
+		const resolved = await this.resolveTasks(sessionId, tasks);
 		return this.registry.mutate(async () => {
 			const parent = this.agentForSession(sessionId);
 			this.assertOpen(parent);
@@ -411,13 +514,13 @@ export class TeamManager {
 			if (depth >= this.limits().maxDepth) throw new HarnessError("Team maximum depth reached");
 			const descriptor = this.registry.descriptor(sessionId);
 			const tools = this.registry.activeTools(sessionId);
-			for (const task of tasks) {
+			for (const task of resolved) {
 				if (!task.name.trim() || !task.task.trim()) throw new HarnessError("Agent name and task must not be empty");
 				if (task.tools?.some((tool) => !tools.includes(tool)))
 					throw new HarnessError("Child tools must be a subset of the parent's active tools");
 			}
 			const created: { agent: AgentRecord; run: RunRecord }[] = [];
-			for (const task of tasks) {
+			for (const task of resolved) {
 				const child = await this.registry.createWithinMutation({
 					workspaceId: descriptor.workspaceId,
 					parentSessionId: sessionId,
@@ -453,6 +556,93 @@ export class TeamManager {
 			};
 		});
 	}
+	async workflow(sessionId: string, tasks: WorkflowTask[], timeoutMs = 300000, signal?: AbortSignal) {
+		try {
+			validateWorkflow(tasks);
+		} catch (error) {
+			throw new HarnessError(error instanceof Error ? error.message : String(error), 400);
+		}
+		if (!Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 300000)
+			throw new HarnessError("Invalid workflow timeout", 400);
+		// Reject invalid profiles and tool grants before admitting any workflow child.
+		const resolved = await this.resolveTasks(sessionId, tasks);
+		const allowed = this.registry.activeTools(sessionId);
+		for (const task of resolved)
+			if (task.tools?.some((tool) => !allowed.includes(tool)))
+				throw new HarnessError("Child tools must be a subset of the parent's active tools", 400);
+		const records = new Map(
+			tasks.map((task) => [
+				task.name,
+				{
+					name: task.name,
+					status: "pending" as RunStatus | "pending" | "skipped",
+					agentId: undefined as string | undefined,
+					runId: undefined as string | undefined,
+					result: undefined as string | undefined,
+					error: undefined as string | undefined,
+				},
+			]),
+		);
+		const deadline = Date.now() + timeoutMs;
+		if (signal?.aborted) throw new HarnessError("Workflow cancelled");
+		while (true) {
+			const ready: SpawnTask[] = [];
+			for (const task of tasks) {
+				const record = records.get(task.name);
+				if (!record || record.status !== "pending") continue;
+				const dependencies = (task.dependsOn ?? []).map((name) => records.get(name));
+				if (
+					dependencies.some(
+						(entry) =>
+							entry?.status === "skipped" ||
+							entry?.status === "failed" ||
+							entry?.status === "cancelled" ||
+							entry?.status === "interrupted",
+					)
+				) {
+					record.status = "skipped";
+					record.error = "Dependency did not complete successfully";
+				} else if (dependencies.every((entry) => entry?.status === "completed")) {
+					const prior = (task.dependsOn ?? [])
+						.map((name) => {
+							const entry = records.get(name);
+							return `${name}:\n${entry?.result ?? ""}`;
+						})
+						.join("\n\n");
+					ready.push({ ...task, context: [task.context, prior].filter(Boolean).join("\n\n") || undefined });
+				}
+			}
+			if (ready.length > 0) {
+				const spawned = await this.spawn(sessionId, ready);
+				for (const agent of spawned.agents) {
+					const record = records.get(agent.name);
+					if (record) Object.assign(record, { agentId: agent.agentId, runId: agent.runId, status: agent.status });
+				}
+			}
+			const active = [...records.values()].filter(
+				(entry) => entry.agentId && !terminalStatus[entry.status as RunStatus],
+			);
+			if (active.length === 0) {
+				if ([...records.values()].some((entry) => entry.status === "pending")) continue;
+				break;
+			}
+			const remaining = Math.max(0, deadline - Date.now());
+			if (remaining === 0) return { tasks: [...records.values()], timedOut: true };
+			const waited = await this.wait(
+				sessionId,
+				active.map((entry) => entry.agentId as string),
+				remaining,
+				signal,
+				"any",
+			);
+			for (const run of waited.runs) {
+				const record = [...records.values()].find((entry) => entry.agentId === run.agentId);
+				if (record) Object.assign(record, { status: run.status, result: run.result, error: run.error });
+			}
+			if (waited.timedOut) return { tasks: [...records.values()], timedOut: true };
+		}
+		return { tasks: [...records.values()], timedOut: false };
+	}
 	async send(sessionId: string, agentId: string, message: string): Promise<AdmissionResult> {
 		if (!message.trim()) throw new HarnessError("Message must not be empty");
 		return this.registry.mutate(async () => {
@@ -483,8 +673,20 @@ export class TeamManager {
 			return { inputId, runId: run.runId, disposition: run.status === "running" ? "started" : "queued" };
 		});
 	}
-	async wait(sessionId: string, agentIds: string[], timeoutMs = 30000, signal?: AbortSignal): Promise<WaitResult> {
-		if (agentIds.length === 0 || !Number.isInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 300000)
+	async wait(
+		sessionId: string,
+		agentIds: string[],
+		timeoutMs = 30000,
+		signal?: AbortSignal,
+		mode: "all" | "any" = "all",
+	): Promise<WaitResult> {
+		if (
+			agentIds.length === 0 ||
+			!Number.isInteger(timeoutMs) ||
+			timeoutMs < 0 ||
+			timeoutMs > 300000 ||
+			(mode !== "all" && mode !== "any")
+		)
 			throw new HarnessError("Invalid wait targets or timeout");
 		let completion: Promise<boolean> | undefined;
 		let removeAbortListener = () => {};
@@ -518,6 +720,7 @@ export class TeamManager {
 				return (this.runById(id).waitingOnRunIds ?? []).some((next) => reaches(next, goal, visited));
 			};
 			if (pinned.some((run) => reaches(run.runId, callerRun.runId))) throw new HarnessError("Wait dependency cycle");
+			if (pinned.some((run) => terminalStatus[run.status]) && mode === "any") return;
 			if (pinned.every((run) => terminalStatus[run.status])) return;
 			callerRun.status = "waiting";
 			callerRun.waitingOnRunIds = pinned.map((run) => run.runId);
@@ -541,6 +744,7 @@ export class TeamManager {
 				const waiter: Waiter = {
 					callerRunId: callerRun.runId,
 					targets: pinned.map((run) => run.runId),
+					mode,
 					finish: (timedOut) => {
 						if (finished) return;
 						finished = true;
@@ -584,6 +788,20 @@ export class TeamManager {
 		let timedOut = false;
 		try {
 			timedOut = completion ? await completion : false;
+			if (completion) {
+				await this.registry.mutate(async () => {
+					const caller = this.agentForSession(sessionId);
+					const current = this.current(caller);
+					if (!current || current.status !== "running") return;
+					for (const input of this.registry.state.pendingInput)
+						if (input.runId === current.runId && input.status === "pending" && !input.delivered) {
+							await this.registry.deliver(sessionId, input.text, input.mode);
+							input.delivered = true;
+						}
+					await this.registry.persist();
+					this.changed(caller);
+				});
+			}
 		} finally {
 			removeAbortListener();
 		}
@@ -606,8 +824,8 @@ export class TeamManager {
 				const run = this.current(agent);
 				if (!run) return;
 				if (event.type === "agent_start") {
+					if (run.status !== "running") return;
 					this.started.add(run.runId);
-					if (this.fenced.has(agent.agentId)) return;
 					for (const input of this.registry.state.pendingInput)
 						if (input.runId === run.runId && input.status === "pending" && !input.delivered) {
 							await this.registry.deliver(sessionId, input.text, input.mode);
@@ -673,6 +891,7 @@ export class TeamManager {
 					this.permits.delete(run.runId);
 					runtime?.resolveDone();
 					this.runtime.delete(run.runId);
+					await this.notifyParent(run);
 				} else {
 					run.status = "cancelling";
 					runtime?.controller.abort();
@@ -687,7 +906,11 @@ export class TeamManager {
 			for (const agent of affected) this.registry.clearQueue(agent.sessionId);
 			await this.registry.persist();
 			for (const waiter of [...this.waiters])
-				if (waiter.targets.every((id) => terminalStatus[this.runById(id).status])) waiter.finish(false);
+				if (
+					(waiter.mode === "any" && waiter.targets.some((id) => terminalStatus[this.runById(id).status])) ||
+					waiter.targets.every((id) => terminalStatus[this.runById(id).status])
+				)
+					waiter.finish(false);
 			for (const agent of affected) this.changed(agent);
 			this.pump(target.teamId);
 		});
@@ -728,8 +951,9 @@ export class TeamManager {
 			name: "team",
 			label: "Agent team",
 			description:
-				"Spawn independent child agents sharing this workspace, list agents, send a message, wait on pinned runs, or stop a child subtree. Waiting releases your team's admission permit until dependencies settle or timeout. Cannot wait on or stop yourself or ancestors.",
-			promptSnippet: "Coordinate independent agents and wait for their results.",
+				"Spawn agents with optional named profiles, inspect available profiles, message children, wait on pinned runs, stop a child subtree, or run a dependency workflow. A workflow starts independent tasks together, waits without occupying its permit, passes successful prerequisites' results to dependents, and skips dependents of failures. Waiting releases your team's admission permit. Cannot wait on or stop yourself or ancestors.",
+			promptSnippet:
+				"For independent subtasks, spawn them together; for ordered review/build steps, use workflow with dependsOn. Use profiles to discover configured specialties. Read child results, integrate them, and report failures. Send instructions during active runs and wait for completion.",
 			executionMode: "sequential",
 			parameters: teamParameters,
 			execute: async (_callId, params: Static<typeof teamParameters>, signal) => {
@@ -737,6 +961,17 @@ export class TeamManager {
 				switch (params.action) {
 					case "spawn":
 						result = await this.spawn(sessionId, params.tasks);
+						break;
+					case "workflow":
+						result = await this.workflow(sessionId, params.tasks, params.timeoutMs, signal);
+						break;
+					case "profiles":
+						result = (await this.profiles(sessionId)).map(({ name, description, model, tools }) => ({
+							name,
+							description,
+							model,
+							tools,
+						}));
 						break;
 					case "list": {
 						const agent = this.agentForSession(sessionId);
@@ -751,7 +986,7 @@ export class TeamManager {
 						result = await this.send(sessionId, params.agentId, params.message);
 						break;
 					case "wait":
-						result = await this.wait(sessionId, params.agentIds, params.timeoutMs, signal);
+						result = await this.wait(sessionId, params.agentIds, params.timeoutMs, signal, params.mode);
 						break;
 					case "stop":
 						result = await this.stop(this.agentById(params.agentId).sessionId, sessionId);

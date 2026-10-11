@@ -1,12 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
 import { createHarnessSettings } from "./config.ts";
 
-export const searchProviderSchema = Type.Union([Type.Literal("brave"), Type.Literal("tavily")]);
+export const searchProviderSchema = Type.Union([
+	Type.Literal("brave"),
+	Type.Literal("tavily"),
+	Type.Literal("exa"),
+	Type.Literal("firecrawl"),
+]);
 export type SearchProviderId = Static<typeof searchProviderSchema>;
 const modelSelectionSchema = Type.Object(
 	{ provider: Type.String({ minLength: 1 }), id: Type.String({ minLength: 1 }) },
@@ -73,7 +79,12 @@ const credentialsSchema = Type.Object(
 	{
 		schemaVersion: Type.Literal(1),
 		search: Type.Object(
-			{ brave: Type.Optional(Type.String({ minLength: 1 })), tavily: Type.Optional(Type.String({ minLength: 1 })) },
+			{
+				brave: Type.Optional(Type.String({ minLength: 1 })),
+				tavily: Type.Optional(Type.String({ minLength: 1 })),
+				exa: Type.Optional(Type.String({ minLength: 1 })),
+				firecrawl: Type.Optional(Type.String({ minLength: 1 })),
+			},
 			{ additionalProperties: false },
 		),
 	},
@@ -148,7 +159,12 @@ export class SettingsService {
 		return {
 			search: {
 				...this.settings.search,
-				configured: { brave: Boolean(this.credentials.brave), tavily: Boolean(this.credentials.tavily) },
+				configured: {
+					brave: Boolean(this.credentials.brave),
+					tavily: Boolean(this.credentials.tavily),
+					exa: Boolean(this.credentials.exa),
+					firecrawl: Boolean(this.credentials.firecrawl),
+				},
 			},
 			teams: { ...this.settings.teams },
 			llm: defaultModel ? { defaultModel: { ...defaultModel } } : {},
@@ -177,7 +193,7 @@ export class SettingsService {
 		return this.enqueue(async () => {
 			const selection = patch.llm?.defaultModel;
 			if (selection && !this.modelRuntime.getModel(selection.provider, selection.id))
-				throw new Error("Unknown model; select a model from Settings");
+				throw new Error("Unknown model; select a model in the composer");
 			const next: HarnessSettings = {
 				search: { ...this.settings.search, ...patch.search },
 				teams: { ...this.settings.teams, ...patch.teams },
@@ -195,8 +211,8 @@ export class SettingsService {
 	}
 
 	setSearchKey(provider: SearchProviderId, key: string): Promise<void> {
-		if (provider !== "brave" && provider !== "tavily")
-			return Promise.reject(new Error("Unknown search provider; select Brave or Tavily in Settings"));
+		if (provider !== "brave" && provider !== "tavily" && provider !== "exa" && provider !== "firecrawl")
+			return Promise.reject(new Error("Unknown search provider"));
 		if (typeof key !== "string" || !key.trim())
 			return Promise.reject(new Error("API key must not be empty; use Delete to remove a saved key"));
 		return this.enqueue(async () => {
@@ -207,8 +223,8 @@ export class SettingsService {
 	}
 
 	deleteSearchKey(provider: SearchProviderId): Promise<void> {
-		if (provider !== "brave" && provider !== "tavily")
-			return Promise.reject(new Error("Unknown search provider; select Brave or Tavily in Settings"));
+		if (provider !== "brave" && provider !== "tavily" && provider !== "exa" && provider !== "firecrawl")
+			return Promise.reject(new Error("Unknown search provider"));
 		return this.enqueue(async () => {
 			const next = { ...this.credentials };
 			delete next[provider];
@@ -233,6 +249,7 @@ export class SettingsService {
 				id: model.id,
 				name: model.name,
 				contextWindow: model.contextWindow,
+				thinkingLevels: getSupportedThinkingLevels(model),
 				input: [...model.input],
 			})),
 		};

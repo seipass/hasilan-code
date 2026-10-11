@@ -1,31 +1,38 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, command, errorMessage } from "./api.ts";
-import { ModelPicker } from "./ModelPicker.tsx";
 import { OAuthLogin } from "./OAuthLogin.tsx";
-import type { Model, ModelCatalog, Settings } from "./types.ts";
+import type { ModelCatalog, Settings } from "./types.ts";
 
 const TABS = [
-	{ id: "models", label: "モデル" },
+	{ id: "providers", label: "プロバイダー" },
 	{ id: "search", label: "検索" },
 	{ id: "agents", label: "エージェント" },
 	{ id: "environment", label: "環境" },
 ] as const;
 type SettingsTab = (typeof TABS)[number]["id"];
+const SEARCH_PROVIDERS = [
+	{ id: "brave", label: "Brave" },
+	{ id: "tavily", label: "Tavily" },
+	{ id: "exa", label: "Exa" },
+	{ id: "firecrawl", label: "Firecrawl" },
+] as const;
+type SearchProviderId = Settings["search"]["defaultProvider"];
 
 export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () => void; onSaved: () => void; workspaceId?: string }) {
 	const [settings, setSettings] = useState<Settings>();
+	const [savedSettings, setSavedSettings] = useState<Settings>();
 	const [catalog, setCatalog] = useState<ModelCatalog>();
-	const [tab, setTab] = useState<SettingsTab>("models");
+	const [tab, setTab] = useState<SettingsTab>("providers");
 	const [error, setError] = useState<string>();
 	const [notice, setNotice] = useState<string>();
 	const [busy, setBusy] = useState(false);
 	const [loginActive, setLoginActive] = useState(false);
 	const [loadAttempt, setLoadAttempt] = useState(0);
 	const [closing, setClosing] = useState(false);
-	const [searchKeys, setSearchKeys] = useState({ brave: "", tavily: "" });
+	const [searchKeys, setSearchKeys] = useState<Record<SearchProviderId, string>>({ brave: "", tavily: "", exa: "", firecrawl: "" });
 	const [llmProvider, setLlmProvider] = useState("");
+	const [providerQuery, setProviderQuery] = useState("");
 	const [llmKeys, setLlmKeys] = useState<Record<string, string>>({});
-	const [modelSelection, setModelSelection] = useState<Model>();
 	const dialog = useRef<HTMLElement>(null);
 	const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 	const titleId = useId();
@@ -48,21 +55,21 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 			.then(([value, models]) => {
 				if (controller.signal.aborted) return;
 				setSettings(value);
+				setSavedSettings(value);
 				setCatalog(models);
-				setModelSelection(value.llm.defaultModel);
-				setLlmProvider(value.llm.defaultModel?.provider ?? models.providers.find((provider) => provider.configured)?.id ?? "");
+				setLlmProvider(models.providers.find((provider) => provider.configured)?.id ?? models.providers[0]?.id ?? "");
 			})
 			.catch((reason: unknown) => {
 				if (!controller.signal.aborted) setError(`設定を読み込めませんでした。サーバーへの接続を確認して、再読み込みしてください。詳細: ${errorMessage(reason)}`);
 			});
 		return () => controller.abort();
 	}, [loadAttempt, workspaceId]);
-	const providerCatalog = useMemo(() => catalog && ({
-		providers: catalog.providers.filter((provider) => provider.id === llmProvider),
-		models: catalog.models.filter((model) => model.provider === llmProvider),
-	}), [catalog, llmProvider]);
 	const selectedProvider = catalog?.providers.find((provider) => provider.id === llmProvider);
 	const llmKey = llmKeys[llmProvider] ?? "";
+	const hasLlmKey = !!selectedProvider?.apiKey && !!llmKey.trim();
+	const matchingProviders = catalog?.providers.filter((provider) => `${provider.name} ${provider.id}`.toLocaleLowerCase().includes(providerQuery.trim().toLocaleLowerCase())) ?? [];
+	const searchChanged = settings?.search.defaultProvider !== savedSettings?.search.defaultProvider;
+	const teamsChanged = settings?.teams.maxConcurrentAgents !== savedSettings?.teams.maxConcurrentAgents || settings?.teams.maxDepth !== savedSettings?.teams.maxDepth;
 
 	async function perform(operation: () => Promise<void>, success: string) {
 		setBusy(true); setError(undefined); setNotice(undefined);
@@ -75,16 +82,34 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 		setBusy(true); setError(undefined); setNotice(undefined);
 		try {
 			setCatalog(await api<ModelCatalog>("/api/models"));
-			setNotice("アカウントで接続しました。既定モデルは変更していません。使いたいモデルを選んで、別途保存してください。");
+			setNotice("アカウントの認証設定を更新しました。接続テストは実施していません。");
 			onSaved();
 		} finally { setBusy(false); }
 	}
+	const keyForm = selectedProvider?.apiKey && <form className="settings-key-entry" onSubmit={(event) => {
+		event.preventDefault();
+		if (!hasLlmKey || busy || loginActive) return;
+		const providerId = selectedProvider.id;
+		void perform(async () => {
+			await command(`/api/credentials/llm/${encodeURIComponent(providerId)}`, { key: llmKey.trim() }, "PUT");
+			setCatalog((current) => current && ({ ...current, providers: current.providers.map((provider) => provider.id === providerId ? { ...provider, configured: true } : provider) }));
+			setLlmKeys((keys) => ({ ...keys, [providerId]: "" }));
+		}, "一時 API キーを現在のサーバープロセスに設定しました。接続テストは実施していません。");
+	}}>
+		<label htmlFor={keyId}>{selectedProvider.name} の一時 API キー<input id={keyId} type="password" autoComplete="new-password" spellCheck={false} disabled={busy || loginActive} value={llmKey} placeholder="API キーを入力" onChange={(event) => {
+			setLlmKeys((keys) => ({ ...keys, [selectedProvider.id]: event.target.value }));
+			setNotice(undefined);
+		}} /></label>
+		<p className="settings-inline-status" role="status">{hasLlmKey ? "入力中 · このキーは未反映です。" : selectedProvider.configured ? "認証の設定があります。空欄のままでは変更しません。" : "キーはまだ設定されていません。"}</p>
+		<p className="fine-print">このキーはサーバー再起動まで有効です。恒久的な認証には Hasilan Code 専用の auth.json / models.json または環境変数を使ってください。既存の認証ファイルは上書きしません。</p>
+		<div className="settings-actions"><button type="submit" disabled={busy || loginActive || !hasLlmKey}>{busy ? "設定中…" : "一時 API キーを設定"}</button></div>
+	</form>;
 
 	return <div className="dialog-backdrop" data-closing={closing} onAnimationEnd={(event) => { if (closing && event.target === event.currentTarget) onClose(); }} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
 		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onKeyDown={(event) => {
 			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); requestClose(); }
 			if (event.key !== "Tab") return;
-			const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled):not([tabindex='-1']), input:not(:disabled), select:not(:disabled), a[href]") ?? [])].filter((element) => !element.matches(":disabled") && element.getClientRects().length > 0);
+			const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled):not([tabindex='-1']), input:not(:disabled), select:not(:disabled), summary, a[href]") ?? [])].filter((element) => !element.matches(":disabled") && element.getClientRects().length > 0);
 			const first = controls[0];
 			const last = controls[controls.length - 1];
 			if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
@@ -107,90 +132,77 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 			{notice && <p className="settings-notice" role="status">{notice}</p>}
 			{!settings && !error && <p role="status">設定を読み込み中…</p>}
 			{settings && <>
-				<section className="settings-content" role="tabpanel" id={`${tabsId}-models-panel`} aria-labelledby={`${tabsId}-models-tab`} hidden={tab !== "models"}>
-					<h3>モデルを接続する</h3>
-					<p>プロバイダーを選び、アカウントでログインするか API キーを設定します。既定モデルの保存はログインとは別の操作です。</p>
-					<div className="provider-model-flow">
-						<fieldset disabled={busy} className="settings-section"><legend>接続と既定モデル</legend>
-							<label>プロバイダー<select value={llmProvider} disabled={loginActive} onChange={(event) => {
-								const provider = event.target.value;
-								setLlmProvider(provider);
-								setModelSelection(settings.llm.defaultModel?.provider === provider ? settings.llm.defaultModel : undefined);
-							}}><option value="" disabled>プロバイダーを選択</option>{catalog?.providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></label>
-							{llmProvider && <>
-							<p className="credential-status" data-configured={selectedProvider?.configured}>{selectedProvider?.configured === true ? "接続設定済み · 保存済み認証または環境変数を利用できます。再入力は不要です。" : selectedProvider?.configured === false ? selectedProvider.oauth ? "未接続 · アカウントでログインできます。モデルは先に選択できます。" : selectedProvider.apiKey ? "キー未設定 · モデルは先に選択できます。実行前に API キーを設定してください。" : "未接続 · Hasilan Code 専用の設定や環境変数で認証を設定してください。" : "接続状態を確認できません。Hasilan Code の保存済み認証がある場合、再入力は不要です。"}</p>
-							{selectedProvider?.oauth && tab === "models" && <OAuthLogin key={llmProvider} provider={llmProvider} label={selectedProvider.oauth.label} disabled={busy} onActiveChange={setLoginActive} onComplete={accountConnected} />}
-							<form className="provider-model-save" onSubmit={(event) => {
-								event.preventDefault();
-								if (!llmProvider || busy || loginActive || (!modelSelection && !(selectedProvider?.apiKey && llmKey.trim()))) return;
-								void perform(async () => {
-									if (selectedProvider?.apiKey && llmKey.trim()) {
-										await command(`/api/credentials/llm/${encodeURIComponent(llmProvider)}`, { key: llmKey }, "PUT");
-										setCatalog((current) => current && ({ ...current, providers: current.providers.map((provider) => provider.id === llmProvider ? { ...provider, configured: true } : provider) }));
-									}
-									if (modelSelection) {
-										try {
-											await command("/api/settings", { llm: { defaultModel: { provider: modelSelection.provider, id: modelSelection.id } } }, "PATCH");
-										} catch (reason: unknown) {
-											if (selectedProvider?.apiKey && llmKey.trim()) throw new Error(`API キーは現在のプロセスに設定できましたが、既定モデルは保存できませんでした。再試行してください。${errorMessage(reason)}`);
-											throw reason;
-										}
-										setSettings((current) => current && ({ ...current, llm: { defaultModel: modelSelection } }));
-									}
-									setLlmKeys((keys) => ({ ...keys, [llmProvider]: "" }));
-								}, modelSelection ? "既定モデルを保存しました。新しい会話で使用します。既存の会話のモデルは変更しません。" : "API キーを現在のプロセスに設定しました。既定モデルは変更していません。");
-							}}>
-								{selectedProvider?.apiKey && <>
-									{selectedProvider.oauth && <p className="auth-method-divider">または API キーで接続</p>}
-									<label htmlFor={keyId}>{selectedProvider.name} の API キー<input id={keyId} type="password" autoComplete="new-password" spellCheck={false} disabled={loginActive} value={llmKey} placeholder={selectedProvider.configured ? "空欄なら現在の認証を使う" : "API キーを入力"} onChange={(event) => setLlmKeys((keys) => ({ ...keys, [llmProvider]: event.target.value }))} /></label>
-									<p className="fine-print">ここで入力する API キーは現在のサーバープロセスだけで有効です。サーバーの再起動で消えるため、継続して使う場合は Hasilan Code 専用の auth.json / models.json / 環境変数で設定してください。アカウントのログイン認証とは別の設定です。既存の認証は上書き保存しません。</p>
-								</>}
-								<ModelPicker catalog={providerCatalog} value={modelSelection} onChange={setModelSelection} disabled={busy || loginActive} />
-								<div className="settings-actions"><button type="submit" disabled={loginActive || !llmProvider || (!modelSelection && !(selectedProvider?.apiKey && llmKey.trim()))}>{busy ? "保存中…" : modelSelection ? selectedProvider?.apiKey && llmKey.trim() ? "API キーと既定モデルを保存" : "既定モデルを保存" : "API キーを設定"}</button></div>
-							</form>
-							</>}
-						</fieldset>
+				<section className="settings-content" role="tabpanel" id={`${tabsId}-providers-panel`} aria-labelledby={`${tabsId}-providers-tab`} hidden={tab !== "providers"}>
+					<h3>プロバイダーの認証</h3>
+					<p>利用するプロバイダーの認証を設定します。ここでの選択は会話のモデルや既定モデルを変更しません。</p>
+					<div className="settings-section settings-provider-section">
+						<p className="settings-inline-status">{catalog?.providers.filter((provider) => provider.configured).length ?? 0} / {catalog?.providers.length ?? 0} 件のプロバイダーに認証の設定があります。接続テストは実施していません。</p>
+						<label>プロバイダーを検索<input type="search" value={providerQuery} disabled={busy || loginActive} placeholder="名前または ID で検索" onChange={(event) => setProviderQuery(event.target.value)} /></label>
+						<label>プロバイダー<select value={llmProvider} disabled={busy || loginActive || !catalog?.providers.length} onChange={(event) => {
+							setLlmProvider(event.target.value);
+							setNotice(undefined);
+						}}>
+							{!llmProvider && <option value="">プロバイダーを選択</option>}
+							{selectedProvider && !matchingProviders.some((provider) => provider.id === selectedProvider.id) && <option value={selectedProvider.id}>{selectedProvider.name} · 現在の選択</option>}
+							{matchingProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.configured === true ? "認証設定あり" : provider.configured === false ? "未設定" : "状態不明"}</option>)}
+						</select></label>
+						{providerQuery.trim() && <p className="settings-inline-status" role="status">{matchingProviders.length ? `${matchingProviders.length} 件が一致しました。` : "一致するプロバイダーはありません。"}{selectedProvider && !matchingProviders.some((provider) => provider.id === selectedProvider.id) && " 現在の選択は表示したままです。"}</p>}
+						{catalog?.providers.length === 0 && <p className="settings-next-action">利用できるプロバイダーがありません。サーバーのモデル設定を確認してください。</p>}
 					</div>
-					<p className="fine-print">保存済みの既定モデル: {settings.llm.defaultModel ? `${settings.llm.defaultModel.provider} / ${settings.llm.defaultModel.id}` : "自動選択（Hasilan Code の設定を使用）"}</p>
-					<button type="button" disabled={busy || loginActive || !settings.llm.defaultModel} onClick={() => { void perform(async () => {
-						await command("/api/settings", { llm: { defaultModel: null } }, "PATCH");
-						setSettings((current) => current && ({ ...current, llm: {} }));
-						setModelSelection(undefined);
-					}, "Web の既定モデルを解除しました。新しい会話では Hasilan Code の設定からモデルを選びます。"); }}>既定モデルを自動選択に戻す</button>
+					{selectedProvider && <div className="settings-section settings-provider-section">
+						<h4>{selectedProvider.name}</h4>
+						<p className="credential-status" data-configured={selectedProvider.configured}>{selectedProvider.configured === true ? "認証設定あり · 接続は未検証です。" : selectedProvider.configured === false ? "認証未設定" : "認証状態は不明"}</p>
+						<p className="settings-next-action" role="status">{hasLlmKey ? "入力した API キーはまだサーバーに反映されていません。下のボタンで設定してください。" : selectedProvider.configured === true ? "認証情報の再入力は不要です。変更する場合のみ、下から再接続または一時 API キーを設定してください。" : selectedProvider.oauth || selectedProvider.apiKey ? "以下の方法で認証を設定してください。" : "Hasilan Code 専用の auth.json / models.json または環境変数で認証を設定し、設定画面を開き直してください。"}</p>
+						{selectedProvider.oauth && tab === "providers" && (selectedProvider.configured === true ? <details className="settings-reconnect"><summary>アカウントを再接続</summary><OAuthLogin key={llmProvider} provider={llmProvider} label={selectedProvider.oauth.label} disabled={busy} onActiveChange={setLoginActive} onComplete={accountConnected} /></details> : <OAuthLogin key={llmProvider} provider={llmProvider} label={selectedProvider.oauth.label} disabled={busy} onActiveChange={setLoginActive} onComplete={accountConnected} />)}
+						{selectedProvider.apiKey && (selectedProvider.configured === true ? <details className="settings-reconnect"><summary>一時 API キーを変更{hasLlmKey ? " · 入力中（未反映）" : ""}</summary>{keyForm}</details> : <>
+							{selectedProvider.oauth && <p className="auth-method-divider">または、一時 API キーで接続</p>}
+							{keyForm}
+						</>)}
+					</div>}
 				</section>
 				<section className="settings-content" role="tabpanel" id={`${tabsId}-search-panel`} aria-labelledby={`${tabsId}-search-tab`} hidden={tab !== "search"}>
 					<h3>Web 検索</h3>
-					<form onSubmit={(event) => { event.preventDefault(); void perform(async () => { await command("/api/settings", { search: { defaultProvider: settings.search.defaultProvider } }, "PATCH"); }, "既定の検索プロバイダーを保存しました。"); }}>
-						<fieldset disabled={busy}><legend>既定の検索サービス</legend>
-							<label>プロバイダー<select value={settings.search.defaultProvider} onChange={(event) => setSettings({ ...settings, search: { ...settings.search, defaultProvider: event.target.value as "brave" | "tavily" } })}><option value="brave">Brave</option><option value="tavily">Tavily</option></select></label>
-							<button type="submit">検索設定を保存</button>
+					<p className="settings-state">現在の既定: {SEARCH_PROVIDERS.find((provider) => provider.id === savedSettings?.search.defaultProvider)?.label} · {settings.search.configured[savedSettings?.search.defaultProvider ?? "brave"] ? "キー設定済み" : "キー未設定"}</p>
+					<form onSubmit={(event) => { event.preventDefault(); if (!searchChanged) return; const provider = settings.search.defaultProvider; void perform(async () => {
+						await command("/api/settings", { search: { defaultProvider: provider } }, "PATCH");
+						setSavedSettings((current) => current && ({ ...current, search: { ...current.search, defaultProvider: provider } }));
+					}, "既定の検索サービスを保存しました。"); }}>
+						<fieldset disabled={busy} className="settings-section"><legend>既定の検索サービス</legend>
+							<label>プロバイダー<select value={settings.search.defaultProvider} onChange={(event) => { setSettings({ ...settings, search: { ...settings.search, defaultProvider: event.target.value as SearchProviderId } }); setNotice(undefined); }}>{SEARCH_PROVIDERS.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></label>
+							<p className="settings-inline-status" role="status">{searchChanged ? `未保存 · ${SEARCH_PROVIDERS.find((provider) => provider.id === settings.search.defaultProvider)?.label} に切り替えます。` : "変更なし"} {settings.search.configured[settings.search.defaultProvider] ? "キー設定済みです。" : "キー未設定のため、検索するには下でキーを保存してください。自動で別のサービスへ切り替わりません。"}</p>
+							<button type="submit" disabled={!searchChanged}>既定の検索サービスを保存</button>
 						</fieldset>
 					</form>
-					<fieldset disabled={busy} className="settings-section"><legend>検索 API キー</legend>
-						{(["brave", "tavily"] as const).map((provider) => <div className="credential-row" key={provider}>
-							<label>{provider === "brave" ? "Brave" : "Tavily"} · {settings.search.configured[provider] ? "設定済み" : "未設定"}<input type="password" autoComplete="new-password" spellCheck={false} value={searchKeys[provider]} placeholder="新しい API キー" onChange={(event) => setSearchKeys({ ...searchKeys, [provider]: event.target.value })} /></label>
+					<fieldset disabled={busy} className="settings-section"><legend>検索 API キー（サーバーに保存）</legend>
+						{SEARCH_PROVIDERS.map(({ id: provider, label }) => <div className="credential-row" key={provider}>
+							<label>{label} · {searchKeys[provider].trim() ? "新しいキーは未保存" : settings.search.configured[provider] ? "保存済み" : "キー未設定"}<input type="password" autoComplete="new-password" spellCheck={false} value={searchKeys[provider]} placeholder="新しい API キー" onChange={(event) => { setSearchKeys({ ...searchKeys, [provider]: event.target.value }); setNotice(undefined); }} /></label>
 							<button type="button" disabled={!searchKeys[provider].trim()} onClick={() => { const key = searchKeys[provider]; void perform(async () => {
 								await command(`/api/credentials/search/${provider}`, { key }, "PUT");
 								setSearchKeys((keys) => ({ ...keys, [provider]: "" }));
 								setSettings((current) => current && ({ ...current, search: { ...current.search, configured: { ...current.search.configured, [provider]: true } } }));
-							}, `${provider} のキーを保存しました。`); }}>キーを保存</button>
+							}, `${label} のキーをサーバーに保存しました。`); }}>キーを保存</button>
 							<button type="button" disabled={!settings.search.configured[provider]} onClick={() => { void perform(async () => {
 								await api(`/api/credentials/search/${provider}`, { method: "DELETE" });
 								setSettings((current) => current && ({ ...current, search: { ...current.search, configured: { ...current.search.configured, [provider]: false } } }));
-							}, `${provider} のキーを削除しました。`); }}>保存済みキーを削除</button>
+							}, `${label} の保存済みキーを削除しました。`); }}>キーを削除</button>
 						</div>)}
-						<p className="fine-print">検索キーはサーバーに保存され、再起動後も使えます。空欄では既存キーを変更しません。キーが未設定でも別の検索サービスへ自動切替はしません。</p>
+						<p className="fine-print">検索キーは再起動後も利用できます。空欄は既存のキーを変更しません。LLM の一時 API キーとは保存方法が異なります。</p>
 					</fieldset>
 				</section>
 				<section className="settings-content" role="tabpanel" id={`${tabsId}-agents-panel`} aria-labelledby={`${tabsId}-agents-tab`} hidden={tab !== "agents"}>
 					<h3>エージェントチーム</h3>
-					<form onSubmit={(event) => { event.preventDefault(); void perform(async () => { await command("/api/settings", { teams: settings.teams }, "PATCH"); }, "エージェントの設定を保存しました。"); }}>
-						<fieldset disabled={busy}><legend>実行の上限</legend>
-							<label>チームごとの同時実行数<input type="number" min={1} max={32} step={1} required value={Number.isNaN(settings.teams.maxConcurrentAgents) ? "" : settings.teams.maxConcurrentAgents} onChange={(event) => setSettings({ ...settings, teams: { ...settings.teams, maxConcurrentAgents: event.target.valueAsNumber } })} /></label>
-							<p className="fine-print">1–32。親エージェントも数えます。結果待ちのエージェントは実行枠を使いません。</p>
-							<label>子エージェントの最大深さ<input type="number" min={1} max={8} step={1} required value={Number.isNaN(settings.teams.maxDepth) ? "" : settings.teams.maxDepth} onChange={(event) => setSettings({ ...settings, teams: { ...settings.teams, maxDepth: event.target.valueAsNumber } })} /></label>
-							<p className="fine-print">1–8。深さ 1 は親から直接作る子まで、深さ 2 はその孫までを許可します。</p>
-							<button type="submit">エージェント設定を保存</button>
+					<p className="settings-state">現在の設定: 同時実行 {savedSettings?.teams.maxConcurrentAgents} · 最大深さ {savedSettings?.teams.maxDepth}</p>
+					<form onSubmit={(event) => { event.preventDefault(); if (!teamsChanged) return; const teams = { ...settings.teams }; void perform(async () => {
+						await command("/api/settings", { teams }, "PATCH");
+						setSavedSettings((current) => current && ({ ...current, teams }));
+					}, "エージェントチームの上限を保存しました。実行中のチームにも適用されます。"); }}>
+						<fieldset disabled={busy} className="settings-section"><legend>実行の上限</legend>
+							<label>チームごとの同時実行数<input type="number" min={1} max={32} step={1} required value={Number.isNaN(settings.teams.maxConcurrentAgents) ? "" : settings.teams.maxConcurrentAgents} onChange={(event) => { setSettings({ ...settings, teams: { ...settings.teams, maxConcurrentAgents: event.target.valueAsNumber } }); setNotice(undefined); }} /></label>
+							<p className="fine-print">1–32。親エージェントを含み、結果待ちは枠を使いません。</p>
+							<label>子エージェントの最大深さ<input type="number" min={1} max={8} step={1} required value={Number.isNaN(settings.teams.maxDepth) ? "" : settings.teams.maxDepth} onChange={(event) => { setSettings({ ...settings, teams: { ...settings.teams, maxDepth: event.target.valueAsNumber } }); setNotice(undefined); }} /></label>
+							<p className="fine-print">1–8。深さ 1 は直下の子まで、深さ 2 は孫まで。</p>
+							<p className="settings-inline-status" role="status">{teamsChanged ? "変更は未保存です。" : "変更なし"}</p>
+							<button type="submit" disabled={!teamsChanged || !Number.isInteger(settings.teams.maxConcurrentAgents) || settings.teams.maxConcurrentAgents < 1 || settings.teams.maxConcurrentAgents > 32 || !Number.isInteger(settings.teams.maxDepth) || settings.teams.maxDepth < 1 || settings.teams.maxDepth > 8}>エージェント設定を保存</button>
 						</fieldset>
 					</form>
 				</section>

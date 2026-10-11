@@ -3,6 +3,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BraveSearchProvider } from "../src/server/search-providers/brave.ts";
+import { ExaSearchProvider } from "../src/server/search-providers/exa.ts";
+import { FirecrawlSearchProvider } from "../src/server/search-providers/firecrawl.ts";
 import { TavilySearchProvider } from "../src/server/search-providers/tavily.ts";
 import type { SearchFetch } from "../src/server/search-providers/types.ts";
 import type { SettingsService, SettingsSnapshot } from "../src/server/settings.ts";
@@ -34,7 +36,15 @@ describe("Search provider consumer boundaries", () => {
 					return;
 				}
 				if (query === "empty") {
-					response.end(JSON.stringify(url.searchParams.has("q") ? {} : { results: [] }));
+					response.end(
+						JSON.stringify(
+							url.pathname === "/v2/search"
+								? { success: true, data: { web: [] } }
+								: url.searchParams.has("q")
+									? {}
+									: { results: [] },
+						),
+					);
 					return;
 				}
 				if (query === "invalid") {
@@ -47,10 +57,19 @@ describe("Search provider consumer boundaries", () => {
 						url: "https://example.org/source",
 						description: "Brave snippet",
 						content: "Tavily snippet",
+						highlights: ["Exa", "snippet"],
 					},
 					{ title: "Unsafe", url: "javascript:alert(1)", description: "bad" },
 				];
-				response.end(JSON.stringify(url.searchParams.has("q") ? { web: { results: rows } } : { results: rows }));
+				response.end(
+					JSON.stringify(
+						url.pathname === "/v2/search"
+							? { success: true, data: { web: rows } }
+							: url.searchParams.has("q")
+								? { web: { results: rows } }
+								: { results: rows },
+					),
+				);
 			})().catch(() => {
 				response.writeHead(500);
 				response.end();
@@ -85,6 +104,18 @@ describe("Search provider consumer boundaries", () => {
 			query: "query",
 			results: [{ title: "Source", url: "https://example.org/source", snippet: "Tavily snippet" }],
 		});
+		const exa = new ExaSearchProvider(() => "private-secret", fetcher);
+		const firecrawl = new FirecrawlSearchProvider(() => "private-secret", fetcher);
+		expect(await exa.search({ query: "query", limit: 3, timeRange: "day" })).toEqual({
+			provider: "exa",
+			query: "query",
+			results: [{ title: "Source", url: "https://example.org/source", snippet: "Exa snippet" }],
+		});
+		expect(await firecrawl.search({ query: "query", limit: 4, timeRange: "year" })).toEqual({
+			provider: "firecrawl",
+			query: "query",
+			results: [{ title: "Source", url: "https://example.org/source", snippet: "Brave snippet" }],
+		});
 		expect(requests[0].headers["x-subscription-token"]).toBe("private-secret");
 		expect(requests[0].url.searchParams.get("freshness")).toBe("pm");
 		expect(requests[1].headers.authorization).toBe("Bearer private-secret");
@@ -97,14 +128,25 @@ describe("Search provider consumer boundaries", () => {
 			include_raw_content: false,
 			time_range: "week",
 		});
+		expect(requests[2].headers["x-api-key"]).toBe("private-secret");
+		expect(requests[2].body).toMatchObject({ numResults: 3, contents: { highlights: true } });
+		expect(new Date(String(requests[2].body.startPublishedDate)).getTime()).toBeGreaterThan(
+			Date.now() - 2 * 86400000,
+		);
+		expect(requests[3].headers.authorization).toBe("Bearer private-secret");
+		expect(requests[3].body).toMatchObject({ limit: 4, sources: [{ type: "web", tbs: "qdr:y" }] });
 		expect((await brave.search({ query: "empty", limit: 5 })).results).toEqual([]);
 		expect((await tavily.search({ query: "empty", limit: 5 })).results).toEqual([]);
+		expect((await exa.search({ query: "empty", limit: 5 })).results).toEqual([]);
+		expect((await firecrawl.search({ query: "empty", limit: 5 })).results).toEqual([]);
 	});
 
 	it("reports HTTP failures once without exposing reflected response credentials", async () => {
 		for (const provider of [
 			new BraveSearchProvider(() => "private-secret", fetcher),
 			new TavilySearchProvider(() => "private-secret", fetcher),
+			new ExaSearchProvider(() => "private-secret", fetcher),
+			new FirecrawlSearchProvider(() => "private-secret", fetcher),
 		]) {
 			for (const status of [401, 429]) {
 				let error: unknown;
@@ -117,7 +159,7 @@ describe("Search provider consumer boundaries", () => {
 				expect(String(error)).not.toContain("private-secret");
 			}
 		}
-		expect(requests).toHaveLength(4);
+		expect(requests).toHaveLength(8);
 		await expect(
 			new BraveSearchProvider(() => "private-secret", fetcher).search({ query: "invalid", limit: 5 }),
 		).rejects.toThrow("invalid JSON");
@@ -146,11 +188,11 @@ describe("Search provider consumer boundaries", () => {
 
 	it("reads changed defaults and keys on each call and never falls back", async () => {
 		const snapshot: SettingsSnapshot = {
-			search: { defaultProvider: "brave", configured: { brave: false, tavily: true } },
+			search: { defaultProvider: "brave", configured: { brave: false, tavily: true, exa: false, firecrawl: false } },
 			teams: { maxConcurrentAgents: 4, maxDepth: 3 },
 			llm: {},
 		};
-		const keys: { brave?: string; tavily?: string } = { tavily: "private-secret" };
+		const keys: { brave?: string; tavily?: string; exa?: string; firecrawl?: string } = { tavily: "private-secret" };
 		const settings: Pick<SettingsService, "get" | "getSearchKey"> = {
 			get: () => snapshot,
 			getSearchKey: (id) => keys[id],
@@ -163,12 +205,19 @@ describe("Search provider consumer boundaries", () => {
 		keys.brave = "new-private-key";
 		expect((await search.search({ query: "query", provider: "brave" })).provider).toBe("brave");
 		expect(requests[1].headers["x-subscription-token"]).toBe("new-private-key");
+		snapshot.search.defaultProvider = "exa";
+		await expect(search.search({ query: "query" })).rejects.toThrow("Exa API key is not configured");
+		keys.exa = "exa-private-key";
+		expect((await search.search({ query: "query" })).provider).toBe("exa");
+		keys.firecrawl = "firecrawl-private-key";
+		expect((await search.search({ query: "query", provider: "firecrawl" })).provider).toBe("firecrawl");
+		expect(requests[3].headers.authorization).toBe("Bearer firecrawl-private-key");
 		await expect(search.search({ query: " " })).rejects.toThrow("must not be empty");
 		await expect(search.search({ query: "query", provider: "unknown" })).rejects.toThrow("Invalid search request");
 		await expect(search.search({ query: "a".repeat(601), provider: "brave" })).rejects.toThrow("600 characters");
 		await expect(
 			search.search({ query: Array.from({ length: 76 }, () => "word").join(" "), provider: "brave" }),
 		).rejects.toThrow("75 words");
-		expect(requests).toHaveLength(2);
+		expect(requests).toHaveLength(4);
 	});
 });

@@ -57,12 +57,13 @@
 .files-splitter::before { content: ""; position: absolute; inset: 0 3px; background: var(--border-subtle); }
 .files-splitter:hover::before, .files-splitter:focus-visible::before, .files-splitter[data-resizing="true"]::before { background: var(--primary); }
 .files-splitter:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-.files-tree { min-width: 0; min-height: 0; overflow: auto; padding: 10px 8px; }
-.files-tree-list { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+.files-tree { min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 10px 8px; }
+.files-tree-list { list-style: none; padding: 0; margin: 0; min-width: 0; font-size: 13px; }
 .files-tree-list .files-tree-list { padding-left: 16px; }
-.files-tree-entry { display: flex; align-items: center; gap: 7px; width: 100%; min-width: max-content; text-align: left; white-space: nowrap; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; font-size: 13px; }
+.files-tree-entry { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; text-align: left; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; font-size: 13px; }
 .files-tree-entry[aria-current="true"] { background: var(--secondary-container); color: var(--on-secondary-container); }
 .files-tree-marker { width: 12px; flex-shrink: 0; color: var(--on-surface-muted); text-align: center; }
+.files-tree-entry > span:last-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .files-tree-message { padding: 7px 8px; line-height: 1.65; overflow-wrap: anywhere; }
 .files-markdown { max-width: 960px; margin: 0 auto; padding: 22px 24px 36px; line-height: 1.75; font-size: 14px; overflow-wrap: anywhere; }
 .files-markdown > :first-child { margin-top: 0; }

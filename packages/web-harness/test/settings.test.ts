@@ -34,22 +34,29 @@ describe("Web harness settings", () => {
 		await Promise.all([
 			settings.setSearchKey("brave", "private-brave"),
 			settings.setSearchKey("tavily", "private-tavily"),
+			settings.setSearchKey("exa", "private-exa"),
+			settings.setSearchKey("firecrawl", "private-firecrawl"),
 		]);
-		await settings.patch({ search: { defaultProvider: "tavily" }, teams: { maxConcurrentAgents: 1 } });
+		await settings.patch({ search: { defaultProvider: "firecrawl" }, teams: { maxConcurrentAgents: 1 } });
 		const restored = await SettingsService.open(directory, runtime);
-		expect(restored.get().search).toEqual({ defaultProvider: "tavily", configured: { brave: true, tavily: true } });
+		expect(restored.get().search).toEqual({
+			defaultProvider: "firecrawl",
+			configured: { brave: true, tavily: true, exa: true, firecrawl: true },
+		});
 		expect(restored.get().teams).toEqual({ maxConcurrentAgents: 1, maxDepth: 3 });
-		expect(restored.getSearchKey("tavily")).toBe("private-tavily");
+		expect(restored.getSearchKey("firecrawl")).toBe("private-firecrawl");
 		expect(JSON.stringify(restored.get())).not.toContain("private-");
 		expect(await readFile(join(directory, "web-harness", "settings.json"), "utf8")).not.toContain("private-");
 		if (process.platform !== "win32")
 			expect((await stat(join(directory, "web-harness", "credentials.json"))).mode & 0o777).toBe(0o600);
 		await expect(restored.setSearchKey("tavily", " ")).rejects.toThrow("must not be empty");
 		expect(restored.getSearchKey("tavily")).toBe("private-tavily");
-		await restored.deleteSearchKey("brave");
+		await restored.deleteSearchKey("exa");
 		expect((await SettingsService.open(directory, runtime)).get().search.configured).toEqual({
-			brave: false,
+			brave: true,
 			tavily: true,
+			exa: false,
+			firecrawl: true,
 		});
 	});
 

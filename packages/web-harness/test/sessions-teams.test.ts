@@ -135,7 +135,10 @@ async function fixture(limit = 4, program?: Program) {
 			return adapter;
 		},
 	});
-	const teams = new TeamManager(registry, { getLimits: () => ({ maxConcurrentAgents: limit, maxDepth: 3 }) });
+	const teams = new TeamManager(registry, {
+		agentDir: root,
+		getLimits: () => ({ maxConcurrentAgents: limit, maxDepth: 3 }),
+	});
 	await registry.initialize();
 	await teams.initialize();
 	const workspace = await registry.addWorkspace(workspacePath);
@@ -188,6 +191,7 @@ describe("team run boundaries", () => {
 			);
 			expect(waited.timedOut).toBe(false);
 			expect(waited.runs[0].status).toBe("completed");
+			for (const notice of adapter.inputs) adapter.consume(notice);
 			return `${level === 0 ? "root" : "child"}: ${waited.runs[0].result}`;
 		});
 		teams = f.teams;
@@ -197,6 +201,222 @@ describe("team run boundaries", () => {
 			.toBe("completed");
 		expect(f.registry.get(f.session.sessionId).latestRun?.result).toBe("root: child: grandchild result");
 		expect(f.registry.state.runs).toHaveLength(3);
+	});
+	it("delivers a child completion to a running parent as one persisted follow-up", async () => {
+		const f = await fixture();
+		await f.teams.prompt(f.session.sessionId, { text: "coordinate", mode: "prompt" });
+		const parent = await running(f.adapters, f.session.sessionId);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "research", task: "investigate" }])).agents[0];
+		(await running(f.adapters, child.sessionId)).finish("finished research");
+		await expect.poll(() => parent.inputs.length).toBe(1);
+		expect(parent.inputs[0]).toContain(`Run ${child.runId} (research) completed`);
+		expect(parent.inputs[0]).toContain("finished research");
+		const pending = f.registry.get(f.session.sessionId).pendingInput;
+		expect(pending).toHaveLength(1);
+		expect(pending[0]).toMatchObject({
+			runId: f.registry.get(f.session.sessionId).currentRun?.runId,
+			delivered: true,
+		});
+		parent.consume(parent.inputs[0]);
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		expect(f.registry.get(f.session.sessionId).messages.at(-1)?.content).toBe(parent.inputs[0]);
+		expect(parent.inputs).toHaveLength(1);
+	});
+	it("admits one idle parent continuation for two completed children", async () => {
+		const f = await fixture(3);
+		await f.teams.prompt(f.session.sessionId, { text: "delegate", mode: "prompt" });
+		const parent = await running(f.adapters, f.session.sessionId);
+		const children = (
+			await f.teams.spawn(f.session.sessionId, [
+				{ name: "first", task: "one" },
+				{ name: "second", task: "two" },
+			])
+		).agents;
+		await running(f.adapters, children[0].sessionId);
+		await running(f.adapters, children[1].sessionId);
+		parent.finish("delegated");
+		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun).toBeUndefined();
+		f.adapters.get(children[0].sessionId)?.finish("first result");
+		await expect.poll(() => f.registry.get(f.session.sessionId).latestRun?.task).toContain("first result");
+		f.adapters.get(children[1].sessionId)?.finish("second result");
+		const continuation = f.registry.get(f.session.sessionId).latestRun;
+		expect(continuation?.task).toContain(`Run ${children[0].runId}`);
+		await expect
+			.poll(() =>
+				f.registry
+					.get(f.session.sessionId)
+					.pendingInput.some((input) => input.completionRunId === children[1].runId),
+			)
+			.toBe(true);
+		expect(
+			f.registry
+				.get(f.session.sessionId)
+				.pendingInput.filter((input) => input.completionRunId === children[1].runId),
+		).toHaveLength(1);
+		expect(
+			f.registry.state.runs.filter(
+				(run) =>
+					run.agentId ===
+					f.registry.state.agents.find((agent) => agent.sessionId === f.session.sessionId)?.agentId,
+			),
+		).toHaveLength(2);
+		await expect
+			.poll(() =>
+				f.registry
+					.get(f.session.sessionId)
+					.messages.some(
+						(message) => message.role === "user" && JSON.stringify(message.content).includes("first result"),
+					),
+			)
+			.toBe(true);
+	});
+	it("notifies a parent exactly once when a queued child is cancelled", async () => {
+		const f = await fixture(1);
+		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
+		const parent = await running(f.adapters, f.session.sessionId);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "queued", task: "never admitted" }])).agents[0];
+		expect(child.status).toBe("queued");
+		await f.teams.stop(child.sessionId);
+		await expect.poll(() => parent.inputs.length).toBe(1);
+		expect(parent.inputs[0]).toContain(`Run ${child.runId} (queued) cancelled`);
+		expect(f.adapters.has(child.sessionId)).toBe(false);
+		expect(f.registry.get(f.session.sessionId).pendingInput).toHaveLength(1);
+	});
+	it("wait any returns the first pinned failure while another child remains running", async () => {
+		const failGate = Promise.withResolvers<void>();
+		const finishGate = Promise.withResolvers<string>();
+		const f = await fixture(3, async (_adapter, text) => {
+			if (text === "fail") {
+				await failGate.promise;
+				throw new Error("child failure");
+			}
+			return finishGate.promise;
+		});
+		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
+		await running(f.adapters, f.session.sessionId);
+		const [failed, slow] = (
+			await f.teams.spawn(f.session.sessionId, [
+				{ name: "failure", task: "fail" },
+				{ name: "slow", task: "slow" },
+			])
+		).agents;
+		const timeout = await f.teams.wait(f.session.sessionId, [failed.agentId, slow.agentId], 0, undefined, "any");
+		expect(timeout.timedOut).toBe(true);
+		expect(timeout.runs.map((run) => run.status)).toEqual(["running", "running"]);
+		const waiting = f.teams.wait(f.session.sessionId, [failed.agentId, slow.agentId], 10000, undefined, "any");
+		await running(f.adapters, failed.sessionId);
+		await running(f.adapters, slow.sessionId);
+		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
+		failGate.resolve();
+		const result = await waiting;
+		expect(result.timedOut).toBe(false);
+		expect(result.runs).toEqual([
+			expect.objectContaining({ runId: failed.runId, status: "failed", error: "child failure" }),
+			expect.objectContaining({ runId: slow.runId, status: "running" }),
+		]);
+		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("running");
+		await expect.poll(() => f.adapters.get(f.session.sessionId)?.inputs[0]).toContain(`Run ${failed.runId}`);
+		expect(f.adapters.get(f.session.sessionId)?.inputs[0]).toContain("Error:\nchild failure");
+		finishGate.resolve("finished");
+	});
+	it("keeps completion notices pending during wait all, then delivers both on readmission", async () => {
+		const f = await fixture(3);
+		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
+		await running(f.adapters, f.session.sessionId);
+		const [first, second] = (
+			await f.teams.spawn(f.session.sessionId, [
+				{ name: "first", task: "first" },
+				{ name: "second", task: "second" },
+			])
+		).agents;
+		const waiting = f.teams.wait(f.session.sessionId, [first.agentId, second.agentId], 10000);
+		void waiting.catch(() => undefined);
+		const firstAdapter = await running(f.adapters, first.sessionId);
+		const secondAdapter = await running(f.adapters, second.sessionId);
+		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
+		firstAdapter.finish("one");
+		await expect.poll(() => f.registry.get(first.sessionId).latestRun?.status).toBe("completed");
+		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
+		expect(f.adapters.get(f.session.sessionId)?.inputs).toEqual([]);
+		expect(f.registry.get(f.session.sessionId).pendingInput).toEqual([
+			expect.objectContaining({ completionRunId: first.runId, delivered: false, status: "pending" }),
+		]);
+		secondAdapter.finish("two");
+		expect((await waiting).runs.map((run) => run.result)).toEqual(["one", "two"]);
+		await expect.poll(() => f.adapters.get(f.session.sessionId)?.inputs.length).toBe(2);
+		expect(f.adapters.get(f.session.sessionId)?.inputs[0]).toContain(`Run ${first.runId}`);
+		expect(f.adapters.get(f.session.sessionId)?.inputs[1]).toContain(`Run ${second.runId}`);
+	});
+	it("records a waiting parent's undelivered completion notice without replaying it after restart", async () => {
+		const f = await fixture(3);
+		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
+		await running(f.adapters, f.session.sessionId);
+		const [first, second] = (
+			await f.teams.spawn(f.session.sessionId, [
+				{ name: "first", task: "first" },
+				{ name: "second", task: "second" },
+			])
+		).agents;
+		const waiting = f.teams.wait(f.session.sessionId, [first.agentId, second.agentId], 10000);
+		void waiting.catch(() => undefined);
+		const firstAdapter = await running(f.adapters, first.sessionId);
+		await running(f.adapters, second.sessionId);
+		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
+		firstAdapter.finish("done");
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput[0]?.completionRunId).toBe(first.runId);
+		const restoredAdapters: ControlledAdapter[] = [];
+		const restored = new SessionRegistry({
+			agentDir: f.root,
+			workspaceFiles: new Directories(),
+			adapterFactory: async (descriptor, manager) => {
+				const adapter = new ControlledAdapter(descriptor, manager);
+				restoredAdapters.push(adapter);
+				return adapter;
+			},
+		});
+		await restored.initialize();
+		const teams = new TeamManager(restored);
+		await teams.initialize();
+		expect(restored.get(f.session.sessionId).pendingInput).toEqual([
+			expect.objectContaining({ completionRunId: first.runId, status: "undelivered", delivered: false }),
+		]);
+		expect(restored.get(f.session.sessionId).latestRun?.status).toBe("interrupted");
+		expect(restoredAdapters).toHaveLength(0);
+		await teams.close();
+		await restored.close();
+	});
+	it("does not activate a stopped parent from a cancelled child or replay its notice on restart", async () => {
+		const f = await fixture(2);
+		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "child", task: "slow" }])).agents[0];
+		await running(f.adapters, child.sessionId);
+		await f.teams.stop(f.session.sessionId);
+		expect(f.registry.get(f.session.sessionId).currentRun).toBeUndefined();
+		expect(f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		expect(
+			f.registry.state.runs.filter(
+				(run) =>
+					run.agentId ===
+					f.registry.state.agents.find((agent) => agent.sessionId === f.session.sessionId)?.agentId,
+			),
+		).toHaveLength(1);
+		const restoredAdapters: ControlledAdapter[] = [];
+		const restored = new SessionRegistry({
+			agentDir: f.root,
+			workspaceFiles: new Directories(),
+			adapterFactory: async (descriptor, manager) => {
+				const adapter = new ControlledAdapter(descriptor, manager);
+				restoredAdapters.push(adapter);
+				return adapter;
+			},
+		});
+		await restored.initialize();
+		const teams = new TeamManager(restored);
+		await teams.initialize();
+		expect(restored.get(f.session.sessionId).currentRun).toBeUndefined();
+		expect(restoredAdapters).toHaveLength(0);
+		await teams.close();
+		await restored.close();
 	});
 	it("rejects busy root prompts and keeps queued child inputs in FIFO until start", async () => {
 		const f = await fixture(1);
@@ -232,6 +452,8 @@ describe("team run boundaries", () => {
 		(await running(f.adapters, child.sessionId)).finish("first result");
 		await expect.poll(() => f.registry.get(child.sessionId).latestRun?.status).toBe("completed");
 		const waited = await f.teams.wait(f.session.sessionId, [child.agentId]);
+		const anyWaited = await f.teams.wait(f.session.sessionId, [child.agentId], 30000, undefined, "any");
+		expect(anyWaited).toMatchObject({ timedOut: false, runs: [{ runId: child.runId, status: "completed" }] });
 		await f.teams.send(f.session.sessionId, child.agentId, "second");
 		expect(waited.runs[0]).toMatchObject({ runId: child.runId, result: "first result", status: "completed" });
 		expect(f.registry.get(child.sessionId).currentRun?.runId).not.toBe(child.runId);
@@ -284,6 +506,20 @@ describe("team run boundaries", () => {
 		await f.teams.prompt(f.session.sessionId, { text: "explicit restart", mode: "prompt" });
 		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("running");
 	});
+	it("resumes a waiting parent once with the cancelled child's notice", async () => {
+		const f = await fixture(2);
+		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
+		await running(f.adapters, f.session.sessionId);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "child", task: "slow" }])).agents[0];
+		const waiting = f.teams.wait(f.session.sessionId, [child.agentId], 10000, undefined, "any");
+		await running(f.adapters, child.sessionId);
+		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
+		await f.teams.stop(child.sessionId);
+		expect((await waiting).runs).toEqual([expect.objectContaining({ runId: child.runId, status: "cancelled" })]);
+		await expect.poll(() => f.adapters.get(f.session.sessionId)?.inputs.length).toBe(1);
+		expect(f.adapters.get(f.session.sessionId)?.inputs[0]).toContain(`Run ${child.runId} (child) cancelled`);
+		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("running");
+	});
 	it("aborts a waiting caller without reacquiring a permit or hanging stop", async () => {
 		const f = await fixture(1);
 		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
@@ -311,9 +547,136 @@ describe("team run boundaries", () => {
 		expect((await waiting).timedOut).toBe(true);
 		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("running");
 	});
+	it("applies a named project profile without granting tools outside its allowance", async () => {
+		const f = await fixture();
+		const directory = join(f.workspace.path, ".hasilan-code", "agents");
+		await mkdir(directory, { recursive: true });
+		await writeFile(
+			join(directory, "reviewer.json"),
+			JSON.stringify({
+				name: "reviewer",
+				description: "Checks changes",
+				systemPrompt: "Review carefully",
+				tools: ["read"],
+			}),
+		);
+		await f.teams.prompt(f.session.sessionId, { text: "coordinate", mode: "prompt" });
+		await expect(
+			f.teams.spawn(f.session.sessionId, [{ name: "bad", task: "review", profile: "missing" }]),
+		).rejects.toThrow("Unknown agent profile");
+		await expect(
+			f.teams.spawn(f.session.sessionId, [{ name: "bad", task: "review", profile: "reviewer", tools: ["bash"] }]),
+		).rejects.toThrow("subset of profile");
+		expect(f.registry.state.agents).toHaveLength(1);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "audit", task: "review", profile: "reviewer" }]))
+			.agents[0];
+		const descriptor = f.registry.descriptor(child.sessionId);
+		expect(descriptor.systemPrompt).toBe("Review carefully");
+		expect(descriptor.tools).toEqual(["read"]);
+	});
+	it("executes dependency stages only after successful prerequisites and passes their results", async () => {
+		let teams: TeamManager;
+		const started: string[] = [];
+		const f = await fixture(2, async (adapter, text) => {
+			if (text !== "workflow" && !adapter.descriptor.parentSessionId) return "continuation";
+			if (!adapter.descriptor.parentSessionId) {
+				const outcome = await teams.workflow(
+					adapter.descriptor.sessionId,
+					[
+						{ name: "review", task: "review", dependsOn: ["implementation"] },
+						{ name: "implementation", task: "implement" },
+						{ name: "research", task: "research" },
+					],
+					10000,
+					adapter.controller.signal,
+				);
+				return JSON.stringify(outcome);
+			}
+			started.push(adapter.descriptor.role ?? "");
+			if (adapter.descriptor.role === "review") {
+				expect(started).toContain("implementation");
+				expect(text).toContain("implementation:\nimplemented");
+			}
+			return adapter.descriptor.role === "implementation" ? "implemented" : "done";
+		});
+		teams = f.teams;
+		const admission = await teams.prompt(f.session.sessionId, { text: "workflow", mode: "prompt" });
+		await expect
+			.poll(() => f.registry.state.runs.find((run) => run.runId === admission.runId)?.status, { timeout: 15000 })
+			.toBe("completed");
+		const outcome = JSON.parse(f.registry.state.runs.find((run) => run.runId === admission.runId)?.result ?? "{}");
+		expect(outcome.timedOut).toBe(false);
+		expect(outcome.tasks.map((task: { name: string; status: string }) => [task.name, task.status])).toEqual([
+			["review", "completed"],
+			["implementation", "completed"],
+			["research", "completed"],
+		]);
+	});
+	it("skips transitive dependents after failure, including reverse-ordered graph nodes", async () => {
+		let teams: TeamManager;
+		const f = await fixture(2, async (adapter, text) => {
+			if (text !== "workflow" && !adapter.descriptor.parentSessionId) return "continuation";
+			if (adapter.descriptor.parentSessionId) throw new Error("source failed");
+			return JSON.stringify(
+				await teams.workflow(
+					adapter.descriptor.sessionId,
+					[
+						{ name: "publish", task: "publish", dependsOn: ["review"] },
+						{ name: "review", task: "review", dependsOn: ["source"] },
+						{ name: "source", task: "source" },
+					],
+					10000,
+					adapter.controller.signal,
+				),
+			);
+		});
+		teams = f.teams;
+		const admission = await teams.prompt(f.session.sessionId, { text: "workflow", mode: "prompt" });
+		await expect
+			.poll(() => f.registry.state.runs.find((run) => run.runId === admission.runId)?.status, { timeout: 15000 })
+			.toBe("completed");
+		const outcome = JSON.parse(f.registry.state.runs.find((run) => run.runId === admission.runId)?.result ?? "{}");
+		expect(outcome.tasks.map((task: { name: string; status: string }) => [task.name, task.status])).toEqual([
+			["publish", "skipped"],
+			["review", "skipped"],
+			["source", "failed"],
+		]);
+		expect(f.registry.state.agents).toHaveLength(2);
+	});
 });
 
 describe("persistent conversation and projection boundaries", () => {
+	it("retains thinking chosen before the first prompt without materializing a session", async () => {
+		const f = await fixture();
+		await f.registry.setThinkingLevel(f.session.sessionId, "low");
+		expect(f.registry.get(f.session.sessionId)).toMatchObject({ thinkingLevel: "low", materialized: false });
+		const restored = new SessionRegistry({ agentDir: f.root, workspaceFiles: new Directories() });
+		await restored.initialize();
+		expect(restored.get(f.session.sessionId)).toMatchObject({ thinkingLevel: "low", materialized: false });
+		await restored.close();
+	});
+	it("keeps the first user prompt as the title across later runs and restart, and persists thinking selection", async () => {
+		const f = await fixture();
+		expect(f.registry.get(f.session.sessionId).title).toBeUndefined();
+		await f.teams.prompt(f.session.sessionId, { text: "最初の依頼", mode: "prompt" });
+		await expect(f.registry.setThinkingLevel(f.session.sessionId, "high")).rejects.toMatchObject({ statusCode: 409 });
+		(await running(f.adapters, f.session.sessionId)).finish("一回目");
+		await expect.poll(() => f.registry.get(f.session.sessionId).latestRun?.status).toBe("completed");
+		await f.registry.setThinkingLevel(f.session.sessionId, "high");
+		await f.teams.prompt(f.session.sessionId, { text: "別の依頼", mode: "prompt" });
+		expect(f.registry.get(f.session.sessionId).title).toBe("最初の依頼");
+		expect(f.registry.list(f.workspace.id)[0].title).toBe("最初の依頼");
+		await expect
+			.poll(() => f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user").length)
+			.toBe(2);
+		(await running(f.adapters, f.session.sessionId)).finish("二回目");
+		await expect.poll(() => f.registry.get(f.session.sessionId).latestRun?.status).toBe("completed");
+		const restored = new SessionRegistry({ agentDir: f.root, workspaceFiles: new Directories() });
+		await restored.initialize();
+		expect(restored.get(f.session.sessionId)).toMatchObject({ title: "最初の依頼", thinkingLevel: "high" });
+		expect(restored.list(f.workspace.id)[0].title).toBe("最初の依頼");
+		await restored.close();
+	});
 	it("replaces streamed messages in place and restores the authoritative JSONL after restart", async () => {
 		const f = await fixture();
 		await f.teams.prompt(f.session.sessionId, { text: "question", mode: "prompt" });

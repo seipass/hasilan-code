@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
+import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import {
 	type AgentSessionEvent,
 	createAgentSession,
@@ -37,6 +38,7 @@ export interface SessionDescriptor {
 	role?: string;
 	systemPrompt?: string;
 	model?: ModelSelection;
+	thinkingLevel?: ThinkingLevel;
 	tools?: string[];
 	availability: "ready" | "missing";
 }
@@ -63,6 +65,7 @@ export interface ContextUsageSnapshot {
 	percent: number | null;
 }
 export interface SessionSnapshot extends SessionDescriptor {
+	title?: string;
 	contextUsage?: ContextUsageSnapshot;
 	messages: ProjectedMessage[];
 	toolCalls: ProjectedTool[];
@@ -94,6 +97,8 @@ export interface ExecutionAdapter {
 	clearQueue(): unknown;
 	getActiveToolNames(): string[];
 	getContextUsage?(): ContextUsageSnapshot | undefined;
+	getThinkingLevel?(): ThinkingLevel;
+	setThinkingLevel?(level: ThinkingLevel): void;
 	setModel(selection: ModelSelection): Promise<void>;
 	dispose(): void;
 }
@@ -188,6 +193,11 @@ function validateState(value: unknown): asserts value is HarnessState {
 			throw new Error("Invalid session tools state");
 		if (session.model && (typeof session.model.provider !== "string" || typeof session.model.id !== "string"))
 			throw new Error("Invalid session model state");
+		if (
+			session.thinkingLevel &&
+			!["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(session.thinkingLevel)
+		)
+			throw new Error("Invalid session thinking level");
 	}
 	const memberSessions = new Set<string>();
 	for (const team of state.teams)
@@ -362,6 +372,7 @@ export class SessionRegistry {
 		role?: string;
 		systemPrompt?: string;
 		model?: ModelSelection;
+		thinkingLevel?: ThinkingLevel;
 		tools?: string[];
 	}): Promise<SessionDescriptor> {
 		return this.mutate(() => this.createWithinMutation(options));
@@ -373,13 +384,14 @@ export class SessionRegistry {
 		role?: string;
 		systemPrompt?: string;
 		model?: ModelSelection;
+		thinkingLevel?: ThinkingLevel;
 		tools?: string[];
 	}): Promise<SessionDescriptor> {
 		if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
 		const cwd = this.getWorkspaceRoot(options.workspaceId);
 		const model = options.model ?? this.options.getDefaultModel?.(cwd);
 		if (model && this.options.modelRuntime && !this.options.modelRuntime.getModel(model.provider, model.id))
-			throw new HarnessError("Model not found; select a model from Settings");
+			throw new HarnessError("Model not found; select a model in the composer");
 		const descriptor: SessionDescriptor = {
 			...options,
 			sessionId: randomUUID(),
@@ -388,6 +400,10 @@ export class SessionRegistry {
 			availability: "ready",
 			model: model ? { ...model } : undefined,
 		};
+		if (descriptor.thinkingLevel && model && this.options.modelRuntime) {
+			const selected = this.options.modelRuntime.getModel(model.provider, model.id);
+			if (selected) descriptor.thinkingLevel = clampThinkingLevel(selected, descriptor.thinkingLevel);
+		}
 		const manager = this.newManager(descriptor);
 		descriptor.path = manager.getSessionFile();
 		this.state.sessions.push(descriptor);
@@ -416,6 +432,8 @@ export class SessionRegistry {
 			...projection,
 			...descriptor,
 			contextUsage: this.live.get(id)?.adapter?.getContextUsage?.(),
+			thinkingLevel: this.live.get(id)?.adapter?.getThinkingLevel?.() ?? descriptor.thinkingLevel,
+			title: runs[0]?.task,
 			currentRun: runs.find((run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status)),
 			latestRun: runs.at(-1),
 			pendingInput: this.state.pendingInput.filter((input) => input.sessionId === id),
@@ -429,6 +447,7 @@ export class SessionRegistry {
 				const runs = agent ? this.state.runs.filter((run) => run.agentId === agent.agentId) : [];
 				return structuredClone({
 					...descriptor,
+					title: runs[0]?.task,
 					currentRun: runs.find(
 						(run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status),
 					),
@@ -490,7 +509,7 @@ export class SessionRegistry {
 				else {
 					const runtime = this.options.modelRuntime;
 					if (!runtime) throw new Error("Model runtime is not configured");
-					if (!descriptor.model) throw new HarnessError("No model selected; choose a model in Settings");
+					if (!descriptor.model) throw new HarnessError("No model selected; choose a model in the composer");
 					const settingsManager = createHarnessSettings(descriptor.cwd, this.options.agentDir);
 					const loader = new DefaultResourceLoader({
 						cwd: descriptor.cwd,
@@ -507,7 +526,7 @@ export class SessionRegistry {
 						? runtime.getModel(descriptor.model.provider, descriptor.model.id)
 						: undefined;
 					if (descriptor.model && !model)
-						throw new HarnessError("Configured model is unavailable; select a model in Settings");
+						throw new HarnessError("Configured model is unavailable; select a model in the composer");
 					const { session } = await createAgentSession({
 						cwd: descriptor.cwd,
 						agentDir: this.options.agentDir,
@@ -519,6 +538,7 @@ export class SessionRegistry {
 						customTools: this.options.customTools?.(descriptor),
 						tools: descriptor.tools,
 					});
+					if (descriptor.thinkingLevel) session.setThinkingLevel(descriptor.thinkingLevel);
 					await session.bindExtensions({});
 					adapter = {
 						subscribe: (listener) => session.subscribe(listener),
@@ -534,6 +554,8 @@ export class SessionRegistry {
 						clearQueue: () => session.clearQueue(),
 						getActiveToolNames: () => session.getActiveToolNames(),
 						getContextUsage: () => session.getContextUsage(),
+						getThinkingLevel: () => session.thinkingLevel,
+						setThinkingLevel: (level) => session.setThinkingLevel(level),
 						setModel: async (selection) => {
 							const selected = runtime.getModel(selection.provider, selection.id);
 							if (!selected) throw new HarnessError("Model not found");
@@ -662,6 +684,25 @@ export class SessionRegistry {
 			else if (this.options.modelRuntime && !this.options.modelRuntime.getModel(selection.provider, selection.id))
 				throw new HarnessError("Model not found");
 			descriptor.model = { ...selection };
+			const selected = this.options.modelRuntime?.getModel(selection.provider, selection.id);
+			if (selected && descriptor.thinkingLevel)
+				descriptor.thinkingLevel =
+					adapter?.getThinkingLevel?.() ?? clampThinkingLevel(selected, descriptor.thinkingLevel);
+			await this.persist();
+			this.changed(id);
+		});
+	}
+	async setThinkingLevel(id: string, level: ThinkingLevel): Promise<void> {
+		await this.mutate(async () => {
+			if (this.get(id).currentRun) throw new HarnessError("Change thinking only while the session is idle", 409);
+			const descriptor = this.descriptor(id);
+			const model =
+				descriptor.model && this.options.modelRuntime?.getModel(descriptor.model.provider, descriptor.model.id);
+			if (model && !getSupportedThinkingLevels(model).includes(level))
+				throw new HarnessError("Thinking level is not supported by this model", 400);
+			const adapter = this.live.get(id)?.adapter;
+			adapter?.setThinkingLevel?.(level);
+			descriptor.thinkingLevel = adapter?.getThinkingLevel?.() ?? level;
 			await this.persist();
 			this.changed(id);
 		});

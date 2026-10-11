@@ -1,3 +1,5 @@
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+
 export interface Workspace {
 	workspaceId: string;
 	path: string;
@@ -19,8 +21,8 @@ export interface Run {
 	result?: string;
 	error?: string;
 	waitingOnRunIds?: string[];
-	startedAt?: number;
-	settledAt?: number;
+	startedAt?: string;
+	settledAt?: string;
 }
 export interface Model {
 	provider: string;
@@ -35,11 +37,13 @@ export interface PendingInput {
 }
 export interface SessionSummary {
 	sessionId: string;
+	title?: string;
 	workspaceId: string;
 	cwd: string;
 	parentSessionId?: string;
 	role?: string;
 	model?: Model;
+	thinkingLevel?: ThinkingLevel;
 	materialized: boolean;
 	availability: "ready" | "missing";
 	currentRun?: Run;
@@ -89,12 +93,15 @@ export interface WorkspaceProjection {
 	teams: TeamSnapshot;
 }
 export interface Settings {
-	search: { defaultProvider: "brave" | "tavily"; configured: { brave: boolean; tavily: boolean } };
+	search: {
+		defaultProvider: "brave" | "tavily" | "exa" | "firecrawl";
+		configured: { brave: boolean; tavily: boolean; exa: boolean; firecrawl: boolean };
+	};
 	teams: { maxConcurrentAgents: number; maxDepth: number };
 	llm: { defaultModel?: Model };
 	browser?: { ready: boolean; error?: string };
 }
 export interface ModelCatalog {
 	providers: { id: string; name: string; configured?: boolean; oauth?: { label: string }; apiKey?: boolean }[];
-	models: (Model & { contextWindow: number })[];
+	models: (Model & { contextWindow: number; thinkingLevels?: ThinkingLevel[] })[];
 }

@@ -5,7 +5,7 @@ import { RUN_LABELS } from "./TeamPane.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
 import type { SessionDetail } from "./types.ts";
 
-export function ChatPane({ session, workspacePath, contextWindow, connected, modelReady, draftKey, modelControl, onSend, onFile, onStop, onParent, onSettings }: {
+export function ChatPane({ session, workspacePath, contextWindow, connected, modelReady, draftKey, modelControl, onSend, onFile, onStop, onParent, onSettings, onProviderSettings }: {
 	session?: SessionDetail;
 	workspacePath?: string;
 	contextWindow?: number;
@@ -18,6 +18,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 	onStop: () => void;
 	onParent: (sessionId: string) => void;
 	onSettings: () => void;
+	onProviderSettings: () => void;
 }) {
 	const [text, setText] = useState(() => { try { return localStorage.getItem(`pi-web-draft:${draftKey}`) ?? ""; } catch { return ""; } });
 	const [mode, setMode] = useState<"steer" | "followUp">("followUp");
@@ -66,16 +67,17 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 				const calls = parts.filter((part: unknown) => record(part) && part.type === "toolCall");
 				const content = calls.length ? parts.filter((part: unknown) => !record(part) || part.type !== "toolCall") : message.content;
 				return <article key={message.messageId} className={`message role-${message.role} ${message.partial ? "partial" : ""}`}>{message.role !== "assistant" && message.role !== "user" && <div className="message-label">{message.role}</div>}<div className="message-content"><Content value={content} onFile={onFile} />{calls.map((part: unknown, index) => { const tool = record(part) ? session.toolCalls.find((entry) => entry.callId === part.id) : undefined; return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>; })}{message.partial && <span className="streaming-dot" aria-label="応答中" />}</div></article>;
-			})}{latestError && <div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><p>接続設定を確認して、もう一度送信してください。</p><button className="text-link" onClick={onSettings}>モデルと接続設定を確認</button><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div>}</div>
+			})}{latestError && <div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><p>接続設定を確認して、もう一度送信してください。</p><button className="text-link" onClick={onProviderSettings}>プロバイダーの認証を確認</button><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div>}</div>
 		</div>}
 		{!empty && !nearBottom && <button className="back-to-bottom" onClick={() => { if (scroller.current) scroller.current.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }); atBottom.current = true; setNearBottom(true); }}>最新のメッセージへ ↓</button>}
 		<div className="composer-area">{session?.currentRun && <div className="run-progress" role="status"><span className="activity-dot" /><span>{RUN_LABELS[session.currentRun.status]}</span>{session.pendingInput.length > 0 && <span className="muted">追加指示 {session.pendingInput.length} 件</span>}</div>}
-			<div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath}>{workspacePath}</code>}</div>
+			{empty && <div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath}>{workspacePath}</code>}</div>}
 			<form className="composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
 				<label className="sr-only" htmlFor="message">メッセージ</label><textarea ref={input} id="message" aria-label="メッセージ" value={text} onChange={(event) => setText(event.target.value)} placeholder="メッセージを入力…" rows={3} disabled={sending || session?.availability === "missing"} onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} />
 				<div className="composer-toolbar"><div className="composer-context">{modelControl}</div><div className="composer-delivery">{busy && <label><span className="sr-only">追加指示の送信方法</span><select aria-label="追加指示の送信方法" value={mode} onChange={(event) => setMode(event.target.value as "steer" | "followUp")}><option value="followUp">完了後に続ける</option><option value="steer">実行中に指示</option></select></label>}{busy && !text.trim() ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title="Ctrl / Cmd + Enter で送信" disabled={!connected || sending || !text.trim() || session?.availability === "missing"}>{sending ? "…" : "↑"}</button>}</div></div>
+				{contextLimit !== undefined && contextLimit > 0 && <div className="composer-usage"><span className="context-usage" aria-label={`コンテキスト使用量 ${contextTokens == null ? "未計測" : `${contextTokens.toLocaleString("ja-JP")} トークン`} / ${contextLimit.toLocaleString("ja-JP")} トークン`}>コンテキスト {contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span></div>}
 			</form>
-			{(!modelReady || (contextLimit !== undefined && contextLimit > 0)) && <div className="composer-caption">{!modelReady && <button className="text-link" onClick={onSettings}>モデルを接続すると会話を始められます</button>}{contextLimit !== undefined && contextLimit > 0 && <span className="context-usage" aria-label={`コンテキスト使用量 ${contextTokens == null ? "未計測" : `${contextTokens.toLocaleString("ja-JP")} トークン`} / ${contextLimit.toLocaleString("ja-JP")} トークン`}>コンテキスト {contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span>}</div>}
+			{!modelReady && <div className="composer-caption"><button className="text-link" onClick={onSettings}>モデルを接続すると会話を始められます</button></div>}
 			{error && <p className="composer-error" role="alert">{error}</p>}{notice && <p className="muted" role="status">{notice}</p>}
 		</div>
 	</section>;
