@@ -16,7 +16,6 @@
 	overflow-x: auto;
 	border-bottom: 1px solid var(--border-subtle);
 	background: var(--surface-panel);
-	scrollbar-width: thin;
 }
 .files-tab { position: relative; display: flex; align-items: center; flex: 0 0 auto; max-width: 260px; border-right: 1px solid var(--border-subtle); border-bottom: 2px solid transparent; }
 .files-tab[data-active="true"] { background: var(--surface-raised); border-bottom-color: var(--primary); }
@@ -43,12 +42,12 @@
 .files-view-mode { display: flex; gap: 6px; flex-shrink: 0; padding: 8px 14px; border-bottom: 1px solid var(--border-subtle); }
 .files-view-mode button { padding: 5px 10px; font-size: 12px; }
 .files-view-mode [aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); border-color: var(--primary); }
-.files-viewer { flex: 1; min-height: 0; min-width: 0; overflow: auto; background: var(--surface-sunken); scrollbar-width: thin; }
+.files-viewer { flex: 1; min-height: 0; min-width: 0; overflow: auto; background: var(--surface-sunken); }
 .files-viewer:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .files-message { margin: 0; padding: 20px 18px; font-size: 13px; }
 .files-page { padding: 12px 16px; }
 .files-page button { font-size: 12px; }
-.files-source-lines { min-width: 100%; width: max-content; padding: 14px 0; font-family: "Cascadia Code", "Consolas", ui-monospace, monospace; }
+.files-source-lines { min-width: 100%; width: max-content; padding: 14px 0; font-family: "UDEV Gothic", ui-monospace, monospace; }
 .files-source-lines > div { display: flex; min-width: max-content; line-height: 1.75; }
 .files-source-lines code { white-space: pre; font-size: 12px; padding-right: 20px; }
 .files-line-number { position: sticky; left: 0; flex-shrink: 0; min-width: 4.2rem; padding: 0 14px 0 8px; text-align: right; color: var(--on-surface-muted); background: var(--surface-sunken); user-select: none; font-size: 12px; }
@@ -58,7 +57,7 @@
 .files-splitter::before { content: ""; position: absolute; inset: 0 3px; background: var(--border-subtle); }
 .files-splitter:hover::before, .files-splitter:focus-visible::before, .files-splitter[data-resizing="true"]::before { background: var(--primary); }
 .files-splitter:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-.files-tree { min-width: 0; min-height: 0; overflow: auto; padding: 10px 8px; scrollbar-width: thin; }
+.files-tree { min-width: 0; min-height: 0; overflow: auto; padding: 10px 8px; }
 .files-tree-list { list-style: none; padding: 0; margin: 0; font-size: 13px; }
 .files-tree-list .files-tree-list { padding-left: 16px; }
 .files-tree-entry { display: flex; align-items: center; gap: 7px; width: 100%; min-width: max-content; text-align: left; white-space: nowrap; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; font-size: 13px; }
@@ -74,7 +73,7 @@
 .files-markdown blockquote { margin-left: 0; padding-left: 16px; border-left: 3px solid var(--border-subtle); color: var(--on-surface-muted); }
 .files-markdown pre { overflow: auto; padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-panel); }
 .files-markdown pre code { white-space: pre; overflow-wrap: normal; font-size: 12px; }
-.files-markdown code { font-family: "Cascadia Code", "Consolas", ui-monospace, monospace; }
+.files-markdown code { font-family: "UDEV Gothic", ui-monospace, monospace; }
 .files-markdown :not(pre) > code { padding: 2px 5px; border-radius: 4px; background: var(--surface-raised); font-size: 0.9em; }
 .files-markdown table { display: block; max-width: 100%; overflow: auto; border-collapse: collapse; }
 .files-markdown th, .files-markdown td { padding: 7px 12px; border: 1px solid var(--border-subtle); }

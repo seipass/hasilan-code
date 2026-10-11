@@ -132,6 +132,7 @@ export interface PackageManager {
 interface PackageManagerOptions {
 	cwd: string;
 	agentDir: string;
+	projectConfigDirName?: string;
 	settingsManager: SettingsManager;
 	/** Names of built-in extensions, resolved as `builtin:<name>` extension resources. */
 	builtinExtensions?: string[];
@@ -812,6 +813,7 @@ function applyAutoloadDisabledPatterns(allPaths: string[], patterns: string[], b
 export class DefaultPackageManager implements PackageManager {
 	private cwd: string;
 	private agentDir: string;
+	private projectConfigDirName: string;
 	private settingsManager: SettingsManager;
 	private builtinExtensions: string[];
 	private globalNpmRoot: string | undefined;
@@ -821,6 +823,7 @@ export class DefaultPackageManager implements PackageManager {
 	constructor(options: PackageManagerOptions) {
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
+		this.projectConfigDirName = options.projectConfigDirName ?? CONFIG_DIR_NAME;
 		this.settingsManager = options.settingsManager;
 		this.builtinExtensions = options.builtinExtensions ?? [];
 	}
@@ -936,7 +939,7 @@ export class DefaultPackageManager implements PackageManager {
 		await this.resolvePackageSources(packageSources, accumulator, onMissing);
 
 		const globalBaseDir = this.agentDir;
-		const projectBaseDir = join(this.cwd, CONFIG_DIR_NAME);
+		const projectBaseDir = join(this.cwd, this.projectConfigDirName);
 
 		for (const resourceType of RESOURCE_TYPES) {
 			const target = this.getTargetMap(accumulator, resourceType);
@@ -2088,7 +2091,7 @@ export class DefaultPackageManager implements PackageManager {
 		}
 		if (scope === "project") {
 			this.assertProjectTrustedForScope(scope);
-			return join(this.cwd, CONFIG_DIR_NAME, "npm");
+			return join(this.cwd, this.projectConfigDirName, "npm");
 		}
 		return join(this.agentDir, "npm");
 	}
@@ -2129,7 +2132,7 @@ export class DefaultPackageManager implements PackageManager {
 		}
 		if (scope === "project") {
 			this.assertProjectTrustedForScope(scope);
-			return join(this.cwd, CONFIG_DIR_NAME, "npm", "node_modules", source.name);
+			return join(this.cwd, this.projectConfigDirName, "npm", "node_modules", source.name);
 		}
 		return join(this.agentDir, "npm", "node_modules", source.name);
 	}
@@ -2169,7 +2172,7 @@ export class DefaultPackageManager implements PackageManager {
 		}
 		if (scope === "project") {
 			this.assertProjectTrustedForScope(scope);
-			return join(this.cwd, CONFIG_DIR_NAME, "git");
+			return join(this.cwd, this.projectConfigDirName, "git");
 		}
 		return join(this.agentDir, "git");
 	}
@@ -2195,7 +2198,7 @@ export class DefaultPackageManager implements PackageManager {
 	private getBaseDirForScope(scope: SourceScope): string {
 		if (scope === "project") {
 			this.assertProjectTrustedForScope(scope);
-			return join(this.cwd, CONFIG_DIR_NAME);
+			return join(this.cwd, this.projectConfigDirName);
 		}
 		if (scope === "user") {
 			return this.agentDir;
@@ -2476,7 +2479,7 @@ export class DefaultPackageManager implements PackageManager {
 		};
 
 		if (projectTrusted) {
-			// Project extensions from .pi/
+			// Project extensions from the project configuration directory
 			addResources(
 				"extensions",
 				collectAutoExtensionEntries(projectDirs.extensions),
@@ -2485,7 +2488,7 @@ export class DefaultPackageManager implements PackageManager {
 				projectBaseDir,
 			);
 
-			// Project skills from .pi/
+			// Project skills from the project configuration directory
 			addResources(
 				"skills",
 				collectAutoSkillEntries(projectDirs.skills, "pi"),
@@ -2528,7 +2531,7 @@ export class DefaultPackageManager implements PackageManager {
 			);
 		}
 
-		// User extensions from ~/.pi/agent/
+		// User extensions from the agent directory
 		addResources(
 			"extensions",
 			collectAutoExtensionEntries(userDirs.extensions),
@@ -2537,7 +2540,7 @@ export class DefaultPackageManager implements PackageManager {
 			globalBaseDir,
 		);
 
-		// User skills from ~/.pi/agent/
+		// User skills from the agent directory
 		addResources(
 			"skills",
 			collectAutoSkillEntries(userDirs.skills, "pi"),

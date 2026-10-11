@@ -159,6 +159,7 @@ export type SettingsScope = "global" | "project";
 
 export interface SettingsManagerCreateOptions {
 	projectTrusted?: boolean;
+	projectConfigDirName?: string;
 }
 
 export interface SettingsStorage {
@@ -185,11 +186,11 @@ export class FileSettingsStorage implements SettingsStorage {
 	private globalSettingsPath: string;
 	private projectSettingsPath: string;
 
-	constructor(cwd: string, agentDir: string) {
+	constructor(cwd: string, agentDir: string, projectConfigDirName: string = CONFIG_DIR_NAME) {
 		const resolvedCwd = resolvePath(cwd);
 		const resolvedAgentDir = resolvePath(agentDir);
 		this.globalSettingsPath = join(resolvedAgentDir, "settings.json");
-		this.projectSettingsPath = join(resolvedCwd, CONFIG_DIR_NAME, "settings.json");
+		this.projectSettingsPath = join(resolvedCwd, projectConfigDirName, "settings.json");
 	}
 
 	private acquireLockSyncWithRetry(path: string): () => void {
@@ -312,10 +313,11 @@ export class SettingsManager {
 	): SettingsManager {
 		const resolvedCwd = resolvePath(cwd);
 		const resolvedAgentDir = resolvePath(agentDir);
-		const storage = new FileSettingsStorage(resolvedCwd, resolvedAgentDir);
+		const projectConfigDirName = options.projectConfigDirName ?? CONFIG_DIR_NAME;
+		const storage = new FileSettingsStorage(resolvedCwd, resolvedAgentDir, projectConfigDirName);
 		return SettingsManager.fromStorageWithPaths(storage, options, {
 			global: join(resolvedAgentDir, "settings.json"),
-			project: join(resolvedCwd, CONFIG_DIR_NAME, "settings.json"),
+			project: join(resolvedCwd, projectConfigDirName, "settings.json"),
 		});
 	}
 

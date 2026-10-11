@@ -1,5 +1,6 @@
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getAgentDir, ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
 	credentialSchema,
 	modelSchema,
@@ -10,7 +11,9 @@ import {
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
 import { ArtifactStore } from "./artifacts.ts";
+import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
 import { openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
+import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
 import { EventHub } from "./events.ts";
 import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
@@ -33,9 +36,15 @@ async function main() {
 		return;
 	}
 	const cwd = await resolveCliWorkspace(options);
-	const agentDir = getAgentDir();
-	const modelRuntime = await ModelRuntime.create();
+	const agentDir = getHarnessAgentDir();
+	const modelRuntime = await ModelRuntime.create({
+		authPath: join(agentDir, "auth.json"),
+		modelsPath: join(agentDir, "models.json"),
+		modelsStorePath: join(agentDir, "models-store.json"),
+	});
 	const settings = await SettingsService.open(agentDir, modelRuntime);
+	const agentSettings = createHarnessSettings(cwd, agentDir);
+	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
 	const artifacts = new ArtifactStore();
 	const browser = new BrowserManager(artifacts);
 	const search = new SearchService(settings);
@@ -150,6 +159,19 @@ async function main() {
 					if (method === "PATCH") return reply(await settings.patch(await readJson(request, settingsPatchSchema)));
 				}
 				if (url.pathname === "/api/models" && method === "GET") return reply(settings.getModels());
+				if (url.pathname === "/api/auth/login" && method === "POST") {
+					const { provider } = await readJson(request, authLoginSchema, 64 * 1024);
+					return reply(authLogin.start(provider), 202);
+				}
+				if (parts[1] === "auth" && parts[2] === "login" && parts[3]) {
+					const id = parts[3];
+					if (parts.length === 4 && method === "GET") return reply(authLogin.get(id));
+					if (parts.length === 4 && method === "DELETE") return reply(authLogin.cancel(id));
+					if (parts.length === 5 && parts[4] === "prompt" && method === "POST") {
+						const { promptId, value } = await readJson(request, authLoginPromptSchema, 64 * 1024);
+						return reply(authLogin.submit(id, promptId, value));
+					}
+				}
 				if (parts[1] === "credentials" && parts[2] === "search" && parts[3]) {
 					if (parts[3] !== "brave" && parts[3] !== "tavily") throw new HttpError(400, "Unknown search provider");
 					const provider: SearchProviderId = parts[3];
@@ -225,6 +247,7 @@ async function main() {
 		if (shuttingDown) return;
 		shuttingDown = true;
 		folderPickerAbort.abort();
+		await authLogin.close();
 		await teams.close();
 		await Promise.all([browser.close(), terminals.shutdown()]);
 		await registry.close();

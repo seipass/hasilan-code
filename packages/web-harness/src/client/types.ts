@@ -64,6 +64,7 @@ export interface ToolCall {
 	status: "running" | "success" | "error" | "cancelled";
 }
 export interface SessionDetail extends SessionSummary {
+	contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
 	messages: ChatMessage[];
 	toolCalls: ToolCall[];
 	activity: { queue?: { steering: string[]; followUp: string[] }; retry?: unknown; compaction?: unknown };
@@ -94,6 +95,6 @@ export interface Settings {
 	browser?: { ready: boolean; error?: string };
 }
 export interface ModelCatalog {
-	providers: { id: string; name: string; configured?: boolean }[];
-	models: Model[];
+	providers: { id: string; name: string; configured?: boolean; oauth?: { label: string }; apiKey?: boolean }[];
+	models: (Model & { contextWindow: number })[];
 }

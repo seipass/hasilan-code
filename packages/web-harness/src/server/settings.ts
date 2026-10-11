@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
+import { createHarnessSettings } from "./config.ts";
 
 export const searchProviderSchema = Type.Union([Type.Literal("brave"), Type.Literal("tavily")]);
 export type SearchProviderId = Static<typeof searchProviderSchema>;
@@ -44,7 +45,7 @@ export interface SettingsSnapshot extends HarnessSettings {
 	search: HarnessSettings["search"] & { configured: Record<SearchProviderId, boolean> };
 }
 export interface ModelCatalog {
-	providers: { id: string; name: string; configured: boolean }[];
+	providers: { id: string; name: string; configured: boolean; apiKey?: boolean; oauth?: { label: string } }[];
 	models: { provider: string; id: string; name: string; contextWindow: number; input: string[] }[];
 }
 /** Deliberately exposes catalogue and process-only credentials, not Pi's auth storage. */
@@ -122,7 +123,7 @@ export class SettingsService {
 
 	static async open(agentDir: string, modelRuntime: SettingsModelRuntime): Promise<SettingsService> {
 		const directory = join(agentDir, "web-harness");
-		// agentDir is the user's private Pi directory; Windows inherits that directory's ACL.
+		// Windows inherits the private application's directory ACL.
 		await mkdir(directory, { recursive: true, mode: 0o700 });
 		if (process.platform !== "win32") await chmod(directory, 0o700);
 		const [savedSettings, savedCredentials] = await Promise.all([
@@ -154,12 +155,12 @@ export class SettingsService {
 		};
 	}
 
-	/** Resolve a new conversation's model without changing either Web or Pi settings. */
+	/** Resolve a new conversation's model using only Hasilan Code settings. */
 	getEffectiveDefaultModel(cwd: string): HarnessSettings["llm"]["defaultModel"] {
 		if (this.settings.llm.defaultModel) return { ...this.settings.llm.defaultModel };
-		const piSettings = SettingsManager.create(cwd, this.agentDir);
-		const provider = piSettings.getDefaultProvider();
-		const id = piSettings.getDefaultModel();
+		const agentSettings = createHarnessSettings(cwd, this.agentDir);
+		const provider = agentSettings.getDefaultProvider();
+		const id = agentSettings.getDefaultModel();
 		// Match Pi's initial-model policy: saved defaults require configured auth.
 		if (provider && id && this.modelRuntime.getModel(provider, id) && this.modelRuntime.hasConfiguredAuth(provider))
 			return { provider, id };
@@ -222,6 +223,10 @@ export class SettingsService {
 				id: provider.id,
 				name: provider.name,
 				configured: this.modelRuntime.hasConfiguredAuth(provider.id),
+				apiKey: Boolean(provider.auth.apiKey),
+				...(provider.auth.oauth
+					? { oauth: { label: provider.auth.oauth.loginLabel ?? provider.auth.oauth.name } }
+					: {}),
 			})),
 			models: this.modelRuntime.getModels().map((model) => ({
 				provider: model.provider,

@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, command, errorMessage } from "./api.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
+import { OAuthLogin } from "./OAuthLogin.tsx";
 import type { Model, ModelCatalog, Settings } from "./types.ts";
 
 const TABS = [
@@ -18,7 +19,9 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 	const [error, setError] = useState<string>();
 	const [notice, setNotice] = useState<string>();
 	const [busy, setBusy] = useState(false);
+	const [loginActive, setLoginActive] = useState(false);
 	const [loadAttempt, setLoadAttempt] = useState(0);
+	const [closing, setClosing] = useState(false);
 	const [searchKeys, setSearchKeys] = useState({ brave: "", tavily: "" });
 	const [llmProvider, setLlmProvider] = useState("");
 	const [llmKeys, setLlmKeys] = useState<Record<string, string>>({});
@@ -28,6 +31,11 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 	const titleId = useId();
 	const tabsId = useId();
 	const keyId = useId();
+	const requestClose = () => {
+		if (closing || busy) return;
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) onClose();
+		else setClosing(true);
+	};
 	useEffect(() => {
 		const previous = document.activeElement;
 		dialog.current?.querySelector<HTMLButtonElement>("button")?.focus();
@@ -63,9 +71,18 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 		finally { setBusy(false); }
 	}
 
-	return <div className="dialog-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-		<section ref={dialog} className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onKeyDown={(event) => {
-			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); }
+	async function accountConnected() {
+		setBusy(true); setError(undefined); setNotice(undefined);
+		try {
+			setCatalog(await api<ModelCatalog>("/api/models"));
+			setNotice("アカウントで接続しました。既定モデルは変更していません。使いたいモデルを選んで、別途保存してください。");
+			onSaved();
+		} finally { setBusy(false); }
+	}
+
+	return <div className="dialog-backdrop" data-closing={closing} onAnimationEnd={(event) => { if (closing && event.target === event.currentTarget) onClose(); }} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
+		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onKeyDown={(event) => {
+			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); requestClose(); }
 			if (event.key !== "Tab") return;
 			const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled):not([tabindex='-1']), input:not(:disabled), select:not(:disabled), a[href]") ?? [])].filter((element) => !element.matches(":disabled") && element.getClientRects().length > 0);
 			const first = controls[0];
@@ -73,7 +90,7 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 			if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
 			if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
 		}}>
-			<header className="panel-heading"><h2 id={titleId}>設定</h2><button type="button" disabled={busy} onClick={onClose} aria-label="設定を閉じる">閉じる</button></header>
+			<header className="panel-heading"><h2 id={titleId}>設定</h2><button type="button" disabled={busy || closing} onClick={requestClose} aria-label="設定を閉じる">閉じる</button></header>
 			<div className="settings-tabs" role="tablist" aria-label="設定のカテゴリ" onKeyDown={(event) => {
 				const index = TABS.findIndex((entry) => entry.id === tab);
 				let next: number;
@@ -92,48 +109,54 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 			{settings && <>
 				<section className="settings-content" role="tabpanel" id={`${tabsId}-models-panel`} aria-labelledby={`${tabsId}-models-tab`} hidden={tab !== "models"}>
 					<h3>モデルを接続する</h3>
-					<p>プロバイダーを選び、必要なら API キーを入力して、使いたいモデルを保存します。</p>
-					<form className="provider-model-flow" onSubmit={(event) => {
-						event.preventDefault();
-						if (!llmProvider || (!modelSelection && !llmKey.trim())) return;
-						void perform(async () => {
-							if (llmKey.trim()) {
-								await command(`/api/credentials/llm/${encodeURIComponent(llmProvider)}`, { key: llmKey }, "PUT");
-								setCatalog((current) => current && ({ ...current, providers: current.providers.map((provider) => provider.id === llmProvider ? { ...provider, configured: true } : provider) }));
-							}
-							if (modelSelection) {
-								try {
-									await command("/api/settings", { llm: { defaultModel: { provider: modelSelection.provider, id: modelSelection.id } } }, "PATCH");
-								} catch (reason: unknown) {
-									if (llmKey.trim()) throw new Error(`API キーは現在のプロセスに設定できましたが、既定モデルは保存できませんでした。再試行してください。${errorMessage(reason)}`);
-									throw reason;
-								}
-								setSettings((current) => current && ({ ...current, llm: { defaultModel: modelSelection } }));
-							}
-							setLlmKeys((keys) => ({ ...keys, [llmProvider]: "" }));
-						}, modelSelection ? "既定モデルを保存しました。新しい会話で使用します。既存の会話のモデルは変更しません。" : "API キーを現在のプロセスに設定しました。既定モデルは変更していません。");
-					}}>
+					<p>プロバイダーを選び、アカウントでログインするか API キーを設定します。既定モデルの保存はログインとは別の操作です。</p>
+					<div className="provider-model-flow">
 						<fieldset disabled={busy} className="settings-section"><legend>接続と既定モデル</legend>
-							<label>プロバイダー<select value={llmProvider} onChange={(event) => {
+							<label>プロバイダー<select value={llmProvider} disabled={loginActive} onChange={(event) => {
 								const provider = event.target.value;
 								setLlmProvider(provider);
 								setModelSelection(settings.llm.defaultModel?.provider === provider ? settings.llm.defaultModel : undefined);
 							}}><option value="" disabled>プロバイダーを選択</option>{catalog?.providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></label>
 							{llmProvider && <>
-							<p className="credential-status" data-configured={selectedProvider?.configured}>{selectedProvider?.configured === true ? "接続設定済み · 保存済み認証または環境変数を利用できます。" : selectedProvider?.configured === false ? "キー未設定 · モデルは先に選択できます。実行前に API キーを設定してください。" : "接続状態を確認できません。既存の Pi 認証がある場合、キーの再入力は不要です。"}</p>
-							<label htmlFor={keyId}>{selectedProvider?.name ?? "プロバイダー"} の API キー<input id={keyId} type="password" autoComplete="new-password" spellCheck={false} value={llmKey} placeholder={selectedProvider?.configured ? "空欄なら現在の認証を使う" : "API キーを入力"} onChange={(event) => setLlmKeys((keys) => ({ ...keys, [llmProvider]: event.target.value }))} /></label>
-							<p className="fine-print">ここで入力するキーは現在のサーバープロセスだけで有効です。サーバーの再起動で消えるため、継続して使う場合は Pi の auth.json / models.json / 環境変数で設定してください。既存の認証は上書き保存しません。</p>
-							<ModelPicker catalog={providerCatalog} value={modelSelection} onChange={setModelSelection} disabled={busy} />
-							<div className="settings-actions"><button type="submit" disabled={!llmProvider || (!modelSelection && !llmKey.trim())}>{busy ? "保存中…" : modelSelection ? "接続とモデルを保存" : "API キーを設定"}</button></div>
+							<p className="credential-status" data-configured={selectedProvider?.configured}>{selectedProvider?.configured === true ? "接続設定済み · 保存済み認証または環境変数を利用できます。再入力は不要です。" : selectedProvider?.configured === false ? selectedProvider.oauth ? "未接続 · アカウントでログインできます。モデルは先に選択できます。" : selectedProvider.apiKey ? "キー未設定 · モデルは先に選択できます。実行前に API キーを設定してください。" : "未接続 · Hasilan Code 専用の設定や環境変数で認証を設定してください。" : "接続状態を確認できません。Hasilan Code の保存済み認証がある場合、再入力は不要です。"}</p>
+							{selectedProvider?.oauth && tab === "models" && <OAuthLogin key={llmProvider} provider={llmProvider} label={selectedProvider.oauth.label} disabled={busy} onActiveChange={setLoginActive} onComplete={accountConnected} />}
+							<form className="provider-model-save" onSubmit={(event) => {
+								event.preventDefault();
+								if (!llmProvider || busy || loginActive || (!modelSelection && !(selectedProvider?.apiKey && llmKey.trim()))) return;
+								void perform(async () => {
+									if (selectedProvider?.apiKey && llmKey.trim()) {
+										await command(`/api/credentials/llm/${encodeURIComponent(llmProvider)}`, { key: llmKey }, "PUT");
+										setCatalog((current) => current && ({ ...current, providers: current.providers.map((provider) => provider.id === llmProvider ? { ...provider, configured: true } : provider) }));
+									}
+									if (modelSelection) {
+										try {
+											await command("/api/settings", { llm: { defaultModel: { provider: modelSelection.provider, id: modelSelection.id } } }, "PATCH");
+										} catch (reason: unknown) {
+											if (selectedProvider?.apiKey && llmKey.trim()) throw new Error(`API キーは現在のプロセスに設定できましたが、既定モデルは保存できませんでした。再試行してください。${errorMessage(reason)}`);
+											throw reason;
+										}
+										setSettings((current) => current && ({ ...current, llm: { defaultModel: modelSelection } }));
+									}
+									setLlmKeys((keys) => ({ ...keys, [llmProvider]: "" }));
+								}, modelSelection ? "既定モデルを保存しました。新しい会話で使用します。既存の会話のモデルは変更しません。" : "API キーを現在のプロセスに設定しました。既定モデルは変更していません。");
+							}}>
+								{selectedProvider?.apiKey && <>
+									{selectedProvider.oauth && <p className="auth-method-divider">または API キーで接続</p>}
+									<label htmlFor={keyId}>{selectedProvider.name} の API キー<input id={keyId} type="password" autoComplete="new-password" spellCheck={false} disabled={loginActive} value={llmKey} placeholder={selectedProvider.configured ? "空欄なら現在の認証を使う" : "API キーを入力"} onChange={(event) => setLlmKeys((keys) => ({ ...keys, [llmProvider]: event.target.value }))} /></label>
+									<p className="fine-print">ここで入力する API キーは現在のサーバープロセスだけで有効です。サーバーの再起動で消えるため、継続して使う場合は Hasilan Code 専用の auth.json / models.json / 環境変数で設定してください。アカウントのログイン認証とは別の設定です。既存の認証は上書き保存しません。</p>
+								</>}
+								<ModelPicker catalog={providerCatalog} value={modelSelection} onChange={setModelSelection} disabled={busy || loginActive} />
+								<div className="settings-actions"><button type="submit" disabled={loginActive || !llmProvider || (!modelSelection && !(selectedProvider?.apiKey && llmKey.trim()))}>{busy ? "保存中…" : modelSelection ? selectedProvider?.apiKey && llmKey.trim() ? "API キーと既定モデルを保存" : "既定モデルを保存" : "API キーを設定"}</button></div>
+							</form>
 							</>}
 						</fieldset>
-					</form>
-					<p className="fine-print">保存済みの既定モデル: {settings.llm.defaultModel ? `${settings.llm.defaultModel.provider} / ${settings.llm.defaultModel.id}` : "自動選択（Pi の設定を使用）"}</p>
-					<button type="button" disabled={busy || !settings.llm.defaultModel} onClick={() => { void perform(async () => {
+					</div>
+					<p className="fine-print">保存済みの既定モデル: {settings.llm.defaultModel ? `${settings.llm.defaultModel.provider} / ${settings.llm.defaultModel.id}` : "自動選択（Hasilan Code の設定を使用）"}</p>
+					<button type="button" disabled={busy || loginActive || !settings.llm.defaultModel} onClick={() => { void perform(async () => {
 						await command("/api/settings", { llm: { defaultModel: null } }, "PATCH");
 						setSettings((current) => current && ({ ...current, llm: {} }));
 						setModelSelection(undefined);
-					}, "Web の既定モデルを解除しました。新しい会話では Pi の設定からモデルを選びます。"); }}>既定モデルを自動選択に戻す</button>
+					}, "Web の既定モデルを解除しました。新しい会話では Hasilan Code の設定からモデルを選びます。"); }}>既定モデルを自動選択に戻す</button>
 				</section>
 				<section className="settings-content" role="tabpanel" id={`${tabsId}-search-panel`} aria-labelledby={`${tabsId}-search-tab`} hidden={tab !== "search"}>
 					<h3>Web 検索</h3>
@@ -174,7 +197,7 @@ export function SettingsDialog({ onClose, onSaved, workspaceId }: { onClose: () 
 				<section className="settings-content" role="tabpanel" id={`${tabsId}-environment-panel`} aria-labelledby={`${tabsId}-environment-tab`} hidden={tab !== "environment"}>
 					<h3>実行環境</h3>
 					<section className="settings-section"><h4>Browser use · Playwright</h4><p className="credential-status" data-configured={settings.browser?.ready}>{settings.browser?.ready ? "Chromium を利用できます。" : "Chromium の準備が必要です。"}</p>{settings.browser?.error && <p className="error">{settings.browser.error}</p>}{!settings.browser?.ready && <><p>サーバーを起動する環境で、次のコマンドを実行してください。</p><code>npx playwright install chromium</code><p className="fine-print">インストール後、この設定を開き直して状態を確認してください。</p></>}</section>
-					<section className="settings-section"><h4>認証とローカル権限</h4><p>LLM は Pi の auth.json / models.json / 環境変数の認証も利用します。設定済みのキーの値は取得・表示しません。</p><p>このアプリはローカル単一ユーザー向けです。エージェントの bash、ブラウザー、ユーザー端末は起動ユーザーの権限で動作します。ファイルのパス検査はサンドボックスではありません。</p></section>
+					<section className="settings-section"><h4>認証とローカル権限</h4><p>LLM は Hasilan Code 専用の auth.json / models.json と環境変数を利用します。Pi の設定・認証ファイルとは共有しません。設定済みのキーの値は取得・表示しません。</p><p>このアプリはローカル単一ユーザー向けです。エージェントの bash、ブラウザー、ユーザー端末は起動ユーザーの権限で動作します。ファイルのパス検査はサンドボックスではありません。</p></section>
 				</section>
 			</>}
 		</section>

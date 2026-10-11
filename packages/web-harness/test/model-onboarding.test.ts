@@ -23,7 +23,7 @@ describe("model onboarding", () => {
 	beforeEach(async () => {
 		root = await mkdtemp(join(tmpdir(), "pi-web-onboarding-"));
 		cwd = join(root, "workspace");
-		await mkdir(join(cwd, ".pi"), { recursive: true });
+		await mkdir(join(cwd, ".hasilan-code"), { recursive: true });
 		runtime = await ModelRuntime.create({
 			refreshOnCreate: false,
 			modelsPath: null,
@@ -50,7 +50,7 @@ describe("model onboarding", () => {
 		await rm(root, { recursive: true, force: true });
 	});
 
-	it("inherits the relevant Pi workspace default without persisting an incidental Web default", async () => {
+	it("inherits the Hasilan workspace default without persisting an incidental Web default", async () => {
 		const globalModel = models[0];
 		const projectModel = models[1];
 		await writeFile(
@@ -58,7 +58,7 @@ describe("model onboarding", () => {
 			JSON.stringify({ defaultProvider: globalModel.provider, defaultModel: globalModel.id }),
 		);
 		await writeFile(
-			join(cwd, ".pi", "settings.json"),
+			join(cwd, ".hasilan-code", "settings.json"),
 			JSON.stringify({ defaultProvider: projectModel.provider, defaultModel: projectModel.id }),
 		);
 		const selected = { provider: projectModel.provider, id: projectModel.id };
@@ -81,7 +81,7 @@ describe("model onboarding", () => {
 	it("honors explicit draft and Web defaults without changing previously created conversations", async () => {
 		const first = await registry.create({ workspaceId });
 		await writeFile(
-			join(cwd, ".pi", "settings.json"),
+			join(cwd, ".hasilan-code", "settings.json"),
 			JSON.stringify({ defaultProvider: models[0].provider, defaultModel: models[0].id }),
 		);
 		const web = { provider: models[1].provider, id: models[1].id };
@@ -115,15 +115,15 @@ describe("model onboarding", () => {
 		).toBe(true);
 	});
 
-	it("skips unavailable Pi defaults and never chooses from the unauthenticated catalogue", async () => {
+	it("skips unavailable Hasilan defaults and never chooses from the unauthenticated catalogue", async () => {
 		await writeFile(
-			join(cwd, ".pi", "settings.json"),
+			join(cwd, ".hasilan-code", "settings.json"),
 			JSON.stringify({ defaultProvider: "unknown", defaultModel: "missing" }),
 		);
 		expect(settings.get(cwd).llm.defaultModel).toEqual({ provider: models[0].provider, id: models[0].id });
 		configured.clear();
 		await writeFile(
-			join(cwd, ".pi", "settings.json"),
+			join(cwd, ".hasilan-code", "settings.json"),
 			JSON.stringify({ defaultProvider: models[0].provider, defaultModel: models[0].id }),
 		);
 		expect(settings.get(cwd).llm.defaultModel).toBeUndefined();
@@ -133,7 +133,7 @@ describe("model onboarding", () => {
 		expect(result.error).toContain("No model selected");
 		expect(registry.get(session.sessionId).messages).toEqual([]);
 		await writeFile(
-			join(cwd, ".pi", "settings.json"),
+			join(cwd, ".hasilan-code", "settings.json"),
 			JSON.stringify({ defaultProvider: "unknown", defaultModel: "missing" }),
 		);
 		configured.add(models[0].provider);
@@ -147,6 +147,5 @@ describe("model onboarding", () => {
 		configured.clear();
 		expect(settings.getModels().providers.find((item) => item.id === provider)?.configured).toBe(false);
 		expect(settings.getModels().providers.every((item) => typeof item.configured === "boolean")).toBe(true);
-		expect(Object.keys(settings.getModels().providers[0]).sort()).toEqual(["configured", "id", "name"]);
 	});
 });

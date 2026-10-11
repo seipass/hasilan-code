@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { windowsFolderDialog } from "./windows-folder-dialog.ts";
 
 const execute = promisify(execFile);
 
@@ -16,17 +17,13 @@ export async function pickWorkspaceFolder(cwd: string, signal: AbortSignal): Pro
 			"v1.0",
 			"powershell.exe",
 		);
-		const script = `[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Windows.Forms
-$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-$dialog.Description = 'Hasilan Code - ワークスペースを選択'
-$dialog.SelectedPath = $env:HASILAN_PICKER_CWD
-$dialog.ShowNewFolderButton = $true
-try {
-  if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Write($dialog.SelectedPath) }
-} finally { $dialog.Dispose() }`;
-		args = ["-NoLogo", "-NoProfile", "-STA", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")];
+		args = [
+			"-NoLogo",
+			"-NoProfile",
+			"-STA",
+			"-EncodedCommand",
+			Buffer.from(windowsFolderDialog, "utf16le").toString("base64"),
+		];
 	} else if (process.platform === "darwin") {
 		command = "/usr/bin/osascript";
 		args = ["-e", 'POSIX path of (choose folder with prompt "Hasilan Code - ワークスペースを選択")'];

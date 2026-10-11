@@ -101,4 +101,56 @@ describe("Web harness settings", () => {
 		expect(failure).not.toHaveProperty("cause");
 		expect(failure).not.toHaveProperty("credential");
 	});
+
+	it("reports account and API-key capabilities independently without resolving stored secrets", async () => {
+		const template = runtime.getProviders()[0];
+		const loadSecret = vi.fn(async () => {
+			throw new Error("private-provider-secret");
+		});
+		runtime.getProviders = () => [
+			{
+				...template,
+				id: "account-only",
+				auth: {
+					oauth: {
+						name: "Account subscription",
+						loginLabel: "Sign in with account",
+						login: loadSecret,
+						refresh: loadSecret,
+						toAuth: loadSecret,
+					},
+				},
+			},
+			{
+				...template,
+				id: "key-only",
+				auth: { apiKey: { name: "API key", login: loadSecret, resolve: loadSecret } },
+			},
+			{
+				...template,
+				id: "both",
+				auth: {
+					apiKey: { name: "API key", resolve: loadSecret },
+					oauth: { name: "Subscription account", login: loadSecret, refresh: loadSecret, toAuth: loadSecret },
+				},
+			},
+		];
+		runtime.hasConfiguredAuth = (provider) => provider === "account-only";
+		const settings = await SettingsService.open(directory, runtime);
+		const providers = settings.getModels().providers;
+		const account = providers.find((provider) => provider.id === "account-only");
+		expect(account?.apiKey).toBe(false);
+		expect(account?.oauth?.label).toBe("Sign in with account");
+		expect(account?.configured).toBe(true);
+		const key = providers.find((provider) => provider.id === "key-only");
+		expect(key?.apiKey).toBe(true);
+		expect(key?.oauth).toBeUndefined();
+		expect(key?.configured).toBe(false);
+		const both = providers.find((provider) => provider.id === "both");
+		expect(both?.apiKey).toBe(true);
+		expect(both?.oauth?.label).toBe("Subscription account");
+		expect(both?.configured).toBe(false);
+		expect(loadSecret).not.toHaveBeenCalled();
+		expect(JSON.stringify(providers)).not.toContain("private-");
+	});
 });

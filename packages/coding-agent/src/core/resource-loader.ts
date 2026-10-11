@@ -276,6 +276,8 @@ export function loadProjectContextFiles(options: {
 export interface DefaultResourceLoaderOptions {
 	cwd: string;
 	agentDir: string;
+	/** Project config directory name; defaults to CONFIG_DIR_NAME. */
+	projectConfigDirName?: string;
 	settingsManager?: SettingsManager;
 	eventBus?: EventBus;
 	additionalExtensionPaths?: string[];
@@ -315,6 +317,7 @@ export interface DefaultResourceLoaderOptions {
 export class DefaultResourceLoader implements ResourceLoader {
 	private cwd: string;
 	private agentDir: string;
+	private projectConfigDirName: string;
 	private settingsManager: SettingsManager;
 	private eventBus: EventBus;
 	private packageManager: DefaultPackageManager;
@@ -375,7 +378,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 	constructor(options: DefaultResourceLoaderOptions) {
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
-		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir);
+		this.projectConfigDirName = options.projectConfigDirName ?? CONFIG_DIR_NAME;
+		this.settingsManager =
+			options.settingsManager ??
+			SettingsManager.create(this.cwd, this.agentDir, { projectConfigDirName: this.projectConfigDirName });
 		this.eventBus = options.eventBus ?? createEventBus();
 		const factories = options.extensionFactories ?? [];
 		this.extensionFactories = factories.filter((input) => !isBuiltinExtension(input));
@@ -383,6 +389,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.packageManager = new DefaultPackageManager({
 			cwd: this.cwd,
 			agentDir: this.agentDir,
+			projectConfigDirName: this.projectConfigDirName,
 			settingsManager: this.settingsManager,
 			builtinExtensions: [...this.builtinExtensions.keys()],
 		});
@@ -845,6 +852,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 			skillsResult = loadSkills({
 				cwd: this.cwd,
 				agentDir: this.agentDir,
+				projectConfigDirName: this.projectConfigDirName,
 				skillPaths,
 				includeDefaults: false,
 			});
@@ -868,6 +876,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 			const loaded = loadPromptTemplates({
 				cwd: this.cwd,
 				agentDir: this.agentDir,
+				projectConfigDirName: this.projectConfigDirName,
 				promptPaths,
 				includeDefaults: false,
 			});
@@ -994,10 +1003,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 			join(this.agentDir, "extensions"),
 		];
 		const projectRoots = [
-			join(this.cwd, CONFIG_DIR_NAME, "skills"),
-			join(this.cwd, CONFIG_DIR_NAME, "prompts"),
-			join(this.cwd, CONFIG_DIR_NAME, "themes"),
-			join(this.cwd, CONFIG_DIR_NAME, "extensions"),
+			join(this.cwd, this.projectConfigDirName, "skills"),
+			join(this.cwd, this.projectConfigDirName, "prompts"),
+			join(this.cwd, this.projectConfigDirName, "themes"),
+			join(this.cwd, this.projectConfigDirName, "extensions"),
 		];
 
 		for (const root of agentRoots) {
@@ -1051,7 +1060,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const themes: Theme[] = [];
 		const diagnostics: ResourceDiagnostic[] = [];
 		if (includeDefaults) {
-			const defaultDirs = [join(this.agentDir, "themes"), join(this.cwd, CONFIG_DIR_NAME, "themes")];
+			const defaultDirs = [join(this.agentDir, "themes"), join(this.cwd, this.projectConfigDirName, "themes")];
 
 			for (const dir of defaultDirs) {
 				this.loadThemesFromDir(dir, themes, diagnostics, colorMode);
@@ -1211,7 +1220,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}
 
 	private discoverSystemPromptFile(): string | undefined {
-		const projectPath = join(this.cwd, CONFIG_DIR_NAME, "SYSTEM.md");
+		const projectPath = join(this.cwd, this.projectConfigDirName, "SYSTEM.md");
 		if (this.settingsManager.isProjectTrusted() && existsSync(projectPath)) {
 			return projectPath;
 		}
@@ -1225,7 +1234,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}
 
 	private discoverAppendSystemPromptFile(): string | undefined {
-		const projectPath = join(this.cwd, CONFIG_DIR_NAME, "APPEND_SYSTEM.md");
+		const projectPath = join(this.cwd, this.projectConfigDirName, "APPEND_SYSTEM.md");
 		if (this.settingsManager.isProjectTrusted() && existsSync(projectPath)) {
 			return projectPath;
 		}

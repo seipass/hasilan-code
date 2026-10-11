@@ -143,7 +143,7 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 
 	const active = terminals.find((item) => item.terminalId === selectedId);
 	const state = selectedId ? viewStates.get(selectedId) : undefined;
-	const connectionLabel = state?.connection === "disconnected" ? "切断" : state?.connection === "connected" ? (active?.status === "exited" ? `終了 ${active.exitCode ?? "?"}` : state.controller ? "操作中" : "閲覧のみ") : "接続中";
+	const connectionLabel = state?.connection === "disconnected" ? "切断" : state?.connection === "connected" ? (active?.status === "exited" ? `終了 ${active.exitCode ?? "?"}` : state.controller ? undefined : "閲覧のみ") : "接続中";
 
 	return <section className="terminal-pane" hidden={!visible} aria-label="ユーザー端末">
 		<header className="terminal-header">
@@ -208,7 +208,7 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 			</div>
 			<button className="terminal-new" type="button" aria-label="新しい端末を作成" title="新しい端末を作成" disabled={!workspaceId || creating} onClick={() => { void create(); }}>{creating ? "作成中…" : "+"}</button>
 			{active && <div className="terminal-status-controls">
-				<span className="terminal-status" data-connection={state?.connection ?? "connecting"} role="status" title={state?.connection === "disconnected" && active.status === "running" ? "接続が切れています。PTYはホストで継続します。" : state?.title}>{connectionLabel}</span>
+				{connectionLabel && <span className="terminal-status" data-connection={state?.connection ?? "connecting"} role="status" title={state?.connection === "disconnected" && active.status === "running" ? "接続が切れています。PTYはホストで継続します。" : state?.title}>{connectionLabel}</span>}
 				{state?.connection === "connected" && !state.controller && active.status === "running" && <button className="terminal-take-control" type="button" onClick={state.takeControl}>操作権を取得</button>}
 				{state?.connection === "disconnected" && <button className="terminal-reconnect" type="button" onClick={state.reconnect}>再接続</button>}
 			</div>}
@@ -260,7 +260,7 @@ function TerminalView({ summary, visible, selected, focusRequest, onSummary, onS
 		const element = container.current;
 		if (!element) return;
 		const colors = getComputedStyle(document.documentElement);
-		const emulator = new Terminal({ cols: summary.cols, rows: summary.rows, ...(summary.windowsPty ? { windowsPty: summary.windowsPty } : {}), theme: { background: colors.getPropertyValue("--surface-sunken").trim(), foreground: colors.getPropertyValue("--on-surface").trim(), cursor: colors.getPropertyValue("--primary").trim(), selectionBackground: colors.getPropertyValue("--primary-container").trim() }, fontSize: 13, scrollback: 2000, cursorBlink: true, disableStdin: true, logLevel: "off", linkHandler: {
+		const emulator = new Terminal({ cols: summary.cols, rows: summary.rows, ...(summary.windowsPty ? { windowsPty: summary.windowsPty } : {}), theme: { background: colors.getPropertyValue("--surface-sunken").trim(), foreground: colors.getPropertyValue("--on-surface").trim(), cursor: colors.getPropertyValue("--primary").trim(), selectionBackground: colors.getPropertyValue("--primary-container").trim() }, fontFamily: '"UDEV Gothic", ui-monospace, monospace', fontSize: 13, scrollback: 2000, cursorBlink: true, disableStdin: true, logLevel: "off", linkHandler: {
 			activate: (event, text) => {
 				if (!event.isTrusted) return;
 				try { const target = new URL(text); if (target.protocol === "https:" || target.protocol === "http:") window.open(target.href, "_blank", "noopener,noreferrer"); } catch { /* Non-URL OSC links are not navigable. */ }

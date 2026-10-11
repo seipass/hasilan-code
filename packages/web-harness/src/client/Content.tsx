@@ -26,7 +26,7 @@ export function Content({ value, onFile }: { value: unknown; onFile: (path: stri
 	if (Array.isArray(value)) return <>{value.map((part: unknown, index: number) => <Content key={index} value={part} onFile={onFile} />)}</>;
 	if (!record(value)) return value === undefined || value === null ? null : <pre>{String(value)}</pre>;
 	if (value.type === "text" && typeof value.text === "string") return <Markdown text={value.text} onFile={onFile} />;
-	if (value.type === "thinking" && typeof value.thinking === "string") return <details className="thinking"><summary>思考</summary><Markdown text={value.thinking} onFile={onFile} /></details>;
+	if (value.type === "thinking" && typeof value.thinking === "string") return <details className="thinking"><summary><span className="thinking-title">思考</span><span className="thinking-preview">{value.thinking.replace(/\s+/g, " ").trim().slice(0, 180)}</span></summary><Markdown text={value.thinking} onFile={onFile} /></details>;
 	if (value.type === "image" && typeof value.data === "string" && typeof value.mimeType === "string" && /^image\/(png|jpeg|webp|gif)$/.test(value.mimeType)) return <img className="tool-image" alt="ツールによる画像" src={`data:${value.mimeType};base64,${value.data}`} />;
 	if (value.type === "toolCall") return <p className="muted">ツール呼び出し: {typeof value.name === "string" ? value.name : "tool"}</p>;
 	return <pre className="json-content">{JSON.stringify(value, null, 2)}</pre>;

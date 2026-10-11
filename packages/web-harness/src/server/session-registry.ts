@@ -9,9 +9,9 @@ import {
 	DefaultResourceLoader,
 	type ModelRuntime,
 	SessionManager,
-	SettingsManager,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { createHarnessSettings } from "./config.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
 
 export interface ModelSelection {
@@ -57,7 +57,13 @@ export interface ProjectedTool {
 	result?: unknown;
 	status: "running" | "success" | "error" | "cancelled";
 }
+export interface ContextUsageSnapshot {
+	tokens: number | null;
+	contextWindow: number;
+	percent: number | null;
+}
 export interface SessionSnapshot extends SessionDescriptor {
+	contextUsage?: ContextUsageSnapshot;
 	messages: ProjectedMessage[];
 	toolCalls: ProjectedTool[];
 	activity: {
@@ -87,6 +93,7 @@ export interface ExecutionAdapter {
 	waitForIdle(): Promise<void>;
 	clearQueue(): unknown;
 	getActiveToolNames(): string[];
+	getContextUsage?(): ContextUsageSnapshot | undefined;
 	setModel(selection: ModelSelection): Promise<void>;
 	dispose(): void;
 }
@@ -408,6 +415,7 @@ export class SessionRegistry {
 		return structuredClone({
 			...projection,
 			...descriptor,
+			contextUsage: this.live.get(id)?.adapter?.getContextUsage?.(),
 			currentRun: runs.find((run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status)),
 			latestRun: runs.at(-1),
 			pendingInput: this.state.pendingInput.filter((input) => input.sessionId === id),
@@ -483,10 +491,11 @@ export class SessionRegistry {
 					const runtime = this.options.modelRuntime;
 					if (!runtime) throw new Error("Model runtime is not configured");
 					if (!descriptor.model) throw new HarnessError("No model selected; choose a model in Settings");
-					const settingsManager = SettingsManager.create(descriptor.cwd, this.options.agentDir);
+					const settingsManager = createHarnessSettings(descriptor.cwd, this.options.agentDir);
 					const loader = new DefaultResourceLoader({
 						cwd: descriptor.cwd,
 						agentDir: this.options.agentDir,
+						projectConfigDirName: ".hasilan-code",
 						settingsManager,
 						appendSystemPrompt: [
 							descriptor.role ? `Agent role: ${descriptor.role}` : "",
@@ -524,6 +533,7 @@ export class SessionRegistry {
 						waitForIdle: () => session.waitForIdle(),
 						clearQueue: () => session.clearQueue(),
 						getActiveToolNames: () => session.getActiveToolNames(),
+						getContextUsage: () => session.getContextUsage(),
 						setModel: async (selection) => {
 							const selected = runtime.getModel(selection.provider, selection.id);
 							if (!selected) throw new HarnessError("Model not found");
