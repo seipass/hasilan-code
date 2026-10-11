@@ -287,7 +287,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .team-message-success { color: var(--success); }
 .team-run-history { margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 12px; }
 .team-history-item { margin-top: 12px; }
-.tool-card { --tool-accent: var(--on-surface-muted); --tool-tint: var(--surface-hover); color: inherit; border: 1px solid var(--border); border-left: 3px solid var(--tool-accent); border-radius: 8px; margin: 8px 0; overflow: hidden; background: var(--surface-raised); min-width: 0; }
+.tool-card { --tool-accent: var(--on-surface-muted); --tool-tint: var(--surface-hover); color: inherit; border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; overflow: hidden; background: var(--surface-raised); min-width: 0; }
 .tool-kind-file { --tool-accent: var(--secondary); --tool-tint: var(--secondary-container); }
 .tool-kind-edit { --tool-accent: var(--primary); --tool-tint: var(--primary-container); }
 .tool-kind-write { --tool-accent: var(--success); --tool-tint: var(--success-container); }
@@ -299,7 +299,6 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-card > summary::-webkit-details-marker { display: none; }
 .tool-card > summary::after { content: "›"; font-size: 18px; line-height: 1; flex: none; margin-left: 2px; }
 .tool-card[open] > summary::after { transform: rotate(90deg); }
-.tool-icon { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border-radius: 7px; background: var(--tool-tint); color: var(--tool-accent); font: 700 16px/1 "UDEV Gothic", ui-monospace, monospace; }
 .tool-heading { display: flex; flex: 0 1 auto; flex-direction: column; min-width: 0; max-width: 45%; line-height: 1.3; }
 .tool-card > summary strong { color: var(--on-surface-secondary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-name { font: 10px/1.3 "UDEV Gothic", ui-monospace, monospace; color: var(--on-surface-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -312,7 +311,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-preparing { color: var(--muted); font-size: 11px; }
 .tool-image { display: block; max-width: 100%; height: auto; margin: .6rem 0; border-radius: 6px; }
 .file-links { display: flex; gap: .4rem; flex-wrap: wrap; }
-.browser-result { border-left: 2px solid var(--tool-accent); padding-left: 10px; overflow-wrap: anywhere; }
+.browser-result { overflow-wrap: anywhere; }
 .browser-result p { margin: .4rem 0; }
 .search-results article { border-bottom: 1px solid var(--border); padding: .6rem 0; }
 .search-results article:last-child { border-bottom: 0; }
@@ -330,13 +329,13 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-secondary > summary, .tool-raw > summary { cursor: pointer; }
 .tool-secondary pre, .tool-raw pre { max-height: 350px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tool-task-list { display: grid; gap: 7px; margin: 9px 0; }
-.tool-task-list article { padding: 9px 11px; border-left: 2px solid var(--tool-accent); border-radius: 4px; background: var(--tool-tint); overflow-wrap: anywhere; }
+.tool-task-list article { padding: 9px 11px; border-radius: 4px; background: var(--tool-tint); overflow-wrap: anywhere; }
 .tool-task-list article p { margin: 5px 0 0; white-space: pre-wrap; }
 .tool-task-list article small { color: var(--on-surface-muted); }
 .tool-task-heading { display: flex; justify-content: space-between; gap: 8px; }
 .tool-task-heading span { color: var(--tool-accent); }
 .tool-entry-kind { margin-left: 8px; color: var(--on-surface-muted); font-size: 11px; }
-.tool-message { border-left: 2px solid var(--tool-accent); padding: 6px 10px; margin: 7px 0; white-space: pre-wrap; }
+.tool-message { padding: 6px 10px; margin: 7px 0; white-space: pre-wrap; }
 .tool-error { color: var(--danger); }
 .tool-success { color: var(--success); }
 .panel-resize { flex-shrink: 0; position: relative; width: 8px; cursor: col-resize; touch-action: none; outline-offset: -2px; }
@@ -533,7 +532,6 @@ button, .workspace-accordion > summary, .panel-resize::after {
 }
 .tool-card:hover, .agent-card:hover { border-color: var(--border-strong); }
 .tool-card[open] { border-color: var(--border-strong); box-shadow: 0 8px 24px #05060a36; }
-.tool-card:hover, .tool-card[open] { border-left-color: var(--tool-accent); }
 .panel-tabs [role="tab"], .settings-tabs button {
 	transition: color var(--motion-base) ease, background-color var(--motion-base) ease;
 }
