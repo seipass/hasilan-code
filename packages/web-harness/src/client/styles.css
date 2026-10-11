@@ -80,7 +80,16 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .history-search input:focus { background: var(--surface-raised); }
 .history-search kbd { position: absolute; right: 5px; top: 10px; color: var(--on-surface-muted); font-size: 10px; pointer-events: none; }
 .history-search:focus-within kbd { display: none; }
-.history-heading { padding: 0 9px 9px; font-size: 11px; color: var(--on-surface-muted); display: flex; justify-content: space-between; }
+.history-heading { padding: 0 5px 9px 9px; font-size: 11px; color: var(--on-surface-muted); display: flex; justify-content: space-between; align-items: center; }
+.workspace-add-button { width: 26px; height: 26px; font-size: 20px; }
+.workspace-accordion { margin-bottom: 6px; }
+.workspace-accordion > summary { display: flex; align-items: center; gap: 8px; padding: 9px; cursor: pointer; border-radius: 7px; font-size: 12px; color: var(--on-surface-secondary); list-style: none; }
+.workspace-accordion > summary::-webkit-details-marker { display: none; }
+.workspace-accordion > summary::before { content: "›"; font-size: 17px; line-height: 1; }
+.workspace-accordion[open] > summary::before { transform: rotate(90deg); }
+.workspace-accordion[data-selected="true"] > summary { background: var(--surface-raised); color: var(--on-surface); }
+.workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-accordion .session-list { margin: 4px 0 4px 12px; border-left: 1px solid var(--border-subtle); padding-left: 4px; }
 .history-navigation { flex: 1; overflow: auto; min-height: 0; }
 .session-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
 .session-button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 11px; border: 0; background: transparent; font-size: 12px; }
@@ -136,12 +145,6 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .is-empty ~ .composer-popover { bottom: max(160px, calc((100dvh - 520px) * .5 + 145px)); }
 .composer-popover > header { display: flex; align-items: center; justify-content: space-between; }
 .composer-popover > .text-link { font-size: 12px; }
-.folder-options { display: grid; gap: 5px; margin: 15px 0; }
-.folder-options button { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; text-align: left; border-color: transparent; }
-.folder-options button[aria-pressed="true"] { background: var(--primary-container); }
-.folder-options small { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
-.workspace-add { border-top: 1px solid var(--border); padding-top: 15px; display: grid; gap: 10px; font-size: 12px; }
-.workspace-add button { justify-self: end; }
 .run-progress { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--on-surface-muted); padding: 0 5px 10px; }
 .activity-dot, .streaming-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--secondary); animation: pulse 1.5s ease-in-out infinite; }
 .streaming-dot { margin-top: 12px; }
@@ -268,7 +271,6 @@ legend { font-weight: 600; padding: 0 .4rem; }
 	.composer-area { padding-left: 14px; padding-right: 14px; padding-bottom: 16px; }
 	.composer { padding: 14px 10px 11px; border-radius: 15px; }
 	.composer-chip { max-width: 145px; padding: 5px; gap: 5px; font-size: 10px; }
-	.folder-trigger { max-width: 100px; }
 	.composer-context { gap: 0; }
 	.composer-delivery { gap: 3px; }
 	.composer-delivery select { max-width: 85px; font-size: 9px; }

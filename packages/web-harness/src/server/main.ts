@@ -7,11 +7,13 @@ import {
 	sessionCreateSchema,
 	terminalCreateSchema,
 	workspaceCreateSchema,
+	workspacePickerSchema,
 } from "../shared/contracts.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { EventHub } from "./events.ts";
 import { fileView } from "./file-view.ts";
+import { pickWorkspaceFolder } from "./folder-picker.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
 import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./settings.ts";
@@ -72,6 +74,8 @@ async function main() {
 	});
 	teams.subscribe((event) => hub.publish("workspace", event.workspaceId));
 	let shuttingDown = false;
+	const folderPickerAbort = new AbortController();
+	let selectingWorkspace = false;
 	const host = createHttpHost({
 		port: options.port,
 		staticDir: fileURLToPath(new URL("../client/", import.meta.url)),
@@ -101,6 +105,19 @@ async function main() {
 						const { path } = await readJson(request, workspaceCreateSchema);
 						const workspace = await registry.addWorkspace(path);
 						return reply({ ...workspace, workspaceId: workspace.id }, 201);
+					}
+				}
+				if (url.pathname === "/api/workspaces/pick" && method === "POST") {
+					await readJson(request, workspacePickerSchema);
+					if (selectingWorkspace) throw new HttpError(409, "フォルダー選択はすでに開いています。");
+					selectingWorkspace = true;
+					try {
+						const selected = await pickWorkspaceFolder(cwd, folderPickerAbort.signal);
+						if (!selected) return reply({ workspace: null });
+						const workspace = await registry.addWorkspace(selected);
+						return reply({ workspace: { ...workspace, workspaceId: workspace.id } }, 201);
+					} finally {
+						selectingWorkspace = false;
 					}
 				}
 				if (url.pathname === "/api/sessions") {
@@ -207,6 +224,7 @@ async function main() {
 	const shutdown = async () => {
 		if (shuttingDown) return;
 		shuttingDown = true;
+		folderPickerAbort.abort();
 		await teams.close();
 		await Promise.all([browser.close(), terminals.shutdown()]);
 		await registry.close();

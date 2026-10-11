@@ -18,8 +18,12 @@
 	background: var(--surface-panel);
 	scrollbar-width: thin;
 }
-.files-tab { display: flex; align-items: center; flex: 0 0 auto; max-width: 260px; border-right: 1px solid var(--border-subtle); border-bottom: 2px solid transparent; }
+.files-tab { position: relative; display: flex; align-items: center; flex: 0 0 auto; max-width: 260px; border-right: 1px solid var(--border-subtle); border-bottom: 2px solid transparent; }
 .files-tab[data-active="true"] { background: var(--surface-raised); border-bottom-color: var(--primary); }
+.files-tab[data-dragging="true"] { opacity: 0.5; }
+.files-tab[data-drop]::after { content: ""; position: absolute; top: 3px; bottom: 3px; width: 3px; background: var(--primary); pointer-events: none; }
+.files-tab[data-drop="before"]::after { left: 0; }
+.files-tab[data-drop="after"]::after { right: 0; }
 .files-tab > [role="tab"] {
 	min-width: 0;
 	max-width: 222px;
@@ -36,6 +40,9 @@
 .files-tab > [aria-selected="true"] { color: var(--on-surface); }
 .files-tab-close { width: 28px; height: 28px; flex-shrink: 0; margin-right: 5px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--on-surface-muted); font-size: 17px; }
 .files-tabs button:focus-visible { outline-offset: -3px; }
+.files-view-mode { display: flex; gap: 6px; flex-shrink: 0; padding: 8px 14px; border-bottom: 1px solid var(--border-subtle); }
+.files-view-mode button { padding: 5px 10px; font-size: 12px; }
+.files-view-mode [aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); border-color: var(--primary); }
 .files-viewer { flex: 1; min-height: 0; min-width: 0; overflow: auto; background: var(--surface-sunken); scrollbar-width: thin; }
 .files-viewer:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .files-message { margin: 0; padding: 20px 18px; font-size: 13px; }
@@ -58,3 +65,27 @@
 .files-tree-entry[aria-current="true"] { background: var(--secondary-container); color: var(--on-secondary-container); }
 .files-tree-marker { width: 12px; flex-shrink: 0; color: var(--on-surface-muted); text-align: center; }
 .files-tree-message { padding: 7px 8px; line-height: 1.65; overflow-wrap: anywhere; }
+.files-markdown { max-width: 960px; margin: 0 auto; padding: 22px 24px 36px; line-height: 1.75; font-size: 14px; overflow-wrap: anywhere; }
+.files-markdown > :first-child { margin-top: 0; }
+.files-markdown h1, .files-markdown h2 { padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+.files-markdown h1 { font-size: 1.85em; }
+.files-markdown h2 { font-size: 1.45em; }
+.files-markdown h3 { font-size: 1.2em; }
+.files-markdown blockquote { margin-left: 0; padding-left: 16px; border-left: 3px solid var(--border-subtle); color: var(--on-surface-muted); }
+.files-markdown pre { overflow: auto; padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-panel); }
+.files-markdown pre code { white-space: pre; overflow-wrap: normal; font-size: 12px; }
+.files-markdown code { font-family: "Cascadia Code", "Consolas", ui-monospace, monospace; }
+.files-markdown :not(pre) > code { padding: 2px 5px; border-radius: 4px; background: var(--surface-raised); font-size: 0.9em; }
+.files-markdown table { display: block; max-width: 100%; overflow: auto; border-collapse: collapse; }
+.files-markdown th, .files-markdown td { padding: 7px 12px; border: 1px solid var(--border-subtle); }
+.files-markdown th { background: var(--surface-raised); }
+.files-markdown hr { border: 0; border-top: 1px solid var(--border-subtle); }
+.files-highlight .hljs-keyword, .files-highlight .hljs-selector-tag, .files-highlight .hljs-literal { color: #c4a7e7; }
+.files-highlight .hljs-string, .files-highlight .hljs-regexp, .files-highlight .hljs-addition { color: #a8d5a2; }
+.files-highlight .hljs-number, .files-highlight .hljs-symbol, .files-highlight .hljs-bullet { color: #e8b988; }
+.files-highlight .hljs-title, .files-highlight .hljs-section, .files-highlight .hljs-selector-class, .files-highlight .hljs-selector-id { color: #91cafa; }
+.files-highlight .hljs-comment, .files-highlight .hljs-quote { color: #9ba5a3; font-style: italic; }
+.files-highlight .hljs-attr, .files-highlight .hljs-attribute, .files-highlight .hljs-type, .files-highlight .hljs-built_in { color: #8bd5ca; }
+.files-highlight .hljs-meta, .files-highlight .hljs-deletion { color: #eea0a0; }
+.files-highlight .hljs-emphasis { font-style: italic; }
+.files-highlight .hljs-strong { font-weight: 700; }

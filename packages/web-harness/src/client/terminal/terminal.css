@@ -37,6 +37,12 @@
 	border-color: var(--border);
 	background: var(--surface-sunken);
 }
+.terminal-tab-item[data-dragging="true"] { opacity: 0.5; }
+.terminal-tab-item[data-drop-edge="before"] { box-shadow: -3px 0 0 var(--primary); }
+.terminal-tab-item[data-drop-edge="after"] { box-shadow: 3px 0 0 var(--primary); }
+.terminal-tab-item[data-drop-edge] { background: var(--primary-container); }
+.terminal-tab[draggable="true"] { cursor: grab; }
+.terminal-tab-item[data-dragging="true"] .terminal-tab { cursor: grabbing; }
 .terminal-pane .terminal-tab,
 .terminal-pane .terminal-tab-close,
 .terminal-pane .terminal-new {

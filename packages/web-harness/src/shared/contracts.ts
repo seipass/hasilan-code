@@ -4,6 +4,7 @@ export const workspaceCreateSchema = Type.Object(
 	{ path: Type.String({ minLength: 1 }) },
 	{ additionalProperties: false },
 );
+export const workspacePickerSchema = Type.Object({}, { additionalProperties: false });
 export const modelSchema = Type.Object(
 	{ provider: Type.String({ minLength: 1 }), id: Type.String({ minLength: 1 }) },
 	{ additionalProperties: false },

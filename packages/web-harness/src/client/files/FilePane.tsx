@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage } from "../api.ts";
+import { FileMarkdown, SourceLines } from "./FileRendering.tsx";
 import "./FilePane.css";
 
 interface FileEntry { name: string; path: string; kind: "file" | "directory" | "symlink"; size: number }
@@ -8,7 +9,7 @@ interface FileView {
 	lines?: { number: number; text: string; truncated?: boolean }[]; nextOffset?: number; size: number;
 }
 export interface FileTarget { path: string; line?: number; requestId: string }
-interface OpenFile { path: string; line?: number; offset: number }
+interface OpenFile { path: string; line?: number; offset: number; mode?: "source" | "rendered" }
 interface FilePaneProps {
 	workspaceId: string; target?: FileTarget; refreshToken: number; visible?: boolean;
 	onOpen: (path: string, line?: number) => void; onClear?: () => void;
@@ -53,19 +54,24 @@ export function FilePane(props: FilePaneProps) {
 function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, onOpen, onClear }: FilePaneProps) {
 	const [files, setFiles] = useState<OpenFile[]>(() => target ? [{ path: target.path, line: target.line, offset: Math.max(1, (target.line ?? 1) - 20) }] : []);
 	const [activePath, setActivePath] = useState(target?.path);
-	const [result, setResult] = useState<{ key: string; view?: FileView; error?: string }>();
+	const [result, setResult] = useState<{ key: string; view?: FileView; markdown?: string; error?: string }>();
 	const [treeWidth, setTreeWidth] = useState(240);
 	const [availableWidth, setAvailableWidth] = useState(0);
 	const [resizing, setResizing] = useState(false);
+	const [draggingPath, setDraggingPath] = useState<string>();
+	const [dropTarget, setDropTarget] = useState<{ path: string; edge: "before" | "after" }>();
 	const pane = useRef<HTMLElement>(null);
 	const viewer = useRef<HTMLDivElement>(null);
 	const tabStrip = useRef<HTMLDivElement>(null);
 	const drag = useRef<{ pointerId: number; startX: number; width: number } | undefined>(undefined);
+	const draggedTab = useRef<string | undefined>(undefined);
 	const lastRequest = useRef(target?.requestId);
 	const id = useId();
 	const active = files.find((file) => file.path === activePath);
+	const markdown = !!active && /\.(?:md|markdown)$/i.test(active.path);
+	const rendered = markdown && (active.mode ?? (active.line === undefined ? "rendered" : "source")) === "rendered";
 	const maxTreeWidth = Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, availableWidth - MIN_PREVIEW_WIDTH - SPLIT_WIDTH));
-	const requestKey = active && (!target || target.requestId === lastRequest.current) ? JSON.stringify([workspaceId, active.path, active.offset, refreshToken, target?.requestId]) : undefined;
+	const requestKey = active && (!target || target.requestId === lastRequest.current) ? JSON.stringify([workspaceId, active.path, active.offset, rendered, refreshToken, target?.requestId]) : undefined;
 	const loaded = result?.key === requestKey ? result : undefined;
 
 	useEffect(() => {
@@ -73,7 +79,7 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 		lastRequest.current = target.requestId;
 		setFiles((previous) => {
 			const existing = previous.find((file) => file.path === target.path);
-			const file = { path: target.path, line: target.line, offset: target.line === undefined ? existing?.offset ?? 1 : Math.max(1, target.line - 20) };
+			const file: OpenFile = { path: target.path, line: target.line, offset: target.line === undefined ? existing?.offset ?? 1 : Math.max(1, target.line - 20), mode: target.line === undefined ? existing?.mode : "source" };
 			return existing ? previous.map((entry) => entry.path === target.path ? file : entry) : [...previous, file];
 		});
 		setActivePath(target.path);
@@ -81,12 +87,35 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 	useEffect(() => {
 		if (!visible || !active || !requestKey) return;
 		const controller = new AbortController();
+		const key = requestKey;
 		setResult(undefined);
-		api<FileView>(`/api/workspaces/${encodeURIComponent(workspaceId)}/file?path=${encodeURIComponent(active.path)}&offset=${active.offset}&limit=200`, { signal: controller.signal })
-			.then((view) => { if (!controller.signal.aborted) setResult({ key: requestKey, view }); })
-			.catch((reason: unknown) => { if (!controller.signal.aborted) setResult({ key: requestKey, error: errorMessage(reason) }); });
+		async function loadFile() {
+			if (!active) return;
+			const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/file?path=${encodeURIComponent(active.path)}`;
+			let offset = rendered ? 1 : active.offset;
+			const view = await api<FileView>(`${endpoint}&offset=${offset}&limit=200`, { signal: controller.signal });
+			let text: string | undefined;
+			if (rendered && view.kind === "text") {
+				const lines: string[] = [];
+				let page = view;
+				for (;;) {
+					if (page.revision !== view.revision || page.kind !== "text")
+						throw new Error("読み込み中にファイルが変更されました。ファイルタブを選択して再読み込みしてください。");
+					if (page.lines?.some((line) => line.truncated))
+						throw new Error("64 KiB を超える行があるため Markdown 全文を取得できません。ソース表示で確認してください。");
+					for (const line of page.lines ?? []) lines.push(line.text);
+					if (page.nextOffset === undefined) break;
+					if (page.nextOffset <= offset) throw new Error("ファイルの続きの位置が不正です。");
+					offset = page.nextOffset;
+					page = await api<FileView>(`${endpoint}&offset=${offset}&limit=200`, { signal: controller.signal });
+				}
+				text = lines.join("\n");
+			}
+			if (!controller.signal.aborted) setResult({ key, view, markdown: text });
+		}
+		loadFile().catch((reason: unknown) => { if (!controller.signal.aborted) setResult({ key: requestKey, error: errorMessage(reason) }); });
 		return () => controller.abort();
-	}, [workspaceId, active?.path, active?.offset, requestKey, visible]);
+	}, [workspaceId, active?.path, active?.offset, requestKey, rendered, visible]);
 	useEffect(() => {
 		if (visible && loaded?.view && active?.line) viewer.current?.querySelector(`[data-line="${active.line}"]`)?.scrollIntoView({ block: "center", inline: "nearest" });
 	}, [loaded?.view, active?.line, visible]);
@@ -120,6 +149,15 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 		setFiles((previous) => previous.map((file) => file.path === activePath ? { ...file, offset } : file));
 		viewer.current?.scrollTo({ top: 0 });
 	}
+	function changeMode(mode: "source" | "rendered") {
+		setFiles((previous) => previous.map((file) => file.path === activePath ? { ...file, mode, ...(mode === "rendered" ? { line: undefined } : {}) } : file));
+		viewer.current?.scrollTo({ top: 0 });
+	}
+	function endTabDrag() {
+		draggedTab.current = undefined;
+		setDraggingPath(undefined);
+		setDropTarget(undefined);
+	}
 	function resizeTree(width: number) {
 		setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(maxTreeWidth, width)));
 	}
@@ -128,7 +166,42 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 		<div className="files-layout" style={{ gridTemplateColumns: `minmax(${MIN_PREVIEW_WIDTH}px, 1fr) ${SPLIT_WIDTH}px ${treeWidth}px`, minWidth: MIN_PREVIEW_WIDTH + SPLIT_WIDTH + treeWidth }}>
 			<div className="files-preview">
 				{files.length > 0 && <div className="files-tabs" role="tablist" aria-label="開いているファイル" ref={tabStrip}>
-					{files.map((file, index) => <div className="files-tab" key={file.path} data-active={file.path === activePath}>
+					{files.map((file, index) => <div className="files-tab" key={file.path} data-path={file.path} data-active={file.path === activePath} data-dragging={file.path === draggingPath} data-drop={dropTarget?.path === file.path ? dropTarget.edge : undefined} draggable onMouseDown={(event) => {
+						if (event.button === 1) event.preventDefault();
+					}} onAuxClick={(event) => {
+						if (event.button !== 1) return;
+						event.preventDefault();
+						closeFile(file.path);
+					}} onDragStart={(event) => {
+						draggedTab.current = file.path;
+						setDraggingPath(file.path);
+						event.dataTransfer.effectAllowed = "move";
+						event.dataTransfer.setData("application/x-hasilan-file-tab", file.path);
+					}} onDragOver={(event) => {
+						if (!draggedTab.current) return;
+						event.preventDefault();
+						event.dataTransfer.dropEffect = "move";
+						const bounds = event.currentTarget.getBoundingClientRect();
+						setDropTarget({ path: file.path, edge: event.clientX < bounds.left + bounds.width / 2 ? "before" : "after" });
+					}} onDragLeave={(event) => {
+						if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDropTarget(undefined);
+					}} onDrop={(event) => {
+						const source = draggedTab.current;
+						if (!source) return;
+						event.preventDefault();
+						const bounds = event.currentTarget.getBoundingClientRect();
+						const after = event.clientX >= bounds.left + bounds.width / 2;
+						if (source !== file.path) setFiles((previous) => {
+							const moved = previous.find((entry) => entry.path === source);
+							if (!moved) return previous;
+							const remaining = previous.filter((entry) => entry.path !== source);
+							const position = remaining.findIndex((entry) => entry.path === file.path);
+							if (position < 0) return previous;
+							remaining.splice(position + (after ? 1 : 0), 0, moved);
+							return remaining;
+						});
+						endTabDrag();
+					}} onDragEnd={endTabDrag}>
 						<button role="tab" id={`${id}-tab-${index}`} aria-controls={`${id}-preview`} aria-selected={file.path === activePath} tabIndex={file.path === activePath ? 0 : -1} title={file.path} onClick={() => onOpen(file.path, file.line)} onKeyDown={(event) => {
 							let nextIndex: number | undefined;
 							if (event.key === "ArrowLeft") nextIndex = (index - 1 + files.length) % files.length;
@@ -142,18 +215,23 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 							onOpen(next.path, next.line);
 							document.getElementById(`${id}-tab-${nextIndex}`)?.focus();
 						}}>{file.path.split(/[\\/]/).at(-1) || file.path}</button>
-						<button className="files-tab-close" aria-label={`${file.path} を閉じる`} onClick={() => closeFile(file.path)}>×</button>
+						<button className="files-tab-close" aria-label={`${file.path} を閉じる`} draggable={false} onClick={() => closeFile(file.path)}>×</button>
 					</div>)}
+				</div>}
+				{markdown && <div className="files-view-mode" role="group" aria-label="Markdown の表示方法">
+					<button aria-pressed={rendered} onClick={() => changeMode("rendered")}>プレビュー</button>
+					<button aria-pressed={!rendered} onClick={() => changeMode("source")}>ソース</button>
 				</div>}
 				<div className="files-viewer" id={`${id}-preview`} role={active ? "tabpanel" : undefined} aria-labelledby={active ? `${id}-tab-${files.findIndex((file) => file.path === activePath)}` : undefined} ref={viewer} tabIndex={0} aria-busy={!!active && !loaded}>
 					{!active && <p className="files-message muted">ファイルを選択してください。</p>}
 					{active && !loaded && <p className="files-message" role="status">読み込み中…</p>}
 					{loaded?.error && <p role="alert" className="files-message error">{loaded.error}</p>}
 					{active && loaded?.view && loaded.view.path === active.path && <>
-						{loaded.view.kind === "text" && <>
+						{loaded.view.kind === "text" && rendered && loaded.markdown !== undefined && (loaded.markdown === "" ? <p className="files-message muted">空のファイル</p> : <FileMarkdown text={loaded.markdown} path={active.path} onFile={onOpen} />)}
+						{loaded.view.kind === "text" && !rendered && <>
 							{active.offset > 1 && <div className="files-page"><button onClick={() => changeOffset(Math.max(1, active.offset - 200))}>前の行</button></div>}
 							{loaded.view.lines?.length === 0 && <p className="files-message muted">空のファイル</p>}
-							<div className="files-source-lines">{loaded.view.lines?.map((line) => <div key={line.number} data-line={line.number} className={line.number === active.line ? "files-selected-line" : undefined}><span className="files-line-number">{line.number}</span><code>{line.text || " "}</code></div>)}</div>
+							<SourceLines path={active.path} lines={loaded.view.lines ?? []} selectedLine={active.line} />
 							{loaded.view.lines?.some((line) => line.truncated) && <p className="files-message warning">64 KiB の表示上限を超える行は先頭のみ表示しています。省略された行: {loaded.view.lines.filter((line) => line.truncated).map((line) => line.number).join(", ")}</p>}
 							{loaded.view.nextOffset && <div className="files-page"><button onClick={() => changeOffset(loaded.view?.nextOffset ?? 1)}>次の行 ({loaded.view.nextOffset}〜)</button></div>}
 						</>}

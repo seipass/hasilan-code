@@ -5,13 +5,12 @@ import { RUN_LABELS } from "./TeamPane.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
 import type { SessionDetail } from "./types.ts";
 
-export function ChatPane({ session, connected, modelReady, draftKey, modelControl, folderControl, onSend, onFile, onStop, onParent, onSettings }: {
+export function ChatPane({ session, connected, modelReady, draftKey, modelControl, onSend, onFile, onStop, onParent, onSettings }: {
 	session?: SessionDetail;
 	connected: boolean;
 	modelReady: boolean;
 	draftKey: string;
 	modelControl: ReactNode;
-	folderControl: ReactNode;
 	onSend: (text: string, mode: "prompt" | "steer" | "followUp") => Promise<{ runId: string; disposition: "queued" | "started" }>;
 	onFile: (path: string, line?: number) => void;
 	onStop: () => void;
@@ -67,7 +66,7 @@ export function ChatPane({ session, connected, modelReady, draftKey, modelContro
 		<div className="composer-area">{session?.currentRun && <div className="run-progress" role="status"><span className="activity-dot" /><span>{RUN_LABELS[session.currentRun.status]}</span>{session.pendingInput.length > 0 && <span className="muted">追加指示 {session.pendingInput.length} 件</span>}</div>}
 			<form className="composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
 				<label className="sr-only" htmlFor="message">メッセージ</label><textarea ref={input} id="message" aria-label="メッセージ" value={text} onChange={(event) => setText(event.target.value)} placeholder="メッセージを入力…" rows={3} disabled={sending || session?.availability === "missing"} onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} />
-				<div className="composer-toolbar"><div className="composer-context">{modelControl}{folderControl}</div><div className="composer-delivery">{busy && <label><span className="sr-only">追加指示の送信方法</span><select aria-label="追加指示の送信方法" value={mode} onChange={(event) => setMode(event.target.value as "steer" | "followUp")}><option value="followUp">完了後に続ける</option><option value="steer">実行中に指示</option></select></label>}{busy && !text.trim() ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title="Ctrl / Cmd + Enter で送信" disabled={!connected || sending || !text.trim() || session?.availability === "missing"}>{sending ? "…" : "↑"}</button>}</div></div>
+				<div className="composer-toolbar"><div className="composer-context">{modelControl}</div><div className="composer-delivery">{busy && <label><span className="sr-only">追加指示の送信方法</span><select aria-label="追加指示の送信方法" value={mode} onChange={(event) => setMode(event.target.value as "steer" | "followUp")}><option value="followUp">完了後に続ける</option><option value="steer">実行中に指示</option></select></label>}{busy && !text.trim() ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title="Ctrl / Cmd + Enter で送信" disabled={!connected || sending || !text.trim() || session?.availability === "missing"}>{sending ? "…" : "↑"}</button>}</div></div>
 			</form>
 			<div className="composer-caption">{!modelReady ? <button className="text-link" onClick={onSettings}>モデルを接続すると会話を始められます</button> : <span>Ctrl / Cmd + Enter で送信</span>}</div>
 			{error && <p className="composer-error" role="alert">{error}</p>}{notice && <p className="muted" role="status">{notice}</p>}

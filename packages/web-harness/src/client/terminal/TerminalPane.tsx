@@ -39,6 +39,9 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 	const [listFailed, setListFailed] = useState(false);
 	const [listAttempt, setListAttempt] = useState(0);
 	const [focusRequest, setFocusRequest] = useState(0);
+	const [draggingId, setDraggingId] = useState<string>();
+	const [dropTarget, setDropTarget] = useState<{ terminalId: string; edge: "before" | "after" }>();
+	const draggedTerminal = useRef<string | undefined>(undefined);
 	const selectionByWorkspace = useRef(new Map<string, string>());
 	const dismissedTerminals = useRef(new Set<string>());
 	const workspaceRef = useRef(workspaceId);
@@ -55,6 +58,9 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 		setError("");
 		setListFailed(false);
 		setFocusRequest(0);
+		draggedTerminal.current = undefined;
+		setDraggingId(undefined);
+		setDropTarget(undefined);
 	}, [workspaceId]);
 
 	useEffect(() => {
@@ -142,8 +148,52 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 	return <section className="terminal-pane" hidden={!visible} aria-label="ユーザー端末">
 		<header className="terminal-header">
 			<div className="terminal-tabs" role="tablist" aria-label="端末一覧">
-				{terminals.map((item, index) => <div className="terminal-tab-item" role="presentation" key={item.terminalId}>
-					<button className="terminal-tab" type="button" role="tab" id={`terminal-tab-${item.terminalId}`} aria-controls={`terminal-screen-${item.terminalId}`} aria-selected={selectedId === item.terminalId} tabIndex={selectedId === item.terminalId ? 0 : -1} title={viewStates.get(item.terminalId)?.title || `端末 ${index + 1}`} onClick={() => select(item.terminalId)} onKeyDown={(event) => {
+				{terminals.map((item, index) => <div className="terminal-tab-item" role="presentation" key={item.terminalId} data-terminal-id={item.terminalId} data-dragging={draggingId === item.terminalId || undefined} data-drop-edge={dropTarget?.terminalId === item.terminalId ? dropTarget.edge : undefined} onMouseDown={(event) => {
+					if (event.button === 1) event.preventDefault();
+				}} onAuxClick={(event) => {
+					if (event.button !== 1) return;
+					event.preventDefault();
+					void close(item.terminalId);
+				}} onDragOver={(event) => {
+					const sourceId = draggedTerminal.current;
+					if (!sourceId || sourceId === item.terminalId || !terminals.some((terminal) => terminal.terminalId === sourceId)) return;
+					event.preventDefault();
+					event.dataTransfer.dropEffect = "move";
+					const bounds = event.currentTarget.getBoundingClientRect();
+					setDropTarget({ terminalId: item.terminalId, edge: event.clientX < bounds.left + bounds.width / 2 ? "before" : "after" });
+				}} onDragLeave={(event) => {
+					if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+					setDropTarget((target) => target?.terminalId === item.terminalId ? undefined : target);
+				}} onDrop={(event) => {
+					const sourceId = draggedTerminal.current;
+					if (!sourceId || sourceId === item.terminalId) return;
+					event.preventDefault();
+					const bounds = event.currentTarget.getBoundingClientRect();
+					const after = event.clientX >= bounds.left + bounds.width / 2;
+					// Only change display order. Stable terminal keys retain sockets, emulators and selection.
+					setTerminals((items) => {
+						const source = items.find((terminal) => terminal.terminalId === sourceId);
+						if (!source || !items.some((terminal) => terminal.terminalId === item.terminalId)) return items;
+						const reordered = items.filter((terminal) => terminal.terminalId !== sourceId);
+						const targetIndex = reordered.findIndex((terminal) => terminal.terminalId === item.terminalId);
+						reordered.splice(targetIndex + (after ? 1 : 0), 0, source);
+						return reordered;
+					});
+					draggedTerminal.current = undefined;
+					setDraggingId(undefined);
+					setDropTarget(undefined);
+				}}>
+					<button className="terminal-tab" type="button" role="tab" id={`terminal-tab-${item.terminalId}`} aria-controls={`terminal-screen-${item.terminalId}`} aria-selected={selectedId === item.terminalId} tabIndex={selectedId === item.terminalId ? 0 : -1} title={viewStates.get(item.terminalId)?.title || `端末 ${index + 1}`} draggable={!closing.includes(item.terminalId)} onDragStart={(event) => {
+						draggedTerminal.current = item.terminalId;
+						setDraggingId(item.terminalId);
+						setDropTarget(undefined);
+						event.dataTransfer.effectAllowed = "move";
+						event.dataTransfer.setData("application/x-hasilan-terminal", item.terminalId);
+					}} onDragEnd={() => {
+						draggedTerminal.current = undefined;
+						setDraggingId(undefined);
+						setDropTarget(undefined);
+					}} onClick={() => select(item.terminalId)} onKeyDown={(event) => {
 						let next: number;
 						if (event.key === "ArrowRight") next = (index + 1) % terminals.length;
 						else if (event.key === "ArrowLeft") next = (index - 1 + terminals.length) % terminals.length;
