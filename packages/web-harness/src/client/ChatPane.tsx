@@ -3,9 +3,9 @@ import { errorMessage } from "./api.ts";
 import { Content, record } from "./Content.tsx";
 import { RUN_LABELS } from "./TeamPane.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
-import type { SessionDetail } from "./types.ts";
+import type { PendingInputAction, SessionDetail } from "./types.ts";
 
-export function ChatPane({ session, workspacePath, contextWindow, connected, modelReady, draftKey, modelControl, onSend, onFile, onStop, onParent, onSettings, onProviderSettings }: {
+export function ChatPane({ session, workspacePath, contextWindow, connected, modelReady, draftKey, modelControl, onSend, onPendingInputAction, onFile, onStop, onParent, onSettings, onProviderSettings }: {
 	session?: SessionDetail;
 	workspacePath?: string;
 	contextWindow?: number;
@@ -14,6 +14,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 	draftKey: string;
 	modelControl: ReactNode;
 	onSend: (text: string, mode: "prompt" | "steer" | "followUp") => Promise<{ runId: string; disposition: "queued" | "started" }>;
+	onPendingInputAction: (inputId: string, action: PendingInputAction) => Promise<void>;
 	onFile: (path: string, line?: number) => void;
 	onStop: () => void;
 	onParent: (sessionId: string) => void;
@@ -25,6 +26,8 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 	const [sending, setSending] = useState(false);
 	const [error, setError] = useState<string>();
 	const [notice, setNotice] = useState<string>();
+	const [editingInput, setEditingInput] = useState<{ inputId: string; text: string }>();
+	const [mutatingInputId, setMutatingInputId] = useState<string>();
 	const [nearBottom, setNearBottom] = useState(true);
 	const scroller = useRef<HTMLDivElement>(null);
 	const input = useRef<HTMLTextAreaElement>(null);
@@ -53,11 +56,28 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 		} catch (reason) { setError(errorMessage(reason)); }
 		finally { setSending(false); }
 	}
+
+	async function mutatePendingInput(inputId: string, action: PendingInputAction) {
+		if (mutatingInputId) return;
+		setError(undefined);
+		setMutatingInputId(inputId);
+		try {
+			await onPendingInputAction(inputId, action);
+			setEditingInput(undefined);
+		} catch (reason) {
+			setError(errorMessage(reason));
+		} finally {
+			setMutatingInputId(undefined);
+		}
+	}
+
 	const latestError = session?.latestRun?.status === "failed" ? session.latestRun.error : undefined;
 	const usage = session?.contextUsage;
 	const contextLimit = usage?.contextWindow ?? contextWindow;
 	const contextTokens = usage?.tokens;
 	const compactTokens = (value: number) => new Intl.NumberFormat("ja-JP", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+	const hasContextLimit = contextLimit !== undefined && contextLimit > 0;
+	const pendingInputs = session?.pendingInput.filter((input) => !input.fromAgentId && !input.completionRunId) ?? [];
 	return <section className={`chat-pane ${empty ? "is-empty" : "has-messages"}`} aria-label="会話">
 		{session?.parentSessionId && <div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div>}
 		{session?.availability === "missing" && <div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div>}
@@ -70,15 +90,49 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 			})}{latestError && <div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><p>接続設定を確認して、もう一度送信してください。</p><button className="text-link" onClick={onProviderSettings}>プロバイダーの認証を確認</button><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div>}</div>
 		</div>}
 		{!empty && !nearBottom && <button className="back-to-bottom" onClick={() => { if (scroller.current) scroller.current.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }); atBottom.current = true; setNearBottom(true); }}>最新のメッセージへ ↓</button>}
-		<div className="composer-area">{session?.currentRun && <div className="run-progress" role="status"><span className="activity-dot" /><span>{RUN_LABELS[session.currentRun.status]}</span>{session.pendingInput.length > 0 && <span className="muted">追加指示 {session.pendingInput.length} 件</span>}</div>}
+		<div className="composer-area">{session?.currentRun && <div className="run-progress" role="status"><span className="activity-dot" /><span>{RUN_LABELS[session.currentRun.status]}</span></div>}
+			{pendingInputs.length > 0 && <div className="pending-input-list" role="list" aria-label="予約中の追加指示">
+				{pendingInputs.map((pendingInput) => {
+					const editing = editingInput?.inputId === pendingInput.inputId;
+					const disabled =
+						!connected ||
+						session?.availability === "missing" ||
+						!pendingInput.manageable ||
+						mutatingInputId !== undefined;
+					return <div className={`pending-input-row${pendingInput.manageable ? "" : " unavailable"}`} role="listitem" key={pendingInput.inputId}>
+						<div className="pending-input-content">
+							<span className="pending-input-mode">{pendingInput.mode === "followUp" ? "完了後に続ける" : "実行中に指示"}</span>
+							{editing
+								? <textarea className="pending-input-edit" aria-label="追加指示を編集" value={editingInput?.text ?? ""} rows={2} onChange={(event) => setEditingInput((current) => current?.inputId === pendingInput.inputId ? { ...current, text: event.target.value } : current)} />
+								: <p className="pending-input-text">{pendingInput.text}</p>}
+						</div>
+						<div className="pending-input-actions">
+							{editing
+								? <>
+									<button type="button" aria-label="変更を保存" title="変更を保存" disabled={disabled || !(editingInput?.text.trim())} onClick={() => { const text = editingInput?.text ?? ""; void mutatePendingInput(pendingInput.inputId, { type: "edit", text }); }}><span aria-hidden="true">✓</span></button>
+									<button type="button" aria-label="編集をキャンセル" title="編集をキャンセル" disabled={mutatingInputId !== undefined} onClick={() => setEditingInput(undefined)}><span aria-hidden="true">×</span></button>
+								</>
+								: <>
+									{pendingInput.mode === "followUp" && <button type="button" aria-label="すぐに送信" title="すぐに送信" disabled={disabled} onClick={() => { void mutatePendingInput(pendingInput.inputId, { type: "sendNow" }); }}><span aria-hidden="true">↑</span></button>}
+									<button type="button" aria-label="追加指示を編集" title="追加指示を編集" disabled={disabled} onClick={() => { setError(undefined); setEditingInput({ inputId: pendingInput.inputId, text: pendingInput.text }); }}><span aria-hidden="true">✎</span></button>
+									<button type="button" aria-label="追加指示を削除" title="追加指示を削除" disabled={disabled} onClick={() => { void mutatePendingInput(pendingInput.inputId, { type: "delete" }); }}><span aria-hidden="true">×</span></button>
+								</>}
+						</div>
+					</div>;
+				})}
+			</div>}
 			{empty && <div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath}>{workspacePath}</code>}</div>}
+			{notice && <div className="composer-notice" role="status">{notice}</div>}
 			<form className="composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-				<label className="sr-only" htmlFor="message">メッセージ</label><textarea ref={input} id="message" aria-label="メッセージ" value={text} onChange={(event) => setText(event.target.value)} placeholder="メッセージを入力…" rows={3} disabled={sending || session?.availability === "missing"} onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} />
+				<label className="sr-only" htmlFor="message">メッセージ</label>
+				<div className={`composer-input-row${hasContextLimit ? " has-usage" : ""}`}>
+					{hasContextLimit && <div className="composer-usage"><span className="context-usage" aria-label={`コンテキスト使用量 ${contextTokens == null ? "未計測" : `${contextTokens.toLocaleString("ja-JP")} トークン`} / ${contextLimit.toLocaleString("ja-JP")} トークン`}>コンテキスト {contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span></div>}
+					<textarea ref={input} id="message" aria-label="メッセージ" value={text} onChange={(event) => setText(event.target.value)} placeholder="メッセージを入力…" rows={3} disabled={sending || session?.availability === "missing"} onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} />
+				</div>
 				<div className="composer-toolbar"><div className="composer-context">{modelControl}</div><div className="composer-delivery">{busy && <label><span className="sr-only">追加指示の送信方法</span><select aria-label="追加指示の送信方法" value={mode} onChange={(event) => setMode(event.target.value as "steer" | "followUp")}><option value="followUp">完了後に続ける</option><option value="steer">実行中に指示</option></select></label>}{busy && !text.trim() ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title="Ctrl / Cmd + Enter で送信" disabled={!connected || sending || !text.trim() || session?.availability === "missing"}>{sending ? "…" : "↑"}</button>}</div></div>
-				{contextLimit !== undefined && contextLimit > 0 && <div className="composer-usage"><span className="context-usage" aria-label={`コンテキスト使用量 ${contextTokens == null ? "未計測" : `${contextTokens.toLocaleString("ja-JP")} トークン`} / ${contextLimit.toLocaleString("ja-JP")} トークン`}>コンテキスト {contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span></div>}
 			</form>
 			{!modelReady && <div className="composer-caption"><button className="text-link" onClick={onSettings}>モデルを接続すると会話を始められます</button></div>}
-			{error && <p className="composer-error" role="alert">{error}</p>}{notice && <p className="muted" role="status">{notice}</p>}
+			{error && <p className="composer-error" role="alert">{error}</p>}
 		</div>
 	</section>;
 }

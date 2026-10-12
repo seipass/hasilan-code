@@ -12,6 +12,7 @@ import {
 	SessionManager,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import type { PendingInputAction } from "../shared/contracts.ts";
 import { createHarnessSettings } from "./config.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
 
@@ -64,6 +65,10 @@ export interface ContextUsageSnapshot {
 	contextWindow: number;
 	percent: number | null;
 }
+export interface PendingInputProjection extends PendingInput {
+	manageable: boolean;
+}
+
 export interface SessionSnapshot extends SessionDescriptor {
 	title?: string;
 	contextUsage?: ContextUsageSnapshot;
@@ -76,7 +81,7 @@ export interface SessionSnapshot extends SessionDescriptor {
 	};
 	currentRun?: RunRecord;
 	latestRun?: RunRecord;
-	pendingInput: PendingInput[];
+	pendingInput: PendingInputProjection[];
 }
 export interface HarnessState {
 	schemaVersion: 1;
@@ -90,8 +95,9 @@ export interface HarnessState {
 export interface ExecutionAdapter {
 	subscribe(listener: (event: AgentSessionEvent) => void): () => void;
 	prompt(text: string): Promise<void>;
-	steer(text: string): Promise<void>;
-	followUp(text: string): Promise<void>;
+	deliverInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<void>;
+	hasQueuedInput(inputId: string): boolean;
+	mutateQueuedInput(inputId: string, action: PendingInputAction): boolean;
 	abort(): Promise<void>;
 	waitForIdle(): Promise<void>;
 	clearQueue(): unknown;
@@ -428,15 +434,18 @@ export class SessionRegistry {
 		};
 		const agent = this.state.agents.find((entry) => entry.sessionId === id);
 		const runs = agent ? this.state.runs.filter((run) => run.agentId === agent.agentId) : [];
+		const currentRun = runs.find((run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status));
 		return structuredClone({
 			...projection,
 			...descriptor,
 			contextUsage: this.live.get(id)?.adapter?.getContextUsage?.(),
 			thinkingLevel: this.live.get(id)?.adapter?.getThinkingLevel?.() ?? descriptor.thinkingLevel,
 			title: runs[0]?.task,
-			currentRun: runs.find((run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status)),
+			currentRun,
 			latestRun: runs.at(-1),
-			pendingInput: this.state.pendingInput.filter((input) => input.sessionId === id),
+			pendingInput: this.state.pendingInput
+				.filter((input) => input.sessionId === id)
+				.map((input) => this.projectPendingInput(input, currentRun)),
 		});
 	}
 	list(workspaceId?: string): Omit<SessionSnapshot, "messages" | "toolCalls" | "activity">[] {
@@ -445,14 +454,17 @@ export class SessionRegistry {
 			.map((descriptor) => {
 				const agent = this.state.agents.find((entry) => entry.sessionId === descriptor.sessionId);
 				const runs = agent ? this.state.runs.filter((run) => run.agentId === agent.agentId) : [];
+				const currentRun = runs.find(
+					(run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status),
+				);
 				return structuredClone({
 					...descriptor,
 					title: runs[0]?.task,
-					currentRun: runs.find(
-						(run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status),
-					),
+					currentRun,
 					latestRun: runs.at(-1),
-					pendingInput: this.state.pendingInput.filter((input) => input.sessionId === descriptor.sessionId),
+					pendingInput: this.state.pendingInput
+						.filter((input) => input.sessionId === descriptor.sessionId)
+						.map((input) => this.projectPendingInput(input, currentRun)),
 				});
 			});
 	}
@@ -479,6 +491,15 @@ export class SessionRegistry {
 		);
 		return result;
 	}
+
+	hasQueuedInput(sessionId: string, inputId: string): boolean {
+		return this.live.get(sessionId)?.adapter?.hasQueuedInput(inputId) ?? false;
+	}
+
+	mutateQueuedInput(sessionId: string, inputId: string, action: PendingInputAction): boolean {
+		return this.live.get(sessionId)?.adapter?.mutateQueuedInput(inputId, action) ?? false;
+	}
+
 	persist(): Promise<void> {
 		this.state.workspaces = this.options.workspaceFiles.getWorkspaces();
 		const bytes = JSON.stringify(this.state, null, 2);
@@ -540,15 +561,19 @@ export class SessionRegistry {
 					});
 					if (descriptor.thinkingLevel) session.setThinkingLevel(descriptor.thinkingLevel);
 					await session.bindExtensions({});
+					const managedSession = session as unknown as {
+						queueManagedInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<unknown>;
+						hasQueuedInput(inputId: string): boolean;
+						mutateQueuedInput(inputId: string, action: PendingInputAction): boolean;
+					};
 					adapter = {
 						subscribe: (listener) => session.subscribe(listener),
 						prompt: (text) => session.prompt(text, { expandPromptTemplates: false }),
-						steer: async (text) => {
-							await session.steer(text);
+						deliverInput: async (text, mode, inputId) => {
+							await managedSession.queueManagedInput(text, mode, inputId);
 						},
-						followUp: async (text) => {
-							await session.followUp(text);
-						},
+						hasQueuedInput: (inputId) => managedSession.hasQueuedInput(inputId),
+						mutateQueuedInput: (inputId, action) => managedSession.mutateQueuedInput(inputId, action),
 						abort: () => session.abort(),
 						waitForIdle: () => session.waitForIdle(),
 						clearQueue: () => session.clearQueue(),
@@ -662,10 +687,23 @@ export class SessionRegistry {
 			this.changed(id);
 		}
 	}
-	async deliver(id: string, text: string, mode: "steer" | "followUp"): Promise<void> {
+	async deliver(id: string, text: string, mode: "steer" | "followUp", inputId: string): Promise<void> {
 		const adapter = await this.adapter(id);
-		await adapter[mode](text);
+		await adapter.deliverInput(text, mode, inputId);
 	}
+
+	private projectPendingInput(input: PendingInput, currentRun?: RunRecord): PendingInputProjection {
+		const userInput = !input.fromAgentId && !input.completionRunId;
+		const manageable =
+			userInput &&
+			(input.status === "undelivered" ||
+				(input.status === "pending" &&
+					currentRun?.runId === input.runId &&
+					currentRun.status !== "cancelling" &&
+					(!input.delivered || this.hasQueuedInput(input.sessionId, input.inputId))));
+		return { ...input, manageable };
+	}
+
 	activeTools(id: string): string[] {
 		return (
 			this.live.get(id)?.adapter?.getActiveToolNames() ??

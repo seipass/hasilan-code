@@ -3,14 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, command, errorMessage } from "./api.ts";
 import { ChatPane } from "./ChatPane.tsx";
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
-import { ModelMenu } from "./ModelMenu.tsx";
+import { ModelMenu, ThinkingSelector } from "./ModelMenu.tsx";
 import { PanelResize } from "./PanelResize.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { TerminalPane } from "./terminal/TerminalPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
-import type { Model, ModelCatalog, SessionDetail, SessionSummary, Settings, Workspace, WorkspaceProjection } from "./types.ts";
+import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Settings, Workspace, WorkspaceProjection } from "./types.ts";
 
 function WorkspaceFeed({ id, onUpdate, onFiles }: { id: string; onUpdate: (id: string, data: WorkspaceProjection) => void; onFiles: () => void }) {
 	const channel = useChannel<WorkspaceProjection>("workspace", id, onFiles);
@@ -123,6 +123,15 @@ export function App() {
 		setSessionId(target); return result;
 	}
 	async function stop(id: string) { try { await command(`/api/sessions/${encodeURIComponent(id)}/abort`, {}); } catch (reason) { setError(errorMessage(reason)); } }
+
+	async function mutatePendingInput(inputId: string, action: PendingInputAction): Promise<void> {
+		if (!sessionId) throw new Error("会話を選択してください。");
+		await command(
+			`/api/sessions/${encodeURIComponent(sessionId)}/pending-inputs/${encodeURIComponent(inputId)}`,
+			action,
+			"PATCH",
+		);
+	}
 	async function messageAgent(agentId: string, message: string): Promise<void> {
 		const recipient = team?.agents.find((agent) => agent.agentId === agentId);
 		if (!recipient) throw new Error("送信先のエージェントが見つかりません。");
@@ -146,7 +155,10 @@ export function App() {
 		await command("/api/settings", { llm: { defaultModel: selection ? { provider: selection.provider, id: selection.id } : null } }, "PATCH");
 		setDefaultModel(selection ?? undefined);
 	}
-	const modelControl = <button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} onClick={() => { if (modelClosing) { setModelClosing(false); setModelMenuKey((value) => value + 1); } else setModelOpen((value) => !value); }}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span aria-hidden="true">⌄</span></button>;
+	const modelControl = <div className="model-control">
+		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} onClick={() => { if (modelClosing) { setModelClosing(false); setModelMenuKey((value) => value + 1); } else setModelOpen((value) => !value); }}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span aria-hidden="true">⌄</span></button>
+		<ThinkingSelector catalog={catalog} value={selectedModel} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeThinking} disabled={!!session?.currentRun} />
+	</div>;
 	const rightMaximum = Math.max(480, viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 260 : 0) - 320);
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);
 	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`}>
@@ -179,8 +191,8 @@ export function App() {
 		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading">{!sidebarOpen && <button className="icon-button" aria-label="履歴を開く" onClick={() => setSidebarOpen(true)}>☰</button>}<span className="page-title">{session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions"><button className="quiet-button" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
 			{(error || workspaceChannel.error || sessionChannel.error) && <div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div>}
 			<div className="main-layout"><main className="chat-column">{sessionId && sessionChannel.connection !== "connected" && <p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p>}
-				<ChatPane key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelReady={!!model && catalog?.providers.find((entry) => entry.id === model.provider)?.configured !== false} modelControl={modelControl} onSend={send} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onSettings={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} />
-				{modelOpen && <ModelMenu key={modelMenuKey} catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} defaultModel={defaultModel} onChange={changeModel} onThinkingChange={changeThinking} onDefaultChange={changeDefaultModel} onSettings={() => { setModelOpen(false); setModelClosing(false); setSettingsOpen(true); }} onClosingChange={setModelClosing} onClose={() => { setModelOpen(false); setModelClosing(false); }} disabled={!!session?.currentRun} />}
+				<ChatPane key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelReady={!!model && catalog?.providers.find((entry) => entry.id === model.provider)?.configured !== false} modelControl={modelControl} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onSettings={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} />
+				{modelOpen && <ModelMenu key={modelMenuKey} catalog={catalog} value={model} defaultModel={defaultModel} onChange={changeModel} onDefaultChange={changeDefaultModel} onSettings={() => { setModelOpen(false); setModelClosing(false); setSettingsOpen(true); }} onClosingChange={setModelClosing} onClose={() => { setModelOpen(false); setModelClosing(false); }} disabled={!!session?.currentRun} />}
 			</main>{rightOpen && <PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} />}
 				<aside className="right-panel" hidden={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined }}>
 					<div className="panel-tabs" role="tablist" aria-label="詳細パネル">{(["files", "team", "tools", "terminal"] as const).map((tab) => <button key={tab} id={`detail-tab-${tab}`} role="tab" aria-controls="detail-panel" aria-selected={rightTab === tab} onClick={() => setRightTab(tab)}>{tab === "files" ? "ファイル" : tab === "team" ? "チーム" : tab === "tools" ? "ツール" : "端末"}</button>)}</div>

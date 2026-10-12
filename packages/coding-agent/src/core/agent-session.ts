@@ -42,6 +42,7 @@ import type {
 	TextContent,
 	ToolResultMessage,
 	Usage,
+	UserMessage,
 } from "@earendil-works/pi-ai/compat";
 import {
 	clampThinkingLevel,
@@ -310,6 +311,8 @@ export interface ExtensionBindings {
 export type QueuedInputDisposition = "handled" | "queued";
 export type PromptDisposition = QueuedInputDisposition | "started";
 
+export type QueuedInputMutation = { type: "edit"; text: string } | { type: "delete" } | { type: "sendNow" };
+
 /** Options for AgentSession.prompt() */
 export interface PromptOptions {
 	/** Whether to dispatch extension commands and expand skill commands and prompt templates (default: true) */
@@ -394,6 +397,10 @@ export class AgentSession {
 	private _steeringMessages: string[] = [];
 	/** Tracks pending follow-up messages for UI display. Removed when delivered. */
 	private _followUpMessages: string[] = [];
+	private _steeringQueueEntries: UserMessage[] = [];
+	private _followUpQueueEntries: UserMessage[] = [];
+	private _managedQueueInputs = new Map<string, { mode: "steer" | "followUp"; message: UserMessage }>();
+
 	/** Messages queued to be included with the next user prompt as context ("asides"). */
 	private _pendingNextTurnMessages: CustomMessage[] = [];
 	/** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
@@ -1042,6 +1049,31 @@ export class AgentSession {
 		}
 	}
 
+	private _syncQueuedMessages(): void {
+		const steeringEntries = this._steeringQueueEntries.filter((message) =>
+			this.agent.hasQueuedMessage("steering", message),
+		);
+		const followUpEntries = this._followUpQueueEntries.filter((message) =>
+			this.agent.hasQueuedMessage("followUp", message),
+		);
+		const steering = steeringEntries.map((message) => contentText(message.content, ""));
+		const followUp = followUpEntries.map((message) => contentText(message.content, ""));
+		const changed =
+			steering.length !== this._steeringMessages.length ||
+			steering.some((text, index) => text !== this._steeringMessages[index]) ||
+			followUp.length !== this._followUpMessages.length ||
+			followUp.some((text, index) => text !== this._followUpMessages[index]);
+		this._steeringQueueEntries = steeringEntries;
+		this._followUpQueueEntries = followUpEntries;
+		this._steeringMessages = steering;
+		this._followUpMessages = followUp;
+		for (const [inputId, input] of this._managedQueueInputs) {
+			const mode = input.mode === "steer" ? "steering" : "followUp";
+			if (!this.agent.hasQueuedMessage(mode, input.message)) this._managedQueueInputs.delete(inputId);
+		}
+		if (changed) this._emitQueueUpdate();
+	}
+
 	private _emitQueueUpdate(): void {
 		this._emit({
 			type: "queue_update",
@@ -1114,26 +1146,11 @@ export class AgentSession {
 				this._nestedToolCalls.clear();
 			}
 		}
-		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
-		// This ensures the UI sees the updated queue state
-		if (event.type === "message_start" && event.message.role === "user") {
-			this._overflowRecoveryAttempted = false;
-			const messageText = contentText(event.message.content, "");
-			if (messageText) {
-				// Check steering queue first
-				const steeringIndex = this._steeringMessages.indexOf(messageText);
-				if (steeringIndex !== -1) {
-					this._steeringMessages.splice(steeringIndex, 1);
-					this._emitQueueUpdate();
-				} else {
-					// Check follow-up queue
-					const followUpIndex = this._followUpMessages.indexOf(messageText);
-					if (followUpIndex !== -1) {
-						this._followUpMessages.splice(followUpIndex, 1);
-						this._emitQueueUpdate();
-					}
-				}
-			}
+		// Agent core drains a queued message before emitting message_start. Reconcile by
+		// object identity so duplicates and batched queue modes cannot expose stale items.
+		if (event.type === "message_start") {
+			if (event.message.role === "user") this._overflowRecoveryAttempted = false;
+			this._syncQueuedMessages();
 		}
 
 		// Emit to extensions first, then notify public listeners.
@@ -2175,6 +2192,7 @@ export class AgentSession {
 		images: ImageContent[] | undefined,
 		behavior: "steer" | "followUp",
 		source: InputSource,
+		queueId?: string,
 	): Promise<QueuedInputDisposition> {
 		if (text.startsWith("/")) {
 			this._throwIfExtensionCommand(text);
@@ -2192,9 +2210,9 @@ export class AgentSession {
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		if (behavior === "steer") {
-			await this._queueSteer(expandedText, processedInput.images);
+			await this._queueSteer(expandedText, processedInput.images, queueId);
 		} else {
-			await this._queueFollowUp(expandedText, processedInput.images);
+			await this._queueFollowUp(expandedText, processedInput.images, queueId);
 		}
 		return "queued";
 	}
@@ -2232,34 +2250,98 @@ export class AgentSession {
 		return this._queueUserInput(text, images, "followUp", options?.source ?? "interactive");
 	}
 
+	/** Queue a session-managed input under an external ID for exact queue controls. */
+	async queueManagedInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<QueuedInputDisposition> {
+		if (!inputId.trim()) throw new Error("Managed queue input ID must not be empty");
+		if (this._managedQueueInputs.has(inputId)) throw new Error("Managed queue input ID is already queued");
+		return this._queueUserInput(text, undefined, mode, "interactive", inputId);
+	}
+
+	hasQueuedInput(inputId: string): boolean {
+		const input = this._managedQueueInputs.get(inputId);
+		if (!input) return false;
+		const mode = input.mode === "steer" ? "steering" : "followUp";
+		return this.agent.hasQueuedMessage(mode, input.message);
+	}
+
+	mutateQueuedInput(inputId: string, mutation: QueuedInputMutation): boolean {
+		const input = this._managedQueueInputs.get(inputId);
+		if (!input) return false;
+		const mode = input.mode;
+		const entries = mode === "steer" ? this._steeringQueueEntries : this._followUpQueueEntries;
+		const texts = mode === "steer" ? this._steeringMessages : this._followUpMessages;
+		const index = entries.indexOf(input.message);
+		if (index === -1) return false;
+		const queueMode = mode === "steer" ? "steering" : "followUp";
+
+		if (mutation.type === "edit") {
+			if (!mutation.text.trim() || input.message.role !== "user") return false;
+			let content: string | (TextContent | ImageContent)[];
+			if (typeof input.message.content === "string") content = mutation.text;
+			else {
+				let replaced = false;
+				content = input.message.content.map((part) => {
+					if (!replaced && part.type === "text") {
+						replaced = true;
+						return { ...part, text: mutation.text };
+					}
+					return part;
+				});
+				if (!replaced) content.unshift({ type: "text", text: mutation.text });
+			}
+			const message: UserMessage = { ...input.message, content };
+			if (!this.agent.mutateQueuedMessage(queueMode, input.message, { type: "replace", message })) return false;
+			entries[index] = message;
+			input.message = message;
+			texts[index] = mutation.text;
+		} else if (mutation.type === "delete") {
+			if (!this.agent.mutateQueuedMessage(queueMode, input.message, { type: "remove" })) return false;
+			entries.splice(index, 1);
+			texts.splice(index, 1);
+			this._managedQueueInputs.delete(inputId);
+		} else {
+			if (mode !== "followUp") return false;
+			if (!this.agent.mutateQueuedMessage("followUp", input.message, { type: "moveToSteering" })) return false;
+			this._followUpQueueEntries.splice(index, 1);
+			this._followUpMessages.splice(index, 1);
+			this._steeringQueueEntries.push(input.message);
+			this._steeringMessages.push(contentText(input.message.content, ""));
+			input.mode = "steer";
+		}
+		this._emitQueueUpdate();
+		return true;
+	}
+
 	/**
 	 * Internal: Queue a steering message (already expanded, no extension command check).
 	 */
-	private async _queueSteer(text: string, images?: ImageContent[]): Promise<void> {
-		this._steeringMessages.push(text);
-		this._emitQueueUpdate();
+	private async _queueSteer(text: string, images?: ImageContent[], queueId?: string): Promise<void> {
 		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
 		if (images) {
 			content.push(...images);
 		}
-		this.agent.steer({
-			role: "user",
-			content,
-			timestamp: Date.now(),
-		});
+		const message: UserMessage = { role: "user", content, timestamp: Date.now() };
+		this.agent.steer(message);
+		this._steeringQueueEntries.push(message);
+		this._steeringMessages.push(text);
+		if (queueId) this._managedQueueInputs.set(queueId, { mode: "steer", message });
+		this._emitQueueUpdate();
 	}
 
 	/**
 	 * Internal: Queue a follow-up message (already expanded, no extension command check).
 	 */
-	private async _queueFollowUp(text: string, images?: ImageContent[]): Promise<void> {
-		this._followUpMessages.push(text);
-		this._emitQueueUpdate();
+	private async _queueFollowUp(text: string, images?: ImageContent[], queueId?: string): Promise<void> {
 		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
 		if (images) {
 			content.push(...images);
 		}
-		this.agent.followUp({ role: "user", content, timestamp: Date.now() });
+		const message: UserMessage = { role: "user", content, timestamp: Date.now() };
+		this.agent.followUp(message);
+		this._followUpQueueEntries.push(message);
+		this._followUpMessages.push(text);
+		if (queueId) this._managedQueueInputs.set(queueId, { mode: "followUp", message });
+		this._emitQueueUpdate();
 	}
 
 	/**
@@ -2404,6 +2486,9 @@ export class AgentSession {
 		const followUp = [...this._followUpMessages];
 		this._steeringMessages = [];
 		this._followUpMessages = [];
+		this._steeringQueueEntries = [];
+		this._followUpQueueEntries = [];
+		this._managedQueueInputs.clear();
 		this.agent.clearAllQueues();
 		this._emitQueueUpdate();
 		return { steering, followUp };

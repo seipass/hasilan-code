@@ -156,12 +156,20 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .composer { border: 1px solid var(--border); border-radius: 18px; background: var(--surface-raised); padding: 15px 15px 12px; box-shadow: 0 3px 13px #05060a40; }
 .composer:focus-within { border-color: var(--border-strong); box-shadow: 0 3px 15px #6c6ff614; }
 .composer textarea { display: block; resize: none; width: 100%; min-height: 70px; max-height: 220px; padding: 0 3px; border: 0; outline: none; box-shadow: none; font-size: 14px; line-height: 1.7; background: transparent; }
+.composer-input-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+.composer-input-row.has-usage { grid-template-columns: minmax(78px, 108px) minmax(0, 1fr); gap: 12px; }
+.composer-input-row textarea { min-width: 0; }
 .composer textarea::placeholder { color: var(--on-surface-muted); }
-.composer-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 12px; }
-.composer-context { display: flex; gap: 5px; min-width: 0; }
+.composer-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 12px; }
+.composer-context { display: flex; flex: 1 1 auto; gap: 5px; min-width: 0; flex-wrap: wrap; }
+.model-control { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
 .composer-chip { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 6px 8px; font-size: 11px; color: var(--on-surface-muted); min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-trigger { color: var(--on-surface-secondary); }
 .composer-chip span { color: var(--on-surface-muted); }
+.model-thinking { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.model-thinking-control { display: flex; flex-direction: row; align-items: center; gap: 5px; min-width: 0; color: var(--on-surface-muted); font-size: 10px; white-space: nowrap; }
+.model-thinking-control select { width: auto; max-width: 100px; padding: 5px; font-size: 10px; }
+.model-thinking-error { color: var(--danger); font-size: 10px; overflow-wrap: anywhere; }
 .composer-delivery { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 .composer-delivery select { padding: 5px; font-size: 10px; border-color: transparent; color: var(--muted); max-width: 115px; }
 .send-button, .stop-button { display: grid; place-items: center; width: 33px; height: 33px; padding: 0; border-radius: 11px; border: 0; background: var(--primary); color: var(--on-primary); font-size: 22px; }
@@ -169,13 +177,26 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .send-button:disabled { background: var(--surface-hover); color: var(--on-surface-muted); opacity: 1; }
 .stop-button { background: var(--secondary-container); color: var(--on-secondary-container); font-size: 12px; }
 .composer-caption { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 6px 0; color: var(--on-surface-muted); font-size: 10px; }
-.composer-usage { display: flex; justify-content: flex-end; margin: 3px 5px 0; color: var(--on-surface-muted); font-size: 10px; }
+.composer-usage { display: flex; justify-content: flex-start; align-items: flex-start; min-width: 0; margin: 2px 0 0; padding: 4px 8px 0 2px; border-right: 1px solid var(--border-subtle); color: var(--on-surface-muted); font-size: 10px; line-height: 1.5; }
+.context-usage { overflow-wrap: anywhere; }
 .composer-caption .text-link { text-decoration: none; font-size: 11px; }
 .composer-error { font-size: 12px; color: var(--danger); margin: 9px 4px 0; }
 .composer-popover { --model-menu-bottom: 150px; position: absolute; bottom: var(--model-menu-bottom); left: max(22px, calc((100% - 744px) / 2)); width: min(480px, calc(100% - 44px)); max-height: min(70dvh, 590px, calc(100% - var(--model-menu-bottom) - 12px)); overflow-y: auto; overflow-x: hidden; z-index: 6; border: 1px solid var(--border); background: var(--surface-raised); border-radius: 14px; padding: 16px; box-shadow: 0 15px 55px #05060a80; }
 .is-empty ~ .composer-popover { --model-menu-bottom: calc(50% + 128px); }
 .composer-popover > header { display: flex; align-items: center; justify-content: space-between; }
+.composer-notice { margin: 0 6px 6px; padding: 4px 8px; border-radius: 8px; background: var(--surface-hover); color: var(--on-surface-secondary); font-size: 12px; line-height: 18px; }
 .run-progress { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--on-surface-muted); padding: 0 5px 10px; }
+.pending-input-list { display: flex; flex-direction: column; gap: 5px; max-height: min(150px, 25dvh); overflow-y: auto; margin: 0 0 8px; padding-right: 3px; }
+.pending-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 8px 9px; border: 1px solid var(--border-subtle); border-radius: 11px; background: var(--surface-raised); }
+.pending-input-row.unavailable { opacity: .72; }
+.pending-input-content { min-width: 0; overflow-wrap: anywhere; }
+.pending-input-mode { display: block; margin-bottom: 3px; color: var(--on-surface-muted); font-size: 10px; line-height: 1.4; }
+.pending-input-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--on-surface-secondary); font-size: 12px; line-height: 1.5; }
+.pending-input-edit { display: block; width: 100%; min-height: 52px; max-height: 140px; resize: vertical; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-sunken); font-size: 12px; line-height: 1.5; }
+.pending-input-actions { display: flex; align-items: center; gap: 3px; }
+.pending-input-actions button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--on-surface-muted); font-size: 15px; line-height: 1; }
+.pending-input-actions button:hover:not(:disabled) { background: var(--surface-hover); color: var(--on-surface-secondary); }
+.pending-input-actions button:disabled { opacity: .4; cursor: not-allowed; }
 .activity-dot, .streaming-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--secondary); animation: pulse 1.5s ease-in-out infinite; }
 .streaming-dot { margin-top: 12px; }
 @keyframes pulse { 50% { opacity: .3; } }
@@ -409,10 +430,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .model-selected-mark { float: right; color: var(--primary); font-size: 11px; }
 .model-settings-link { display: block; width: 100%; text-align: center; background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-size: 13px; }
 .model-settings-link:hover:not(:disabled) { background: var(--primary-hover); }
-.model-menu-preferences { display: grid; gap: 10px; border-top: 1px solid var(--border-subtle); margin-top: 12px; padding-top: 12px; font-size: 12px; }
-.model-menu-preferences label { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
-.model-menu-preferences select { width: auto; max-width: 65%; font-size: 12px; }
-.model-menu-default { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: var(--on-surface-muted); overflow-wrap: anywhere; }
+.model-menu-default { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; border-top: 1px solid var(--border-subtle); margin-top: 12px; padding-top: 12px; color: var(--on-surface-muted); font-size: 12px; overflow-wrap: anywhere; }
 .model-menu-default > span { flex-basis: 100%; }
 .model-menu-default button { font-size: 11px; }
 .model-picker .fine-print { font-size: 11px; margin: 2px 0; }
@@ -453,7 +471,11 @@ legend { font-weight: 600; padding: 0 .4rem; }
 	.composer-area { padding-left: 14px; padding-right: 14px; padding-bottom: 16px; }
 	.composer { padding: 14px 10px 11px; border-radius: 15px; }
 	.composer-chip { max-width: 145px; padding: 5px; gap: 5px; font-size: 10px; }
-	.composer-context { gap: 0; }
+	.model-control { gap: 3px; }
+	.model-thinking-control { gap: 3px; font-size: 9px; }
+	.model-thinking-control select { max-width: 86px; padding: 5px 4px; font-size: 9px; }
+	.composer-input-row.has-usage { grid-template-columns: minmax(70px, 86px) minmax(0, 1fr); gap: 8px; }
+	.composer-usage { padding-right: 5px; font-size: 9px; }
 	.composer-delivery { gap: 3px; }
 	.composer-delivery select { max-width: 85px; font-size: 9px; }
 	.composer-popover { left: 12px; width: calc(100% - 24px); }
@@ -525,7 +547,7 @@ button, .workspace-accordion > summary, .panel-resize::after {
 }
 .right-panel:not([hidden]) { animation: panel-enter var(--motion-enter) var(--motion-ease) both; }
 .message:last-child:not(.partial) { animation: message-enter var(--motion-base) var(--motion-ease) both; }
-.run-progress, .connection-warning, .global-error, .composer-error, .run-error, .back-to-bottom { animation: status-enter var(--motion-base) var(--motion-ease) both; }
+.run-progress, .composer-notice, .connection-warning, .global-error, .composer-error, .run-error, .back-to-bottom { animation: status-enter var(--motion-base) var(--motion-ease) both; }
 .settings-content:not([hidden]), .model-picker-results { animation: message-enter var(--motion-base) var(--motion-ease) both; }
 .tool-card, .agent-card {
 	transition: border-color var(--motion-base) ease, background-color var(--motion-base) ease, box-shadow var(--motion-base) ease;

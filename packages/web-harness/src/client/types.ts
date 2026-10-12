@@ -31,10 +31,17 @@ export interface Model {
 }
 export interface PendingInput {
 	inputId: string;
-	text?: string;
-	status?: string;
-	mode?: string;
+	sessionId: string;
+	runId: string;
+	text: string;
+	mode: "steer" | "followUp";
+	fromAgentId?: string;
+	status: "pending" | "undelivered";
+	delivered?: boolean;
+	completionRunId?: string;
+	manageable: boolean;
 }
+export type PendingInputAction = { type: "edit"; text: string } | { type: "delete" } | { type: "sendNow" };
 export interface SessionSummary {
 	sessionId: string;
 	title?: string;

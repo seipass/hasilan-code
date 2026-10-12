@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
 import { EventHub } from "../src/server/events.ts";
 
@@ -9,6 +9,7 @@ class Socket extends EventEmitter {
 	messages: Record<string, unknown>[] = [];
 	closed?: number;
 	send(data: string) {
+		this.bufferedAmount += Buffer.byteLength(data);
 		this.messages.push(JSON.parse(data) as Record<string, unknown>);
 	}
 	close(code: number) {
@@ -22,38 +23,83 @@ class Socket extends EventEmitter {
 }
 
 describe("channel subscriptions", () => {
-	it("keeps session identities and monotonic sequences independent across selection changes", () => {
-		const state: Record<string, string> = { a: "first", b: "second" };
-		const hub = new EventHub((_channel, id) => ({ text: state[id] }));
-		const socket = new Socket();
-		hub.attach(socket as unknown as WebSocket);
-		socket.command({ type: "subscribe", subscriptionId: "selected", channel: "session", id: "a" });
-		state.a = "final-a";
-		hub.publish("session", "a");
-		socket.command({ type: "subscribe", subscriptionId: "selected", channel: "session", id: "b" });
-		hub.publish("session", "a");
-		state.b = "final-b";
-		hub.publish("session", "b");
-		expect(socket.messages.map((message) => [message.type, message.id, message.seq])).toEqual([
-			["snapshot", "a", 0],
-			["event", "a", 1],
-			["snapshot", "b", 0],
-			["event", "b", 1],
-		]);
-		expect(socket.messages[0].data).toEqual({ text: "first" });
-		expect(socket.messages[3].event).toEqual({ type: "projection", data: { text: "final-b" } });
-	});
-	it("disconnects only an overflowing client while another receives the same update", () => {
-		const hub = new EventHub(() => ({ text: "result" }));
-		const slow = new Socket();
-		const fast = new Socket();
-		for (const socket of [slow, fast]) {
+	it("keeps session identities and monotonic sequences independent across selection changes", async () => {
+		vi.useFakeTimers();
+		try {
+			const state: Record<string, string> = { a: "first", b: "second" };
+			const hub = new EventHub((_channel, id) => ({ text: state[id] }));
+			const socket = new Socket();
 			hub.attach(socket as unknown as WebSocket);
-			socket.command({ type: "subscribe", subscriptionId: "s", channel: "workspace", id: "w" });
+			socket.command({ type: "subscribe", subscriptionId: "selected", channel: "session", id: "a" });
+			state.a = "final-a";
+			hub.publish("session", "a");
+			await vi.advanceTimersByTimeAsync(50);
+			socket.command({ type: "subscribe", subscriptionId: "selected", channel: "session", id: "b" });
+			hub.publish("session", "a");
+			state.b = "final-b";
+			hub.publish("session", "b");
+			await vi.advanceTimersByTimeAsync(50);
+			expect(socket.messages.map((message) => [message.type, message.id, message.seq])).toEqual([
+				["snapshot", "a", 0],
+				["event", "a", 1],
+				["snapshot", "b", 0],
+				["event", "b", 1],
+			]);
+			expect(socket.messages[0].data).toEqual({ text: "first" });
+			expect(socket.messages[3].event).toEqual({ type: "projection", data: { text: "final-b" } });
+		} finally {
+			vi.useRealTimers();
 		}
-		slow.bufferedAmount = 2 * 1024 * 1024 + 1;
-		hub.publish("workspace", "w");
-		expect(slow.closed).toBe(1013);
-		expect(fast.messages[1].seq).toBe(1);
+	});
+	it("disconnects only an overflowing client while another receives the same update", async () => {
+		vi.useFakeTimers();
+		try {
+			const hub = new EventHub(() => ({ text: "result" }));
+			const slow = new Socket();
+			const fast = new Socket();
+			for (const socket of [slow, fast]) {
+				hub.attach(socket as unknown as WebSocket);
+				socket.command({ type: "subscribe", subscriptionId: "s", channel: "workspace", id: "w" });
+			}
+			slow.bufferedAmount = 2 * 1024 * 1024 + 1;
+			hub.publish("workspace", "w");
+			await vi.advanceTimersByTimeAsync(50);
+			expect(slow.closed).toBe(1013);
+			expect(fast.messages[1].seq).toBe(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+	it("coalesces bursty projection snapshots before disconnecting a slow client", async () => {
+		vi.useFakeTimers();
+		try {
+			let text = "x".repeat(64 * 1024);
+			const hub = new EventHub(() => ({ text }));
+			const slow = new Socket();
+			hub.attach(slow as unknown as WebSocket);
+			slow.command({ type: "subscribe", subscriptionId: "s", channel: "session", id: "session" });
+			slow.bufferedAmount = 0;
+			for (let index = 0; index < 40; index++) {
+				text = `${index}${"x".repeat(64 * 1024)}`;
+				hub.publish("session", "session");
+			}
+			hub.publish("session", "session", { type: "files_changed", paths: ["file.ts"] });
+			expect(slow.messages).toHaveLength(2);
+			expect(slow.messages[1]).toMatchObject({
+				type: "event",
+				seq: 1,
+				event: { type: "files_changed", paths: ["file.ts"] },
+			});
+			await vi.advanceTimersByTimeAsync(50);
+			expect(slow.closed).toBeUndefined();
+			expect(slow.messages).toHaveLength(3);
+			expect(slow.messages[2]).toMatchObject({
+				type: "event",
+				seq: 2,
+				event: { type: "projection", data: { text } },
+			});
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

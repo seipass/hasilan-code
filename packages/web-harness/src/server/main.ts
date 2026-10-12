@@ -4,6 +4,7 @@ import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-age
 import {
 	credentialSchema,
 	modelSchema,
+	pendingInputActionSchema,
 	promptSchema,
 	sessionCreateSchema,
 	teamMessageSchema,
@@ -145,6 +146,10 @@ async function main() {
 					if (parts.length === 3 && method === "GET") return reply(registry.get(id));
 					if (parts[3] === "prompt" && method === "POST")
 						return reply(await teams.prompt(id, await readJson(request, promptSchema)), 202);
+					if (parts[3] === "pending-inputs" && parts.length === 5 && method === "PATCH") {
+						await teams.updatePendingInput(id, parts[4], await readJson(request, pendingInputActionSchema));
+						return reply(registry.get(id));
+					}
 					if (parts[3] === "abort" && method === "POST") return reply(await teams.stop(id));
 					if (parts[3] === "team-message" && parts.length === 4 && method === "POST") {
 						const { agentId, message } = await readJson(request, teamMessageSchema);

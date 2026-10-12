@@ -7,10 +7,13 @@ interface Subscription {
 	channel: Channel;
 	id: string;
 }
+
+const PROJECTION_COALESCE_MS = 50;
 export class EventHub {
 	readonly epoch = randomUUID();
 	private sequences = new Map<string, number>();
 	private clients = new Map<WebSocket, Map<string, Subscription>>();
+	private pending = new Map<string, NodeJS.Timeout>();
 	private snapshot: (channel: Channel, id: string) => unknown;
 	constructor(snapshot: (channel: Channel, id: string) => unknown) {
 		this.snapshot = snapshot;
@@ -62,6 +65,21 @@ export class EventHub {
 	}
 	publish(channel: Channel, id: string, event?: unknown) {
 		const key = `${channel}:${id}`;
+		if (event !== undefined && event !== null) {
+			this.broadcast(channel, id, event);
+			return;
+		}
+		if (this.pending.has(key)) return;
+		this.pending.set(
+			key,
+			setTimeout(() => {
+				this.pending.delete(key);
+				this.broadcast(channel, id);
+			}, PROJECTION_COALESCE_MS),
+		);
+	}
+	private broadcast(channel: Channel, id: string, event?: unknown) {
+		const key = `${channel}:${id}`;
 		const seq = (this.sequences.get(key) ?? 0) + 1;
 		this.sequences.set(key, seq);
 		const payload = event ?? { type: "projection", data: structuredClone(this.snapshot(channel, id)) };
@@ -72,6 +90,8 @@ export class EventHub {
 			}
 	}
 	close() {
+		for (const timer of this.pending.values()) clearTimeout(timer);
+		this.pending.clear();
 		for (const socket of this.clients.keys()) socket.close(1001, "Host shutting down");
 		this.clients.clear();
 	}

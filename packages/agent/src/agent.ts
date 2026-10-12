@@ -152,6 +152,21 @@ class PendingMessageQueue {
 		this.messages.push(message);
 	}
 
+	hasMessage(message: AgentMessage): boolean {
+		return this.messages.includes(message);
+	}
+
+	mutateMessage(
+		message: AgentMessage,
+		mutation: { type: "replace"; message: AgentMessage } | { type: "remove" },
+	): boolean {
+		const index = this.messages.indexOf(message);
+		if (index === -1) return false;
+		if (mutation.type === "remove") this.messages.splice(index, 1);
+		else this.messages[index] = mutation.message;
+		return true;
+	}
+
 	hasItems(): boolean {
 		return this.messages.length > 0;
 	}
@@ -303,6 +318,25 @@ export class Agent {
 	/** Queue a message to run only after the agent would otherwise stop. */
 	followUp(message: AgentMessage): void {
 		this.followUpQueue.enqueue(message);
+	}
+
+	/** Check whether this exact message is still waiting in the selected queue. */
+	hasQueuedMessage(mode: "steering" | "followUp", message: AgentMessage): boolean {
+		return mode === "steering" ? this.steeringQueue.hasMessage(message) : this.followUpQueue.hasMessage(message);
+	}
+
+	/** Mutate or promote one exact queued message without disturbing its neighbors. */
+	mutateQueuedMessage(
+		mode: "steering" | "followUp",
+		message: AgentMessage,
+		mutation: { type: "replace"; message: AgentMessage } | { type: "remove" } | { type: "moveToSteering" },
+	): boolean {
+		if (mutation.type === "moveToSteering") {
+			if (mode !== "followUp" || !this.followUpQueue.mutateMessage(message, { type: "remove" })) return false;
+			this.steeringQueue.enqueue(message);
+			return true;
+		}
+		return (mode === "steering" ? this.steeringQueue : this.followUpQueue).mutateMessage(message, mutation);
 	}
 
 	/** Remove all queued steering messages. */

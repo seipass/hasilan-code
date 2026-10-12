@@ -40,20 +40,52 @@ export function encodeLines(snapshot: HashlineSnapshot, lines: string[]): Buffer
 	return Buffer.from((snapshot.bom ? "\uFEFF" : "") + text, "utf8");
 }
 
-/** This store belongs to an agent session, never to the viewer or workspace. */
+/** Bounded agent-session history; viewer reads never enter this store. */
 export class SnapshotStore {
-	private readonly snapshots = new Map<string, HashlineSnapshot>();
+	private readonly snapshots = new Map<string, HashlineSnapshot[]>();
+	private readonly retained: HashlineSnapshot[] = [];
+	private retainedBytes = 0;
 	get(path: string): HashlineSnapshot | undefined {
-		return this.snapshots.get(path);
+		return this.snapshots.get(path)?.at(-1);
+	}
+	resolve(path: string, tag: string): HashlineSnapshot {
+		const history = this.snapshots.get(path);
+		if (!history) throw new Error("Unread file; read the file before editing");
+		const matches = history.filter((snapshot) => snapshot.tag === tag);
+		if (!matches.length) throw new Error("Stale snapshot: unknown or expired tag; read the file again");
+		if (matches.length !== 1) throw new Error("Stale snapshot: colliding tag; read the file again");
+		return matches[0];
 	}
 	observe(file: FileSnapshot): HashlineSnapshot {
-		const existing = this.snapshots.get(file.path);
-		if (existing?.revision === file.revision && existing.bytes.equals(file.bytes)) return existing;
-		const snapshot = snapshotOf(file);
-		this.snapshots.set(file.path, snapshot);
+		const history = this.snapshots.get(file.path) ?? [];
+		const existing = history.find(
+			(snapshot) => snapshot.revision === file.revision && snapshot.bytes.equals(file.bytes),
+		);
+		const snapshot = existing ?? snapshotOf(file);
+		if (existing) {
+			history.splice(history.indexOf(existing), 1);
+			this.retained.splice(this.retained.indexOf(existing), 1);
+			this.retainedBytes -= existing.bytes.length;
+		}
+		history.push(snapshot);
+		this.snapshots.set(file.path, history);
+		this.retained.push(snapshot);
+		this.retainedBytes += snapshot.bytes.length;
+		// Count bounds include current snapshots, so reading new paths cannot grow the store indefinitely.
+		if (history.length > 8) this.evict(history[0]);
+		// Keep one oversized current snapshot usable, but never amplify it with retained history.
+		while (this.retained.length > 1 && (this.retained.length > 64 || this.retainedBytes > 32 * 1024 * 1024))
+			this.evict(this.retained[0]);
 		return snapshot;
 	}
+	private evict(snapshot: HashlineSnapshot): void {
+		const history = this.snapshots.get(snapshot.path)!;
+		history.splice(history.indexOf(snapshot), 1);
+		if (!history.length) this.snapshots.delete(snapshot.path);
+		this.retained.splice(this.retained.indexOf(snapshot), 1);
+		this.retainedBytes -= snapshot.bytes.length;
+	}
 	invalidate(path: string): void {
-		this.snapshots.delete(path);
+		for (const snapshot of [...(this.snapshots.get(path) ?? [])]) this.evict(snapshot);
 	}
 }

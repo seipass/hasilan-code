@@ -1,4 +1,4 @@
-import { Type } from "typebox";
+import { type Static, Type } from "typebox";
 
 export const workspaceCreateSchema = Type.Object(
 	{ path: Type.String({ minLength: 1 }) },
@@ -38,6 +38,16 @@ export const promptSchema = Type.Object(
 	},
 	{ additionalProperties: false },
 );
+
+export const pendingInputActionSchema = Type.Union([
+	Type.Object(
+		{ type: Type.Literal("edit"), text: Type.String({ minLength: 1, maxLength: 1024 * 1024 }) },
+		{ additionalProperties: false },
+	),
+	Type.Object({ type: Type.Literal("delete") }, { additionalProperties: false }),
+	Type.Object({ type: Type.Literal("sendNow") }, { additionalProperties: false }),
+]);
+export type PendingInputAction = Static<typeof pendingInputActionSchema>;
 export const teamMessageSchema = Type.Object(
 	{
 		agentId: Type.String({ minLength: 1 }),

@@ -437,6 +437,47 @@ describe("AgentSession queue characterization", () => {
 		expect(harness.session.pendingMessageCount).toBe(0);
 	});
 
+	it("mutates managed queue entries by ID without losing custom messages", async () => {
+		const waiting = await createWaitingHarness();
+		const { harness, waitForToolStart, promptPromise, releaseToolExecution } = waiting;
+		harnesses.push(harness);
+
+		harness.setResponses([
+			fauxAssistantMessage(fauxToolCall("wait", {}), { stopReason: "toolUse" }),
+			fauxAssistantMessage("after steering"),
+			fauxAssistantMessage("after custom"),
+			fauxAssistantMessage("after edited follow-up"),
+		]);
+
+		await waitForToolStart;
+		await harness.session.sendCustomMessage(
+			{ customType: "queue-test", content: "preserve custom", display: true, details: {} },
+			{ deliverAs: "followUp" },
+		);
+		await harness.session.queueManagedInput("delete me", "followUp", "delete-id");
+		await harness.session.queueManagedInput("before edit", "followUp", "edit-id");
+		await harness.session.queueManagedInput("send now", "followUp", "send-id");
+
+		expect(harness.session.mutateQueuedInput("delete-id", { type: "delete" })).toBe(true);
+		expect(harness.session.agent.peekQueuedMessages()[0]?.role).toBe("custom");
+		expect(harness.session.mutateQueuedInput("edit-id", { type: "edit", text: "edited" })).toBe(true);
+		expect(harness.session.mutateQueuedInput("send-id", { type: "sendNow" })).toBe(true);
+		expect(harness.session.getSteeringMessages()).toEqual(["send now"]);
+		expect(harness.session.getFollowUpMessages()).toEqual(["edited"]);
+		expect(harness.session.hasQueuedInput("send-id")).toBe(true);
+		expect(harness.session.mutateQueuedInput("delete-id", { type: "edit", text: "stale" })).toBe(false);
+
+		releaseToolExecution();
+		await promptPromise;
+
+		expect(getUserTexts(harness)).toEqual(["start", "send now", "edited"]);
+		expect(
+			harness.session.messages.some((message) => message.role === "custom" && message.customType === "queue-test"),
+		).toBe(true);
+		expect(harness.session.hasQueuedInput("send-id")).toBe(false);
+		expect(harness.session.mutateQueuedInput("send-id", { type: "delete" })).toBe(false);
+	});
+
 	it("throws when queueing an extension command with steer", async () => {
 		const harness = await createHarness({
 			extensionFactories: [

@@ -6,6 +6,8 @@ import { encodeLines, type HashlineSnapshot } from "./snapshots.ts";
 export interface PreparedPatch {
 	change: FileChange;
 	lines: string[];
+	seenLines: Set<number>;
+	previewLines: number[];
 	snapshot: HashlineSnapshot;
 }
 function requireSeen(snapshot: HashlineSnapshot, start: number, end: number): void {
@@ -91,13 +93,25 @@ export function preparePatch(
 	const removed = new Set<number>();
 	for (const range of removals) for (let line = range.start; line <= range.end; line++) removed.add(line);
 	const lines: string[] = [];
+	const seenLines = new Set<number>();
+	const previewLines: number[] = [];
 	for (let slot = 0; slot <= snapshot.lines.length; slot++) {
-		for (const addition of insertions.get(slot) ?? []) lines.push(...addition.lines);
-		if (slot < snapshot.lines.length && !removed.has(slot + 1)) lines.push(snapshot.lines[slot]);
+		for (const addition of insertions.get(slot) ?? []) {
+			for (const line of addition.lines) {
+				lines.push(line);
+				previewLines.push(lines.length);
+			}
+		}
+		if (slot < snapshot.lines.length && !removed.has(slot + 1)) {
+			lines.push(snapshot.lines[slot]);
+			if (lines.length === slot + 1 && snapshot.seenLines.has(slot + 1)) seenLines.add(lines.length);
+		}
 	}
 	return {
 		snapshot,
 		lines,
+		seenLines,
+		previewLines,
 		change: {
 			path: snapshot.path,
 			beforeBytes: snapshot.bytes,

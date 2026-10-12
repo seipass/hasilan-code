@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { AgentSessionEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
+
+import type { PendingInputAction } from "../shared/contracts.ts";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
 import { loadTeamProfiles } from "./team-profiles.ts";
 import { validateWorkflow, type WorkflowTask } from "./team-workflow.ts";
@@ -359,7 +361,7 @@ export class TeamManager {
 			await this.registry.persist();
 			if (current.status === "running" && this.started.has(current.runId)) {
 				try {
-					await this.registry.deliver(parent.sessionId, text, "followUp");
+					await this.registry.deliver(parent.sessionId, text, "followUp", inputId);
 					pending.delivered = true;
 				} catch {
 					pending.status = "undelivered";
@@ -443,6 +445,82 @@ export class TeamManager {
 			return { runId: run.runId, disposition: run.status === "running" ? "started" : "queued" };
 		});
 	}
+
+	async updatePendingInput(sessionId: string, inputId: string, action: PendingInputAction): Promise<void> {
+		await this.registry.mutate(async () => {
+			const agent = this.agentForSession(sessionId);
+			this.assertOpen(agent);
+			const inputs = this.registry.state.pendingInput;
+			const index = inputs.findIndex((input) => input.sessionId === sessionId && input.inputId === inputId);
+			if (index === -1) throw new HarnessError("Pending input not found", 404);
+			const input = inputs[index];
+			if (!input || input.fromAgentId || input.completionRunId)
+				throw new HarnessError("Team messages cannot be changed", 403);
+			const current = this.current(agent);
+			const undelivered = input.status === "undelivered";
+			const currentInput = input.status === "pending" && current?.runId === input.runId;
+			if (!undelivered && !currentInput) throw new HarnessError("Pending input is no longer available", 409);
+			const queued = currentInput && input.delivered === true;
+			if (queued && !this.registry.hasQueuedInput(sessionId, inputId))
+				throw new HarnessError("Pending input has already started", 409);
+
+			if (action.type === "edit") {
+				if (!action.text.trim()) throw new HarnessError("Pending input must not be empty");
+				const previousText = input.text;
+				input.text = action.text;
+				if (queued && !this.registry.mutateQueuedInput(sessionId, inputId, action)) {
+					input.text = previousText;
+					throw new HarnessError("Pending input has already started", 409);
+				}
+			} else if (action.type === "delete") {
+				inputs.splice(index, 1);
+				if (queued && !this.registry.mutateQueuedInput(sessionId, inputId, action)) {
+					inputs.splice(index, 0, input);
+					throw new HarnessError("Pending input has already started", 409);
+				}
+			} else if (input.mode !== "followUp") {
+				throw new HarnessError("Only follow-up inputs can be sent immediately", 409);
+			} else if (current) {
+				const previous = {
+					runId: input.runId,
+					mode: input.mode,
+					status: input.status,
+					delivered: input.delivered,
+				};
+				input.runId = current.runId;
+				input.mode = "steer";
+				input.status = "pending";
+				if (queued) {
+					if (!this.registry.mutateQueuedInput(sessionId, inputId, action)) {
+						Object.assign(input, previous);
+						throw new HarnessError("Pending input has already started", 409);
+					}
+				} else {
+					input.delivered = false;
+					if (current.status === "running" && this.started.has(current.runId)) {
+						try {
+							await this.registry.deliver(sessionId, input.text, "steer", inputId);
+							input.delivered = true;
+						} catch (error) {
+							Object.assign(input, previous);
+							throw error;
+						}
+					}
+				}
+			} else {
+				inputs.splice(index, 1);
+				const run = this.newRun(agent, input.text);
+				await this.registry.persist();
+				this.enqueue(agent.teamId, { runId: run.runId });
+				this.pump(agent.teamId);
+				this.changed(agent);
+				return;
+			}
+			await this.registry.persist();
+			this.changed(agent);
+		});
+	}
+
 	private async acceptInput(
 		agent: AgentRecord,
 		run: RunRecord,
@@ -464,7 +542,7 @@ export class TeamManager {
 		this.registry.state.pendingInput.push(pending);
 		await this.registry.persist();
 		if (this.started.has(run.runId) && run.status === "running") {
-			await this.registry.deliver(agent.sessionId, text, mode);
+			await this.registry.deliver(agent.sessionId, text, mode, inputId);
 			pending.delivered = true;
 			await this.registry.persist();
 		}
@@ -795,7 +873,7 @@ export class TeamManager {
 					if (!current || current.status !== "running") return;
 					for (const input of this.registry.state.pendingInput)
 						if (input.runId === current.runId && input.status === "pending" && !input.delivered) {
-							await this.registry.deliver(sessionId, input.text, input.mode);
+							await this.registry.deliver(sessionId, input.text, input.mode, input.inputId);
 							input.delivered = true;
 						}
 					await this.registry.persist();
@@ -828,7 +906,7 @@ export class TeamManager {
 					this.started.add(run.runId);
 					for (const input of this.registry.state.pendingInput)
 						if (input.runId === run.runId && input.status === "pending" && !input.delivered) {
-							await this.registry.deliver(sessionId, input.text, input.mode);
+							await this.registry.deliver(sessionId, input.text, input.mode, input.inputId);
 							input.delivered = true;
 						}
 				} else if (event.type === "message_end" && event.message.role === "user") {

@@ -13,6 +13,7 @@ import {
 	type WorkspaceDirectoryService,
 } from "../src/server/session-registry.ts";
 import { TeamManager } from "../src/server/team-manager.ts";
+import type { PendingInputAction } from "../src/shared/contracts.ts";
 
 class Directories implements WorkspaceDirectoryService {
 	entries: WorkspaceDirectory[] = [];
@@ -34,11 +35,15 @@ class Directories implements WorkspaceDirectoryService {
 	}
 }
 type Program = (adapter: ControlledAdapter, text: string) => Promise<string>;
+type ControlledQueueItem = { inputId: string; text: string };
+
 class ControlledAdapter implements ExecutionAdapter {
 	readonly descriptor: SessionDescriptor;
 	readonly manager: SessionManager;
 	readonly listeners = new Set<(event: AgentSessionEvent) => void>();
 	readonly inputs: string[] = [];
+	private readonly queuedSteering: ControlledQueueItem[] = [];
+	private readonly queuedFollowUp: ControlledQueueItem[] = [];
 	controller = new AbortController();
 	private readonly program?: Program;
 	private finishPrompt?: (text: string) => void;
@@ -54,6 +59,16 @@ class ControlledAdapter implements ExecutionAdapter {
 	}
 	emit(event: AgentSessionEvent) {
 		for (const listener of this.listeners) listener(event);
+	}
+	private queueFor(mode: "steer" | "followUp"): ControlledQueueItem[] {
+		return mode === "steer" ? this.queuedSteering : this.queuedFollowUp;
+	}
+	private emitQueueUpdate() {
+		this.emit({
+			type: "queue_update",
+			steering: this.queuedSteering.map((input) => input.text),
+			followUp: this.queuedFollowUp.map((input) => input.text),
+		});
 	}
 	async prompt(text: string) {
 		this.controller = new AbortController();
@@ -87,13 +102,47 @@ class ControlledAdapter implements ExecutionAdapter {
 	finish(text: string) {
 		this.finishPrompt?.(text);
 	}
-	async steer(text: string) {
+	async deliverInput(text: string, mode: "steer" | "followUp", inputId: string) {
 		this.inputs.push(text);
+		this.queueFor(mode).push({ inputId, text });
+		this.emitQueueUpdate();
 	}
-	async followUp(text: string) {
-		this.inputs.push(text);
+	hasQueuedInput(inputId: string): boolean {
+		return (
+			this.queuedSteering.some((input) => input.inputId === inputId) ||
+			this.queuedFollowUp.some((input) => input.inputId === inputId)
+		);
+	}
+	mutateQueuedInput(inputId: string, action: PendingInputAction): boolean {
+		const followUpIndex = this.queuedFollowUp.findIndex((input) => input.inputId === inputId);
+		if (action.type === "sendNow") {
+			if (followUpIndex === -1) return false;
+			const [input] = this.queuedFollowUp.splice(followUpIndex, 1);
+			if (!input) return false;
+			this.queuedSteering.push(input);
+		} else {
+			const queue = this.queuedSteering.some((input) => input.inputId === inputId)
+				? this.queuedSteering
+				: this.queuedFollowUp;
+			const index = queue.findIndex((input) => input.inputId === inputId);
+			if (index === -1) return false;
+			if (action.type === "edit") {
+				const input = queue[index];
+				if (!input) return false;
+				input.text = action.text;
+			} else queue.splice(index, 1);
+		}
+		this.emitQueueUpdate();
+		return true;
 	}
 	consume(text: string) {
+		let index = this.queuedSteering.findIndex((input) => input.text === text);
+		if (index !== -1) this.queuedSteering.splice(index, 1);
+		else {
+			index = this.queuedFollowUp.findIndex((input) => input.text === text);
+			if (index !== -1) this.queuedFollowUp.splice(index, 1);
+		}
+		this.emitQueueUpdate();
 		const message = { role: "user" as const, content: text, timestamp: Date.now() };
 		this.emit({ type: "message_start", message });
 		this.emit({ type: "message_end", message });
@@ -108,6 +157,9 @@ class ControlledAdapter implements ExecutionAdapter {
 	}
 	clearQueue() {
 		this.inputs.length = 0;
+		this.queuedSteering.length = 0;
+		this.queuedFollowUp.length = 0;
+		this.emitQueueUpdate();
 	}
 	getActiveToolNames() {
 		return this.descriptor.tools ?? ["read", "edit", "write", "bash", "team"];
@@ -773,5 +825,64 @@ describe("persistent conversation and projection boundaries", () => {
 		expect(failing.get(session.sessionId).latestRun?.error).toBe("preflight failure");
 		await teams.close();
 		await failing.close();
+	});
+});
+
+describe("pending input queue controls", () => {
+	it("edits, deletes, and immediately sends tracked inputs in the live queue", async () => {
+		const f = await fixture();
+		const sessionId = f.session.sessionId;
+		await f.teams.prompt(sessionId, { text: "hold", mode: "prompt" });
+		const adapter = await running(f.adapters, sessionId);
+		const editing = await f.teams.prompt(sessionId, { text: "before edit", mode: "followUp" });
+		const deleting = await f.teams.prompt(sessionId, { text: "remove me", mode: "followUp" });
+		const promoting = await f.teams.prompt(sessionId, { text: "send now", mode: "followUp" });
+		const editId = editing.inputId;
+		const deleteId = deleting.inputId;
+		const sendId = promoting.inputId;
+		if (!editId || !deleteId || !sendId) throw new Error("Follow-up inputs were not assigned IDs");
+		await expect
+			.poll(
+				() => adapter.hasQueuedInput(editId) && adapter.hasQueuedInput(deleteId) && adapter.hasQueuedInput(sendId),
+			)
+			.toBe(true);
+
+		await f.teams.updatePendingInput(sessionId, editId, { type: "edit", text: "edited text" });
+		await f.teams.updatePendingInput(sessionId, deleteId, { type: "delete" });
+		await f.teams.updatePendingInput(sessionId, sendId, { type: "sendNow" });
+
+		expect(f.registry.get(sessionId).activity.queue).toEqual({
+			steering: ["send now"],
+			followUp: ["edited text"],
+		});
+		expect(f.registry.get(sessionId).pendingInput).toEqual([
+			expect.objectContaining({ inputId: editId, text: "edited text", mode: "followUp", manageable: true }),
+			expect.objectContaining({ inputId: sendId, text: "send now", mode: "steer", manageable: true }),
+		]);
+		expect(adapter.hasQueuedInput(deleteId)).toBe(false);
+
+		adapter.consume("send now");
+		await expect
+			.poll(() => f.registry.get(sessionId).pendingInput.some((input) => input.inputId === sendId))
+			.toBe(false);
+		adapter.consume("edited text");
+		await expect.poll(() => f.registry.get(sessionId).pendingInput).toHaveLength(0);
+		adapter.finish("finished");
+		await expect.poll(() => f.registry.get(sessionId).latestRun?.status).toBe("completed");
+	});
+
+	it("rejects controls for messages routed between team agents", async () => {
+		const f = await fixture();
+		await f.teams.prompt(f.session.sessionId, { text: "root work", mode: "prompt" });
+		await running(f.adapters, f.session.sessionId);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "child", task: "child work" }])).agents[0];
+		await running(f.adapters, child.sessionId);
+		const sent = await f.teams.send(f.session.sessionId, child.agentId, "internal message");
+		if (!sent.inputId) throw new Error("Team message was not assigned an ID");
+		await expect.poll(() => f.registry.get(child.sessionId).pendingInput[0]?.manageable).toBe(false);
+		await expect(f.teams.updatePendingInput(child.sessionId, sent.inputId, { type: "delete" })).rejects.toMatchObject(
+			{ statusCode: 403 },
+		);
+		await f.teams.stop(f.session.sessionId);
 	});
 });

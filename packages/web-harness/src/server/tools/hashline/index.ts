@@ -9,6 +9,8 @@ import { Type } from "typebox";
 import { type CommitResult, type FileSnapshot, imageMime, type WorkspaceFiles } from "../../workspace-files.ts";
 import { patchDiff, preparePatch } from "./applier.ts";
 import { parsePatch } from "./parser.ts";
+import { HASHLINE_EDIT_DESCRIPTION } from "./prompt.ts";
+import { recoverPatch } from "./recovery.ts";
 import { SnapshotStore, snapshotOf } from "./snapshots.ts";
 
 export { preparePatch } from "./applier.ts";
@@ -148,17 +150,20 @@ export class HashlineSession {
 				const relative = this.files.normalizePath(entry.path);
 				if (paths.has(relative)) throw new Error("Duplicate file header");
 				paths.add(relative);
-				const snapshot = this.snapshots.get(relative);
-				if (!snapshot) throw new Error("Unread file; read the file before editing");
+				const snapshot = this.snapshots.resolve(relative, entry.tag);
 				const current = await this.files.read(this.workspaceId, relative);
-				const normalized = snapshotOf(current);
-				if (
-					snapshot.revision !== current.revision ||
-					!snapshot.bytes.equals(current.bytes) ||
-					snapshot.text !== normalized.text
-				)
-					throw new Error("Stale snapshot; read the file again");
-				prepared.push(preparePatch(entry, snapshot, nextRegisters));
+				if (snapshot.revision === current.revision && snapshot.bytes.equals(current.bytes))
+					prepared.push(preparePatch(entry, snapshot, nextRegisters));
+				else {
+					// Validate original coverage and overlap semantics before attempting a remap.
+					preparePatch(entry, snapshot, new Map(nextRegisters));
+					const normalized = snapshotOf(current);
+					const observed = this.snapshots.get(relative);
+					if (observed?.revision === current.revision && observed.bytes.equals(current.bytes))
+						for (const line of observed.seenLines) normalized.seenLines.add(line);
+					const recovered = recoverPatch(entry, snapshot, normalized);
+					prepared.push(preparePatch(recovered, normalized, nextRegisters));
+				}
 			}
 			if (signal?.aborted) throw new Error("Operation aborted");
 			const commit = await this.files.commit(
@@ -167,11 +172,12 @@ export class HashlineSession {
 			);
 			const headers: string[] = [];
 			const diffs: string[] = [];
+			const previews: string[] = [];
 			for (let index = 0; index < commit.files.length; index++) {
 				const result = commit.files[index];
 				if (result.status !== "applied") continue;
 				const item = prepared[index];
-				this.snapshots.invalidate(item.snapshot.path);
+				if (result.operation !== "update" || result.error) this.snapshots.invalidate(item.snapshot.path);
 				if (result.error) {
 					headers.push(`[${result.path}: ${result.error}]`);
 					continue;
@@ -179,12 +185,27 @@ export class HashlineSession {
 				if (result.operation === "delete") headers.push(`[${result.path} removed]`);
 				else {
 					const destination = result.moveDest ? this.files.normalizePath(result.moveDest) : result.path;
+					if (result.moveDest) this.snapshots.invalidate(destination);
 					const updated = this.snapshots.observe({
 						path: destination,
 						bytes: item.change.afterBytes,
 						revision: result.revision!,
 					});
 					headers.push(`[${destination}#${updated.tag}]`);
+					for (const line of item.seenLines) updated.seenLines.add(line);
+					const rows = [`[${destination}#${updated.tag}]`, "[Edited lines; only complete numbered rows are seen]"];
+					let size = Buffer.byteLength(rows.join("\n"));
+					for (const line of item.previewLines) {
+						const row = `${line}:${updated.lines[line - 1]}`;
+						size += Buffer.byteLength(row) + 1;
+						if (size > 60 * 1024) {
+							rows.push("[Edited preview truncated; read omitted lines before editing them]");
+							break;
+						}
+						rows.push(row);
+						updated.seenLines.add(line);
+					}
+					if (item.previewLines.length) previews.push(rows.join("\n"));
 				}
 				diffs.push(patchDiff(result.path, item.snapshot.lines, result.operation === "delete" ? [] : item.lines));
 			}
@@ -199,8 +220,9 @@ export class HashlineSession {
 						text: [
 							...headers,
 							diff,
+							...previews,
 							...errors,
-							"Read changed files again before another edit; no stale remapping is performed.",
+							"Use the returned header for unchanged, unshifted previously read lines and complete numbered preview rows. Read other lines before editing.",
 						]
 							.filter(Boolean)
 							.join("\n\n"),
@@ -246,8 +268,7 @@ export function createHashlineTools(files: WorkspaceFiles, workspaceId: string):
 		label: "edit",
 		parameters: editSchema,
 		executionMode: "sequential",
-		description:
-			"Apply an independent Hashline patch: *** Begin Patch, [PATH#TAG], PUT N.=M: with +body, PUT N*: for a multiline Markdown or TS/JS block, PUT <N:/>N:/>N*:/>$: gaps, CUT N.=M or N* optionally @register, PUT locator @register (bare gap pastes anonymous CUT), REM, MV destination, *** End Patch. Original snapshot line numbers do not shift across hunks. Targets must be read, tags/preimages current; no stale remapping. Registers persist within this session. Explicit ranges work in all UTF-8 languages; N* only Markdown/TS/TSX/JS/JSX. Preserves BOM/EOL/trailing newline; mixed EOL edits are rejected. Multiple-file I/O may partially apply; inspect per-file results.",
+		description: HASHLINE_EDIT_DESCRIPTION,
 		execute: async (_id, params, signal) => session.edit(params.input, signal),
 	};
 	const write: ToolDefinition<typeof writeSchema, HashlineReadDetails> = {
