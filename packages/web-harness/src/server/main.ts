@@ -58,7 +58,6 @@ async function main() {
 		agentDir,
 		modelRuntime,
 		workspaceFiles: files,
-		getDefaultModel: (workspaceCwd) => settings.getEffectiveDefaultModel(workspaceCwd),
 		// Pi validates each tool's declared schema before execution; erase only the registry's heterogeneous generic boundary.
 		customTools: (descriptor) =>
 			[
@@ -167,9 +166,8 @@ async function main() {
 				}
 				if (url.pathname === "/api/settings") {
 					if (method === "GET") {
-						const workspaceId = url.searchParams.get("workspaceId");
 						return reply({
-							...settings.get(workspaceId ? registry.getWorkspaceRoot(workspaceId) : cwd),
+							...settings.get(),
 							browser: browser.status(),
 						});
 					}

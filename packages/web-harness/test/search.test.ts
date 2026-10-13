@@ -190,7 +190,6 @@ describe("Search provider consumer boundaries", () => {
 		const snapshot: SettingsSnapshot = {
 			search: { defaultProvider: "brave", configured: { brave: false, tavily: true, exa: false, firecrawl: false } },
 			teams: { maxConcurrentAgents: 4, maxDepth: 3 },
-			llm: {},
 		};
 		const keys: { brave?: string; tavily?: string; exa?: string; firecrawl?: string } = { tavily: "private-secret" };
 		const settings: Pick<SettingsService, "get" | "getSearchKey"> = {

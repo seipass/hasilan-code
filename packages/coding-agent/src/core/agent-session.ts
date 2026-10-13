@@ -390,6 +390,8 @@ export class AgentSession {
 	private _eventListeners: AgentSessionEventListener[] = [];
 	private _isAgentRunActive = false;
 	private _agentRunAbortRequested = false;
+	/** A context-only wake request, fulfilled by the next request that includes the injected context. */
+	private _contextResumeRequested = false;
 	private _idleWaitPromise: Promise<void> | undefined;
 	private _resolveIdleWait: (() => void) | undefined;
 
@@ -804,6 +806,9 @@ export class AgentSession {
 					// Messages declare the provider-visible loadout; context.tools keeps executable implementations.
 					tools: this.agent.state.tools.slice(),
 				};
+				// A natural tool/queue continuation also fulfills the wake request. Messages
+				// still waiting for the tool-result boundary have not entered this snapshot.
+				if (this._pendingCustomMessages.length === 0) this._contextResumeRequested = false;
 				const previous = await previousPrepareRequest?.(
 					{
 						...request,
@@ -1123,11 +1128,13 @@ export class AgentSession {
 		if (deferred.length > 0) {
 			try {
 				for (const action of deferred) await action();
+				if (this._contextResumeRequested) await this.resumeContext();
 			} finally {
 				this._resolveIdleWaitIfIdle();
 			}
 			return;
 		}
+		if (this._contextResumeRequested) await this.resumeContext();
 		this._resolveIdleWaitIfIdle();
 	}
 
@@ -1408,6 +1415,7 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	dispose(): void {
+		this._contextResumeRequested = false;
 		try {
 			this.abortRetry();
 			this.abortCompaction();
@@ -1836,7 +1844,7 @@ export class AgentSession {
 	// Prompting
 	// =========================================================================
 
-	private async _runAgentPrompt(messages: AgentMessage | AgentMessage[]): Promise<void> {
+	private async _runAgentPrompt(messages?: AgentMessage | AgentMessage[]): Promise<void> {
 		this._agentRunAbortRequested = false;
 		// Compaction before the prompt may have scheduled a retry; the new prompt replaces it.
 		this._failedResponse = undefined;
@@ -1846,20 +1854,31 @@ export class AgentSession {
 		this._pendingToolNames.clear();
 		this._isAgentRunActive = true;
 		try {
-			await this.agent.prompt(messages);
+			if (messages === undefined) {
+				this._refreshFinalizedContext();
+				const updateMessage = this._preparePromptAndToolLoadout(this._baseSystemPromptOptions);
+				if (updateMessage) await this.agent.prompt(updateMessage);
+				else await this.agent.continue();
+			} else {
+				await this.agent.prompt(messages);
+			}
 			while (!this._agentRunAbortRequested) {
 				if (await this._handlePostAgentRun()) {
 					if (this._agentRunAbortRequested) break;
 					await this.agent.continue();
 					continue;
 				}
-				if (this._agentRunAbortRequested || !(await this._runBeforeSettleBoundary())) break;
-				if (this._agentRunAbortRequested) break;
+				const boundaryContinue = await this._runBeforeSettleBoundary();
+				// Recheck after the awaited boundary: a wake can arrive after its decision,
+				// including when no extension handler was installed.
+				this._flushPendingCustomMessages();
+				if (this._agentRunAbortRequested || (!boundaryContinue && !this._shouldResumeContext())) break;
 				await this.agent.continue();
 			}
 		} finally {
 			if (this._agentRunAbortRequested) this._finishCancelledRetry();
 			this._failedResponse = undefined;
+			if (this._agentRunAbortRequested) this._contextResumeRequested = false;
 			this._runSystemPromptOptions = undefined;
 			this._flushPendingBashMessages();
 			this._flushPendingCustomMessages();
@@ -1907,8 +1926,20 @@ export class AgentSession {
 		return !this._agentRunAbortRequested && this.agent.hasQueuedMessages();
 	}
 
+	private _shouldResumeContext(): boolean {
+		if (!this._contextResumeRequested) return false;
+		if (this._pendingCustomMessages.length > 0) return true;
+		const messages = convertToLlm(this.agent.state.messages);
+		return (
+			messages.some((message) => message.role !== "system") &&
+			(messages.at(-1)?.role !== "assistant" || this.agent.hasQueuedMessages())
+		);
+	}
+
 	private async _runBeforeSettleBoundary(): Promise<boolean> {
-		if (!this._extensionRunner.hasHandlers("agent_before_settle")) return this.agent.hasQueuedMessages();
+		if (!this._extensionRunner.hasHandlers("agent_before_settle")) {
+			return this.agent.hasQueuedMessages() || this._shouldResumeContext();
+		}
 		this._isBeforeSettle = true;
 		this._abortDuringBeforeSettle = false;
 		try {
@@ -1920,7 +1951,7 @@ export class AgentSession {
 			this._flushPendingCustomMessages();
 			const finalContext = this._buildBoundaryContext([], "agent_before_settle");
 			if (this._abortDuringBeforeSettle) return false;
-			const shouldContinue = result.continue || this.agent.hasQueuedMessages();
+			const shouldContinue = result.continue || this.agent.hasQueuedMessages() || this._shouldResumeContext();
 			if (shouldContinue && !finalContext.canContinue) {
 				if (result.continue) this._reportInvalidBoundaryContinuation("agent_before_settle");
 				return false;
@@ -2410,6 +2441,33 @@ export class AgentSession {
 		}
 	}
 
+	/**
+	 * Request execution from existing context without appending a user message.
+	 * During a run, the next natural request fulfills this wake; otherwise continuation
+	 * waits until the current tool-result batch and settlement boundary are complete.
+	 */
+	async resumeContext(): Promise<void> {
+		if (this._isEmittingAgentSettled) {
+			this._contextResumeRequested = true;
+			this._deferredSettledActions.push(async () => {
+				if (this._contextResumeRequested) await this.resumeContext();
+			});
+			return;
+		}
+		if (this.isStreaming) {
+			if (!this._agentRunAbortRequested) this._contextResumeRequested = true;
+			return;
+		}
+		this._flushPendingCustomMessages();
+		this._refreshFinalizedContext();
+		this._contextResumeRequested = true;
+		if (!this._shouldResumeContext()) {
+			this._contextResumeRequested = false;
+			return;
+		}
+		await this._runAgentPrompt();
+	}
+
 	private _appendCustomMessage(appMessage: CustomMessage): void {
 		this.sessionManager.appendCustomMessageEntry(
 			appMessage.customType,
@@ -2517,6 +2575,7 @@ export class AgentSession {
 	 * Abort current operation and wait for agent to become idle.
 	 */
 	async abort(): Promise<void> {
+		this._contextResumeRequested = false;
 		if (this._isAgentRunActive) {
 			this._agentRunAbortRequested = true;
 		}

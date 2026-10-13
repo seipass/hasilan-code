@@ -5,7 +5,6 @@ import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
-import { createHarnessSettings } from "./config.ts";
 
 export const searchProviderSchema = Type.Union([
 	Type.Literal("brave"),
@@ -14,10 +13,6 @@ export const searchProviderSchema = Type.Union([
 	Type.Literal("firecrawl"),
 ]);
 export type SearchProviderId = Static<typeof searchProviderSchema>;
-const modelSelectionSchema = Type.Object(
-	{ provider: Type.String({ minLength: 1 }), id: Type.String({ minLength: 1 }) },
-	{ additionalProperties: false },
-);
 export const settingsPatchSchema = Type.Object(
 	{
 		search: Type.Optional(
@@ -32,12 +27,6 @@ export const settingsPatchSchema = Type.Object(
 				{ additionalProperties: false },
 			),
 		),
-		llm: Type.Optional(
-			Type.Object(
-				{ defaultModel: Type.Optional(Type.Union([modelSelectionSchema, Type.Null()])) },
-				{ additionalProperties: false },
-			),
-		),
 	},
 	{ additionalProperties: false },
 );
@@ -45,7 +34,6 @@ export type SettingsPatch = Static<typeof settingsPatchSchema>;
 export interface HarnessSettings {
 	search: { defaultProvider: SearchProviderId };
 	teams: { maxConcurrentAgents: number; maxDepth: number };
-	llm: { defaultModel?: { provider: string; id: string } };
 }
 export interface SettingsSnapshot extends HarnessSettings {
 	search: HarnessSettings["search"] & { configured: Record<SearchProviderId, boolean> };
@@ -57,7 +45,7 @@ export interface ModelCatalog {
 /** Deliberately exposes catalogue and process-only credentials, not Pi's auth storage. */
 export type SettingsModelRuntime = Pick<
 	ModelRuntime,
-	"getProviders" | "getModels" | "getModel" | "getAvailableSnapshot" | "hasConfiguredAuth" | "setRuntimeApiKey"
+	"getProviders" | "getModels" | "hasConfiguredAuth" | "setRuntimeApiKey"
 >;
 
 const settingsFileSchema = Type.Object(
@@ -71,7 +59,6 @@ const settingsFileSchema = Type.Object(
 			},
 			{ additionalProperties: false },
 		),
-		llm: Type.Object({ defaultModel: Type.Optional(modelSelectionSchema) }, { additionalProperties: false }),
 	},
 	{ additionalProperties: false },
 );
@@ -112,7 +99,6 @@ async function saveJson(path: string, data: unknown): Promise<void> {
 
 export class SettingsService {
 	private readonly directory: string;
-	private readonly agentDir: string;
 	private readonly modelRuntime: SettingsModelRuntime;
 	private settings: HarnessSettings;
 	private credentials: Partial<Record<SearchProviderId, string>>;
@@ -120,13 +106,11 @@ export class SettingsService {
 
 	private constructor(
 		directory: string,
-		agentDir: string,
 		modelRuntime: SettingsModelRuntime,
 		settings: HarnessSettings,
 		credentials: Partial<Record<SearchProviderId, string>>,
 	) {
 		this.directory = directory;
-		this.agentDir = agentDir;
 		this.modelRuntime = modelRuntime;
 		this.settings = settings;
 		this.credentials = credentials;
@@ -137,25 +121,33 @@ export class SettingsService {
 		// Windows inherits the private application's directory ACL.
 		await mkdir(directory, { recursive: true, mode: 0o700 });
 		if (process.platform !== "win32") await chmod(directory, 0o700);
-		const [savedSettings, savedCredentials] = await Promise.all([
+		const [storedSettings, savedCredentials] = await Promise.all([
 			readJson(join(directory, "settings.json")),
 			readJson(join(directory, "credentials.json")),
 		]);
+		let savedSettings = storedSettings;
+		if (savedSettings && typeof savedSettings === "object" && "llm" in savedSettings) {
+			// Retire the saved model default without changing the remaining settings format.
+			const currentSettings: Record<string, unknown> = { ...savedSettings };
+			delete currentSettings.llm;
+			savedSettings = currentSettings;
+		}
 		if (savedSettings !== undefined && !Check(settingsFileSchema, savedSettings))
 			throw new Error("Invalid Web harness settings.json; repair the file before starting");
 		if (savedCredentials !== undefined && !Check(credentialsSchema, savedCredentials))
 			throw new Error("Invalid Web harness credentials.json; repair the file before starting");
 		const settings: HarnessSettings =
 			savedSettings === undefined
-				? { search: { defaultProvider: "brave" }, teams: { maxConcurrentAgents: 4, maxDepth: 3 }, llm: {} }
-				: { search: savedSettings.search, teams: savedSettings.teams, llm: savedSettings.llm };
+				? { search: { defaultProvider: "brave" }, teams: { maxConcurrentAgents: 4, maxDepth: 3 } }
+				: { search: savedSettings.search, teams: savedSettings.teams };
 		if (savedCredentials !== undefined && process.platform !== "win32")
 			await chmod(join(directory, "credentials.json"), 0o600);
-		return new SettingsService(directory, agentDir, modelRuntime, settings, savedCredentials?.search ?? {});
+		if (savedSettings !== storedSettings)
+			await saveJson(join(directory, "settings.json"), { schemaVersion: 1, ...settings });
+		return new SettingsService(directory, modelRuntime, settings, savedCredentials?.search ?? {});
 	}
 
-	get(cwd?: string): SettingsSnapshot {
-		const defaultModel = cwd ? this.getEffectiveDefaultModel(cwd) : this.settings.llm.defaultModel;
+	get(): SettingsSnapshot {
 		return {
 			search: {
 				...this.settings.search,
@@ -167,37 +159,16 @@ export class SettingsService {
 				},
 			},
 			teams: { ...this.settings.teams },
-			llm: defaultModel ? { defaultModel: { ...defaultModel } } : {},
 		};
-	}
-
-	/** Resolve a new conversation's model using only Hasilan Code settings. */
-	getEffectiveDefaultModel(cwd: string): HarnessSettings["llm"]["defaultModel"] {
-		if (this.settings.llm.defaultModel) return { ...this.settings.llm.defaultModel };
-		const agentSettings = createHarnessSettings(cwd, this.agentDir);
-		const provider = agentSettings.getDefaultProvider();
-		const id = agentSettings.getDefaultModel();
-		// Match Pi's initial-model policy: saved defaults require configured auth.
-		if (provider && id && this.modelRuntime.getModel(provider, id) && this.modelRuntime.hasConfiguredAuth(provider))
-			return { provider, id };
-		// The SDK's available snapshot contains authenticated chat models, not the full catalogue.
-		const available = this.modelRuntime
-			.getAvailableSnapshot()
-			.find((model) => this.modelRuntime.hasConfiguredAuth(model.provider));
-		return available ? { provider: available.provider, id: available.id } : undefined;
 	}
 
 	patch(patch: unknown): Promise<SettingsSnapshot> {
 		if (!Check(settingsPatchSchema, patch))
 			return Promise.reject(new Error("Invalid settings; concurrency must be 1..32 and depth 1..8"));
 		return this.enqueue(async () => {
-			const selection = patch.llm?.defaultModel;
-			if (selection && !this.modelRuntime.getModel(selection.provider, selection.id))
-				throw new Error("Unknown model; select a model in the composer");
 			const next: HarnessSettings = {
 				search: { ...this.settings.search, ...patch.search },
 				teams: { ...this.settings.teams, ...patch.teams },
-				llm: selection === null ? {} : selection ? { defaultModel: { ...selection } } : { ...this.settings.llm },
 			};
 			await saveJson(join(this.directory, "settings.json"), { schemaVersion: 1, ...next });
 			this.settings = next;

@@ -38,7 +38,6 @@ describe("model onboarding", () => {
 			agentDir: root,
 			modelRuntime: runtime,
 			workspaceFiles: new WorkspaceFiles(),
-			getDefaultModel: (workspaceCwd) => settings.getEffectiveDefaultModel(workspaceCwd),
 		});
 		await registry.initialize();
 		workspaceId = (await registry.addWorkspace(cwd)).id;
@@ -50,55 +49,61 @@ describe("model onboarding", () => {
 		await rm(root, { recursive: true, force: true });
 	});
 
-	it("inherits the Hasilan workspace default without persisting an incidental Web default", async () => {
-		const globalModel = models[0];
-		const projectModel = models[1];
+	it("leaves new conversations unselected despite saved Web, global, and workspace defaults", async () => {
 		await writeFile(
 			join(root, "settings.json"),
-			JSON.stringify({ defaultProvider: globalModel.provider, defaultModel: globalModel.id }),
+			JSON.stringify({ defaultProvider: models[0].provider, defaultModel: models[0].id }),
 		);
 		await writeFile(
 			join(cwd, ".hasilan-code", "settings.json"),
-			JSON.stringify({ defaultProvider: projectModel.provider, defaultModel: projectModel.id }),
+			JSON.stringify({ defaultProvider: models[1].provider, defaultModel: models[1].id }),
 		);
-		const selected = { provider: projectModel.provider, id: projectModel.id };
-		expect(settings.get(cwd).llm.defaultModel).toEqual(selected);
-		expect((await registry.create({ workspaceId })).model).toEqual(selected);
-		vi.mocked(runtime.getAvailableSnapshot).mockReturnValue([]);
-		expect(settings.getEffectiveDefaultModel(cwd)).toEqual(selected);
+		await writeFile(
+			join(root, "web-harness", "settings.json"),
+			JSON.stringify({
+				schemaVersion: 1,
+				search: { defaultProvider: "brave" },
+				teams: { maxConcurrentAgents: 4, maxDepth: 3 },
+				llm: { defaultModel: { provider: models[2].provider, id: models[2].id } },
+			}),
+		);
+		settings = await SettingsService.open(root, runtime);
+		expect(settings.get()).not.toHaveProperty("llm");
+		expect((await registry.create({ workspaceId })).model).toBeUndefined();
 		const otherCwd = join(root, "other-workspace");
 		await mkdir(otherCwd);
 		const other = await registry.addWorkspace(otherCwd);
-		expect((await registry.create({ workspaceId: other.id })).model).toEqual({
-			provider: globalModel.provider,
-			id: globalModel.id,
-		});
-		await expect(readFile(join(root, "web-harness", "settings.json"))).rejects.toMatchObject({ code: "ENOENT" });
-		await settings.patch({ teams: { maxDepth: 2 } });
-		expect(JSON.parse(await readFile(join(root, "web-harness", "settings.json"), "utf8")).llm).toEqual({});
+		expect((await registry.create({ workspaceId: other.id })).model).toBeUndefined();
+		expect(runtime.getAvailableSnapshot).not.toHaveBeenCalled();
 	});
 
-	it("honors explicit draft and Web defaults without changing previously created conversations", async () => {
+	it("persists explicit draft and session selections independently across restart", async () => {
 		const first = await registry.create({ workspaceId });
-		await writeFile(
-			join(cwd, ".hasilan-code", "settings.json"),
-			JSON.stringify({ defaultProvider: models[0].provider, defaultModel: models[0].id }),
-		);
-		const web = { provider: models[1].provider, id: models[1].id };
-		const draft = { provider: models[2].provider, id: models[2].id };
-		await settings.patch({ llm: { defaultModel: web } });
-		expect(settings.get(cwd).llm.defaultModel).toEqual(web);
-		expect((await registry.create({ workspaceId })).model).toEqual(web);
+		const draft = { provider: models[1].provider, id: models[1].id };
 		const chosen = await registry.create({ workspaceId, model: draft });
 		draft.id = "caller-mutated-id";
-		expect(registry.get(chosen.sessionId).model).toEqual({ provider: models[2].provider, id: models[2].id });
-		expect(registry.get(first.sessionId).model).toEqual(first.model);
-		await settings.patch({ llm: { defaultModel: null } });
+		expect(registry.get(chosen.sessionId).model).toEqual({ provider: models[1].provider, id: models[1].id });
+		expect(registry.get(first.sessionId).model).toBeUndefined();
+		const selection = { provider: models[2].provider, id: models[2].id };
+		await registry.setModel(first.sessionId, selection);
+		selection.id = "caller-mutated-id";
+		expect(registry.get(first.sessionId).model).toEqual({ provider: models[2].provider, id: models[2].id });
 		expect(registry.get(chosen.sessionId).model).toEqual(chosen.model);
+		const unselected = await registry.create({ workspaceId });
 		const saved = JSON.parse(await readFile(join(root, "web-harness", "state.json"), "utf8"));
 		expect(
 			saved.sessions.find((session: { sessionId: string }) => session.sessionId === chosen.sessionId).model,
 		).toEqual(chosen.model);
+		await registry.close();
+		registry = new SessionRegistry({
+			agentDir: root,
+			modelRuntime: runtime,
+			workspaceFiles: new WorkspaceFiles(),
+		});
+		await registry.initialize();
+		expect(registry.get(first.sessionId).model).toEqual({ provider: models[2].provider, id: models[2].id });
+		expect(registry.get(chosen.sessionId).model).toEqual(chosen.model);
+		expect(registry.get(unselected.sessionId).model).toBeUndefined();
 	});
 
 	it("rejects an unknown draft model before creating or persisting a conversation", async () => {
@@ -115,30 +120,14 @@ describe("model onboarding", () => {
 		).toBe(true);
 	});
 
-	it("skips unavailable Hasilan defaults and never chooses from the unauthenticated catalogue", async () => {
-		await writeFile(
-			join(cwd, ".hasilan-code", "settings.json"),
-			JSON.stringify({ defaultProvider: "unknown", defaultModel: "missing" }),
-		);
-		expect(settings.get(cwd).llm.defaultModel).toEqual({ provider: models[0].provider, id: models[0].id });
-		configured.clear();
-		await writeFile(
-			join(cwd, ".hasilan-code", "settings.json"),
-			JSON.stringify({ defaultProvider: models[0].provider, defaultModel: models[0].id }),
-		);
-		expect(settings.get(cwd).llm.defaultModel).toBeUndefined();
+	it("requires an explicit selection before execution even when authenticated models are available", async () => {
 		const session = await registry.create({ workspaceId });
 		expect(session.model).toBeUndefined();
 		const result = await registry.execute(session.sessionId, "test-run", "hello", new AbortController().signal);
 		expect(result.error).toContain("No model selected");
 		expect(registry.get(session.sessionId).messages).toEqual([]);
-		await writeFile(
-			join(cwd, ".hasilan-code", "settings.json"),
-			JSON.stringify({ defaultProvider: "unknown", defaultModel: "missing" }),
-		);
-		configured.add(models[0].provider);
-		vi.mocked(runtime.getAvailableSnapshot).mockReturnValue([]);
-		expect(settings.get(cwd).llm.defaultModel).toBeUndefined();
+		expect(registry.get(session.sessionId).materialized).toBe(false);
+		expect(runtime.getAvailableSnapshot).not.toHaveBeenCalled();
 	});
 
 	it("reports live provider credential status as booleans without exposing credentials", async () => {

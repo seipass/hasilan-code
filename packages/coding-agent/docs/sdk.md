@@ -69,6 +69,22 @@ A steering message enters after the current assistant turn and its tool calls. A
 
 `abort()` stops the active operation and waits for the session to become idle. `waitForIdle()` waits without aborting it.
 
+### Supplemental context
+
+Use `sendCustomMessage(message, { triggerTurn: false })` for supplementary material such as a worker result, not a direct user prompt. Give the message a `customType` and source metadata in `details`. The session persists it as a custom entry; provider conversion uses ordinary user-role context, not system authority.
+
+Injection and execution are separate:
+
+```typescript
+await session.sendCustomMessage(
+  { customType: "worker-result", content: "Worker found the answer", display: true, details: { workerId: "worker-1" } },
+  { triggerTurn: false },
+);
+await session.resumeContext();
+```
+
+Injection alone does not start a turn. During an active run, it waits until the complete tool-result batch finishes. `resumeContext()` requests continuation without appending a user message: idle calls wait for the resumed run; active calls return after requesting it, and the current run processes the context at its next safe request boundary. A natural continuation that already includes the context fulfills the request without an extra model call. It does nothing for empty, system-only, or already-answered context. `abort()` cancels pending continuation requests, without removing persisted context.
+
 ## Subscribing to events
 
 Subscribe before prompting when the host needs streamed output:
@@ -137,6 +153,12 @@ namespace. Explicit resource paths can still intentionally point outside either
 namespace.
 
 <a id="inlineextension"></a>
+
+In a `before_agent_start` handler, set `event.systemPromptOptions.defaultPreamble`
+to replace the default product introduction while retaining tool guidance and rules.
+Set `event.systemPromptOptions.includeDocumentation = false` to omit the default
+Pi documentation section. These options leave user-supplied `customPrompt` and
+complete prompt replacements unchanged; other SDK sessions retain the Pi defaults.
 
 Inline extension factories can be supplied through `DefaultResourceLoader`. Give one an `InlineExtension` name only when it needs a stable name in diagnostics and startup output. A named inline extension with `replaceable: true` is left out when another extension registers a tool, command, or flag with a name it registers during loading, instead of both loading with a conflict. The CLI's built-in codemode, tool search, and MCP extensions are replaceable. A named entry with `builtin: true` is not an inline extension: it supplies the code of the `builtin:<name>` extension, which loads like a configured extension file. It loads by default, is listed in `pi config`, and is disabled by `-builtin:<name>` in the `extensions` setting or by `noExtensions`; `additionalExtensionPaths: ["builtin:<name>"]` loads it explicitly. It loads after project trust is resolved, so it cannot handle `project_trust`. The CLI's built-in extensions use it.
 

@@ -3,14 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, command, errorMessage } from "./api.ts";
 import { ChatPane } from "./ChatPane.tsx";
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
-import { ModelMenu, ThinkingSelector } from "./ModelMenu.tsx";
+import { ModelMenu } from "./ModelMenu.tsx";
 import { PanelResize } from "./PanelResize.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { TerminalPane } from "./terminal/TerminalPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
-import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Settings, Workspace, WorkspaceProjection } from "./types.ts";
+import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 
 function WorkspaceFeed({ id, onUpdate, onFiles }: { id: string; onUpdate: (id: string, data: WorkspaceProjection) => void; onFiles: () => void }) {
 	const channel = useChannel<WorkspaceProjection>("workspace", id, onFiles);
@@ -27,7 +27,6 @@ export function App() {
 	const [error, setError] = useState<string>();
 	const [catalog, setCatalog] = useState<ModelCatalog>();
 	const [catalogVersion, setCatalogVersion] = useState(0);
-	const [defaultModel, setDefaultModel] = useState<Model>();
 	const [draftModel, setDraftModel] = useState<Model>();
 	const [draftThinking, setDraftThinking] = useState<ThinkingLevel>();
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -46,11 +45,19 @@ export function App() {
 	const [filesVersion, setFilesVersion] = useState(0);
 	const draftSession = useRef<string | undefined>(undefined);
 	const searchInput = useRef<HTMLInputElement>(null);
+	const sidebarRef = useRef<HTMLElement>(null);
+	const sidebarOpener = useRef<HTMLButtonElement>(null);
+	const rightPanelRef = useRef<HTMLElement>(null);
+	const rightPanelToggle = useRef<HTMLButtonElement>(null);
 	const workspaceChannel = useChannel<WorkspaceProjection>("workspace", workspaceId, () => setFilesVersion((value) => value + 1));
 	const sessionChannel = useChannel<SessionDetail>("session", sessionId);
 	const session = sessionChannel.data;
-	const model = session?.model ?? draftModel ?? defaultModel;
+	const model = session?.model ?? draftModel;
 	const selectedModel = catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id) ?? model;
+	const modelNeedsAuthentication = model
+		? catalog?.providers.find((entry) => entry.id === model.provider)?.configured === false
+		: !!catalog?.providers.length && catalog.providers.every((entry) => entry.configured === false);
+	const modelSetup = modelNeedsAuthentication ? "authentication" : !model ? "selection" : undefined;
 	const workspace = workspaces.find((entry) => entry.workspaceId === workspaceId);
 	const summaries = [...initialSessions.filter((entry) => !projections[entry.workspaceId]), ...Object.values(projections).flatMap((projection) => projection.sessions)];
 	const team = workspaceChannel.data?.teams;
@@ -63,6 +70,12 @@ export function App() {
 		window.addEventListener("resize", resize);
 		return () => window.removeEventListener("resize", resize);
 	}, []);
+	useEffect(() => {
+		if (!sidebarOpen && sidebarRef.current?.contains(document.activeElement)) sidebarOpener.current?.focus();
+	}, [sidebarOpen]);
+	useEffect(() => {
+		if (!rightOpen && rightPanelRef.current?.contains(document.activeElement)) rightPanelToggle.current?.focus();
+	}, [rightOpen]);
 	useEffect(() => { if (workspaceId && workspaceChannel.data) updateProjection(workspaceId, workspaceChannel.data); }, [workspaceId, workspaceChannel.data, updateProjection]);
 	useEffect(() => {
 		const controller = new AbortController();
@@ -79,7 +92,7 @@ export function App() {
 	useEffect(() => {
 		if (!workspaceId) return;
 		const controller = new AbortController();
-		Promise.all([api<ModelCatalog>("/api/models", { signal: controller.signal }), api<Settings>(`/api/settings${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ""}`, { signal: controller.signal })]).then(([models, settings]) => { setCatalog(models); setDefaultModel(settings.llm.defaultModel); }).catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
+		api<ModelCatalog>("/api/models", { signal: controller.signal }).then(setCatalog).catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
 		return () => controller.abort();
 	}, [catalogVersion, workspaceId]);
 	useEffect(() => {
@@ -100,7 +113,7 @@ export function App() {
 		if (id === workspaceId) return;
 		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setDraftModel(undefined); setDraftThinking(undefined); setFileTarget(undefined); setModelOpen(false); setError(undefined);
 	}
-	function newConversation() { setSessionId(undefined); draftSession.current = undefined; setDraftModel(session?.model ?? defaultModel); setDraftThinking(session?.thinkingLevel); setRightOpen(false); setFileTarget(undefined); setError(undefined); if (window.innerWidth < 900) setSidebarOpen(false); }
+	function newConversation() { setSessionId(undefined); draftSession.current = undefined; setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined); if (window.innerWidth < 900) setSidebarOpen(false); }
 	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: crypto.randomUUID() }); setRightTab("files"); setRightOpen(true); }
 	async function addWorkspace() {
 		if (addingWorkspace) return;
@@ -115,7 +128,8 @@ export function App() {
 	}
 	async function send(text: string, mode: "prompt" | "steer" | "followUp") {
 		if (!workspaceId) throw new Error("作業フォルダーを準備できません。フォルダーを選択してください。");
-		if (!model || catalog?.providers.find((entry) => entry.id === model.provider)?.configured === false) { setModelOpen(true); throw new Error("モデルを接続すると送信できます。"); }
+		if (modelNeedsAuthentication) { setSettingsOpen(true); throw new Error("プロバイダーの認証を設定してください。"); }
+		if (!model) { setModelOpen(true); throw new Error("送信するモデルを選択してください。"); }
 		let target = sessionId ?? draftSession.current;
 		if (!target) { const created = await command<SessionSummary>("/api/sessions", { workspaceId, model: { provider: model.provider, id: model.id }, ...(draftThinking ? { thinkingLevel: draftThinking } : {}) }); target = created.sessionId; draftSession.current = target; }
 		const result = await command<{ runId: string; disposition: "queued" | "started" }>(`/api/sessions/${encodeURIComponent(target)}/prompt`, { text, mode });
@@ -142,42 +156,40 @@ export function App() {
 		await command(`/api/sessions/${encodeURIComponent(target)}/team-message`, { agentId, message });
 	}
 	async function changeModel(selection: { provider: string; id: string }) {
-		if (!sessionId) { setDraftModel(selection); draftSession.current = undefined; }
+		if (!sessionId) {
+			setDraftModel(selection); draftSession.current = undefined;
+			const levels = catalog?.models.find((entry) => entry.provider === selection.provider && entry.id === selection.id)?.thinkingLevels;
+			if (draftThinking && !levels?.includes(draftThinking)) setDraftThinking(undefined);
+		}
 		else await command(`/api/sessions/${encodeURIComponent(sessionId)}/model`, selection);
-		setModelOpen(false);
-		requestAnimationFrame(() => document.getElementById("message")?.focus());
 	}
 	async function changeThinking(level: ThinkingLevel) {
 		if (!sessionId) { setDraftThinking(level); draftSession.current = undefined; }
 		else await command(`/api/sessions/${encodeURIComponent(sessionId)}/thinking`, { level }, "PATCH");
 	}
-	async function changeDefaultModel(selection: Model | null) {
-		await command("/api/settings", { llm: { defaultModel: selection ? { provider: selection.provider, id: selection.id } : null } }, "PATCH");
-		setDefaultModel(selection ?? undefined);
-	}
 	const modelControl = <div className="model-control">
-		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} onClick={() => { if (modelClosing) { setModelClosing(false); setModelMenuKey((value) => value + 1); } else setModelOpen((value) => !value); }}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span aria-hidden="true">⌄</span></button>
-		<ThinkingSelector catalog={catalog} value={selectedModel} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeThinking} disabled={!!session?.currentRun} />
+		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} title="モデル・Thinkingを選択" onClick={() => { if (modelClosing) { setModelClosing(false); setModelMenuKey((value) => value + 1); } else setModelOpen((value) => !value); }}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span className="model-trigger-thinking">Thinking: {session?.thinkingLevel ?? draftThinking ?? "自動"}</span><span aria-hidden="true">⌄</span></button>
 	</div>;
 	const rightMaximum = Math.max(480, viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 260 : 0) - 320);
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);
 	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`}>
 		{workspaces.filter((entry) => entry.workspaceId !== workspaceId).map((entry) => <WorkspaceFeed key={entry.workspaceId} id={entry.workspaceId} onUpdate={updateProjection} onFiles={filesChanged} />)}
-		{sidebarOpen && <button className="navigation-scrim" aria-label="履歴を閉じる" onClick={() => setSidebarOpen(false)} />}
-		<aside className="sidebar" aria-label="会話の履歴">
-			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={newConversation}><img className="brand-symbol" src="/icon.svg" alt="" /></button><button className="icon-button" aria-label="履歴を閉じる" onClick={() => setSidebarOpen(false)}>‹</button></div>
+		<button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><span aria-hidden="true">{sidebarOpen ? "‹" : "☰"}</span></button>
+		<button className="navigation-scrim" aria-label="履歴を閉じる" aria-hidden={!sidebarOpen} inert={!sidebarOpen} onClick={() => setSidebarOpen(false)} />
+		<aside ref={sidebarRef} id="conversation-history" className="sidebar" aria-label="会話の履歴" aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
+			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={newConversation}><img className="brand-symbol" src="/icon.svg" alt="" /></button></div>
 			<button className="new-conversation" onClick={newConversation}><span aria-hidden="true">＋</span>新しい会話</button>
 			<label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>
 			<div className="history-heading"><span>会話</span><button className="icon-button workspace-add-button" aria-label="ワークスペースを追加" title="フォルダーを選択してワークスペースを追加" disabled={addingWorkspace} onClick={() => { void addWorkspace(); }}>{addingWorkspace ? "…" : "+"}</button></div>
 			<nav className="history-navigation" aria-label="ワークスペースと会話">
 				{workspaces.filter((entry) => !historyQuery.trim() || entry.path.toLowerCase().includes(historyQuery.toLowerCase()) || history.some((item) => item.workspaceId === entry.workspaceId)).map((entry) => {
 					const conversations = history.filter((item) => item.workspaceId === entry.workspaceId);
-					return <details className="workspace-accordion" key={entry.workspaceId} data-workspace-id={entry.workspaceId} data-selected={workspaceId === entry.workspaceId} open={!!historyQuery.trim() || (expandedWorkspaces[entry.workspaceId] ?? workspaceId === entry.workspaceId)} onToggle={(event) => {
-						if (historyQuery.trim()) return;
-						const open = event.currentTarget.open;
-						setExpandedWorkspaces((previous) => previous[entry.workspaceId] === open ? previous : { ...previous, [entry.workspaceId]: open });
-					}}>
-						<summary title={entry.path} onClick={() => { if (entry.workspaceId !== workspaceId) selectWorkspace(entry.workspaceId); }}><span className="workspace-name">{entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}</span></summary>
+					const open = !!historyQuery.trim() || (expandedWorkspaces[entry.workspaceId] ?? workspaceId === entry.workspaceId);
+					return <details className="workspace-accordion" key={entry.workspaceId} data-workspace-id={entry.workspaceId} data-selected={workspaceId === entry.workspaceId} open={open}>
+						<summary title={entry.path} onClick={(event) => {
+							event.preventDefault();
+							if (!historyQuery.trim()) setExpandedWorkspaces((previous) => ({ ...previous, [entry.workspaceId]: !open }));
+						}}><span className="workspace-name">{entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}</span></summary>
 						<ul className="session-list">{conversations.map((summary) => {
 							const title = (summary.title ?? "新しい会話").replace(/\s+/g, " ").slice(0, 90);
 							const status = summary.availability === "missing" ? "missing" : summary.currentRun?.status ?? (summary.latestRun?.status === "failed" || summary.latestRun?.status === "interrupted" ? summary.latestRun.status : "idle");
@@ -188,13 +200,13 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}>設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading">{!sidebarOpen && <button className="icon-button" aria-label="履歴を開く" onClick={() => setSidebarOpen(true)}>☰</button>}<span className="page-title">{session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions"><button className="quiet-button" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions"><button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
 			{(error || workspaceChannel.error || sessionChannel.error) && <div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div>}
 			<div className="main-layout"><main className="chat-column">{sessionId && sessionChannel.connection !== "connected" && <p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p>}
-				<ChatPane key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelReady={!!model && catalog?.providers.find((entry) => entry.id === model.provider)?.configured !== false} modelControl={modelControl} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onSettings={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} />
-				{modelOpen && <ModelMenu key={modelMenuKey} catalog={catalog} value={model} defaultModel={defaultModel} onChange={changeModel} onDefaultChange={changeDefaultModel} onSettings={() => { setModelOpen(false); setModelClosing(false); setSettingsOpen(true); }} onClosingChange={setModelClosing} onClose={() => { setModelOpen(false); setModelClosing(false); }} disabled={!!session?.currentRun} />}
-			</main>{rightOpen && <PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} />}
-				<aside className="right-panel" hidden={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined }}>
+				<ChatPane key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} />
+				{modelOpen && <ModelMenu key={modelMenuKey} catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setModelClosing(false); setSettingsOpen(true); }} onClosingChange={setModelClosing} onClose={() => { setModelOpen(false); setModelClosing(false); }} disabled={!!session?.currentRun} />}
+			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
+				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : -actualRightWidth : undefined }}>
 					<div className="panel-tabs" role="tablist" aria-label="詳細パネル">{(["files", "team", "tools", "terminal"] as const).map((tab) => <button key={tab} id={`detail-tab-${tab}`} role="tab" aria-controls="detail-panel" aria-selected={rightTab === tab} onClick={() => setRightTab(tab)}>{tab === "files" ? "ファイル" : tab === "team" ? "チーム" : tab === "tools" ? "ツール" : "端末"}</button>)}</div>
 					<div id="detail-panel" className={`right-panel-body ${rightTab === "files" ? "file-panel-body" : rightTab === "terminal" ? "terminal-panel-body" : ""}`} role="tabpanel" aria-labelledby={`detail-tab-${rightTab}`}>
 						{workspaceId && <FilePane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} onOpen={openFile} onClear={() => setFileTarget(undefined)} visible={rightOpen && rightTab === "files"} />}
@@ -204,6 +216,6 @@ export function App() {
 					</div>
 				</aside>
 			</div>
-		</div>{settingsOpen && <SettingsDialog workspaceId={workspaceId} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} />}
+		</div>{settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} />}
 	</div>;
 }

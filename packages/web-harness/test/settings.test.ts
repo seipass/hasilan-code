@@ -18,8 +18,6 @@ describe("Web harness settings", () => {
 		runtime = {
 			getProviders: catalog.getProviders.bind(catalog),
 			getModels: catalog.getModels.bind(catalog),
-			getModel: catalog.getModel.bind(catalog),
-			getAvailableSnapshot: () => [],
 			hasConfiguredAuth: () => false,
 			setRuntimeApiKey: vi.fn(async () => undefined),
 		};
@@ -60,24 +58,60 @@ describe("Web harness settings", () => {
 		});
 	});
 
-	it("validates limits and model defaults and returns independent snapshots", async () => {
+	it("validates limits, rejects removed model settings, and returns independent snapshots", async () => {
 		const settings = await SettingsService.open(directory, runtime);
 		await expect(settings.patch({ teams: { maxDepth: 9 } })).rejects.toThrow("Invalid settings");
 		await expect(settings.patch({ llm: { defaultModel: { provider: "missing", id: "none" } } })).rejects.toThrow(
-			"Unknown model",
+			"Invalid settings",
 		);
-		const model = settings.getModels().models[0];
-		expect(model).toBeDefined();
-		await settings.patch({ llm: { defaultModel: { provider: model.provider, id: model.id } } });
+		await settings.patch({ teams: { maxDepth: 2 } });
 		const snapshot = settings.get();
 		snapshot.teams.maxConcurrentAgents = 31;
-		expect(settings.get().teams.maxConcurrentAgents).toBe(4);
-		expect((await SettingsService.open(directory, runtime)).get().llm.defaultModel).toEqual({
-			provider: model.provider,
-			id: model.id,
+		snapshot.search.defaultProvider = "exa";
+		snapshot.search.configured.brave = true;
+		expect(settings.get().teams).toEqual({ maxConcurrentAgents: 4, maxDepth: 2 });
+		expect(settings.get().search.defaultProvider).toBe("brave");
+		expect(settings.get().search.configured.brave).toBe(false);
+		expect((await SettingsService.open(directory, runtime)).get()).not.toHaveProperty("llm");
+		expect(JSON.parse(await readFile(join(directory, "web-harness", "settings.json"), "utf8"))).toEqual({
+			schemaVersion: 1,
+			search: { defaultProvider: "brave" },
+			teams: { maxConcurrentAgents: 4, maxDepth: 2 },
 		});
-		await settings.patch({ llm: { defaultModel: null } });
-		expect(settings.get().llm.defaultModel).toBeUndefined();
+	});
+
+	it.each([{}, { defaultModel: { provider: "retired-provider", id: "retired-model" } }])(
+		"removes saved legacy model settings while preserving search and team settings: %j",
+		async (llm) => {
+			await SettingsService.open(directory, runtime);
+			const path = join(directory, "web-harness", "settings.json");
+			const retained = {
+				schemaVersion: 1,
+				search: { defaultProvider: "tavily" },
+				teams: { maxConcurrentAgents: 7, maxDepth: 5 },
+			};
+			await writeFile(path, JSON.stringify({ ...retained, llm }));
+			const settings = await SettingsService.open(directory, runtime);
+			expect(settings.get()).not.toHaveProperty("llm");
+			expect(settings.get().search.defaultProvider).toBe("tavily");
+			expect(settings.get().teams).toEqual(retained.teams);
+			expect(JSON.parse(await readFile(path, "utf8"))).toEqual(retained);
+			expect((await SettingsService.open(directory, runtime)).get()).toEqual(settings.get());
+		},
+	);
+
+	it("does not migrate legacy model settings when the remaining settings are invalid", async () => {
+		await SettingsService.open(directory, runtime);
+		const path = join(directory, "web-harness", "settings.json");
+		const saved = JSON.stringify({
+			schemaVersion: 1,
+			search: { defaultProvider: "brave" },
+			teams: { maxConcurrentAgents: 0, maxDepth: 3 },
+			llm: { defaultModel: { provider: "retired-provider", id: "retired-model" } },
+		});
+		await writeFile(path, saved);
+		await expect(SettingsService.open(directory, runtime)).rejects.toThrow("Invalid Web harness settings.json");
+		expect(await readFile(path, "utf8")).toBe(saved);
 	});
 
 	it("does not replace malformed saved state", async () => {

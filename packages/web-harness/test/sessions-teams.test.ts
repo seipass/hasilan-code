@@ -13,6 +13,7 @@ import {
 	type WorkspaceDirectoryService,
 } from "../src/server/session-registry.ts";
 import { TeamManager } from "../src/server/team-manager.ts";
+import { CONTEXT_INJECTION_CUSTOM_TYPE, type ContextInjection } from "../src/shared/context-injection.ts";
 import type { PendingInputAction } from "../src/shared/contracts.ts";
 
 class Directories implements WorkspaceDirectoryService {
@@ -42,6 +43,11 @@ class ControlledAdapter implements ExecutionAdapter {
 	readonly manager: SessionManager;
 	readonly listeners = new Set<(event: AgentSessionEvent) => void>();
 	readonly inputs: string[] = [];
+	readonly prompts: string[] = [];
+	readonly contextInjections: ContextInjection[] = [];
+	contextResumes = 0;
+	private active = false;
+	private readonly queuedContextInjections: ContextInjection[] = [];
 	private readonly queuedSteering: ControlledQueueItem[] = [];
 	private readonly queuedFollowUp: ControlledQueueItem[] = [];
 	controller = new AbortController();
@@ -71,19 +77,28 @@ class ControlledAdapter implements ExecutionAdapter {
 		});
 	}
 	async prompt(text: string) {
+		this.prompts.push(text);
+		await this.execute(text);
+	}
+	private async execute(text?: string) {
 		this.controller = new AbortController();
+		this.active = true;
 		let resolveIdle = () => {};
 		this.idle = new Promise<void>((resolve) => {
 			resolveIdle = resolve;
 		});
 		this.emit({ type: "agent_start" });
-		const user = { role: "user" as const, content: text, timestamp: Date.now() };
-		this.emit({ type: "message_start", message: user });
-		this.emit({ type: "message_end", message: user });
-		this.manager.appendMessage(user);
+		if (text !== undefined) {
+			const user = { role: "user" as const, content: text, timestamp: Date.now() };
+			this.emit({ type: "message_start", message: user });
+			this.emit({ type: "message_end", message: user });
+			this.manager.appendMessage(user);
+		} else {
+			for (const injection of [...this.queuedContextInjections]) this.consumeContext(injection);
+		}
 		try {
 			const result = this.program
-				? await this.program(this, text)
+				? await this.program(this, text ?? "")
 				: await new Promise<string>((resolve) => {
 						this.finishPrompt = resolve;
 						this.controller.signal.addEventListener("abort", () => resolve(""), { once: true });
@@ -95,6 +110,8 @@ class ControlledAdapter implements ExecutionAdapter {
 				this.manager.appendMessage(message);
 			}
 		} finally {
+			this.active = false;
+			this.finishPrompt = undefined;
 			this.emit({ type: "agent_settled", aborted: this.controller.signal.aborted });
 			resolveIdle();
 		}
@@ -106,6 +123,34 @@ class ControlledAdapter implements ExecutionAdapter {
 		this.inputs.push(text);
 		this.queueFor(mode).push({ inputId, text });
 		this.emitQueueUpdate();
+	}
+	async injectContext(injection: ContextInjection, activeOnly = false): Promise<boolean> {
+		if (activeOnly && !this.active) return false;
+		const snapshot = structuredClone(injection);
+		this.contextInjections.push(snapshot);
+		this.queuedContextInjections.push(snapshot);
+		if (activeOnly) await this.resumeContext();
+		return true;
+	}
+	async resumeContext() {
+		this.contextResumes++;
+		if (!this.active) await this.execute();
+	}
+	consumeContext(injection: ContextInjection) {
+		const index = this.queuedContextInjections.findIndex((queued) => queued.injectionId === injection.injectionId);
+		if (index === -1) throw new Error("Context injection is not queued");
+		this.queuedContextInjections.splice(index, 1);
+		const message = {
+			role: "custom" as const,
+			customType: CONTEXT_INJECTION_CUSTOM_TYPE,
+			content: injection.content,
+			display: true,
+			details: structuredClone(injection),
+			timestamp: Date.now(),
+		};
+		this.emit({ type: "message_start", message });
+		this.emit({ type: "message_end", message });
+		this.manager.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);
 	}
 	hasQueuedInput(inputId: string): boolean {
 		return (
@@ -159,6 +204,7 @@ class ControlledAdapter implements ExecutionAdapter {
 		this.inputs.length = 0;
 		this.queuedSteering.length = 0;
 		this.queuedFollowUp.length = 0;
+		this.queuedContextInjections.length = 0;
 		this.emitQueueUpdate();
 	}
 	getActiveToolNames() {
@@ -243,7 +289,18 @@ describe("team run boundaries", () => {
 			);
 			expect(waited.timedOut).toBe(false);
 			expect(waited.runs[0].status).toBe("completed");
-			for (const notice of adapter.inputs) adapter.consume(notice);
+			expect(adapter.contextInjections.map((injection) => injection.source)).toEqual([
+				{
+					type: "subagent_completion",
+					agentId: spawned.agents[0].agentId,
+					agentName: level === 0 ? "child" : "grandchild",
+					runId: waited.runs[0].runId,
+					status: "completed",
+					result: waited.runs[0].result,
+				},
+			]);
+			for (const injection of adapter.contextInjections) adapter.consumeContext(injection);
+			expect(adapter.inputs).toEqual([]);
 			return `${level === 0 ? "root" : "child"}: ${waited.runs[0].result}`;
 		});
 		teams = f.teams;
@@ -253,28 +310,66 @@ describe("team run boundaries", () => {
 			.toBe("completed");
 		expect(f.registry.get(f.session.sessionId).latestRun?.result).toBe("root: child: grandchild result");
 		expect(f.registry.state.runs).toHaveLength(3);
+		for (const adapter of f.adapters.values()) {
+			expect(adapter.prompts).toHaveLength(1);
+			expect(
+				f.registry.get(adapter.descriptor.sessionId).messages.filter((message) => message.role === "user"),
+			).toHaveLength(1);
+		}
 	});
-	it("delivers a child completion to a running parent as one persisted follow-up", async () => {
+	it("persists an active parent's sourced completion separately from its real user queue", async () => {
 		const f = await fixture();
 		await f.teams.prompt(f.session.sessionId, { text: "coordinate", mode: "prompt" });
 		const parent = await running(f.adapters, f.session.sessionId);
+		const userInput = await f.teams.prompt(f.session.sessionId, { text: "user follow-up", mode: "followUp" });
 		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "research", task: "investigate" }])).agents[0];
 		(await running(f.adapters, child.sessionId)).finish("finished research");
-		await expect.poll(() => parent.inputs.length).toBe(1);
-		expect(parent.inputs[0]).toContain(`Run ${child.runId} (research) completed`);
-		expect(parent.inputs[0]).toContain("finished research");
-		const pending = f.registry.get(f.session.sessionId).pendingInput;
-		expect(pending).toHaveLength(1);
-		expect(pending[0]).toMatchObject({
-			runId: f.registry.get(f.session.sessionId).currentRun?.runId,
-			delivered: true,
+		await expect.poll(() => parent.contextInjections.length).toBe(1);
+		const injection = parent.contextInjections[0];
+		expect(injection.source).toEqual({
+			type: "subagent_completion",
+			agentId: child.agentId,
+			agentName: "research",
+			runId: child.runId,
+			status: "completed",
+			result: "finished research",
 		});
-		parent.consume(parent.inputs[0]);
+		const pending = f.registry.get(f.session.sessionId).pendingInput;
+		expect(pending).toHaveLength(2);
+		expect(pending.find((input) => input.completionRunId === child.runId)).toMatchObject({
+			inputId: injection.injectionId,
+			runId: f.registry.get(f.session.sessionId).currentRun?.runId,
+			fromAgentId: child.agentId,
+			delivered: true,
+			manageable: false,
+			contextInjection: injection,
+		});
+		await expect(
+			f.teams.updatePendingInput(f.session.sessionId, injection.injectionId, { type: "delete" }),
+		).rejects.toMatchObject({ statusCode: 403 });
+		expect(parent.inputs).toEqual(["user follow-up"]);
+		expect(f.registry.get(f.session.sessionId).activity.queue).toEqual({
+			steering: [],
+			followUp: ["user follow-up"],
+		});
+		parent.consumeContext(injection);
+		await expect
+			.poll(() => f.registry.get(f.session.sessionId).pendingInput)
+			.toEqual([expect.objectContaining({ inputId: userInput.inputId, text: "user follow-up", manageable: true })]);
+		expect(f.registry.get(f.session.sessionId).messages.at(-1)).toMatchObject({
+			role: "custom",
+			content: injection.content,
+			contextInjection: injection,
+		});
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
+		expect(parent.prompts).toEqual(["coordinate"]);
+		expect(parent.contextResumes).toBe(1);
+		parent.consume("user follow-up");
 		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
-		expect(f.registry.get(f.session.sessionId).messages.at(-1)?.content).toBe(parent.inputs[0]);
-		expect(parent.inputs).toHaveLength(1);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(2);
+		expect(parent.contextInjections).toHaveLength(1);
 	});
-	it("admits one idle parent continuation for two completed children", async () => {
+	it("admits one no-user-message idle continuation for two completed children", async () => {
 		const f = await fixture(3);
 		await f.teams.prompt(f.session.sessionId, { text: "delegate", mode: "prompt" });
 		const parent = await running(f.adapters, f.session.sessionId);
@@ -284,44 +379,109 @@ describe("team run boundaries", () => {
 				{ name: "second", task: "two" },
 			])
 		).agents;
-		await running(f.adapters, children[0].sessionId);
-		await running(f.adapters, children[1].sessionId);
+		const first = await running(f.adapters, children[0].sessionId);
+		const second = await running(f.adapters, children[1].sessionId);
 		parent.finish("delegated");
 		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun).toBeUndefined();
-		f.adapters.get(children[0].sessionId)?.finish("first result");
-		await expect.poll(() => f.registry.get(f.session.sessionId).latestRun?.task).toContain("first result");
-		f.adapters.get(children[1].sessionId)?.finish("second result");
-		const continuation = f.registry.get(f.session.sessionId).latestRun;
-		expect(continuation?.task).toContain(`Run ${children[0].runId}`);
-		await expect
-			.poll(() =>
-				f.registry
-					.get(f.session.sessionId)
-					.pendingInput.some((input) => input.completionRunId === children[1].runId),
-			)
-			.toBe(true);
-		expect(
-			f.registry
-				.get(f.session.sessionId)
-				.pendingInput.filter((input) => input.completionRunId === children[1].runId),
-		).toHaveLength(1);
-		expect(
-			f.registry.state.runs.filter(
-				(run) =>
-					run.agentId ===
-					f.registry.state.agents.find((agent) => agent.sessionId === f.session.sessionId)?.agentId,
-			),
-		).toHaveLength(2);
-		await expect
-			.poll(() =>
-				f.registry
-					.get(f.session.sessionId)
-					.messages.some(
-						(message) => message.role === "user" && JSON.stringify(message.content).includes("first result"),
-					),
-			)
-			.toBe(true);
+		first.finish("first result");
+		await expect.poll(() => parent.contextResumes).toBe(1);
+		const continuation = f.registry.get(f.session.sessionId).currentRun;
+		expect(continuation).toMatchObject({ inputKind: "context", status: "running" });
+		expect(parent.contextInjections[0].source).toEqual({
+			type: "subagent_completion",
+			agentId: children[0].agentId,
+			agentName: "first",
+			runId: children[0].runId,
+			status: "completed",
+			result: "first result",
+		});
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		second.finish("second result");
+		await expect.poll(() => parent.contextInjections.length).toBe(2);
+		expect(parent.contextInjections[1].source).toEqual({
+			type: "subagent_completion",
+			agentId: children[1].agentId,
+			agentName: "second",
+			runId: children[1].runId,
+			status: "completed",
+			result: "second result",
+		});
+		expect(f.registry.get(f.session.sessionId).currentRun?.runId).toBe(continuation?.runId);
+		expect(f.registry.get(f.session.sessionId).pendingInput).toEqual([
+			expect.objectContaining({
+				completionRunId: children[1].runId,
+				contextInjection: parent.contextInjections[1],
+				delivered: true,
+			}),
+		]);
+		parent.consumeContext(parent.contextInjections[1]);
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		parent.finish("combined results");
+		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun).toBeUndefined();
+		expect(f.registry.state.runs.filter((run) => run.agentId === continuation?.agentId)).toHaveLength(2);
+		const messages = f.registry.get(f.session.sessionId).messages;
+		expect(messages.filter((message) => message.contextInjection).map((message) => message.contextInjection)).toEqual(
+			parent.contextInjections,
+		);
+		expect(messages.filter((message) => message.role === "user")).toHaveLength(1);
+		expect(parent.prompts).toEqual(["delegate"]);
+		expect(parent.inputs).toEqual([]);
 	});
+	it("schedules one context continuation when active-only delivery loses the parent's final turn", async () => {
+		const f = await fixture(2);
+		const initial = await f.teams.prompt(f.session.sessionId, { text: "delegate", mode: "prompt" });
+		const parent = await running(f.adapters, f.session.sessionId);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "child", task: "investigate" }])).agents[0];
+		const delivering = Promise.withResolvers<void>();
+		const releaseDelivery = Promise.withResolvers<void>();
+		const injectContext = parent.injectContext.bind(parent);
+		parent.injectContext = async (injection, activeOnly) => {
+			if (activeOnly) {
+				delivering.resolve();
+				await releaseDelivery.promise;
+			}
+			return injectContext(injection, activeOnly);
+		};
+		try {
+			(await running(f.adapters, child.sessionId)).finish("late result");
+			await delivering.promise;
+			expect(f.registry.get(f.session.sessionId).pendingInput).toEqual([
+				expect.objectContaining({ runId: initial.runId, completionRunId: child.runId, delivered: false }),
+			]);
+			parent.finish("already finished");
+			await parent.waitForIdle();
+			expect(parent.contextInjections).toEqual([]);
+			releaseDelivery.resolve();
+			await expect.poll(() => f.registry.get(f.session.sessionId).currentRun?.inputKind).toBe("context");
+			await expect.poll(() => parent.contextInjections.length).toBe(1);
+			expect(parent.contextInjections[0].source).toEqual({
+				type: "subagent_completion",
+				agentId: child.agentId,
+				agentName: "child",
+				runId: child.runId,
+				status: "completed",
+				result: "late result",
+			});
+			await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+			expect(parent.contextResumes).toBe(1);
+			const continuation = f.registry.get(f.session.sessionId).currentRun;
+			expect(continuation?.runId).not.toBe(initial.runId);
+			expect(f.registry.state.runs.find((run) => run.runId === initial.runId)?.status).toBe("completed");
+			parent.finish("handled late result");
+			await expect.poll(() => f.registry.get(f.session.sessionId).currentRun).toBeUndefined();
+			expect(f.registry.state.runs.filter((run) => run.agentId === continuation?.agentId)).toHaveLength(2);
+			const messages = f.registry.get(f.session.sessionId).messages;
+			expect(
+				messages.filter((message) => message.contextInjection).map((message) => message.contextInjection),
+			).toEqual(parent.contextInjections);
+			expect(messages.filter((message) => message.role === "user")).toHaveLength(1);
+			expect(parent.prompts).toEqual(["delegate"]);
+			expect(parent.inputs).toEqual([]);
+		} finally {
+			releaseDelivery.resolve();
+		}
+	});
+
 	it("notifies a parent exactly once when a queued child is cancelled", async () => {
 		const f = await fixture(1);
 		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
@@ -329,10 +489,23 @@ describe("team run boundaries", () => {
 		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "queued", task: "never admitted" }])).agents[0];
 		expect(child.status).toBe("queued");
 		await f.teams.stop(child.sessionId);
-		await expect.poll(() => parent.inputs.length).toBe(1);
-		expect(parent.inputs[0]).toContain(`Run ${child.runId} (queued) cancelled`);
+		await expect.poll(() => parent.contextInjections.length).toBe(1);
+		expect(parent.contextInjections[0].source).toEqual({
+			type: "subagent_completion",
+			agentId: child.agentId,
+			agentName: "queued",
+			runId: child.runId,
+			status: "cancelled",
+		});
 		expect(f.adapters.has(child.sessionId)).toBe(false);
 		expect(f.registry.get(f.session.sessionId).pendingInput).toHaveLength(1);
+		parent.consumeContext(parent.contextInjections[0]);
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		expect(parent.inputs).toEqual([]);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.contextInjection)).toHaveLength(
+			1,
+		);
 	});
 	it("wait any returns the first pinned failure while another child remains running", async () => {
 		const failGate = Promise.withResolvers<void>();
@@ -345,7 +518,7 @@ describe("team run boundaries", () => {
 			return finishGate.promise;
 		});
 		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
-		await running(f.adapters, f.session.sessionId);
+		const parent = await running(f.adapters, f.session.sessionId);
 		const [failed, slow] = (
 			await f.teams.spawn(f.session.sessionId, [
 				{ name: "failure", task: "fail" },
@@ -367,14 +540,25 @@ describe("team run boundaries", () => {
 			expect.objectContaining({ runId: slow.runId, status: "running" }),
 		]);
 		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("running");
-		await expect.poll(() => f.adapters.get(f.session.sessionId)?.inputs[0]).toContain(`Run ${failed.runId}`);
-		expect(f.adapters.get(f.session.sessionId)?.inputs[0]).toContain("Error:\nchild failure");
+		await expect.poll(() => parent.contextInjections.length).toBe(1);
+		expect(parent.contextInjections[0].source).toEqual({
+			type: "subagent_completion",
+			agentId: failed.agentId,
+			agentName: "failure",
+			runId: failed.runId,
+			status: "failed",
+			error: "child failure",
+		});
+		parent.consumeContext(parent.contextInjections[0]);
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		expect(parent.inputs).toEqual([]);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
 		finishGate.resolve("finished");
 	});
 	it("keeps completion notices pending during wait all, then delivers both on readmission", async () => {
 		const f = await fixture(3);
 		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
-		await running(f.adapters, f.session.sessionId);
+		const parent = await running(f.adapters, f.session.sessionId);
 		const [first, second] = (
 			await f.teams.spawn(f.session.sessionId, [
 				{ name: "first", task: "first" },
@@ -389,16 +573,136 @@ describe("team run boundaries", () => {
 		firstAdapter.finish("one");
 		await expect.poll(() => f.registry.get(first.sessionId).latestRun?.status).toBe("completed");
 		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
-		expect(f.adapters.get(f.session.sessionId)?.inputs).toEqual([]);
+		expect(parent.contextInjections).toEqual([]);
+		expect(parent.inputs).toEqual([]);
 		expect(f.registry.get(f.session.sessionId).pendingInput).toEqual([
-			expect.objectContaining({ completionRunId: first.runId, delivered: false, status: "pending" }),
+			expect.objectContaining({
+				completionRunId: first.runId,
+				delivered: false,
+				status: "pending",
+				contextInjection: expect.objectContaining({
+					source: {
+						type: "subagent_completion",
+						agentId: first.agentId,
+						agentName: "first",
+						runId: first.runId,
+						status: "completed",
+						result: "one",
+					},
+				}),
+			}),
 		]);
 		secondAdapter.finish("two");
 		expect((await waiting).runs.map((run) => run.result)).toEqual(["one", "two"]);
-		await expect.poll(() => f.adapters.get(f.session.sessionId)?.inputs.length).toBe(2);
-		expect(f.adapters.get(f.session.sessionId)?.inputs[0]).toContain(`Run ${first.runId}`);
-		expect(f.adapters.get(f.session.sessionId)?.inputs[1]).toContain(`Run ${second.runId}`);
+		await expect.poll(() => parent.contextInjections.length).toBe(2);
+		expect(parent.contextInjections.map((injection) => injection.source)).toEqual([
+			{
+				type: "subagent_completion",
+				agentId: first.agentId,
+				agentName: "first",
+				runId: first.runId,
+				status: "completed",
+				result: "one",
+			},
+			{
+				type: "subagent_completion",
+				agentId: second.agentId,
+				agentName: "second",
+				runId: second.runId,
+				status: "completed",
+				result: "two",
+			},
+		]);
+		for (const injection of parent.contextInjections) parent.consumeContext(injection);
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		expect(
+			f.registry
+				.get(f.session.sessionId)
+				.messages.filter((message) => message.contextInjection)
+				.map((message) => message.contextInjection?.source.runId),
+		).toEqual([first.runId, second.runId]);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
 	});
+	it("delivers a frozen completion snapshot and restores its source without adding user messages", async () => {
+		const f = await fixture(3);
+		await f.teams.prompt(f.session.sessionId, { text: "coordinate", mode: "prompt" });
+		const parent = await running(f.adapters, f.session.sessionId);
+		const [first, second] = (
+			await f.teams.spawn(f.session.sessionId, [
+				{ name: "original researcher", task: "first" },
+				{ name: "second", task: "second" },
+			])
+		).agents;
+		const waiting = f.teams.wait(f.session.sessionId, [first.agentId, second.agentId], 10000);
+		void waiting.catch(() => undefined);
+		const firstAdapter = await running(f.adapters, first.sessionId);
+		const secondAdapter = await running(f.adapters, second.sessionId);
+		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
+		firstAdapter.finish("original findings");
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput[0]?.completionRunId).toBe(first.runId);
+		const snapshot = f.registry.get(f.session.sessionId).pendingInput[0].contextInjection;
+		if (!snapshot) throw new Error("Completion source was not persisted");
+		expect(snapshot.source).toEqual({
+			type: "subagent_completion",
+			agentId: first.agentId,
+			agentName: "original researcher",
+			runId: first.runId,
+			status: "completed",
+			result: "original findings",
+		});
+		expect(snapshot.content).toContain("original findings");
+		const childRecord = f.registry.state.agents.find((agent) => agent.agentId === first.agentId);
+		const childRun = f.registry.state.runs.find((run) => run.runId === first.runId);
+		if (!childRecord || !childRun) throw new Error("Child state was not recorded");
+		// Delivery must use the persisted completion, not reconstruct it from mutable registry records.
+		childRecord.name = "renamed researcher";
+		childRun.status = "failed";
+		childRun.result = "rewritten findings";
+		childRun.error = "late error";
+		secondAdapter.finish("second findings");
+		expect((await waiting).timedOut).toBe(false);
+		await expect.poll(() => parent.contextInjections.length).toBe(2);
+		expect(parent.contextInjections[0]).toEqual(snapshot);
+		expect(parent.contextInjections[0].content).not.toContain("renamed researcher");
+		expect(parent.contextInjections[0].content).not.toContain("rewritten findings");
+		expect(parent.contextInjections[0].content).not.toContain("late error");
+		for (const injection of parent.contextInjections) parent.consumeContext(injection);
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		parent.finish("used original findings");
+		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun).toBeUndefined();
+		await f.registry.persist();
+		const live = f.registry.get(f.session.sessionId);
+		expect(
+			live.messages.filter((message) => message.contextInjection).map((message) => message.contextInjection),
+		).toEqual(parent.contextInjections);
+		expect(live.messages.filter((message) => message.role === "user")).toHaveLength(1);
+		const restored = new SessionRegistry({ agentDir: f.root, workspaceFiles: new Directories() });
+		await restored.initialize();
+		try {
+			const replay = restored.get(f.session.sessionId);
+			expect(
+				replay.messages
+					.filter((message) => message.contextInjection)
+					.map((message) => ({
+						role: message.role,
+						content: message.content,
+						injection: message.contextInjection,
+					})),
+			).toEqual(
+				parent.contextInjections.map((injection) => ({
+					role: "custom",
+					content: injection.content,
+					injection,
+				})),
+			);
+			expect(replay.messages.filter((message) => message.role === "user")).toHaveLength(1);
+			expect(replay.title).toBe("coordinate");
+			expect(replay.pendingInput).toHaveLength(0);
+		} finally {
+			await restored.close();
+		}
+	});
+
 	it("records a waiting parent's undelivered completion notice without replaying it after restart", async () => {
 		const f = await fixture(3);
 		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
@@ -416,6 +720,16 @@ describe("team run boundaries", () => {
 		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
 		firstAdapter.finish("done");
 		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput[0]?.completionRunId).toBe(first.runId);
+		const snapshot = f.registry.get(f.session.sessionId).pendingInput[0].contextInjection;
+		expect(snapshot?.source).toEqual({
+			type: "subagent_completion",
+			agentId: first.agentId,
+			agentName: "first",
+			runId: first.runId,
+			status: "completed",
+			result: "done",
+		});
+		await f.registry.persist();
 		const restoredAdapters: ControlledAdapter[] = [];
 		const restored = new SessionRegistry({
 			agentDir: f.root,
@@ -430,10 +744,17 @@ describe("team run boundaries", () => {
 		const teams = new TeamManager(restored);
 		await teams.initialize();
 		expect(restored.get(f.session.sessionId).pendingInput).toEqual([
-			expect.objectContaining({ completionRunId: first.runId, status: "undelivered", delivered: false }),
+			expect.objectContaining({
+				completionRunId: first.runId,
+				status: "undelivered",
+				delivered: false,
+				contextInjection: snapshot,
+			}),
 		]);
 		expect(restored.get(f.session.sessionId).latestRun?.status).toBe("interrupted");
 		expect(restoredAdapters).toHaveLength(0);
+		expect(restored.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
+		expect(restored.get(f.session.sessionId).messages.filter((message) => message.contextInjection)).toHaveLength(0);
 		await teams.close();
 		await restored.close();
 	});
@@ -492,6 +813,13 @@ describe("team run boundaries", () => {
 		adapter.consume(adapter.inputs[0]);
 		adapter.consume(adapter.inputs[1]);
 		await expect.poll(() => f.registry.get(child.sessionId).pendingInput.length).toBe(0);
+		expect(adapter.contextInjections).toEqual([]);
+		expect(
+			f.registry
+				.get(child.sessionId)
+				.messages.filter((message) => message.role === "user")
+				.map((message) => message.content),
+		).toEqual(["initial", ...adapter.inputs]);
 		adapter.finish("child result");
 		expect((await waiting).runs[0].result).toBe("child result");
 	});
@@ -561,15 +889,26 @@ describe("team run boundaries", () => {
 	it("resumes a waiting parent once with the cancelled child's notice", async () => {
 		const f = await fixture(2);
 		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
-		await running(f.adapters, f.session.sessionId);
+		const parent = await running(f.adapters, f.session.sessionId);
 		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "child", task: "slow" }])).agents[0];
 		const waiting = f.teams.wait(f.session.sessionId, [child.agentId], 10000, undefined, "any");
 		await running(f.adapters, child.sessionId);
 		await expect.poll(() => f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
 		await f.teams.stop(child.sessionId);
 		expect((await waiting).runs).toEqual([expect.objectContaining({ runId: child.runId, status: "cancelled" })]);
-		await expect.poll(() => f.adapters.get(f.session.sessionId)?.inputs.length).toBe(1);
-		expect(f.adapters.get(f.session.sessionId)?.inputs[0]).toContain(`Run ${child.runId} (child) cancelled`);
+		await expect.poll(() => parent.contextInjections.length).toBe(1);
+		expect(parent.contextInjections[0].source).toEqual({
+			type: "subagent_completion",
+			agentId: child.agentId,
+			agentName: "child",
+			runId: child.runId,
+			status: "cancelled",
+		});
+		parent.consumeContext(parent.contextInjections[0]);
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		expect(parent.contextResumes).toBe(1);
+		expect(parent.inputs).toEqual([]);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
 		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("running");
 	});
 	it("aborts a waiting caller without reacquiring a permit or hanging stop", async () => {
@@ -626,11 +965,10 @@ describe("team run boundaries", () => {
 		expect(descriptor.systemPrompt).toBe("Review carefully");
 		expect(descriptor.tools).toEqual(["read"]);
 	});
-	it("executes dependency stages only after successful prerequisites and passes their results", async () => {
+	it("executes a limit-one dependency workflow with sourced context and no synthetic user prompts", async () => {
 		let teams: TeamManager;
 		const started: string[] = [];
-		const f = await fixture(2, async (adapter, text) => {
-			if (text !== "workflow" && !adapter.descriptor.parentSessionId) return "continuation";
+		const f = await fixture(1, async (adapter, text) => {
 			if (!adapter.descriptor.parentSessionId) {
 				const outcome = await teams.workflow(
 					adapter.descriptor.sessionId,
@@ -642,6 +980,14 @@ describe("team run boundaries", () => {
 					10000,
 					adapter.controller.signal,
 				);
+				expect(adapter.contextInjections.map((injection) => injection.source.agentName)).toEqual(started);
+				expect(adapter.contextInjections.map((injection) => injection.source.status)).toEqual([
+					"completed",
+					"completed",
+					"completed",
+				]);
+				for (const injection of adapter.contextInjections) adapter.consumeContext(injection);
+				expect(adapter.inputs).toEqual([]);
 				return JSON.stringify(outcome);
 			}
 			started.push(adapter.descriptor.role ?? "");
@@ -663,24 +1009,43 @@ describe("team run boundaries", () => {
 			["implementation", "completed"],
 			["research", "completed"],
 		]);
+		const parent = await running(f.adapters, f.session.sessionId);
+		expect(parent.prompts).toEqual(["workflow"]);
+		expect(parent.contextInjections).toHaveLength(3);
+		expect(
+			f.registry
+				.get(f.session.sessionId)
+				.messages.filter((message) => message.contextInjection)
+				.map((message) => message.contextInjection),
+		).toEqual(parent.contextInjections);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
+		expect(f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		expect(f.registry.state.runs).toHaveLength(4);
 	});
 	it("skips transitive dependents after failure, including reverse-ordered graph nodes", async () => {
 		let teams: TeamManager;
-		const f = await fixture(2, async (adapter, text) => {
-			if (text !== "workflow" && !adapter.descriptor.parentSessionId) return "continuation";
+		const f = await fixture(2, async (adapter) => {
 			if (adapter.descriptor.parentSessionId) throw new Error("source failed");
-			return JSON.stringify(
-				await teams.workflow(
-					adapter.descriptor.sessionId,
-					[
-						{ name: "publish", task: "publish", dependsOn: ["review"] },
-						{ name: "review", task: "review", dependsOn: ["source"] },
-						{ name: "source", task: "source" },
-					],
-					10000,
-					adapter.controller.signal,
-				),
+			const outcome = await teams.workflow(
+				adapter.descriptor.sessionId,
+				[
+					{ name: "publish", task: "publish", dependsOn: ["review"] },
+					{ name: "review", task: "review", dependsOn: ["source"] },
+					{ name: "source", task: "source" },
+				],
+				10000,
+				adapter.controller.signal,
 			);
+			expect(adapter.contextInjections).toHaveLength(1);
+			expect(adapter.contextInjections[0].source).toMatchObject({
+				type: "subagent_completion",
+				agentName: "source",
+				runId: outcome.tasks[2].runId,
+				status: "failed",
+				error: "source failed",
+			});
+			adapter.consumeContext(adapter.contextInjections[0]);
+			return JSON.stringify(outcome);
 		});
 		teams = f.teams;
 		const admission = await teams.prompt(f.session.sessionId, { text: "workflow", mode: "prompt" });
@@ -694,6 +1059,8 @@ describe("team run boundaries", () => {
 			["source", "failed"],
 		]);
 		expect(f.registry.state.agents).toHaveLength(2);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
+		expect(f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
 	});
 });
 
@@ -876,13 +1243,18 @@ describe("pending input queue controls", () => {
 		await f.teams.prompt(f.session.sessionId, { text: "root work", mode: "prompt" });
 		await running(f.adapters, f.session.sessionId);
 		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "child", task: "child work" }])).agents[0];
-		await running(f.adapters, child.sessionId);
+		const adapter = await running(f.adapters, child.sessionId);
 		const sent = await f.teams.send(f.session.sessionId, child.agentId, "internal message");
 		if (!sent.inputId) throw new Error("Team message was not assigned an ID");
 		await expect.poll(() => f.registry.get(child.sessionId).pendingInput[0]?.manageable).toBe(false);
 		await expect(f.teams.updatePendingInput(child.sessionId, sent.inputId, { type: "delete" })).rejects.toMatchObject(
 			{ statusCode: 403 },
 		);
+		await expect.poll(() => adapter.inputs.length).toBe(1);
+		expect(adapter.contextInjections).toEqual([]);
+		adapter.consume(adapter.inputs[0]);
+		await expect.poll(() => f.registry.get(child.sessionId).pendingInput).toHaveLength(0);
+		expect(f.registry.get(child.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(2);
 		await f.teams.stop(f.session.sessionId);
 	});
 });

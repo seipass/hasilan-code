@@ -1,7 +1,7 @@
 import type { AuthEvent } from "@earendil-works/pi-ai";
 import { useEffect, useId, useRef, useState } from "react";
 import type { AuthLoginPrompt, AuthLoginView } from "../shared/auth-login.ts";
-import { ApiError, api, command } from "./api.ts";
+import { ApiError, api, command, errorMessage } from "./api.ts";
 
 interface LoginAttempt {
 	loginId?: string;
@@ -37,11 +37,11 @@ function safeAuthUrl(value: string) {
 function LoginEvent({ event }: { event: AuthEvent }) {
 	if (event.type === "auth_url") {
 		const url = safeAuthUrl(event.url);
-		return <>{event.instructions && <p>{event.instructions}</p>}{url ? <a className="oauth-auth-link" href={url} target="_blank" rel="noopener noreferrer">ログインページを開く</a> : <p className="error">安全なログイン用 URL を確認できません。キャンセルして再試行してください。</p>}</>;
+		return <>{event.instructions && <p>{event.instructions}</p>}{url ? <a className="oauth-auth-link" href={url} target="_blank" rel="noopener noreferrer">ログインページを開く</a> : <p className="error">安全なログイン用 URL を確認できません。</p>}</>;
 	}
 	if (event.type === "device_code") {
 		const url = safeAuthUrl(event.verificationUri);
-		return <><p>確認ページを開き、このコードを入力してください。</p><code className="oauth-device-code" aria-label="デバイスコード">{event.userCode}</code>{url ? <a className="oauth-auth-link" href={url} target="_blank" rel="noopener noreferrer">デバイスの確認ページを開く</a> : <p className="error">安全な確認用 URL を確認できません。キャンセルして再試行してください。</p>}{event.expiresInSeconds !== undefined && <p className="fine-print">コードの有効期間: {event.expiresInSeconds} 秒</p>}</>;
+		return <><p>確認ページを開き、このコードを入力してください。</p><code className="oauth-device-code" aria-label="デバイスコード">{event.userCode}</code>{url ? <a className="oauth-auth-link" href={url} target="_blank" rel="noopener noreferrer">デバイスの確認ページを開く</a> : <p className="error">安全な確認用 URL を確認できません。</p>}{event.expiresInSeconds !== undefined && <p className="fine-print">コードの有効期間: {event.expiresInSeconds} 秒</p>}</>;
 	}
 	return <><p>{event.message}</p>{event.type === "info" && event.links?.map((link, index) => {
 		const url = safeAuthUrl(link.url);
@@ -59,7 +59,6 @@ function LoginPrompt({ prompt, disabled, onSubmit }: { prompt: AuthLoginPrompt; 
 		event.preventDefault();
 		if (disabled || !value.trim()) return;
 		const entered = value;
-		setValue("");
 		void onSubmit(prompt.id, entered);
 	}}><label htmlFor={promptId}>{prompt.message}<input ref={input} id={promptId} type={prompt.type === "secret" ? "password" : "text"} autoComplete="off" spellCheck={false} autoCapitalize="none" value={value} placeholder={prompt.placeholder} disabled={disabled} onChange={(event) => setValue(event.target.value)} /></label>{prompt.type === "manual_code" && <p className="fine-print">ブラウザーでログインした後のコード、またはコールバック URL を入力してください。自動で受け取れた場合、この入力欄は消えます。</p>}<button type="submit" disabled={disabled || !value.trim()}>送信して続ける</button></form>;
 }
@@ -98,10 +97,10 @@ export function OAuthLogin({ provider, label, onComplete, onActiveChange, disabl
 	async function complete() {
 		setRefreshing(true); setRefreshFailed(false); setError(undefined);
 		try { await completion.current(); }
-		catch {
+		catch (reason: unknown) {
 			if (mounted.current) {
 				setRefreshFailed(true);
-				setError("ログインは完了しましたが、認証状態の更新に失敗しました。もう一度反映してください。");
+				setError(`ログインは完了しましたが、認証状態の更新に失敗しました。詳細: ${errorMessage(reason)}`);
 			}
 		} finally { if (mounted.current) setRefreshing(false); }
 	}
@@ -129,9 +128,9 @@ export function OAuthLogin({ provider, label, onComplete, onActiveChange, disabl
 		try {
 			const snapshot = await api<AuthLoginView>(`/api/auth/login/${encodeURIComponent(current.loginId)}`, { signal: controller.signal });
 			if (!controller.signal.aborted && !current.cancelled && !current.finished) receive(current, snapshot);
-		} catch {
+		} catch (reason: unknown) {
 			if (!controller.signal.aborted && mounted.current && attempt.current === current && !current.cancelled) {
-				setError("ログイン状況を確認できません。接続を確認してください。自動で再確認しています。");
+				setError(`ログイン状況を確認できません。自動で再確認しています。詳細: ${errorMessage(reason)}`);
 				schedulePoll(current);
 			}
 		} finally { if (current.pollController === controller) current.pollController = undefined; }
@@ -143,11 +142,11 @@ export function OAuthLogin({ provider, label, onComplete, onActiveChange, disabl
 		try {
 			const snapshot = await cancelOwnedLogin(current);
 			if (snapshot) receive(current, snapshot);
-		} catch {
+		} catch (reason: unknown) {
 			current.cancellation = undefined;
 			if (mounted.current && attempt.current === current) {
 				setCancelling(false);
-				setError("ログインをキャンセルできませんでした。接続を確認して、もう一度キャンセルしてください。");
+				setError(`ログインをキャンセルできませんでした。詳細: ${errorMessage(reason)}`);
 			}
 		}
 	}
@@ -163,7 +162,7 @@ export function OAuthLogin({ provider, label, onComplete, onActiveChange, disabl
 			current.finished = true;
 			if (mounted.current && attempt.current === current) {
 				setStarting(false); setCancelling(false);
-				setError(reason instanceof ApiError && reason.status === 409 ? "別のログインが進行中です。先にそのログインを完了またはキャンセルしてから再試行してください。" : "ログインを開始できませんでした。接続を確認して、もう一度お試しください。");
+				setError(`${reason instanceof ApiError && reason.status === 409 ? "別のログインが進行中です。先にそのログインを完了またはキャンセルしてから再試行してください。" : "ログインを開始できませんでした。"} 詳細: ${errorMessage(reason)}`);
 			}
 			return;
 		}
@@ -185,8 +184,8 @@ export function OAuthLogin({ provider, label, onComplete, onActiveChange, disabl
 		try {
 			const snapshot = await command<AuthLoginView>(`/api/auth/login/${encodeURIComponent(current.loginId)}/prompt`, { promptId, value });
 			if (!current.cancelled) receive(current, snapshot);
-		} catch {
-			if (mounted.current && attempt.current === current && !current.cancelled) setError("入力を送信できませんでした。ログイン状況を再確認します。必要ならもう一度入力してください。");
+		} catch (reason: unknown) {
+			if (mounted.current && attempt.current === current && !current.cancelled) setError(`入力を送信できませんでした。ログイン状況を再確認します。詳細: ${errorMessage(reason)}`);
 		} finally {
 			current.submitting = false;
 			if (mounted.current && attempt.current === current) setSubmitting(false);
@@ -197,11 +196,10 @@ export function OAuthLogin({ provider, label, onComplete, onActiveChange, disabl
 	const buttonLabel = provider === "openai" || provider === "openai-codex" ? "ChatGPTでログイン" : label;
 	return <section className="oauth-login" data-provider={provider} aria-label="アカウントでログイン" aria-busy={starting || submitting || cancelling || refreshing}>
 		{!active && view?.status !== "completed" && <button className="oauth-login-start" type="button" disabled={disabled || refreshing} onClick={() => { void start(); }}>{view || error ? `${buttonLabel}を再試行` : buttonLabel}</button>}
-		<p className="fine-print">アカウント認証は Hasilan Code 専用の auth.json に保存され、サーバーの再起動後も利用できます。Pi の認証とは共有しません。ログインを開始して、表示されたリンクから認証ページを開いてください。</p>
-		{(starting || view || cancelling || refreshing) && <p className="oauth-login-status" role="status">{cancelling ? "ログインをキャンセル中…" : starting ? "ログインを開始中…" : refreshing ? "ログイン完了 · モデル一覧に反映中…" : view?.status === "pending" ? submitting ? "入力を送信中…" : view.prompt ? "ログインの操作を選択・入力してください。" : "ブラウザーまたはデバイスでのログイン完了を待っています…" : view?.status === "completed" ? "アカウントのログインが完了しました。" : view?.status === "cancelled" ? "ログインをキャンセルしました。接続方法を選び直せます。" : "ログインに失敗しました。キャンセルまたは再試行してください。"}</p>}
+		{(starting || (view && view.status !== "failed") || cancelling || refreshing) && <p className="oauth-login-status" role="status">{cancelling ? "ログインをキャンセル中…" : starting ? "ログインを開始中…" : refreshing ? "ログイン完了 · モデル一覧に反映中…" : view?.status === "pending" ? submitting ? "入力を送信中…" : view.prompt ? "ログインの操作を選択・入力してください。" : "ブラウザーまたはデバイスでのログイン完了を待っています…" : view?.status === "completed" ? "アカウントのログインが完了しました。" : view?.status === "cancelled" ? "ログインをキャンセルしました。接続方法を選び直せます。" : ""}</p>}
 		{view?.events.length ? <ol className="oauth-login-events" aria-label="ログインの手順">{view.events.map((event, index) => <li key={index}><LoginEvent event={event} /></li>)}</ol> : null}
 		{view?.status === "pending" && view.prompt && !attempt.current?.cancelled && <LoginPrompt key={view.prompt.id} prompt={view.prompt} disabled={disabled || submitting || cancelling} onSubmit={submitPrompt} />}
-		{view?.status === "failed" && <p className="error" role="alert">アカウントのログインを完了できませんでした。もう一度お試しください。</p>}
+		{view?.status === "failed" && <div className="error" role="alert"><p>ログインに失敗しました。</p>{view.error && <details><summary>エラーの詳細</summary><pre>{view.error}</pre></details>}</div>}
 		{error && <p className="error" role="alert">{error}</p>}
 		{active && <button className="oauth-login-cancel" type="button" disabled={cancelling} onClick={() => { void cancel(); }}>ログインをキャンセル</button>}
 		{refreshFailed && <button type="button" disabled={refreshing || disabled} onClick={() => { void complete(); }}>ログイン結果をもう一度反映</button>}

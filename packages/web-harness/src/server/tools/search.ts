@@ -52,7 +52,7 @@ export class SearchService {
 			name: "web_search",
 			label: "Web search",
 			description:
-				"Search the web using the configured Brave, Tavily, Exa, or Firecrawl provider. Results contain source title, URL, and snippet. Configure API keys in Settings; no provider fallback or automatic retry is performed.",
+				"Search the web using the configured Brave, Tavily, Exa, or Firecrawl provider. Results contain source title, URL, and snippet. No provider fallback or automatic retry is performed.",
 			promptSnippet: "Search the web with Brave, Tavily, Exa, or Firecrawl and return source links",
 			parameters: webSearchSchema,
 			execute: async (_toolCallId, params, signal) => {

@@ -1,4 +1,5 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ContextInjection } from "../shared/context-injection.ts";
 
 export interface Workspace {
 	workspaceId: string;
@@ -17,6 +18,7 @@ export interface Run {
 	runId: string;
 	agentId: string;
 	task: string;
+	inputKind?: "prompt" | "context";
 	status: RunStatus;
 	result?: string;
 	error?: string;
@@ -63,6 +65,7 @@ export interface ChatMessage {
 	content: unknown;
 	partial: boolean;
 	runId?: string;
+	contextInjection?: ContextInjection;
 }
 export interface ToolCall {
 	key: string;
@@ -105,7 +108,6 @@ export interface Settings {
 		configured: { brave: boolean; tavily: boolean; exa: boolean; firecrawl: boolean };
 	};
 	teams: { maxConcurrentAgents: number; maxDepth: number };
-	llm: { defaultModel?: Model };
 	browser?: { ready: boolean; error?: string };
 }
 export interface ModelCatalog {

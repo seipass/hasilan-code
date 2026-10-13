@@ -12,6 +12,11 @@ import {
 	SessionManager,
 	type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import {
+	CONTEXT_INJECTION_CUSTOM_TYPE,
+	type ContextInjection,
+	isContextInjection,
+} from "../shared/context-injection.ts";
 import type { PendingInputAction } from "../shared/contracts.ts";
 import { createHarnessSettings } from "./config.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
@@ -49,6 +54,7 @@ export interface ProjectedMessage {
 	content: unknown;
 	partial: boolean;
 	runId?: string;
+	contextInjection?: ContextInjection;
 }
 export interface ProjectedTool {
 	key: string;
@@ -96,6 +102,8 @@ export interface ExecutionAdapter {
 	subscribe(listener: (event: AgentSessionEvent) => void): () => void;
 	prompt(text: string): Promise<void>;
 	deliverInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<void>;
+	injectContext(injection: ContextInjection, activeOnly?: boolean): Promise<boolean>;
+	resumeContext(): Promise<void>;
 	hasQueuedInput(inputId: string): boolean;
 	mutateQueuedInput(inputId: string, action: PendingInputAction): boolean;
 	abort(): Promise<void>;
@@ -113,7 +121,6 @@ export interface RegistryOptions {
 	workspaceFiles: WorkspaceDirectoryService;
 	modelRuntime?: ModelRuntime;
 	customTools?: (descriptor: SessionDescriptor) => ToolDefinition[];
-	getDefaultModel?: (cwd: string) => ModelSelection | undefined;
 	/** An execution seam for deterministic boundary tests; production uses the Pi SDK. */
 	adapterFactory?: (descriptor: SessionDescriptor, manager: SessionManager) => Promise<ExecutionAdapter>;
 }
@@ -240,7 +247,8 @@ function validateState(value: unknown): asserts value is HarnessState {
 			typeof run.task !== "string" ||
 			!["queued", "running", "waiting", "cancelling", "completed", "failed", "cancelled", "interrupted"].includes(
 				run.status,
-			)
+			) ||
+			(run.inputKind !== undefined && run.inputKind !== "prompt" && run.inputKind !== "context")
 		)
 			throw new Error("Invalid run state");
 		if (["queued", "running", "waiting", "cancelling"].includes(run.status)) {
@@ -255,7 +263,8 @@ function validateState(value: unknown): asserts value is HarnessState {
 			typeof input.inputId !== "string" ||
 			typeof input.text !== "string" ||
 			!["steer", "followUp"].includes(input.mode) ||
-			!["pending", "undelivered"].includes(input.status)
+			!["pending", "undelivered"].includes(input.status) ||
+			(input.contextInjection !== undefined && !isContextInjection(input.contextInjection))
 		)
 			throw new Error("Invalid pending input state");
 }
@@ -327,6 +336,11 @@ export class SessionRegistry {
 				role: message.role,
 				content: structuredClone("content" in message ? message.content : message),
 				partial: false,
+				...(message.role === "custom" &&
+				message.customType === CONTEXT_INJECTION_CUSTOM_TYPE &&
+				isContextInjection(message.details)
+					? { contextInjection: structuredClone(message.details) }
+					: {}),
 			}),
 		);
 		const toolCalls: ProjectedTool[] = [];
@@ -395,7 +409,7 @@ export class SessionRegistry {
 	}): Promise<SessionDescriptor> {
 		if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
 		const cwd = this.getWorkspaceRoot(options.workspaceId);
-		const model = options.model ?? this.options.getDefaultModel?.(cwd);
+		const model = options.model;
 		if (model && this.options.modelRuntime && !this.options.modelRuntime.getModel(model.provider, model.id))
 			throw new HarnessError("Model not found; select a model in the composer");
 		const descriptor: SessionDescriptor = {
@@ -537,6 +551,15 @@ export class SessionRegistry {
 						agentDir: this.options.agentDir,
 						projectConfigDirName: ".hasilan-code",
 						settingsManager,
+						extensionFactories: [
+							(pi) => {
+								pi.on("before_agent_start", (event) => {
+									event.systemPromptOptions.defaultPreamble =
+										"You are an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files.";
+									event.systemPromptOptions.includeDocumentation = false;
+								});
+							},
+						],
 						appendSystemPrompt: [
 							descriptor.role ? `Agent role: ${descriptor.role}` : "",
 							descriptor.systemPrompt ?? "",
@@ -565,6 +588,7 @@ export class SessionRegistry {
 						queueManagedInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<unknown>;
 						hasQueuedInput(inputId: string): boolean;
 						mutateQueuedInput(inputId: string, action: PendingInputAction): boolean;
+						resumeContext(): Promise<void>;
 					};
 					adapter = {
 						subscribe: (listener) => session.subscribe(listener),
@@ -572,6 +596,24 @@ export class SessionRegistry {
 						deliverInput: async (text, mode, inputId) => {
 							await managedSession.queueManagedInput(text, mode, inputId);
 						},
+						injectContext: async (injection, activeOnly) => {
+							if (activeOnly && !session.isStreaming) return false;
+							const injected = session.sendCustomMessage(
+								{
+									customType: CONTEXT_INJECTION_CUSTOM_TYPE,
+									content: injection.content,
+									display: true,
+									details: structuredClone(injection),
+								},
+								{ triggerTurn: false },
+							);
+							// Request continuation before yielding, so a final turn cannot settle between injection and wake.
+							const resumed = activeOnly ? managedSession.resumeContext() : undefined;
+							await injected;
+							await resumed;
+							return true;
+						},
+						resumeContext: () => managedSession.resumeContext(),
 						hasQueuedInput: (inputId) => managedSession.hasQueuedInput(inputId),
 						mutateQueuedInput: (inputId, action) => managedSession.mutateQueuedInput(inputId, action),
 						abort: () => session.abort(),
@@ -610,6 +652,11 @@ export class SessionRegistry {
 				content: structuredClone("content" in event.message ? event.message.content : event.message),
 				partial: event.type !== "message_end",
 				runId: live.runId,
+				...(event.message.role === "custom" &&
+				event.message.customType === CONTEXT_INJECTION_CUSTOM_TYPE &&
+				isContextInjection(event.message.details)
+					? { contextInjection: structuredClone(event.message.details) }
+					: {}),
 			};
 			const index = projection.messages.findIndex((entry) => entry.messageId === message.messageId);
 			if (index === -1) projection.messages.push(message);
@@ -658,7 +705,13 @@ export class SessionRegistry {
 		for (const listener of this.executionListeners) listener(id, event);
 		this.changed(id);
 	}
-	async execute(id: string, runId: string, text: string, signal: AbortSignal): Promise<ExecutionOutcome> {
+	async execute(
+		id: string,
+		runId: string,
+		text: string,
+		signal: AbortSignal,
+		inputKind: "prompt" | "context" = "prompt",
+	): Promise<ExecutionOutcome> {
 		const live = this.live.get(id);
 		if (!live) return { aborted: false, error: "Conversation file is missing" };
 		live.runId = runId;
@@ -673,7 +726,17 @@ export class SessionRegistry {
 				void adapter.abort().catch(() => undefined);
 			};
 			signal.addEventListener("abort", abort, { once: true });
-			await adapter.prompt(text);
+			if (inputKind === "context") {
+				for (const input of this.state.pendingInput.filter(
+					(entry) => entry.runId === runId && entry.status === "pending" && entry.contextInjection,
+				)) {
+					if (!input.delivered) {
+						await adapter.injectContext(input.contextInjection!);
+						input.delivered = true;
+					}
+				}
+				await adapter.resumeContext();
+			} else await adapter.prompt(text);
 			await adapter.waitForIdle();
 			return { aborted: live.aborted || signal.aborted, result: live.finalText, error: live.finalError };
 		} catch (error) {
@@ -690,6 +753,10 @@ export class SessionRegistry {
 	async deliver(id: string, text: string, mode: "steer" | "followUp", inputId: string): Promise<void> {
 		const adapter = await this.adapter(id);
 		await adapter.deliverInput(text, mode, inputId);
+	}
+	async deliverContext(id: string, injection: ContextInjection): Promise<boolean> {
+		const adapter = await this.adapter(id);
+		return adapter.injectContext(injection, true);
 	}
 
 	private projectPendingInput(input: PendingInput, currentRun?: RunRecord): PendingInputProjection {

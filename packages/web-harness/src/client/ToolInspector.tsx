@@ -22,6 +22,12 @@ function shortText(value: unknown): string | undefined {
 	return line.length > 120 ? `${line.slice(0, 120)}…` : line;
 }
 
+function writeResultContent(value: unknown): unknown {
+	if (typeof value === "string") return value.replace(/^(File created|Created file)\. Read it before editing\.\r?(?:\n|$)/gm, "");
+	if (Array.isArray(value)) return value.map((part: unknown) => record(part) && part.type === "text" && typeof part.text === "string" ? { ...part, text: writeResultContent(part.text) } : part);
+	return value;
+}
+
 function toolContext(name: string, input: Record<string, unknown> | undefined): string | undefined {
 	if (!input) return undefined;
 	if (name === "read") {
@@ -70,7 +76,9 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	}
 	const searchResults: unknown[] | undefined = details && Array.isArray(details.results) ? details.results : undefined;
 	const artifact = details && record(details.artifact) && typeof details.artifact.id === "string" ? details.artifact : undefined;
-	const content = result && "content" in result ? result.content : tool.result;
+	const originalContent = result && "content" in result ? result.content : tool.result;
+	const content = tool.name === "write" ? writeResultContent(originalContent) : originalContent;
+	const displayDetails = tool.name === "write" && details && "content" in details ? { ...details, content: writeResultContent(details.content) } : details;
 	const textContent = Array.isArray(content) ? content.map((part: unknown) => record(part) && part.type === "text" && typeof part.text === "string" ? part.text : "").join("\n") : typeof content === "string" ? content : "";
 	let directoryEntries: unknown[] | undefined;
 	if (tool.name === "read" && details?.kind === "directory") {
@@ -152,13 +160,13 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 					: tool.name === "read" && directoryEntries ? <div className="tool-task-list">{directoryEntries.map((entry: unknown, index) => record(entry) && typeof entry.path === "string" ? <article key={index}><button className="text-link" onClick={() => onFile(entry.path as string)}>{typeof entry.name === "string" ? entry.name : entry.path}</button><span className="tool-entry-kind">{typeof entry.kind === "string" ? entry.kind : ""}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</span></article> : null)}</div>
 					: tool.name === "edit" && textContent ? <><div className="tool-task-list">{Array.isArray(details?.files) && details.files.map((file: unknown, index) => record(file) ? <article key={index}><div className="tool-task-heading"><strong>{typeof file.path === "string" ? file.path : `File ${index + 1}`}</strong><span>{typeof file.status === "string" ? file.status : ""}</span></div>{typeof file.error === "string" && <p className="tool-error">{file.error}</p>}</article> : null)}</div><pre className="hashline-diff">{typeof details?.diff === "string" ? details.diff : textContent}</pre></>
 					: isShell ? <pre className="tool-output">{typeof structured?.output === "string" ? structured.output : textContent}</pre>
-					: tool.name === "write" && details?.kind === "text" ? <p className="tool-success">File created. Read it before editing.</p>
+					: tool.name === "write" && details?.kind === "text" ? null
 					: tool.name === "team" && teamEntries ? <div className="tool-task-list">{teamEntries.map((entry: unknown, index) => record(entry) ? <article key={index}><div className="tool-task-heading"><strong>{typeof entry.name === "string" ? entry.name : typeof entry.agentId === "string" ? entry.agentId : `Entry ${index + 1}`}</strong>{typeof entry.status === "string" && <span>{entry.status}</span>}</div>{typeof entry.result === "string" && <p>{entry.result}</p>}{typeof entry.error === "string" && <p className="tool-error">{entry.error}</p>}</article> : null)}</div>
 					: tool.name === "team" && teamProfiles ? <div className="tool-task-list">{teamProfiles.map((entry: unknown, index) => record(entry) ? <article key={index}><strong>{typeof entry.name === "string" ? entry.name : `Entry ${index + 1}`}</strong>{typeof entry.description === "string" && <p>{entry.description}</p>}</article> : null)}</div>
 					: tool.name === "team" && details ? <div className="tool-meta">{typeof details.runId === "string" && <span>Run {details.runId}</span>}{typeof details.disposition === "string" && <span>{details.disposition}</span>}{typeof details.status === "string" && <span>{details.status}</span>}</div>
 					: <Content value={artifact && Array.isArray(content) ? content.filter((part: unknown) => !record(part) || part.type !== "image") : content} onFile={onFile} />}
 				{!specialized && details && <details><summary>Details</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}
-				{specialized && details && <details className="tool-secondary"><summary>Raw result</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}
+				{specialized && displayDetails && <details className="tool-secondary"><summary>Raw result</summary><pre>{JSON.stringify(displayDetails, null, 2)}</pre></details>}
 			</>}
 		</div>
 	</details>;

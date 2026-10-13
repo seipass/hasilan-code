@@ -16,6 +16,8 @@ interface FilePaneProps {
 }
 const MIN_PREVIEW_WIDTH = 300;
 const MIN_TREE_WIDTH = 180;
+const COMPACT_MIN_PREVIEW_WIDTH = 180;
+const COMPACT_MIN_TREE_WIDTH = 100;
 const MAX_TREE_WIDTH = 480;
 const SPLIT_WIDTH = 8;
 
@@ -70,7 +72,16 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 	const active = files.find((file) => file.path === activePath);
 	const markdown = !!active && /\.(?:md|markdown)$/i.test(active.path);
 	const rendered = markdown && (active.mode ?? (active.line === undefined ? "rendered" : "source")) === "rendered";
-	const maxTreeWidth = Math.max(MIN_TREE_WIDTH, Math.min(MAX_TREE_WIDTH, availableWidth - MIN_PREVIEW_WIDTH - SPLIT_WIDTH));
+	const splitWidth = Math.min(SPLIT_WIDTH, availableWidth);
+	const contentWidth = Math.max(0, availableWidth - splitWidth);
+	const compact = availableWidth < MIN_PREVIEW_WIDTH + SPLIT_WIDTH + MIN_TREE_WIDTH;
+	const previewMinimum = compact ? COMPACT_MIN_PREVIEW_WIDTH : MIN_PREVIEW_WIDTH;
+	const treeMinimum = compact ? COMPACT_MIN_TREE_WIDTH : MIN_TREE_WIDTH;
+	const minimumScale = Math.min(1, contentWidth / (previewMinimum + treeMinimum));
+	const minPreviewWidth = Math.floor(previewMinimum * minimumScale);
+	const minTreeWidth = Math.floor(treeMinimum * minimumScale);
+	const maxTreeWidth = Math.max(minTreeWidth, Math.min(MAX_TREE_WIDTH, contentWidth - minPreviewWidth));
+	const displayedTreeWidth = Math.max(minTreeWidth, Math.min(maxTreeWidth, treeWidth));
 	const requestKey = active && (!target || target.requestId === lastRequest.current) ? JSON.stringify([workspaceId, active.path, active.offset, rendered, refreshToken, target?.requestId]) : undefined;
 	const loaded = result?.key === requestKey ? result : undefined;
 
@@ -159,11 +170,11 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 		setDropTarget(undefined);
 	}
 	function resizeTree(width: number) {
-		setTreeWidth(Math.max(MIN_TREE_WIDTH, Math.min(maxTreeWidth, width)));
+		setTreeWidth(Math.max(minTreeWidth, Math.min(maxTreeWidth, width)));
 	}
 
 	return <section className="files-pane" ref={pane} hidden={!visible} aria-label="ファイル閲覧">
-		<div className="files-layout" style={{ gridTemplateColumns: `minmax(${MIN_PREVIEW_WIDTH}px, 1fr) ${SPLIT_WIDTH}px ${treeWidth}px`, minWidth: MIN_PREVIEW_WIDTH + SPLIT_WIDTH + treeWidth }}>
+		<div className="files-layout" style={{ gridTemplateColumns: `minmax(0, 1fr) ${splitWidth}px minmax(0, ${displayedTreeWidth}px)` }}>
 			<div className="files-preview">
 				{files.length > 0 && <div className="files-tabs" role="tablist" aria-label="開いているファイル" ref={tabStrip}>
 					{files.map((file, index) => <div className="files-tab" key={file.path} data-path={file.path} data-active={file.path === activePath} data-dragging={file.path === draggingPath} data-drop={dropTarget?.path === file.path ? dropTarget.edge : undefined} draggable onMouseDown={(event) => {
@@ -236,16 +247,16 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 							{loaded.view.nextOffset && <div className="files-page"><button onClick={() => changeOffset(loaded.view?.nextOffset ?? 1)}>次の行 ({loaded.view.nextOffset}〜)</button></div>}
 						</>}
 						{loaded.view.kind === "image" && <img className="files-image" alt={loaded.view.path} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} />}
-						{loaded.view.kind === "binary" && <p className="files-message">バイナリファイルです。内容は表示しません。</p>}
+						{loaded.view.kind === "binary" && <p className="files-message">バイナリファイル</p>}
 					</>}
 				</div>
 			</div>
-			<div className="files-splitter" role="separator" tabIndex={0} aria-label="ファイルツリーの幅" aria-orientation="vertical" aria-controls={`${id}-tree`} aria-valuemin={MIN_TREE_WIDTH} aria-valuemax={Math.max(maxTreeWidth, treeWidth)} aria-valuenow={treeWidth} aria-valuetext={`${treeWidth} ピクセル`} data-resizing={resizing} onPointerDown={(event) => {
+			<div className="files-splitter" role="separator" tabIndex={0} aria-label="ファイルツリーの幅" aria-orientation="vertical" aria-controls={`${id}-tree`} aria-valuemin={minTreeWidth} aria-valuemax={maxTreeWidth} aria-valuenow={displayedTreeWidth} aria-valuetext={`${displayedTreeWidth} ピクセル`} data-resizing={resizing} onPointerDown={(event) => {
 				if (event.button !== 0) return;
 				event.preventDefault();
 				event.currentTarget.focus();
 				event.currentTarget.setPointerCapture(event.pointerId);
-				drag.current = { pointerId: event.pointerId, startX: event.clientX, width: treeWidth };
+				drag.current = { pointerId: event.pointerId, startX: event.clientX, width: displayedTreeWidth };
 				setResizing(true);
 			}} onPointerMove={(event) => {
 				if (drag.current?.pointerId === event.pointerId) resizeTree(drag.current.width + drag.current.startX - event.clientX);
@@ -258,7 +269,7 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 				if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
 				event.preventDefault();
 				const step = event.shiftKey ? 48 : 16;
-				resizeTree(event.key === "Home" ? MIN_TREE_WIDTH : event.key === "End" ? maxTreeWidth : treeWidth + (event.key === "ArrowLeft" ? step : -step));
+				resizeTree(event.key === "Home" ? minTreeWidth : event.key === "End" ? maxTreeWidth : displayedTreeWidth + (event.key === "ArrowLeft" ? step : -step));
 			}} />
 			<nav className="files-tree" id={`${id}-tree`} aria-label="作業フォルダーのファイル">
 				<Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${target?.requestId ?? ""}`} activePath={activePath} visible={visible} onOpen={onOpen} />

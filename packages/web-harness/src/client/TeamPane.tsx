@@ -103,7 +103,6 @@ function RunDetail({ run, snapshot, focus, onFile, now }: {
 		<div className="team-run-meta"><span className={`team-map-state status-${run.status}`}>{RUN_LABELS[run.status]}</span>{elapsed(run, now) && <span>{run.settledAt ? "所要" : "経過"} {elapsed(run, now)}</span>}</div>
 		<h4>担当していること</h4>
 		<p className="team-run-task">{taskText(run)}</p>
-		{run.status === "queued" && <p className="team-inline-note">順番を待っています。開始前のため経過時間はありません。</p>}
 		{run.status === "waiting" && <div className="team-dependency"><strong>結果を待っている相手</strong>{waiting?.length ? <ul>{waiting.map(({ agent, state }, index) => <li key={`${run.runId}-${index}`}>
 			{agent ? <button className="text-link" type="button" onClick={() => focus(agent.agentId)}>{label(agent)}</button> : "不明な担当"}<span> · {state ? RUN_LABELS[state] : "状態不明"}</span>
 		</li>)}</ul> : <p>子の結果を待っています。</p>}</div>}

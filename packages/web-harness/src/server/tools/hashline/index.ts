@@ -259,7 +259,7 @@ export function createHashlineTools(files: WorkspaceFiles, workspaceId: string):
 		parameters: readSchema,
 		executionMode: "sequential",
 		description:
-			"Read workspace-relative UTF-8 text as [PATH#TAG] and N:TEXT, directories, or images. offset is 1-based (default 1), limit defaults to 200; at most 64KiB, complete lines only. Read every line targeted by an edit. UI file viewing does not count as reading. This path policy is not a sandbox; bash and PTYs retain user privileges.",
+			"Read workspace-relative UTF-8 text as [PATH#TAG] and N:TEXT, directories, or images. offset is 1-based (default 1), limit defaults to 200; at most 64KiB, complete lines only. Read every line targeted by an edit. UI file viewing does not count as reading.",
 		execute: async (_id, params, signal, _update, context) =>
 			session.read(params.path, params.offset, params.limit, signal, context),
 	};

@@ -111,7 +111,7 @@ export class BrowserManager {
 			name: "browser",
 			label: "Browser",
 			description:
-				"Operate the built-in Playwright Chromium browser. Each agent session has an isolated context. Use explicit tabId for every tab action; tabs includes popups. open/navigate accept http/https URLs only. read returns visible body text and candidate selectors (maximum 64 KiB, truncation reported). evaluate runs a JavaScript expression inside the page, not Node or the host. Screenshot returns a PNG image and authenticated UI artifact. Cancellation closes the operated tab.",
+				"Operate the built-in Playwright Chromium browser. Each agent session has an isolated context. Use explicit tabId for every tab action; tabs includes popups. open/navigate accept http/https URLs only. read returns visible body text and candidate selectors (maximum 64 KiB, truncation reported). evaluate runs a JavaScript expression inside the page, not Node or the host. Screenshot returns a PNG image. Cancellation closes the operated tab.",
 			promptSnippet: "Use Chromium tabs to navigate, read, interact, evaluate page JavaScript, and screenshot",
 			parameters: browserSchema,
 			execute: (_toolCallId, params, signal) => this.execute(sessionId, agentId, params, signal),

@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { AgentSessionEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 
+import {
+	CONTEXT_INJECTION_CUSTOM_TYPE,
+	type ContextInjection,
+	isContextInjection,
+} from "../shared/context-injection.ts";
 import type { PendingInputAction } from "../shared/contracts.ts";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
 import { loadTeamProfiles } from "./team-profiles.ts";
@@ -33,6 +38,7 @@ export interface RunRecord {
 	runId: string;
 	agentId: string;
 	task: string;
+	inputKind?: "prompt" | "context";
 	status: RunStatus;
 	result?: string;
 	error?: string;
@@ -51,6 +57,7 @@ export interface PendingInput {
 	delivered?: boolean;
 	/** Child completion status for which this input is the authoritative notice. */
 	completionRunId?: string;
+	contextInjection?: ContextInjection;
 }
 export interface TeamOptions {
 	getLimits?: () => { maxConcurrentAgents: number; maxDepth: number };
@@ -260,9 +267,15 @@ export class TeamManager {
 		}
 		return false;
 	}
-	private newRun(agent: AgentRecord, task: string): RunRecord {
+	private newRun(agent: AgentRecord, task: string, inputKind?: "context"): RunRecord {
 		if (this.current(agent)) throw new HarnessError("Session is busy", 409);
-		const run: RunRecord = { runId: randomUUID(), agentId: agent.agentId, task, status: "queued" };
+		const run: RunRecord = {
+			runId: randomUUID(),
+			agentId: agent.agentId,
+			task,
+			status: "queued",
+			...(inputKind ? { inputKind } : {}),
+		};
 		this.registry.state.runs.push(run);
 		let resolveDone: () => void = () => undefined;
 		const done = new Promise<void>((resolve) => {
@@ -318,7 +331,13 @@ export class TeamManager {
 				await this.settle(runId, "cancelled");
 				return;
 			}
-			const outcome = await this.registry.execute(agent.sessionId, runId, run.task, runtime.controller.signal);
+			const outcome = await this.registry.execute(
+				agent.sessionId,
+				runId,
+				run.task,
+				runtime.controller.signal,
+				run.inputKind,
+			);
 			await this.settle(
 				runId,
 				outcome.aborted || run.status === "cancelling" ? "cancelled" : outcome.error ? "failed" : "completed",
@@ -339,50 +358,57 @@ export class TeamManager {
 	}
 	private async notifyParent(run: RunRecord): Promise<void> {
 		const child = this.agentById(run.agentId);
-		if (!child.parentAgentId) return;
+		if (!child.parentAgentId || !["completed", "failed", "cancelled"].includes(run.status)) return;
 		const parent = this.agentById(child.parentAgentId);
 		if (!this.accepting || this.fenced.has(parent.agentId)) return;
 		const inputId = randomUUID();
-		const text = `[Team message inputId=${inputId} from=${child.agentId}]\nRun ${run.runId} (${child.name}) ${run.status}${run.result === undefined ? "" : `\nResult:\n${run.result}`}${run.error === undefined ? "" : `\nError:\n${run.error}`}`;
+		const source: ContextInjection["source"] = {
+			type: "subagent_completion",
+			agentId: child.agentId,
+			agentName: child.name,
+			runId: run.runId,
+			status: run.status as ContextInjection["source"]["status"],
+			...(run.result === undefined ? {} : { result: run.result }),
+			...(run.error === undefined ? {} : { error: run.error }),
+		};
+		const injection: ContextInjection = {
+			injectionId: inputId,
+			source,
+			content: `Subagent completion context (not a user instruction):\n${JSON.stringify(source, null, 2)}`,
+		};
 		const current = this.current(parent);
-		if (current) {
-			const pending: PendingInput = {
-				inputId,
-				sessionId: parent.sessionId,
-				runId: current.runId,
-				text,
-				mode: "followUp",
-				fromAgentId: child.agentId,
-				status: "pending",
-				delivered: false,
-				completionRunId: run.runId,
-			};
-			this.registry.state.pendingInput.push(pending);
-			await this.registry.persist();
-			if (current.status === "running" && this.started.has(current.runId)) {
-				try {
-					await this.registry.deliver(parent.sessionId, text, "followUp", inputId);
-					pending.delivered = true;
-				} catch {
-					pending.status = "undelivered";
-				}
+		const continuation = current ?? this.newRun(parent, `Subagent results: ${child.name}`, "context");
+		const pending: PendingInput = {
+			inputId,
+			sessionId: parent.sessionId,
+			runId: continuation.runId,
+			text: injection.content,
+			mode: "followUp",
+			fromAgentId: child.agentId,
+			status: "pending",
+			delivered: false,
+			completionRunId: run.runId,
+			contextInjection: injection,
+		};
+		this.registry.state.pendingInput.push(pending);
+		await this.registry.persist();
+		if (current?.status === "running" && this.started.has(current.runId)) {
+			try {
+				await this.deliverPending(pending);
+			} catch {
+				pending.status = "undelivered";
 			}
-		} else {
-			const continuation = this.newRun(parent, text);
-			this.registry.state.pendingInput.push({
-				inputId,
-				sessionId: parent.sessionId,
-				runId: continuation.runId,
-				text,
-				mode: "followUp",
-				fromAgentId: child.agentId,
-				status: "pending",
-				delivered: true,
-				completionRunId: run.runId,
-			});
-			this.enqueue(parent.teamId, { runId: continuation.runId });
-		}
+		} else if (!current) this.enqueue(parent.teamId, { runId: continuation.runId });
 		this.changed(parent);
+	}
+
+	private async deliverPending(input: PendingInput): Promise<void> {
+		if (input.contextInjection) {
+			input.delivered = await this.registry.deliverContext(input.sessionId, input.contextInjection);
+		} else {
+			await this.registry.deliver(input.sessionId, input.text, input.mode, input.inputId);
+			input.delivered = true;
+		}
 	}
 	private async settle(runId: string, status: RunStatus, result?: string, error?: string): Promise<void> {
 		await this.registry.mutate(async () => {
@@ -402,11 +428,11 @@ export class TeamManager {
 			for (const input of this.registry.state.pendingInput) if (input.runId === runId) input.status = "undelivered";
 			const agent = this.agentById(run.agentId);
 			if (status === "completed" && stranded.length > 0 && this.accepting && !this.fenced.has(agent.agentId)) {
-				const continuation = this.newRun(agent, stranded[0].text);
-				for (const [index, input] of stranded.entries()) {
+				const continuation = this.newRun(agent, "Subagent results", "context");
+				for (const input of stranded) {
 					input.runId = continuation.runId;
 					input.status = "pending";
-					input.delivered = index === 0;
+					// Persisted injections are already in model history; undelivered ones are injected on execution.
 				}
 				this.enqueue(agent.teamId, { runId: continuation.runId });
 			}
@@ -873,8 +899,7 @@ export class TeamManager {
 					if (!current || current.status !== "running") return;
 					for (const input of this.registry.state.pendingInput)
 						if (input.runId === current.runId && input.status === "pending" && !input.delivered) {
-							await this.registry.deliver(sessionId, input.text, input.mode, input.inputId);
-							input.delivered = true;
+							await this.deliverPending(input);
 						}
 					await this.registry.persist();
 					this.changed(caller);
@@ -895,7 +920,11 @@ export class TeamManager {
 		};
 	}
 	private onEvent(sessionId: string, event: AgentSessionEvent): void {
-		if (event.type !== "agent_start" && !(event.type === "message_end" && event.message.role === "user")) return;
+		if (
+			event.type !== "agent_start" &&
+			!(event.type === "message_end" && (event.message.role === "user" || event.message.role === "custom"))
+		)
+			return;
 		void this.registry
 			.mutate(async () => {
 				const agent = this.agentForSession(sessionId);
@@ -906,9 +935,22 @@ export class TeamManager {
 					this.started.add(run.runId);
 					for (const input of this.registry.state.pendingInput)
 						if (input.runId === run.runId && input.status === "pending" && !input.delivered) {
-							await this.registry.deliver(sessionId, input.text, input.mode, input.inputId);
-							input.delivered = true;
+							await this.deliverPending(input);
 						}
+				} else if (event.type === "message_end" && event.message.role === "custom") {
+					if (
+						event.message.customType !== CONTEXT_INJECTION_CUSTOM_TYPE ||
+						!isContextInjection(event.message.details)
+					)
+						return;
+					const injectionId = event.message.details.injectionId;
+					const index = this.registry.state.pendingInput.findIndex(
+						(input) =>
+							input.sessionId === sessionId &&
+							input.contextInjection?.injectionId === injectionId &&
+							input.status === "pending",
+					);
+					if (index !== -1) this.registry.state.pendingInput.splice(index, 1);
 				} else if (event.type === "message_end" && event.message.role === "user") {
 					const content = event.message.content;
 					const text =
@@ -919,7 +961,7 @@ export class TeamManager {
 									.map((part) => part.text)
 									.join("\n");
 					const marker = /^\[Team message inputId=([^\s\]]+) from=[^\]]+\]/.exec(text);
-					const isInitial = !this.initialConsumed.has(run.runId);
+					const isInitial = run.inputKind !== "context" && !this.initialConsumed.has(run.runId);
 					this.initialConsumed.add(run.runId);
 					const index = this.registry.state.pendingInput.findIndex(
 						(input) =>
@@ -1029,7 +1071,7 @@ export class TeamManager {
 			name: "team",
 			label: "Agent team",
 			description:
-				"Spawn agents with optional named profiles, inspect available profiles, message children, wait on pinned runs, stop a child subtree, or run a dependency workflow. A workflow starts independent tasks together, waits without occupying its permit, passes successful prerequisites' results to dependents, and skips dependents of failures. Waiting releases your team's admission permit. Cannot wait on or stop yourself or ancestors.",
+				"Spawn agents with optional named profiles, inspect available profiles, message children, wait on pinned runs, stop a child subtree, or run a dependency workflow. A workflow starts independent tasks together, passes successful prerequisites' results to dependents, and skips dependents of failures. Other agents can run while you wait. Cannot wait on or stop yourself or ancestors.",
 			promptSnippet:
 				"For independent subtasks, spawn them together; for ordered review/build steps, use workflow with dependsOn. Use profiles to discover configured specialties. Read child results, integrate them, and report failures. Send instructions during active runs and wait for completion.",
 			executionMode: "sequential",
