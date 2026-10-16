@@ -220,6 +220,7 @@ function validateState(value: unknown): asserts value is HarnessState {
 			throw new Error("Invalid session thinking level");
 		if (session.swarm) {
 			const swarm = session.swarm;
+			const legacy = swarm.status === undefined && swarm.updatedAt === undefined && swarm.reason === undefined;
 			if (
 				session.parentSessionId ||
 				typeof swarm.id !== "string" ||
@@ -230,11 +231,16 @@ function validateState(value: unknown): asserts value is HarnessState {
 				typeof swarm.createdAt !== "string" ||
 				typeof swarm.rootRunId !== "string" ||
 				!swarm.rootRunId ||
-				!["active", "paused", "blocked", "complete"].includes(swarm.status) ||
-				typeof swarm.updatedAt !== "string" ||
+				(!legacy && !["active", "paused", "blocked", "complete"].includes(swarm.status)) ||
+				(!legacy && typeof swarm.updatedAt !== "string") ||
 				(swarm.reason !== undefined && typeof swarm.reason !== "string")
 			)
 				throw new Error("Invalid session swarm state");
+			if (legacy) {
+				swarm.status = "paused";
+				swarm.updatedAt = new Date().toISOString();
+				swarm.reason = "Saved swarm requires explicit restart with /hyakki";
+			}
 		}
 		if (session.goal) {
 			const goal = session.goal as Omit<Goal, "status"> & { status: string };

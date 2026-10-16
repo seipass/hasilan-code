@@ -559,6 +559,67 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		);
 	});
 
+	it("migrates saved pre-autonomy swarms without losing history or starting a model call", async () => {
+		const f = await fixture();
+		f.faux.setResponses([fauxAssistantMessage("Saved conversation result")]);
+		await f.teams.prompt(f.session.sessionId, { text: "Original objective", mode: "prompt" });
+		await idle(f.registry, f.session.sessionId);
+		const statePath = join(f.root, "web-harness", "state.json");
+		const state = JSON.parse(await readFile(statePath, "utf8"));
+		const legacy = {
+			id: "saved-swarm",
+			objective: "Original objective",
+			createdAt: "2026-10-15T00:00:00.000Z",
+			rootRunId: f.registry.get(f.session.sessionId).latestRun!.runId,
+		};
+		state.sessions[0].swarm = legacy;
+		await writeFile(statePath, JSON.stringify(state));
+		const history = await readFile(f.session.path!, "utf8");
+		const calls = f.faux.state.callCount;
+		const restored = new SessionRegistry({ agentDir: f.root, workspaceFiles: new WorkspaceFiles() });
+		await restored.initialize();
+		const restoredTeams = new TeamManager(restored);
+		await restoredTeams.initialize();
+		expect(restored.get(f.session.sessionId).swarm).toMatchObject({ ...legacy, status: "paused" });
+		expect(restored.get(f.session.sessionId).messages).toContainEqual(
+			expect.objectContaining({
+				role: "assistant",
+				content: expect.arrayContaining([
+					expect.objectContaining({ type: "text", text: "Saved conversation result" }),
+				]),
+			}),
+		);
+		expect(restored.state.runs).toEqual(state.runs);
+		expect(f.faux.state.callCount).toBe(calls);
+		expect(await readFile(f.session.path!, "utf8")).toBe(history);
+		const saved = JSON.parse(await readFile(statePath, "utf8"));
+		expect(saved.sessions[0].swarm).toMatchObject({ ...legacy, status: "paused", updatedAt: expect.any(String) });
+		await restoredTeams.close();
+		await restored.close();
+	});
+
+	it.each([
+		{ status: "active" },
+		{ updatedAt: "2026-10-15T00:00:00.000Z" },
+		{ status: "invalid", updatedAt: "2026-10-15T00:00:00.000Z" },
+	])("rejects incomplete or invalid lifecycle metadata without overwriting state: %j", async (lifecycle) => {
+		const f = await fixture();
+		const statePath = join(f.root, "web-harness", "state.json");
+		const state = JSON.parse(await readFile(statePath, "utf8"));
+		state.sessions[0].swarm = {
+			id: "saved-swarm",
+			objective: "Saved objective",
+			createdAt: "2026-10-15T00:00:00.000Z",
+			rootRunId: "saved-run",
+			...lifecycle,
+		};
+		const bytes = JSON.stringify(state);
+		await writeFile(statePath, bytes);
+		const restored = new SessionRegistry({ agentDir: f.root, workspaceFiles: new WorkspaceFiles() });
+		await expect(restored.initialize()).rejects.toThrow("Invalid session swarm state");
+		expect(await readFile(statePath, "utf8")).toBe(bytes);
+	});
+
 	it("rejects corrupt persisted mode metadata without overwriting state", async () => {
 		const f = await fixture();
 		const statePath = join(f.root, "web-harness", "state.json");
