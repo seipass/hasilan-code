@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { CANVAS_LIMITS, canvasSaveSchema } from "../shared/canvas.ts";
+import { CANVAS_LIMITS, canvasSaveSchema, isCanvasDocument, serializeCanvasDesign } from "../shared/canvas.ts";
 import {
 	credentialSchema,
 	modelSchema,
@@ -223,6 +224,16 @@ async function main() {
 				if (parts[1] === "workspaces" && parts[2]) {
 					const id = parts[2];
 					const path = url.searchParams.get("path") ?? "";
+					if (parts[3] === "canvas" && parts[4] === "compose" && parts.length === 5 && method === "POST") {
+						const document = await readJson(request, canvasSaveSchema, CANVAS_LIMITS.bytes);
+						if (!isCanvasDocument(document)) throw new HttpError(400, "設計データの ID・接続先が不正です。");
+						const snapshot = await files.create(
+							id,
+							`.hasilan-code/canvas/design-${randomUUID()}.txt`,
+							Buffer.from(`${serializeCanvasDesign(document.design)}\n`, "utf8"),
+						);
+						return reply({ path: snapshot.path }, 201);
+					}
 					if (parts[3] === "canvas" && parts.length === 4) {
 						if (method === "GET") return reply(await canvases.get(id));
 						if (method === "PUT")

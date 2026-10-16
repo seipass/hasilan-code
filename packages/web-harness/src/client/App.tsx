@@ -209,8 +209,9 @@ export function App() {
 		setRightTab("team");
 		if (window.innerWidth >= 1100) setRightOpen(true);
 	}
-	function composeCanvasDesign(text: string): void {
+	function composeCanvasDesign(path: string): void {
 		if (commandPending.current) throw new Error("送信が完了してから設計を入力欄に追加してください。");
+		const text = `設計ファイル ${JSON.stringify(path)} を読み、内容に沿って進めてください。`;
 		setDraftInsertion({ id: crypto.randomUUID(), text: canvasTarget === "swarm" ? `/hyakki ${text}` : text });
 		setMode("chat");
 	}

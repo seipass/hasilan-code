@@ -111,10 +111,23 @@ async function fixture(limit = 2) {
 				}),
 				{ stopReason: "toolUse" },
 			);
+		const rootAgent = registry.state.agents.find((agent) => agent.sessionId === session.sessionId)!;
+		const rootRuns = registry.state.runs.filter((run) => run.agentId === rootAgent.agentId);
+		const swarm = registry.descriptor(session.sessionId).swarm;
+		const initial = rootRuns.findIndex((run) => run.runId === swarm?.rootRunId);
+		if (rootRuns.length - initial > 1 && swarm?.status === "active")
+			return fauxAssistantMessage(
+				fauxToolCall("team", {
+					action: "swarm",
+					op: "complete",
+					reason: "Verified alpha result and beta result from actual children",
+				}),
+				{ stopReason: "toolUse" },
+			);
 		return fauxAssistantMessage("Integrated alpha result and beta result");
 	};
 	function script() {
-		faux.setResponses(Array.from({ length: 32 }, () => respond));
+		faux.setResponses(Array.from({ length: 64 }, () => respond));
 	}
 	cleanups.push(async () => {
 		await teams.close();
@@ -144,10 +157,16 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		await expect.poll(() => f.held.has("alpha"), { timeout: 10000 }).toBe(true);
 		expect(f.held.has("beta")).toBe(false);
 		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
+		expect(f.registry.activeTools(f.session.sessionId)).toEqual(["team"]);
+		expect(f.registry.delegationTools(f.session.sessionId)).toEqual(["gate"]);
+		expect(
+			f.registry.state.sessions.filter((session) => session.parentSessionId).map((session) => session.tools),
+		).toEqual([["gate"], ["gate"]]);
 		expect(f.registry.state.runs.filter((run) => run.status === "running")).toHaveLength(1);
 		f.held.get("alpha")?.();
 		await expect.poll(() => f.held.has("beta"), { timeout: 10000 }).toBe(true);
 		f.held.get("beta")?.();
+		await expect.poll(() => f.registry.get(f.session.sessionId).swarm?.status).toBe("complete");
 		await idle(f.registry, f.session.sessionId);
 		const detail = f.registry.get(f.session.sessionId);
 		expect(detail.latestRun).toMatchObject({
@@ -161,15 +180,12 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		expect(detail.messages.filter((message) => message.contextInjection)).toHaveLength(2);
 		expect(f.requests.at(-1)).toContain("alpha result");
 		expect(f.requests.at(-1)).toContain("beta result");
-		expect(
-			f.requests.every(
-				(request) => request.includes("Hyakki-Yako Agent Swarm:") && request.includes(admission.swarm.id),
-			),
-		).toBe(true);
 		expect(f.requests[0]).toContain("Preserve this existing instruction.");
 		expect(detail.goal).toBeUndefined();
-		expect(f.registry.state.runs).toHaveLength(4);
-		expect(f.registry.activeTools(f.session.sessionId)).toContain("team");
+		expect(f.registry.state.runs).toHaveLength(5);
+		expect(f.registry.state.runs.filter((run) => run.agentId === detail.latestRun?.agentId)).toHaveLength(3);
+		expect(detail.swarm?.status).toBe("complete");
+		expect(f.registry.activeTools(f.session.sessionId)).toEqual(["gate"]);
 	});
 
 	it("runs independent children concurrently within the existing permits and cancels the entire waiting subtree", async () => {
@@ -186,6 +202,14 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		expect(f.registry.state.runs.map((run) => run.status)).toEqual(["cancelled", "cancelled", "cancelled"]);
 		expect(f.registry.state.pendingInput).toHaveLength(0);
 		expect(f.registry.get(f.session.sessionId).swarm?.objective).toBe("Parallel work");
+		expect(f.registry.get(f.session.sessionId).swarm?.status).toBe("paused");
+		const calls = f.faux.state.callCount;
+		f.faux.setResponses([fauxAssistantMessage("Ordinary chat after stop")]);
+		await f.teams.prompt(f.session.sessionId, { text: "Chat normally", mode: "prompt" });
+		await idle(f.registry, f.session.sessionId);
+		expect(f.faux.state.callCount).toBe(calls + 1);
+		expect(f.registry.get(f.session.sessionId).swarm?.status).toBe("paused");
+		expect(f.registry.activeTools(f.session.sessionId)).toEqual(["gate"]);
 	});
 
 	it("refuses an idle root with a busy child and integrates late results despite a historical paused Goal", async () => {
@@ -210,6 +234,14 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 						action: "spawn",
 						tasks: [{ name: "alpha", task: "Independent work", tools: ["gate"] }],
 					}),
+					{ stopReason: "toolUse" },
+				);
+			if (
+				JSON.stringify(context.messages).includes("alpha result") &&
+				f.registry.descriptor(f.session.sessionId).swarm?.status === "active"
+			)
+				return fauxAssistantMessage(
+					fauxToolCall("team", { action: "swarm", op: "complete", reason: "Integrated actual alpha result" }),
 					{ stopReason: "toolUse" },
 				);
 			return fauxAssistantMessage(
@@ -252,10 +284,10 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		await restored.initialize();
 		const restoredTeams = new TeamManager(restored);
 		await restoredTeams.initialize();
-		expect(restored.get(f.session.sessionId).swarm).toEqual(swarm);
-		expect(restored.list(f.workspace.id).find((session) => session.sessionId === f.session.sessionId)?.swarm).toEqual(
-			swarm,
-		);
+		expect(restored.get(f.session.sessionId).swarm).toMatchObject({ id: swarm.id, status: "paused" });
+		expect(
+			restored.list(f.workspace.id).find((session) => session.sessionId === f.session.sessionId)?.swarm?.status,
+		).toBe("paused");
 		expect(restored.state.runs.map((run) => run.status)).toEqual(["interrupted", "interrupted", "interrupted"]);
 		expect(f.faux.state.callCount).toBe(calls);
 		await restoredTeams.close();
@@ -307,6 +339,224 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		await expect(
 			f.teams.startSwarm(child.sessionId, { objective: "Child cannot coordinate a new swarm" }),
 		).rejects.toMatchObject({ statusCode: 409 });
+	});
+
+	it("continues across multiple root turns only until explicit completion and preserves ordinary chat", async () => {
+		const f = await fixture(1);
+		f.script();
+		await f.teams.startSwarm(f.session.sessionId, { objective: "Finish all delegated work" });
+		await expect.poll(() => f.held.has("alpha")).toBe(true);
+		f.held.get("alpha")?.();
+		await expect.poll(() => f.held.has("beta")).toBe(true);
+		f.held.get("beta")?.();
+		await expect.poll(() => f.registry.get(f.session.sessionId).swarm?.status).toBe("complete");
+		await idle(f.registry, f.session.sessionId);
+		const detail = f.registry.get(f.session.sessionId);
+		expect(f.registry.state.runs.filter((run) => run.agentId === detail.latestRun?.agentId)).toHaveLength(2);
+		expect(detail.messages.filter((message) => message.role === "user")).toHaveLength(1);
+		expect(
+			detail.toolCalls.findLast((call) => {
+				const input = call.input;
+				return input !== null && typeof input === "object" && "action" in input && input.action === "swarm";
+			}),
+		).toMatchObject({
+			status: "success",
+			input: { action: "swarm", op: "complete" },
+		});
+		expect(detail.swarm).not.toHaveProperty("tokenBudget");
+		expect(detail.swarm).not.toHaveProperty("tokensUsed");
+		const calls = f.faux.state.callCount;
+		f.faux.setResponses([fauxAssistantMessage("Normal parent conversation")]);
+		await f.teams.prompt(f.session.sessionId, { text: "New unrelated question", mode: "prompt" });
+		await idle(f.registry, f.session.sessionId);
+		expect(f.faux.state.callCount).toBe(calls + 1);
+		expect(f.registry.get(f.session.sessionId).swarm?.status).toBe("complete");
+	});
+
+	it.each(["error", "aborted", "length"] as const)(
+		"pauses after model %s without retry or continuation",
+		async (stopReason) => {
+			const f = await fixture();
+			f.faux.setResponses([
+				fauxAssistantMessage("Interrupted", {
+					stopReason,
+					errorMessage: stopReason === "error" ? "overloaded_error" : undefined,
+				}),
+			]);
+			await f.teams.startSwarm(f.session.sessionId, { objective: "Do not retry model failures" });
+			await expect.poll(() => f.registry.get(f.session.sessionId).swarm?.status).toBe("paused");
+			await idle(f.registry, f.session.sessionId);
+			expect(f.faux.state.callCount).toBe(1);
+			expect(f.registry.state.runs).toHaveLength(1);
+		},
+	);
+
+	it("blocks explicitly on child failure without manufacturing successful completion", async () => {
+		const f = await fixture(1);
+		const respond: FauxResponseFactory = (context) => {
+			if (getCurrentSystemPrompt(context.messages).includes("Agent role: failure"))
+				return fauxAssistantMessage("Child failed", { stopReason: "error", errorMessage: "Missing prerequisite" });
+			if (!context.messages.some((message) => message.role === "toolResult" && message.toolName === "team"))
+				return fauxAssistantMessage(
+					fauxToolCall("team", {
+						action: "workflow",
+						tasks: [{ name: "failure", task: "Perform the actual implementation", tools: ["gate"] }],
+					}),
+					{ stopReason: "toolUse" },
+				);
+			const attemptedCompletion = f.registry.get(f.session.sessionId).toolCalls.some((call) => {
+				const input = call.input;
+				return input !== null && typeof input === "object" && "op" in input && input.op === "complete";
+			});
+			if (!attemptedCompletion)
+				return fauxAssistantMessage(
+					fauxToolCall("team", { action: "swarm", op: "complete", reason: "Cannot claim failed work" }),
+					{ stopReason: "toolUse" },
+				);
+			if (f.registry.descriptor(f.session.sessionId).swarm?.status === "active")
+				return fauxAssistantMessage(
+					fauxToolCall("team", { action: "swarm", op: "block", reason: "Child failed: Missing prerequisite" }),
+					{ stopReason: "toolUse" },
+				);
+			return fauxAssistantMessage("Need the missing prerequisite");
+		};
+		f.faux.setResponses(Array.from({ length: 12 }, () => respond));
+		await f.teams.startSwarm(f.session.sessionId, { objective: "Respect real child failure" });
+		await idle(f.registry, f.session.sessionId);
+		expect(f.registry.get(f.session.sessionId).swarm).toMatchObject({
+			status: "blocked",
+			reason: "Child failed: Missing prerequisite",
+		});
+		expect(f.registry.state.runs.map((run) => run.status)).toEqual(["completed", "failed"]);
+		expect(f.registry.get(f.session.sessionId).toolCalls).toContainEqual(
+			expect.objectContaining({
+				status: "error",
+				input: { action: "swarm", op: "complete", reason: "Cannot claim failed work" },
+			}),
+		);
+	});
+
+	it("refuses completion without real delegated work and pauses prose-only orchestration", async () => {
+		const f = await fixture();
+		f.faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("team", { action: "swarm", op: "complete", reason: "Imaginary work" }), {
+				stopReason: "toolUse",
+			}),
+			fauxAssistantMessage("No real work"),
+		]);
+		await f.teams.startSwarm(f.session.sessionId, { objective: "Require real delegation" });
+		await expect.poll(() => f.registry.get(f.session.sessionId).swarm?.status).toBe("paused");
+		await idle(f.registry, f.session.sessionId);
+		expect(f.registry.get(f.session.sessionId).toolCalls[0]).toMatchObject({ status: "error" });
+		expect(f.registry.get(f.session.sessionId).swarm?.reason).toContain("no tool progress");
+		expect(f.faux.state.callCount).toBe(2);
+	});
+
+	it("pauses repeated inspection rather than spinning through autonomous root turns", async () => {
+		const f = await fixture();
+		const inspect = fauxAssistantMessage(fauxToolCall("team", { action: "profiles" }), { stopReason: "toolUse" });
+		f.faux.setResponses([
+			inspect,
+			fauxAssistantMessage("Inspected profiles"),
+			fauxAssistantMessage(fauxToolCall("team", { action: "profiles" }), { stopReason: "toolUse" }),
+			fauxAssistantMessage("Inspected the same profiles"),
+		]);
+		await f.teams.startSwarm(f.session.sessionId, { objective: "Avoid no-work loops" });
+		await expect.poll(() => f.registry.get(f.session.sessionId).swarm?.status).toBe("paused");
+		await idle(f.registry, f.session.sessionId);
+		expect(f.registry.get(f.session.sessionId).swarm?.reason).toContain("repeated");
+		expect(f.registry.state.runs).toHaveLength(2);
+		expect(f.faux.state.callCount).toBe(4);
+	});
+
+	it("rejects implementation tools on the root while keeping normal chat grants intact", async () => {
+		const f = await fixture();
+		f.faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("gate", { name: "forbidden-root-work" }), { stopReason: "toolUse" }),
+			fauxAssistantMessage(
+				fauxToolCall("team", { action: "swarm", op: "block", reason: "Delegate implementation instead" }),
+				{ stopReason: "toolUse" },
+			),
+			fauxAssistantMessage("Implementation belongs to a child"),
+		]);
+		await f.teams.startSwarm(f.session.sessionId, { objective: "Coordinate, do not implement" });
+		await idle(f.registry, f.session.sessionId);
+		expect(f.held.size).toBe(0);
+		expect(f.registry.get(f.session.sessionId).swarm?.status).toBe("blocked");
+		expect(f.registry.activeTools(f.session.sessionId)).toEqual(["gate"]);
+	});
+
+	it("lets a user stop win before an autonomous continuation is admitted", async () => {
+		const f = await fixture();
+		f.faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("team", { action: "profiles" }), { stopReason: "toolUse" }),
+			fauxAssistantMessage("Ready for the next orchestration turn"),
+		]);
+		let stopping: Promise<{ status: "cancelled" }> | undefined;
+		const unsubscribe = f.registry.subscribe((event) => {
+			if (
+				event.sessionId === f.session.sessionId &&
+				f.registry.get(f.session.sessionId).latestRun?.status === "completed" &&
+				f.registry.descriptor(f.session.sessionId).swarm?.status === "active" &&
+				!stopping
+			)
+				stopping = f.teams.stop(f.session.sessionId);
+		});
+		await f.teams.startSwarm(f.session.sessionId, { objective: "Allow user interruption between rounds" });
+		await expect.poll(() => f.registry.get(f.session.sessionId).swarm?.status).toBe("paused");
+		await stopping;
+		unsubscribe();
+		expect(f.registry.state.runs).toHaveLength(1);
+		expect(f.faux.state.callCount).toBe(2);
+	});
+
+	it("holds late child results after blocking and refuses completion while the child is still active", async () => {
+		const f = await fixture(2);
+		const respond: FauxResponseFactory = (context) => {
+			if (getCurrentSystemPrompt(context.messages).includes("Agent role: alpha")) {
+				if (!context.messages.some((message) => message.role === "toolResult" && message.toolName === "gate"))
+					return fauxAssistantMessage(fauxToolCall("gate", { name: "alpha" }), { stopReason: "toolUse" });
+				return fauxAssistantMessage("Late alpha result");
+			}
+			const calls = f.registry.get(f.session.sessionId).toolCalls;
+			if (calls.length === 0)
+				return fauxAssistantMessage(
+					fauxToolCall("team", {
+						action: "spawn",
+						tasks: [{ name: "alpha", task: "Actual implementation", tools: ["gate"] }],
+					}),
+					{ stopReason: "toolUse" },
+				);
+			if (calls.length === 1)
+				return fauxAssistantMessage(
+					fauxToolCall("team", { action: "swarm", op: "complete", reason: "Child still running" }),
+					{ stopReason: "toolUse" },
+				);
+			if (f.registry.descriptor(f.session.sessionId).swarm?.status === "active")
+				return fauxAssistantMessage(
+					fauxToolCall("team", { action: "swarm", op: "block", reason: "External decision required" }),
+					{ stopReason: "toolUse" },
+				);
+			return fauxAssistantMessage("Waiting for the user's decision");
+		};
+		f.faux.setResponses(Array.from({ length: 16 }, () => respond));
+		await f.teams.startSwarm(f.session.sessionId, { objective: "Do not wake blocked orchestration" });
+		await expect.poll(() => f.held.has("alpha")).toBe(true);
+		await idle(f.registry, f.session.sessionId);
+		expect(f.registry.get(f.session.sessionId).swarm?.status).toBe("blocked");
+		expect(f.registry.get(f.session.sessionId).toolCalls[1]?.status).toBe("error");
+		const root = f.registry.get(f.session.sessionId).latestRun;
+		f.held.get("alpha")?.();
+		const child = f.registry.state.sessions.find((session) => session.parentSessionId === f.session.sessionId)!;
+		await idle(f.registry, child.sessionId);
+		expect(f.registry.get(f.session.sessionId).latestRun?.runId).toBe(root?.runId);
+		expect(f.registry.get(f.session.sessionId).swarm?.status).toBe("blocked");
+		expect(f.registry.get(f.session.sessionId).pendingInput).toContainEqual(
+			expect.objectContaining({
+				completionRunId: f.registry.get(child.sessionId).latestRun?.runId,
+				status: "undelivered",
+			}),
+		);
 	});
 
 	it("rejects corrupt persisted mode metadata without overwriting state", async () => {

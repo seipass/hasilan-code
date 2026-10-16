@@ -7,10 +7,15 @@ export const swarmStartSchema = Type.Object(
 );
 export type SwarmStart = Static<typeof swarmStartSchema>;
 
-/** Durable mode identity; execution state comes from TeamManager runs, not a second scheduler. */
+export type SwarmStatus = "active" | "paused" | "blocked" | "complete";
+
+/** Durable objective lifecycle; TeamManager remains the only execution scheduler. */
 export interface Swarm {
 	id: string;
 	objective: string;
 	createdAt: string;
+	updatedAt: string;
+	status: SwarmStatus;
+	reason?: string;
 	rootRunId: string;
 }

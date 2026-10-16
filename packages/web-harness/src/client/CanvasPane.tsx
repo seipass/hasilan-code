@@ -6,7 +6,6 @@ import {
 	type CanvasNode,
 	emptyCanvasDocument,
 	isCanvasDocument,
-	serializeCanvasDesign,
 } from "../shared/canvas.ts";
 import { api, command, errorMessage } from "./api.ts";
 import "./CanvasPane.css";
@@ -14,7 +13,7 @@ import "./CanvasPane.css";
 export interface CanvasPaneProps {
 	workspaceId: string;
 	destinationControl: ReactNode;
-	onComposeDesign: (text: string) => void;
+	onComposeDesign: (path: string) => void;
 	onDirtyChange?: (dirty: boolean) => void;
 }
 
@@ -184,8 +183,10 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		cancelConnection();
 		try {
 			if (action === "use") {
-				onComposeDesign(serializeCanvasDesign(design));
-				if (mounted.current) setNotice("現在の設計を AI への下書きに追加しました。送信先と内容を確認してから送信してください。設計の保存は別操作です。");
+				const { path } = await command<{ path: string }>(`${endpoint}/compose`, document);
+				if (!mounted.current) return;
+				onComposeDesign(path);
+				setNotice("設計の指示と JSON を txt に保存し、ファイルのパスを下書きに追加しました。設計の保存は別操作です。");
 			} else {
 				const result = action === "load" ? await api<unknown>(endpoint) : await command<unknown>(endpoint, document, "PUT");
 				if (!isCanvasDocument(result)) throw new Error("サーバーから届いた設計データが不正です。");

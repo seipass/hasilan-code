@@ -9,7 +9,7 @@ import {
 } from "../shared/context-injection.ts";
 import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal, GoalAction, GoalStatus } from "../shared/goals.ts";
-import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm, type SwarmStart } from "../shared/swarm.ts";
+import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm, type SwarmStart, type SwarmStatus } from "../shared/swarm.ts";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
 import { loadTeamProfiles } from "./team-profiles.ts";
 import { validateWorkflow, type WorkflowTask } from "./team-workflow.ts";
@@ -103,6 +103,7 @@ interface RuntimeRun {
 	resolveDone: () => void;
 	executing: boolean;
 	goalId?: string;
+	swarmId?: string;
 }
 interface Waiter {
 	callerRunId: string;
@@ -149,6 +150,14 @@ const teamParameters = Type.Union([
 		timeoutMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 300000 })),
 	}),
 	Type.Object({ action: Type.Literal("stop"), agentId: Type.String() }),
+	Type.Object(
+		{
+			action: Type.Literal("swarm"),
+			op: Type.Union([Type.Literal("complete"), Type.Literal("block")]),
+			reason: Type.String({ minLength: 1, maxLength: 16384 }),
+		},
+		{ additionalProperties: false },
+	),
 ]);
 const goalParameters = Type.Union([
 	Type.Object({ op: Type.Literal("get") }, { additionalProperties: false }),
@@ -176,6 +185,8 @@ export class TeamManager {
 	private readonly goalTimers = new Map<string, NodeJS.Timeout>();
 	private readonly autonomousRuns = new Set<string>();
 	private readonly goalFingerprints = new Map<string, string>();
+	private readonly swarmTimers = new Map<string, NodeJS.Timeout>();
+	private readonly swarmFingerprints = new Map<string, string>();
 	private readonly listeners = new Set<(event: { type: "team_changed"; workspaceId: string }) => void>();
 	private readonly unsubscribe: () => void;
 	private accepting = true;
@@ -299,12 +310,14 @@ export class TeamManager {
 			resolveDone = resolve;
 		});
 		const goal = this.registry.descriptor(agent.sessionId).goal;
+		const swarm = this.registry.descriptor(agent.sessionId).swarm;
 		this.runtime.set(run.runId, {
 			controller: new AbortController(),
 			done,
 			resolveDone,
 			executing: false,
 			goalId: goal?.status === "active" ? goal.id : undefined,
+			swarmId: swarm?.status === "active" ? swarm.id : undefined,
 		});
 		return run;
 	}
@@ -442,6 +455,76 @@ export class TeamManager {
 			}, 0),
 		);
 	}
+	private updateSwarm(sessionId: string, status: SwarmStatus, reason?: string): void {
+		const swarm = this.registry.descriptor(sessionId).swarm;
+		if (!swarm) return;
+		swarm.status = status;
+		swarm.reason = reason;
+		swarm.updatedAt = new Date().toISOString();
+		if (status !== "active") {
+			clearTimeout(this.swarmTimers.get(sessionId));
+			this.swarmTimers.delete(sessionId);
+			this.swarmFingerprints.delete(swarm.id);
+		}
+	}
+	private scheduleSwarm(agent: AgentRecord): void {
+		const swarm = this.registry.descriptor(agent.sessionId).swarm;
+		if (
+			swarm?.status !== "active" ||
+			!this.accepting ||
+			this.fenced.has(agent.agentId) ||
+			this.swarmTimers.has(agent.sessionId) ||
+			this.registry.state.agents.some((child) => this.ancestor(agent.agentId, child) && this.current(child))
+		)
+			return;
+		const swarmId = swarm.id;
+		// As with Goal, user input and stop commands win before the next autonomous admission.
+		this.swarmTimers.set(
+			agent.sessionId,
+			setTimeout(() => {
+				this.swarmTimers.delete(agent.sessionId);
+				void this.registry
+					.mutate(async () => {
+						const currentSwarm = this.registry.descriptor(agent.sessionId).swarm;
+						if (
+							!this.accepting ||
+							this.fenced.has(agent.agentId) ||
+							currentSwarm?.id !== swarmId ||
+							currentSwarm.status !== "active" ||
+							this.current(agent) ||
+							this.registry.state.agents.some(
+								(child) => this.ancestor(agent.agentId, child) && this.current(child),
+							)
+						)
+							return;
+						const previous = this.latest(agent);
+						const run = this.newRun(agent, `Hyakki-Yako: ${currentSwarm.objective}`, "context");
+						for (const input of this.registry.state.pendingInput)
+							if (input.runId === previous?.runId && input.status === "undelivered") {
+								input.runId = run.runId;
+								input.status = "pending";
+								input.delivered = false;
+							}
+						await this.registry.persist();
+						this.enqueue(agent.teamId, { runId: run.runId });
+						this.pump(agent.teamId);
+						this.changed(agent);
+					})
+					.catch((error: unknown) => {
+						void this.registry.mutate(async () => {
+							if (this.registry.descriptor(agent.sessionId).swarm?.id !== swarmId) return;
+							this.updateSwarm(
+								agent.sessionId,
+								"paused",
+								error instanceof Error ? error.message : String(error),
+							);
+							await this.registry.persist();
+							this.changed(agent);
+						});
+					});
+			}, 0),
+		);
+	}
 	async startSwarm(sessionId: string, input: SwarmStart): Promise<AdmissionResult & { swarm: Swarm }> {
 		const objective = input.objective.trim();
 		if (!objective || objective.length > SWARM_OBJECTIVE_MAX_LENGTH)
@@ -453,6 +536,8 @@ export class TeamManager {
 			const descriptor = this.registry.descriptor(sessionId);
 			if (agent.parentAgentId || descriptor.parentSessionId)
 				throw new HarnessError("Swarm mode requires a root session", 409);
+			if (descriptor.swarm?.status === "active")
+				throw new HarnessError("Stop the active Hyakki-Yako swarm before starting another", 409);
 			if (descriptor.goal?.status === "active")
 				throw new HarnessError("Pause or drop the active Goal before starting a swarm", 409);
 			if (
@@ -469,7 +554,10 @@ export class TeamManager {
 				objective,
 				createdAt: new Date().toISOString(),
 				rootRunId: run.runId,
+				updatedAt: new Date().toISOString(),
+				status: "active",
 			};
+			this.runtime.get(run.runId)!.swarmId = descriptor.swarm.id;
 			await this.registry.persist();
 			this.enqueue(agent.teamId, { runId: run.runId });
 			this.pump(agent.teamId);
@@ -494,6 +582,8 @@ export class TeamManager {
 			const descriptor = this.registry.descriptor(sessionId);
 			if (agent.parentAgentId || descriptor.parentSessionId)
 				throw new HarnessError("Goal mode requires a root session", 409);
+			if (descriptor.swarm?.status === "active")
+				throw new HarnessError("Stop the active Hyakki-Yako swarm before starting a Goal", 409);
 			if (
 				this.registry.state.agents.some(
 					(entry) =>
@@ -591,7 +681,8 @@ export class TeamManager {
 		};
 		const current = this.current(parent);
 		const goal = this.registry.descriptor(parent.sessionId).goal;
-		const held = !current && !!goal && goal.status !== "active" && !this.registry.descriptor(parent.sessionId).swarm;
+		const swarm = this.registry.descriptor(parent.sessionId).swarm;
+		const held = goal?.status !== "active" && (swarm ? swarm.status !== "active" : !current && !!goal);
 		const continuation =
 			current ?? (held ? this.latest(parent) : this.newRun(parent, `Subagent results: ${child.name}`, "context"));
 		const pending: PendingInput = {
@@ -608,7 +699,7 @@ export class TeamManager {
 		};
 		this.registry.state.pendingInput.push(pending);
 		await this.registry.persist();
-		if (current?.status === "running" && this.started.has(current.runId)) {
+		if (!held && current?.status === "running" && this.started.has(current.runId)) {
 			try {
 				await this.deliverPending(pending);
 			} catch {
@@ -678,11 +769,65 @@ export class TeamManager {
 					else this.goalFingerprints.set(goal.id, fingerprint);
 				}
 			}
+			const swarm = this.registry.descriptor(agent.sessionId).swarm;
+			if (swarm?.status === "active" && this.runtime.get(runId)?.swarmId === swarm.id) {
+				if (status !== "completed")
+					this.updateSwarm(agent.sessionId, "paused", error ?? "Run was aborted or did not complete");
+				else if (
+					stranded.length === 0 &&
+					!this.registry.state.agents.some((child) => this.ancestor(agent.agentId, child) && this.current(child))
+				) {
+					const calls = this.registry.get(agent.sessionId).toolCalls.filter((tool) => {
+						if (tool.runId !== runId || tool.status !== "success") return false;
+						if (tool.name !== "team") return true;
+						const input = tool.input;
+						return (
+							input !== null &&
+							typeof input === "object" &&
+							"action" in input &&
+							typeof input.action === "string" &&
+							["spawn", "workflow", "send", "profiles"].includes(input.action)
+						);
+					});
+					const rootIndex = this.registry.state.runs.indexOf(run);
+					const delegatedResults = this.registry.state.runs
+						.filter(
+							(childRun, index) =>
+								index > rootIndex &&
+								terminalStatus[childRun.status] &&
+								this.ancestor(agent.agentId, this.agentById(childRun.agentId)),
+						)
+						.map(({ task, status: childStatus, result: childResult, error: childError }) => ({
+							task,
+							status: childStatus,
+							result: childResult,
+							error: childError,
+						}));
+					// Ignore generated run/session IDs, but keep real work outcomes and inspection results.
+					const fingerprint = JSON.stringify({
+						calls: calls.map(({ name, input, result: toolResult }) => ({
+							name,
+							input,
+							result: name === "team" ? undefined : toolResult,
+						})),
+						delegatedResults,
+					});
+					if (calls.length === 0)
+						this.updateSwarm(
+							agent.sessionId,
+							"paused",
+							"Orchestration made no tool progress; start Hyakki-Yako explicitly to continue",
+						);
+					else if (this.swarmFingerprints.get(swarm.id) === fingerprint)
+						this.updateSwarm(agent.sessionId, "paused", "Orchestration repeated the same tool calls and results");
+					else this.swarmFingerprints.set(swarm.id, fingerprint);
+				}
+			}
 			this.autonomousRuns.delete(runId);
 			if (
 				status === "completed" &&
 				stranded.length > 0 &&
-				(!goal || goal.status === "active" || this.registry.descriptor(agent.sessionId).swarm) &&
+				(goal?.status === "active" || (swarm ? swarm.status === "active" : !goal)) &&
 				this.accepting &&
 				!this.fenced.has(agent.agentId)
 			) {
@@ -706,7 +851,10 @@ export class TeamManager {
 			this.runtime.get(runId)?.resolveDone();
 			this.runtime.delete(runId);
 			this.pump(agent.teamId);
-			if (status === "completed") this.scheduleGoal(agent);
+			if (status === "completed") {
+				this.scheduleGoal(agent);
+				this.scheduleSwarm(agent);
+			}
 		});
 	}
 	async prompt(
@@ -876,7 +1024,7 @@ export class TeamManager {
 			}
 			if (depth >= this.limits().maxDepth) throw new HarnessError("Team maximum depth reached");
 			const descriptor = this.registry.descriptor(sessionId);
-			const tools = this.registry.activeTools(sessionId);
+			const tools = this.registry.delegationTools(sessionId);
 			for (const task of resolved) {
 				if (!task.name.trim() || !task.task.trim()) throw new HarnessError("Agent name and task must not be empty");
 				if (task.tools?.some((tool) => !tools.includes(tool)))
@@ -929,7 +1077,7 @@ export class TeamManager {
 			throw new HarnessError("Invalid workflow timeout", 400);
 		// Reject invalid profiles and tool grants before admitting any workflow child.
 		const resolved = await this.resolveTasks(sessionId, tasks);
-		const allowed = this.registry.activeTools(sessionId);
+		const allowed = this.registry.delegationTools(sessionId);
 		for (const task of resolved)
 			if (task.tools?.some((tool) => !allowed.includes(tool)))
 				throw new HarnessError("Child tools must be a subset of the parent's active tools", 400);
@@ -1206,6 +1354,21 @@ export class TeamManager {
 						await this.registry.persist();
 						this.changed(agent);
 					}
+					const swarm = this.registry.descriptor(sessionId).swarm;
+					if (swarm?.status === "active" && this.runtime.get(run.runId)?.swarmId === swarm.id) {
+						if (["error", "aborted", "length"].includes(event.message.stopReason)) {
+							this.updateSwarm(
+								sessionId,
+								"paused",
+								event.message.errorMessage ??
+									(event.message.stopReason === "length"
+										? "Model output limit reached; start Hyakki-Yako explicitly to continue"
+										: "Model request failed or was aborted"),
+							);
+							await this.registry.persist();
+							this.changed(agent);
+						}
+					}
 					return;
 				}
 				if (event.type === "agent_start") {
@@ -1297,8 +1460,10 @@ export class TeamManager {
 					goalAction === "drop" ? "Dropped by user" : "Paused by user",
 				);
 			} else if (goal?.status === "active") this.updateGoal(sessionId, "paused", "Stopped by user");
-			// Persist the goal transition before aborting: settlement must never requeue it.
-			if (goal) await this.registry.persist();
+			const swarm = this.registry.descriptor(sessionId).swarm;
+			if (swarm?.status === "active") this.updateSwarm(sessionId, "paused", "Stopped by user");
+			// Persist lifecycle transitions before aborting: settlement must never requeue them.
+			if (goal || swarm) await this.registry.persist();
 			affected = this.registry.state.agents.filter(
 				(agent) => agent.agentId === target.agentId || this.ancestor(target.agentId, agent),
 			);
@@ -1373,7 +1538,7 @@ export class TeamManager {
 			name: "team",
 			label: "Agent team",
 			description:
-				"Spawn agents with optional named profiles, inspect available profiles, message children, wait on pinned runs, stop a child subtree, or run a dependency workflow. A workflow starts independent tasks together, passes successful prerequisites' results to dependents, and skips dependents of failures. Other agents can run while you wait. Cannot wait on or stop yourself or ancestors.",
+				"Spawn agents with optional named profiles, inspect available profiles, message children, wait on pinned runs, stop a child subtree, or run a dependency workflow. A workflow starts independent tasks together, passes successful prerequisites' results to dependents, and skips dependents of failures. Other agents can run while you wait. Cannot wait on or stop yourself or ancestors. An active Hyakki-Yako root must explicitly finish with action swarm, op complete or block, and a concrete reason; complete requires successful delegated work and an idle child subtree.",
 			promptSnippet:
 				"For independent subtasks, spawn them together; for ordered review/build steps, use workflow with dependsOn. Use profiles to discover configured specialties. Read child results, integrate them, and report failures. Send instructions during active runs and wait for completion.",
 			executionMode: "sequential",
@@ -1381,6 +1546,46 @@ export class TeamManager {
 			execute: async (_callId, params: Static<typeof teamParameters>, signal) => {
 				let result: unknown;
 				switch (params.action) {
+					case "swarm":
+						result = await this.registry.mutate(async () => {
+							const swarm = this.registry.descriptor(sessionId).swarm;
+							const agent = this.agentForSession(sessionId);
+							const current = this.current(agent);
+							if (
+								agent.parentAgentId ||
+								swarm?.status !== "active" ||
+								!current ||
+								this.runtime.get(current.runId)?.swarmId !== swarm.id
+							)
+								throw new HarnessError("No active Hyakki-Yako root run", 409);
+							if (!params.reason.trim()) throw new HarnessError("Swarm completion or block requires a reason");
+							if (params.op === "complete") {
+								const descendants = this.registry.state.agents.filter((child) =>
+									this.ancestor(agent.agentId, child),
+								);
+								if (descendants.some((child) => this.current(child)))
+									throw new HarnessError("Await all delegated work before completing Hyakki-Yako", 409);
+								const initial = this.registry.state.runs.findIndex((run) => run.runId === swarm.rootRunId);
+								if (
+									!this.registry.state.runs.some(
+										(run, index) =>
+											index > initial &&
+											run.status === "completed" &&
+											descendants.some((child) => child.agentId === run.agentId),
+									)
+								)
+									throw new HarnessError("Hyakki-Yako completion requires successful delegated work", 409);
+							}
+							this.updateSwarm(
+								sessionId,
+								params.op === "complete" ? "complete" : "blocked",
+								params.reason.trim(),
+							);
+							await this.registry.persist();
+							this.changed(agent);
+							return structuredClone(swarm);
+						});
+						break;
 					case "spawn":
 						result = await this.spawn(sessionId, params.tasks);
 						break;

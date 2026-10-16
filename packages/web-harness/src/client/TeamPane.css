@@ -40,10 +40,11 @@
 .team-graph-viewport {
 	position: relative;
 	height: clamp(280px, 43dvh, 420px);
-	overflow: auto;
+	overflow: clip;
 	overscroll-behavior: contain;
-	scrollbar-width: thin;
-	scrollbar-color: var(--scroll-thumb) transparent;
+	touch-action: none;
+	user-select: none;
+	cursor: grab;
 	border-block: 1px solid var(--border-subtle);
 	background-color: var(--surface-sunken);
 	background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
@@ -51,7 +52,8 @@
 }
 
 .team-graph-viewport:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
-.team-graph-extent { position: relative; min-width: 100%; min-height: 100%; }
+.team-graph-viewport.is-dragging,
+.team-graph-viewport.is-dragging .team-graph-node { cursor: grabbing; }
 .team-graph-canvas { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
 .team-graph-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .team-graph-edge { fill: none; stroke: var(--on-surface-muted); stroke-width: 1.6; }
@@ -71,6 +73,7 @@
 	box-shadow: 0 4px 12px #0003;
 	color: var(--on-surface);
 	text-align: left;
+	cursor: grab;
 }
 
 .team-graph-node.is-root { border-radius: 14px; background: var(--surface-raised); border-top-width: 4px; }

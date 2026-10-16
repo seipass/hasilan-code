@@ -152,6 +152,8 @@ interface LiveSession {
 	finalText?: string;
 	finalError?: string;
 	aborted: boolean;
+	/** Implementation grants retained while the swarm root uses a read-only orchestration loadout. */
+	delegatedTools?: string[];
 }
 export interface ExecutionOutcome {
 	aborted: boolean;
@@ -227,7 +229,10 @@ function validateState(value: unknown): asserts value is HarnessState {
 				swarm.objective.length > SWARM_OBJECTIVE_MAX_LENGTH ||
 				typeof swarm.createdAt !== "string" ||
 				typeof swarm.rootRunId !== "string" ||
-				!swarm.rootRunId
+				!swarm.rootRunId ||
+				!["active", "paused", "blocked", "complete"].includes(swarm.status) ||
+				typeof swarm.updatedAt !== "string" ||
+				(swarm.reason !== undefined && typeof swarm.reason !== "string")
 			)
 				throw new Error("Invalid session swarm state");
 		}
@@ -349,7 +354,7 @@ export class SessionRegistry {
 	}
 	async initialize(): Promise<void> {
 		let parsed: unknown;
-		let savedGoals = false;
+		let savedModes = false;
 		try {
 			parsed = JSON.parse(await readFile(this.statePath, "utf8"));
 		} catch (error) {
@@ -358,13 +363,21 @@ export class SessionRegistry {
 		if (parsed !== undefined) {
 			validateState(parsed);
 			Object.assign(this.state, parsed);
-			savedGoals = this.state.sessions.some((descriptor) => descriptor.goal !== undefined);
-			for (const descriptor of this.state.sessions)
+			savedModes = this.state.sessions.some(
+				(descriptor) => descriptor.goal !== undefined || descriptor.swarm !== undefined,
+			);
+			for (const descriptor of this.state.sessions) {
 				if (descriptor.goal?.status === "active") {
 					descriptor.goal.status = "paused";
 					descriptor.goal.reason = "Host restarted; resume explicitly to continue";
 					descriptor.goal.updatedAt = new Date().toISOString();
 				}
+				if (descriptor.swarm?.status === "active") {
+					descriptor.swarm.status = "paused";
+					descriptor.swarm.reason = "Host restarted; start Hyakki-Yako explicitly to continue";
+					descriptor.swarm.updatedAt = new Date().toISOString();
+				}
+			}
 		}
 		for (const workspace of this.state.workspaces) {
 			const registered = await this.options.workspaceFiles.register(workspace.path, workspace.id);
@@ -384,7 +397,7 @@ export class SessionRegistry {
 			descriptor.path = manager.getSessionFile();
 			this.addLive(descriptor, manager);
 		}
-		if (savedGoals) await this.persist();
+		if (savedModes) await this.persist();
 	}
 	private newManager(descriptor: SessionDescriptor): SessionManager {
 		const parent = descriptor.parentSessionId ? this.descriptor(descriptor.parentSessionId) : undefined;
@@ -640,7 +653,12 @@ export class SessionRegistry {
 									event.systemPromptOptions.includeDocumentation = false;
 								});
 								pi.on("context", async (event) => {
-									if (descriptor.swarm && descriptor.goal?.status !== "active")
+									await this.mutate(() => undefined);
+									if (
+										descriptor.swarm &&
+										(descriptor.swarm.status === "active" || live.delegatedTools) &&
+										descriptor.goal?.status !== "active"
+									)
 										return {
 											messages: [
 												...event.messages,
@@ -714,29 +732,43 @@ export class SessionRegistry {
 						mutateQueuedInput(inputId: string, action: PendingInputAction): boolean;
 						resumeContext(): Promise<void>;
 					};
-					// Disable SDK retry only for paid goal runs; normal sessions retain their settings.
+					const configureExecution = () => {
+						const activeSwarm = descriptor.swarm?.status === "active";
+						settingsManager.applyOverrides({
+							retry: { enabled: descriptor.goal?.status === "active" || activeSwarm ? false : retryEnabled },
+						});
+						if (activeSwarm) {
+							live.delegatedTools ??= session.getActiveToolNames();
+							session.setActiveToolsByName([
+								...live.delegatedTools.filter((name) => ["read", "grep", "glob", "web_search"].includes(name)),
+								"team",
+							]);
+						} else {
+							if (live.delegatedTools) {
+								session.setActiveToolsByName(live.delegatedTools);
+								live.delegatedTools = undefined;
+							}
+							if (descriptor.goal?.status === "active" && !session.getActiveToolNames().includes("goal"))
+								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"]);
+						}
+					};
+					// Disable SDK retries for autonomous modes; normal sessions retain their settings.
 					const retryEnabled = settingsManager.getRetryEnabled();
 					adapter = {
 						subscribe: (listener) =>
 							session.subscribe((event) => {
 								listener(event);
 								if (
-									descriptor.goal?.status === "active" &&
+									(descriptor.goal?.status === "active" || descriptor.swarm?.status === "active") &&
 									event.type === "message_end" &&
 									event.message.role === "assistant" &&
 									["error", "aborted", "length"].includes(event.message.stopReason)
 								)
-									// Prevent SDK overflow recovery from turning a failed goal request into a paid retry.
+									// A failed autonomous request must not trigger SDK overflow recovery or retry.
 									void session.abort().catch(() => undefined);
 							}),
 						prompt: (text) => {
-							settingsManager.applyOverrides({
-								retry: { enabled: descriptor.goal?.status === "active" ? false : retryEnabled },
-							});
-							if (descriptor.goal?.status === "active" && !session.getActiveToolNames().includes("goal"))
-								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"]);
-							if (descriptor.swarm && !session.getActiveToolNames().includes("team"))
-								session.setActiveToolsByName([...session.getActiveToolNames(), "team"]);
+							configureExecution();
 							return session.prompt(text, { expandPromptTemplates: false });
 						},
 						deliverInput: async (text, mode, inputId) => {
@@ -760,13 +792,7 @@ export class SessionRegistry {
 							return true;
 						},
 						resumeContext: async () => {
-							settingsManager.applyOverrides({
-								retry: { enabled: descriptor.goal?.status === "active" ? false : retryEnabled },
-							});
-							if (descriptor.goal?.status === "active" && !session.getActiveToolNames().includes("goal"))
-								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"]);
-							if (descriptor.swarm && !session.getActiveToolNames().includes("team"))
-								session.setActiveToolsByName([...session.getActiveToolNames(), "team"]);
+							configureExecution();
 							if (descriptor.goal?.status === "active")
 								await session.sendCustomMessage(
 									{
@@ -778,12 +804,26 @@ export class SessionRegistry {
 									},
 									{ triggerTurn: false },
 								);
+							if (descriptor.swarm?.status === "active")
+								await session.sendCustomMessage(
+									{
+										customType: "harness-swarm-continuation",
+										content:
+											"Continue orchestrating the unfinished objective. Handle queued user input and child results first. Delegate all implementation and verification; explicitly complete or block with the team tool.",
+										display: false,
+										details: { swarmId: descriptor.swarm.id },
+									},
+									{ triggerTurn: false },
+								);
 							await managedSession.resumeContext();
 						},
 						hasQueuedInput: (inputId) => managedSession.hasQueuedInput(inputId),
 						mutateQueuedInput: (inputId, action) => managedSession.mutateQueuedInput(inputId, action),
 						abort: () => session.abort(),
-						waitForIdle: () => session.waitForIdle(),
+						waitForIdle: async () => {
+							await session.waitForIdle();
+							if (descriptor.swarm?.status !== "active" && live.delegatedTools) configureExecution();
+						},
 						clearQueue: () => session.clearQueue(),
 						getActiveToolNames: () => session.getActiveToolNames(),
 						getContextUsage: () => session.getContextUsage(),
@@ -950,6 +990,10 @@ export class SessionRegistry {
 			this.live.get(id)?.adapter?.getActiveToolNames() ??
 			this.descriptor(id).tools ?? ["read", "edit", "write", "bash", "browser", "web_search", "team"]
 		);
+	}
+	/** Children inherit implementation grants, never the swarm root's restricted execution loadout. */
+	delegationTools(id: string): string[] {
+		return this.live.get(id)?.delegatedTools ?? this.activeTools(id);
 	}
 	clearQueue(id: string): void {
 		this.live.get(id)?.adapter?.clearQueue();

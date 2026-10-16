@@ -86,6 +86,63 @@ describe("team graph layout", () => {
 		expect(layoutTeamGraph(state.agents, state).edges.map((edge) => edge.kind)).toEqual(["parent"]);
 	});
 
+	it("attaches parent and waiting edges to dragged positions and fits negative and distant coordinates", () => {
+		const root = agent("root");
+		const child = agent("child", root.agentId);
+		const run: Run = { runId: "child-run", agentId: child.agentId, task: "Implement", status: "running" };
+		root.currentRun = {
+			runId: "root-run",
+			agentId: root.agentId,
+			task: "Coordinate",
+			status: "waiting",
+			waitingOnRunIds: [run.runId],
+		};
+		const state = snapshot([root, child], [run]);
+		const positions = new Map([
+			[root.agentId, { x: -640, y: -320 }],
+			[child.agentId, { x: 1_600, y: 1_200 }],
+			["another-team", { x: 50_000, y: 50_000 }],
+		]);
+		const graph = layoutTeamGraph(state.agents, state, positions);
+		const [rootNode, childNode] = graph.nodes;
+		expect({ x: rootNode.x, y: rootNode.y }).toEqual(positions.get(root.agentId));
+		expect({ x: childNode.x, y: childNode.y }).toEqual(positions.get(child.agentId));
+		expect(graph.edges).toHaveLength(2);
+		for (const edge of graph.edges) {
+			expect(edge.from).toBe(rootNode);
+			expect(edge.to).toBe(childNode);
+		}
+		for (const node of graph.nodes) {
+			expect(node.x).toBeGreaterThan(graph.x);
+			expect(node.y).toBeGreaterThan(graph.y);
+			expect(node.x + TEAM_NODE_WIDTH).toBeLessThan(graph.x + graph.width);
+			expect(node.y + TEAM_NODE_HEIGHT).toBeLessThan(graph.y + graph.height);
+		}
+		expect(graph.width).toBe(1_600 + TEAM_NODE_WIDTH + 640 + 56);
+		expect(graph.height).toBe(1_200 + TEAM_NODE_HEIGHT + 320 + 56);
+	});
+
+	it("preserves a custom position through refreshed status and new siblings, and restores automatic layout without it", () => {
+		const root = agent("root");
+		const child = agent("child", root.agentId);
+		const state = snapshot([root, child]);
+		const positions = new Map([[child.agentId, { x: -120, y: 720 }]]);
+		const before = layoutTeamGraph(state.agents, state, positions);
+		const refreshedChild: TeamAgent = {
+			...child,
+			currentRun: { runId: "child-run", agentId: child.agentId, task: "Fresh task", status: "running" },
+		};
+		const refreshed = snapshot([{ ...root }, agent("new-sibling", root.agentId), refreshedChild]);
+		const graph = layoutTeamGraph(refreshed.agents, refreshed, positions);
+		const node = graph.nodes.find((entry) => entry.agent.agentId === child.agentId);
+		expect(node?.agent).toBe(refreshedChild);
+		expect({ x: node?.x, y: node?.y }).toEqual(positions.get(child.agentId));
+		expect(graph.edges.find((edge) => edge.to === node)?.to).toBe(node);
+		expect(before.nodes.find((entry) => entry.agent.agentId === child.agentId)?.agent).toBe(child);
+		expect(positions.get(child.agentId)).toEqual({ x: -120, y: 720 });
+		expect(layoutTeamGraph(state.agents, state, new Map())).toEqual(layoutTeamGraph(state.agents, state));
+	});
+
 	it("keeps large and deep teams within scrollable bounds without overlapping nodes on the same row", () => {
 		const agents = [agent("root")];
 		for (let index = 0; index < 30; index++) agents.push(agent(`parallel-${index}`, "root"));
