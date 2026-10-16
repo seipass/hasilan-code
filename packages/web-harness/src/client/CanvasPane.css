@@ -1,0 +1,75 @@
+.canvas-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; height: 100%; overflow: auto; padding: 8px; }
+.canvas-pane summary { cursor: pointer; font-size: 12px; line-height: 1.5; color: var(--on-surface-muted); }
+.canvas-pane summary:hover { color: var(--on-surface); }
+.canvas-pane summary:focus-visible, .canvas-node:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.canvas-layout { display: flex; flex: 1; min-height: 0; }
+.canvas-drawing { position: relative; display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-sunken); }
+.canvas-view-controls { position: relative; z-index: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); border-radius: 10px 10px 0 0; flex: none; background: var(--surface-panel); }
+.canvas-view-controls button, .canvas-properties > summary { padding: 5px 8px; min-height: 32px; font-size: 12px; white-space: nowrap; }
+.canvas-view-controls output { color: var(--on-surface-muted); font-size: 11px; min-width: 38px; text-align: center; }
+.canvas-destination { display: flex; align-items: center; }
+.canvas-destination select { padding: 5px 8px; min-height: 32px; font-size: 12px; }
+.canvas-title { flex: 1; width: 200px; min-width: 130px; max-width: 300px; padding: 5px 8px; min-height: 32px; font-size: 13px; font-weight: 600; background: transparent; border-color: transparent; }
+.canvas-title:hover, .canvas-title:focus { border-color: var(--border-strong); background: var(--surface-raised); }
+.canvas-add, .canvas-use { border-color: var(--primary); color: var(--on-primary-container); background: var(--primary-container); }
+.canvas-toolbar-status { flex: 1; min-width: 80px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--on-surface-muted); }
+.canvas-toolbar-status.warning { color: var(--warning); }
+.canvas-clear { width: 72px; }
+.canvas-properties { position: relative; }
+.canvas-properties > summary { border: 1px solid var(--border); border-radius: 8px; }
+.canvas-properties > div { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; display: grid; gap: 10px; width: min(300px, calc(100vw - 40px)); max-height: min(420px, 60dvh); overflow: auto; padding: 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface-panel); box-shadow: 0 10px 28px #0003; }
+.canvas-file-menu > div { left: auto; right: 0; width: 220px; }
+.canvas-properties label { display: grid; font-size: 11px; gap: 5px; }
+.canvas-properties input, .canvas-properties textarea { width: 100%; min-width: 0; padding: 8px; font-size: 12px; }
+.canvas-properties textarea { resize: vertical; min-height: 65px; max-height: 240px; }
+.canvas-coordinate-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.canvas-message { position: absolute; z-index: 3; bottom: 10px; left: 10px; right: 10px; margin: 0; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; line-height: 1.6; background: var(--surface-panel); }
+.canvas-viewport { position: relative; flex: 1; min-height: 180px; overflow: hidden; border-radius: 0 0 10px 10px; isolation: isolate; touch-action: none; cursor: grab; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 24px 24px; }
+.canvas-viewport:active { cursor: grabbing; }
+.canvas-viewport:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
+.canvas-world { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; transform-origin: 0 0; }
+.canvas-connections { position: absolute; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.canvas-connections g > path { fill: none; stroke: var(--secondary); stroke-width: 2; }
+.canvas-connections marker path { fill: var(--secondary); }
+.canvas-connections .selected > path { stroke: var(--primary); stroke-width: 3; }
+.canvas-connections g > .canvas-edge-hit { stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: pointer; }
+.canvas-connections text { fill: var(--on-surface); font-size: 12px; font-family: inherit; stroke: var(--surface-sunken); stroke-width: 5px; paint-order: stroke; stroke-linejoin: round; }
+.canvas-connections > .canvas-connection-preview { fill: none; stroke: var(--primary); stroke-width: 2; stroke-dasharray: 7 5; }
+.canvas-node { position: absolute; display: flex; flex-direction: column; align-items: stretch; gap: 8px; box-sizing: border-box; padding: 15px; text-align: left; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-panel); color: var(--on-surface); box-shadow: 0 4px 14px #0002; cursor: grab; touch-action: none; user-select: none; }
+.canvas-node:hover { background: var(--surface-raised); }
+.canvas-node:active { cursor: grabbing; }
+.canvas-node.selected { z-index: 2; border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-container), 0 5px 18px #0002; }
+.canvas-node.connection-source { border-style: dashed; border-width: 2px; }
+.canvas-node strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; line-height: 1.45; font-size: 14px; flex: none; }
+.canvas-node-description { color: var(--on-surface-muted); font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.canvas-node-footer { margin-top: auto; display: flex; justify-content: flex-end; }
+.canvas-node-footer button { min-height: 28px; padding: 3px 10px; font-size: 11px; }
+.canvas-node > .canvas-connect-handle, .canvas-node > .canvas-connect-target { position: absolute; top: 50%; transform: translateY(-50%); min-height: 34px; padding: 5px 7px; border-radius: 999px; font-size: 10px; border-color: var(--primary); background: var(--surface-panel); color: var(--on-surface); box-shadow: 0 2px 6px #0002; cursor: pointer; }
+.canvas-node > .canvas-connect-handle { right: -30px; }
+.canvas-node > .canvas-connect-target { left: -30px; background: var(--primary-container); color: var(--on-primary-container); }
+.canvas-connect-handle[aria-pressed="true"] { background: var(--primary-container); color: var(--on-primary-container); }
+.is-connecting .canvas-node { cursor: crosshair; border-color: var(--primary); }
+.is-connecting .canvas-node:hover { box-shadow: 0 0 0 3px var(--primary-container); }
+.canvas-node.is-editing { cursor: default; padding: 10px 14px; }
+.canvas-inline-editor { display: flex; flex-direction: column; gap: 5px; height: 100%; min-height: 0; }
+.canvas-inline-editor label { display: grid; gap: 2px; font-size: 10px; color: var(--on-surface-muted); }
+.canvas-inline-editor input, .canvas-inline-editor textarea { width: 100%; min-width: 0; padding: 5px 6px; font-size: 12px; user-select: text; }
+.canvas-inline-editor input { min-height: 29px; }
+.canvas-inline-editor textarea { min-height: 43px; height: 43px; resize: none; line-height: 1.4; }
+.canvas-inline-editor button { align-self: flex-end; margin-top: auto; padding: 3px 8px; min-height: 26px; font-size: 10px; }
+.canvas-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; cursor: default; }
+.canvas-empty-eyebrow { font-size: 11px; color: var(--primary); letter-spacing: 0.06em; }
+.canvas-empty h3 { margin: 12px 0 0; font-size: 19px; }
+.canvas-empty p { margin: 12px 0 20px; color: var(--on-surface-muted); font-size: 12px; line-height: 1.8; }
+.canvas-empty button { min-height: 42px; font-size: 12px; }
+@media (max-width: 700px) {
+	.canvas-pane { padding: 4px; }
+	.canvas-view-controls { gap: 4px; padding: 5px; }
+	.canvas-title { max-width: none; }
+	.canvas-properties { position: static; }
+	.canvas-properties > div { left: 5px; right: 5px; width: auto; }
+	.canvas-file-menu > div { left: 5px; right: 5px; width: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.canvas-pane *, .canvas-pane *::before, .canvas-pane *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

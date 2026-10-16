@@ -1,6 +1,9 @@
-import { useEffect, useState, type SubmitEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type SubmitEvent } from "react";
 import { Content } from "./Content.tsx";
+import { transitionItems } from "./item-transition.ts";
+import { layoutTeamGraph, selectedTeamAgents, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "./team-graph.ts";
 import type { Run, RunStatus, SessionSummary, TeamAgent, TeamSnapshot } from "./types.ts";
+import "./TeamPane.css";
 
 export const RUN_LABELS: Record<RunStatus, string> = {
 	queued: "開始待ち", running: "作業中", waiting: "結果待ち", cancelling: "停止中",
@@ -18,7 +21,7 @@ type TeamPaneProps = {
 };
 
 function label(agent: TeamAgent): string {
-	return !agent.parentAgentId && agent.name === "Root" ? "調整役" : agent.name;
+	return !agent.parentAgentId && agent.name === "Root" ? "親AI" : agent.name;
 }
 
 function status(agent: TeamAgent): RunStatus | "idle" {
@@ -64,27 +67,93 @@ function MessageForm({ agent, onMessage }: { agent: TeamAgent; onMessage: TeamPa
 	</form>;
 }
 
-function TeamNode({ agent, agents, runs, focusedId, focus }: {
-	agent: TeamAgent;
+function TeamGraph({ agents, snapshot, focusedId, focus }: {
 	agents: TeamAgent[];
-	runs: Run[];
+	snapshot: TeamSnapshot;
 	focusedId: string;
 	focus: (id: string) => void;
 }) {
-	const run = agent.currentRun ?? agent.latestRun;
-	const children = agents.filter((child) => child.parentAgentId === agent.agentId);
-	const waiting = agent.currentRun?.waitingOnRunIds?.map((id) => {
-		const target = runs.find((entry) => entry.runId === id);
-		return agents.find((entry) => entry.agentId === target?.agentId);
-	}).filter((entry): entry is TeamAgent => entry !== undefined);
-	return <li className="team-map-branch">
-		<button type="button" className={`team-map-node status-${status(agent)} ${focusedId === agent.agentId ? "focused" : ""}`} aria-pressed={focusedId === agent.agentId} onClick={() => focus(agent.agentId)}>
-			<span className="team-map-node-heading"><strong>{label(agent)}</strong><span className={`team-map-state status-${status(agent)}`}>{status(agent) === "idle" ? "作業なし" : RUN_LABELS[status(agent) as RunStatus]}</span></span>
-			<span className="team-map-task">{run ? taskText(run).split(/\r?\n/, 1)[0] : "まだ作業はありません"}</span>
-			{waiting && waiting.length > 0 && <span className="team-map-wait">↳ {waiting.map(label).join("、")}の結果待ち</span>}
-		</button>
-		{children.length > 0 && <ul className="team-map-children">{children.map((child) => <TeamNode key={child.agentId} agent={child} agents={agents} runs={runs} focusedId={focusedId} focus={focus} />)}</ul>}
-	</li>;
+	const graph = useMemo(() => layoutTeamGraph(agents, snapshot), [agents, snapshot]);
+	const waitingByAgent = useMemo(() => {
+		const waiting = new Map<string, string[]>();
+		for (const edge of graph.edges) {
+			if (edge.kind !== "waiting") continue;
+			const names = waiting.get(edge.from.agent.agentId);
+			if (names) names.push(label(edge.to.agent));
+			else waiting.set(edge.from.agent.agentId, [label(edge.to.agent)]);
+		}
+		return waiting;
+	}, [graph]);
+	const [zoom, setZoom] = useState(1);
+	const viewport = useRef<HTMLDivElement>(null);
+	const markerId = useId();
+	const helpId = useId();
+	const focused = graph.nodes.find((node) => node.agent.agentId === focusedId);
+	const focusedX = focused?.x;
+	const focusedY = focused?.y;
+	const fitGraph = useCallback(() => {
+		const element = viewport.current;
+		if (element) setZoom(Math.max(0.65, Math.min(1, (element.clientWidth - 12) / graph.width, (element.clientHeight - 12) / graph.height)));
+	}, [graph.width, graph.height]);
+	useEffect(fitGraph, [fitGraph]);
+	function centerSelected() {
+		if (!viewport.current || focusedX === undefined || focusedY === undefined) return;
+		viewport.current.scrollTo({
+			left: (focusedX + TEAM_NODE_WIDTH / 2) * zoom - viewport.current.clientWidth / 2,
+			top: (focusedY + TEAM_NODE_HEIGHT / 2) * zoom - viewport.current.clientHeight / 2,
+		});
+	}
+	useEffect(() => {
+		if (!viewport.current || focusedX === undefined || focusedY === undefined) return;
+		viewport.current.scrollTo({
+			left: (focusedX + TEAM_NODE_WIDTH / 2) * zoom - viewport.current.clientWidth / 2,
+			top: (focusedY + TEAM_NODE_HEIGHT / 2) * zoom - viewport.current.clientHeight / 2,
+		});
+	}, [focusedX, focusedY, zoom]);
+	return <section className="team-graph" aria-label="エージェントの親子関係">
+		<div className="team-graph-heading"><div><h3>チームの関係図</h3><p>親AIと並行して動く担当</p></div><span className="team-graph-total">{agents.length} ノード</span></div>
+		<div className="team-graph-toolbar" role="group" aria-label="関係図の表示">
+			<div className="team-graph-zoom"><button type="button" aria-label="関係図を縮小" disabled={zoom <= 0.65} onClick={() => setZoom((value) => Math.max(0.65, Math.round((value - 0.1) * 100) / 100))}>−</button><output aria-label="関係図の拡大率">{Math.round(zoom * 100)}%</output><button type="button" aria-label="関係図を拡大" disabled={zoom >= 1.4} onClick={() => setZoom((value) => Math.min(1.4, Math.round((value + 0.1) * 100) / 100))}>＋</button></div>
+			<button type="button" onClick={() => setZoom(1)}>等倍</button>
+			<button type="button" onClick={fitGraph}>全体表示</button>
+			<button type="button" onClick={centerSelected}>選択へ</button>
+		</div>
+		<p id={helpId} className="team-graph-help">スクロールで移動 · ノードを選ぶと下に詳細を表示</p>
+		<div ref={viewport} className="team-graph-viewport" tabIndex={0} role="region" aria-label="チーム関係図のスクロール領域" aria-describedby={helpId}>
+			<div className="team-graph-extent" style={{ width: graph.width * zoom, height: graph.height * zoom }}>
+				<div className="team-graph-canvas" style={{ width: graph.width, height: graph.height, transform: `scale(${zoom})` }}>
+					<svg className="team-graph-edges" width={graph.width} height={graph.height} aria-hidden="true">
+						<defs><marker id={markerId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1 L 7 4 L 1 7" fill="none" stroke="context-stroke" strokeWidth="1.5" /></marker></defs>
+						{graph.edges.map((edge) => {
+							const waiting = edge.kind === "waiting";
+							const x1 = edge.from.x + (waiting ? TEAM_NODE_WIDTH : TEAM_NODE_WIDTH / 2);
+							const y1 = edge.from.y + (waiting ? TEAM_NODE_HEIGHT / 2 : TEAM_NODE_HEIGHT);
+							const x2 = edge.to.x + (waiting ? TEAM_NODE_WIDTH : TEAM_NODE_WIDTH / 2);
+							const y2 = edge.to.y + (waiting ? TEAM_NODE_HEIGHT / 2 : 0);
+							const bendX = Math.max(x1, x2) + 20;
+							const middleY = (y1 + y2) / 2;
+							const path = waiting ? `M ${x1} ${y1} C ${bendX} ${y1}, ${bendX} ${y2}, ${x2} ${y2}` : `M ${x1} ${y1} C ${x1} ${middleY}, ${x2} ${middleY}, ${x2} ${y2}`;
+							return <path key={`${edge.kind}-${edge.from.agent.agentId}-${edge.to.agent.agentId}`} className={`team-graph-edge is-${edge.kind}`} d={path} markerEnd={`url(#${markerId})`} />;
+						})}
+					</svg>
+					{graph.nodes.map(({ agent, x, y }) => {
+						const run = agent.currentRun ?? agent.latestRun;
+						const state = status(agent);
+						const stateLabel = state === "idle" ? "作業なし" : RUN_LABELS[state];
+						const waiting = waitingByAgent.get(agent.agentId) ?? [];
+						const task = run ? taskText(run) : "まだ作業はありません";
+						return <button key={agent.agentId} type="button" className={`team-graph-node status-${state} ${!agent.parentAgentId ? "is-root" : "is-child"} ${focusedId === agent.agentId ? "is-selected" : ""}`} style={{ left: x, top: y, width: TEAM_NODE_WIDTH, height: TEAM_NODE_HEIGHT }} aria-pressed={focusedId === agent.agentId} aria-label={`${label(agent)}、${!agent.parentAgentId ? "親AI" : "子の担当"}、${stateLabel}。${task}${waiting.length ? `。${waiting.join("、")}の結果待ち` : ""}`} title={`${label(agent)}\n${task}`} onClick={() => focus(agent.agentId)}>
+							<span className="team-graph-node-role">{!agent.parentAgentId ? "親AI / チームの起点" : "子の担当"}<span>{focusedId === agent.agentId ? "選択中" : ""}</span></span>
+							<span className="team-graph-node-name">{label(agent)}</span>
+							<span className="team-graph-node-task">{task}</span>
+							<span className="team-graph-node-footer"><span className={`team-map-state status-${state}`}>{stateLabel}</span>{waiting.length > 0 && <span className="team-graph-node-wait" title={`${waiting.join("、")}の結果待ち`}>{waiting.length}人の結果待ち</span>}</span>
+						</button>;
+					})}
+				</div>
+			</div>
+		</div>
+		<div className="team-graph-legend" aria-label="関係図の凡例"><span><i className="team-graph-line" />親 → 子</span><span><i className="team-graph-line is-waiting" />結果を待つ相手 →</span><span><i className="team-graph-selection" />選択中</span></div>
+	</section>;
 }
 
 function RunDetail({ run, snapshot, focus, onFile, now }: {
@@ -116,8 +185,8 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, onSelect, onSt
 	const [now, setNow] = useState(() => Date.now());
 	const selected = snapshot?.agents.find((agent) => agent.sessionId === selectedSessionId);
 	useEffect(() => { setFocusedId(selected?.agentId); }, [selectedSessionId, selected?.agentId]);
-	const agents = snapshot?.agents.filter((agent) => !selected || agent.teamId === selected.teamId) ?? [];
-	const roots = agents.filter((agent) => !agent.parentAgentId);
+	const agents = useMemo(() => selectedTeamAgents(snapshot, selectedSessionId), [snapshot, selectedSessionId]);
+	const roots = agents.filter((agent) => !agent.parentAgentId || !agents.some((parent) => parent.agentId === agent.parentAgentId));
 	const focused = agents.find((agent) => agent.agentId === focusedId) ?? selected ?? roots[0];
 	const workers = agents.filter((agent) => agent.parentAgentId);
 	const active = agents.some((agent) => !!agent.currentRun?.startedAt);
@@ -136,22 +205,25 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, onSelect, onSt
 	}
 	const rootState = roots[0] ? status(roots[0]) : "idle";
 	const problems = counts.problem + (rootState === "failed" || rootState === "interrupted" ? 1 : 0);
-	const situation = problems ? "失敗・中断した作業があります" : counts.running ? "担当が作業中です" : counts.waiting || rootState === "waiting" ? "子の結果を待っています" : counts.queued ? "担当の開始待ちです" : counts.stopping || rootState === "cancelling" ? "停止処理中です" : rootState === "cancelled" ? "チームの作業を中止しました" : rootState === "completed" ? "作業を完了しました" : rootState === "running" ? "調整役が作業中です" : "現在進行中の作業はありません";
+	const situation = problems ? "失敗・中断した作業があります" : counts.running ? "子の担当が作業中です" : counts.waiting || rootState === "waiting" ? "子の結果を待っています" : counts.queued ? "担当の開始待ちです" : counts.stopping || rootState === "cancelling" ? "停止処理中です" : rootState === "cancelled" ? "チームの作業を中止しました" : rootState === "completed" ? "作業を完了しました" : rootState === "running" ? "親AIが作業中です" : "現在進行中の作業はありません";
 	const run = focused?.currentRun ?? focused?.latestRun;
 	const parent = agents.find((agent) => agent.agentId === focused?.parentAgentId);
 	const directChildren = agents.filter((agent) => agent.parentAgentId === focused?.agentId).length;
 	const model = sessions.find((session) => session.sessionId === focused?.sessionId)?.model;
 	const previous = focused ? snapshot?.runs.filter((item) => item.agentId === focused.agentId && item.runId !== run?.runId) ?? [] : [];
+	function focusAgent(id: string) {
+		if (id !== focused?.agentId) transitionItems(() => setFocusedId(id));
+	}
 	return <section className="team-pane" aria-label="チームの進行状況">
-		{roots.length === 0 ? <div className="team-empty"><h2>チームの作業はまだありません</h2><p>担当が起動すると、親子関係と作業状況がここに表示されます。</p></div> : <>
-			<header className="team-overview"><span className="team-section-label">チームの現在地</span><h2>{situation}</h2><p>担当 {workers.length}人 <span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> 完了 {counts.completed}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}</header>
-			<section className="team-map" aria-label="エージェントの親子関係"><div className="team-section-heading"><h3>チームの関係図</h3><span>担当を選ぶと下に詳細を表示</span></div><div className="team-map-scroll"><ul className="team-map-roots">{snapshot && roots.map((agent) => <TeamNode key={agent.agentId} agent={agent} agents={agents} runs={snapshot.runs} focusedId={focused?.agentId ?? ""} focus={setFocusedId} />)}</ul></div></section>
+		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2><p>会話を始めると親AIを、担当が起動すると親子関係と実際の作業状況をここに表示します。</p></div> : <>
+			<header className="team-overview"><span className="team-section-label">ライブ · この会話のチーム</span><h2 role="status">{situation}</h2><p>子の担当 {workers.length}人 <span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> 完了 {counts.completed}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}</header>
+			{snapshot && <TeamGraph key={selected?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} />}
 			{focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
 				<header className="team-focus-header"><div><span className="team-section-label">選択中の担当</span><h3>{label(focused)}</h3></div><button type="button" className="text-link" onClick={() => onSelect(focused.sessionId)}>会話を開く ↗</button></header>
-				<div className="team-relationship">{parent ? <>親: <button type="button" className="text-link" onClick={() => setFocusedId(parent.agentId)}>{label(parent)}</button></> : "チームの調整役"}{directChildren > 0 && <span> · 子 {directChildren}人</span>}{model && <span> · {model.name ?? model.id}</span>}</div>
-				{run ? <RunDetail run={run} snapshot={snapshot} focus={setFocusedId} onFile={onFile} now={now} /> : <p className="team-inline-note">まだ作業はありません。</p>}
+				<div className="team-relationship">{parent ? <>親: <button type="button" className="text-link" onClick={() => focusAgent(parent.agentId)}>{label(parent)}</button></> : "親AI · チームの起点"}{directChildren > 0 && <span> · 子 {directChildren}人</span>}{model && <span> · {model.name ?? model.id}</span>}</div>
+				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /> : <p className="team-inline-note">まだ作業はありません。</p>}
 				<div className="team-focus-actions">{focused.parentAgentId && <details><summary>{label(focused)}にメッセージを送る</summary><MessageForm key={focused.agentId} agent={focused} onMessage={onMessage} /></details>}{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
-				{previous.length > 0 && <details className="team-run-history"><summary>以前の作業 {previous.length}件</summary>{previous.map((item) => <div key={item.runId} className="team-history-item"><RunDetail run={item} snapshot={snapshot} focus={setFocusedId} onFile={onFile} now={now} /></div>)}</details>}
+				{previous.length > 0 && <details className="team-run-history"><summary>以前の作業 {previous.length}件</summary>{previous.map((item) => <div key={item.runId} className="team-history-item"><RunDetail run={item} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /></div>)}</details>}
 			</section>}
 		</>}
 	</section>;

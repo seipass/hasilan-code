@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage } from "../api.ts";
+import { transitionItems } from "../item-transition.ts";
 import { FileMarkdown, SourceLines } from "./FileRendering.tsx";
 import "./FilePane.css";
 
@@ -43,8 +44,8 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen 
 			<button className="files-tree-entry" title={entry.path} aria-current={entry.path === activePath ? "true" : undefined} aria-expanded={entry.kind === "directory" ? open.includes(entry.path) : undefined} onClick={() => {
 				if (entry.kind === "directory") setOpen((previous) => previous.includes(entry.path) ? previous.filter((value) => value !== entry.path) : [...previous, entry.path]);
 				else onOpen(entry.path);
-			}}><span className="files-tree-marker" aria-hidden="true">{entry.kind === "directory" ? (open.includes(entry.path) ? "▾" : "▸") : entry.kind === "symlink" ? "↗" : "·"}</span><span>{entry.name}</span></button>
-			{entry.kind === "directory" && open.includes(entry.path) && <Directory workspaceId={workspaceId} path={entry.path} refreshKey={refreshKey} activePath={activePath} visible={visible} onOpen={onOpen} />}
+			}}><span className="files-tree-marker" aria-hidden="true">{entry.kind === "directory" ? "▸" : entry.kind === "symlink" ? "↗" : "·"}</span><span>{entry.name}</span></button>
+			{entry.kind === "directory" && <div className="files-tree-children" data-open={open.includes(entry.path)} aria-hidden={!open.includes(entry.path)} inert={!open.includes(entry.path)}><div><Directory workspaceId={workspaceId} path={entry.path} refreshKey={refreshKey} activePath={activePath} visible={visible && open.includes(entry.path)} onOpen={onOpen} /></div></div>}
 		</li>)}
 	</ul>;
 }
@@ -143,18 +144,20 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 	}, []);
 
 	function closeFile(path: string) {
-		const remaining = files.filter((file) => file.path !== path);
-		setFiles(remaining);
-		requestAnimationFrame(() => {
-			const selectedTab = tabStrip.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
-			if (selectedTab) selectedTab.focus();
-			else document.getElementById(`${id}-tree`)?.querySelector<HTMLButtonElement>("button")?.focus();
+		transitionItems(() => {
+			const remaining = files.filter((file) => file.path !== path);
+			setFiles(remaining);
+			requestAnimationFrame(() => {
+				const selectedTab = tabStrip.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+				if (selectedTab) selectedTab.focus();
+				else document.getElementById(`${id}-tree`)?.querySelector<HTMLButtonElement>("button")?.focus();
+			});
+			if (path !== activePath) return;
+			const next = remaining[Math.min(files.findIndex((file) => file.path === path), remaining.length - 1)];
+			setActivePath(next?.path);
+			if (next) onOpen(next.path, next.line);
+			else onClear?.();
 		});
-		if (path !== activePath) return;
-		const next = remaining[Math.min(files.findIndex((file) => file.path === path), remaining.length - 1)];
-		setActivePath(next?.path);
-		if (next) onOpen(next.path, next.line);
-		else onClear?.();
 	}
 	function changeOffset(offset: number) {
 		setFiles((previous) => previous.map((file) => file.path === activePath ? { ...file, offset } : file));
@@ -202,7 +205,7 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 						event.preventDefault();
 						const bounds = event.currentTarget.getBoundingClientRect();
 						const after = event.clientX >= bounds.left + bounds.width / 2;
-						if (source !== file.path) setFiles((previous) => {
+						if (source !== file.path) transitionItems(() => setFiles((previous) => {
 							const moved = previous.find((entry) => entry.path === source);
 							if (!moved) return previous;
 							const remaining = previous.filter((entry) => entry.path !== source);
@@ -210,7 +213,7 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 							if (position < 0) return previous;
 							remaining.splice(position + (after ? 1 : 0), 0, moved);
 							return remaining;
-						});
+						}));
 						endTabDrag();
 					}} onDragEnd={endTabDrag}>
 						<button role="tab" id={`${id}-tab-${index}`} aria-controls={`${id}-preview`} aria-selected={file.path === activePath} tabIndex={file.path === activePath ? 0 : -1} title={file.path} onClick={() => onOpen(file.path, file.line)} onKeyDown={(event) => {
@@ -237,7 +240,7 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 					{!active && <p className="files-message muted">ファイルを選択してください。</p>}
 					{active && !loaded && <p className="files-message" role="status">読み込み中…</p>}
 					{loaded?.error && <p role="alert" className="files-message error">{loaded.error}</p>}
-					{active && loaded?.view && loaded.view.path === active.path && <>
+					{active && loaded?.view && loaded.view.path === active.path && <div className="files-content" key={loaded.key}>
 						{loaded.view.kind === "text" && rendered && loaded.markdown !== undefined && (loaded.markdown === "" ? <p className="files-message muted">空のファイル</p> : <FileMarkdown text={loaded.markdown} path={active.path} onFile={onOpen} />)}
 						{loaded.view.kind === "text" && !rendered && <>
 							{active.offset > 1 && <div className="files-page"><button onClick={() => changeOffset(Math.max(1, active.offset - 200))}>前の行</button></div>}
@@ -248,7 +251,7 @@ function WorkspaceFilePane({ workspaceId, target, refreshToken, visible = true, 
 						</>}
 						{loaded.view.kind === "image" && <img className="files-image" alt={loaded.view.path} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} />}
 						{loaded.view.kind === "binary" && <p className="files-message">バイナリファイル</p>}
-					</>}
+					</div>}
 				</div>
 			</div>
 			<div className="files-splitter" role="separator" tabIndex={0} aria-label="ファイルツリーの幅" aria-orientation="vertical" aria-controls={`${id}-tree`} aria-valuemin={minTreeWidth} aria-valuemax={maxTreeWidth} aria-valuenow={displayedTreeWidth} aria-valuetext={`${displayedTreeWidth} ピクセル`} data-resizing={resizing} onPointerDown={(event) => {

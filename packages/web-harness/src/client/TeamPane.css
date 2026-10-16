@@ -1,0 +1,111 @@
+.team-pane {
+	width: 100%;
+	max-width: none;
+}
+
+.team-graph {
+	min-width: 0;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: var(--surface-raised);
+}
+
+.team-graph-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 14px 14px 10px;
+}
+
+.team-graph-heading h3 { margin: 0; font-size: 13px; }
+.team-graph-heading p { margin: 4px 0 0; color: var(--on-surface-muted); font-size: 11px; }
+.team-graph-total { flex-shrink: 0; color: var(--on-surface-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.team-graph-toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 0 12px;
+}
+
+.team-graph-toolbar button { min-height: 30px; padding: 4px 8px; font-size: 11px; }
+.team-graph-zoom { display: flex; align-items: center; gap: 3px; margin-right: auto; }
+.team-graph-zoom button { min-width: 30px; font-size: 14px; }
+.team-graph-zoom output { min-width: 40px; text-align: center; font-size: 11px; color: var(--on-surface-secondary); font-variant-numeric: tabular-nums; }
+.team-graph-help { margin: 9px 14px; color: var(--on-surface-muted); font-size: 10px; line-height: 1.5; }
+
+.team-graph-viewport {
+	position: relative;
+	height: clamp(280px, 43dvh, 420px);
+	overflow: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: var(--scroll-thumb) transparent;
+	border-block: 1px solid var(--border-subtle);
+	background-color: var(--surface-sunken);
+	background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+	background-size: 18px 18px;
+}
+
+.team-graph-viewport:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
+.team-graph-extent { position: relative; min-width: 100%; min-height: 100%; }
+.team-graph-canvas { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
+.team-graph-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.team-graph-edge { fill: none; stroke: var(--on-surface-muted); stroke-width: 1.6; }
+.team-graph-edge.is-waiting { stroke: var(--warning); stroke-width: 1.8; stroke-dasharray: 5 4; }
+
+.team-graph-node {
+	--node-color: var(--border-strong);
+	position: absolute;
+	display: grid;
+	grid-template-rows: 16px 22px minmax(0, 1fr) 24px;
+	gap: 5px;
+	padding: 11px 12px;
+	border: 1px solid var(--node-color);
+	border-top: 3px solid var(--node-color);
+	border-radius: 10px;
+	background: var(--surface-panel);
+	box-shadow: 0 4px 12px #0003;
+	color: var(--on-surface);
+	text-align: left;
+}
+
+.team-graph-node.is-root { border-radius: 14px; background: var(--surface-raised); border-top-width: 4px; }
+.team-graph-node.status-running { --node-color: var(--secondary); }
+.team-graph-node.status-waiting { --node-color: var(--warning); }
+.team-graph-node.status-queued { --node-color: var(--secondary); border-top-style: dashed; }
+.team-graph-node.status-completed { --node-color: var(--success); }
+.team-graph-node.status-failed { --node-color: var(--danger); }
+.team-graph-node.status-interrupted,
+.team-graph-node.status-cancelled,
+.team-graph-node.status-cancelling { --node-color: var(--warning); }
+.team-graph-node:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--primary); }
+.team-graph-node.is-selected { background: var(--primary-container); box-shadow: 0 0 0 2px var(--primary), 0 6px 16px #0004; }
+.team-graph-node.is-selected:hover:not(:disabled) { background: var(--primary-container); }
+.team-graph-node:focus-visible { outline: 3px solid var(--on-primary-container); outline-offset: 4px; z-index: 1; }
+
+.team-graph-node-role { display: flex; justify-content: space-between; gap: 6px; color: var(--on-surface-muted); font-size: 10px; line-height: 16px; }
+.team-graph-node.is-root .team-graph-node-role { color: var(--on-primary-container); }
+.team-graph-node-role > span { color: var(--on-primary-container); }
+.team-graph-node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; line-height: 22px; }
+.team-graph-node-task { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: var(--on-surface-secondary); font-size: 11px; line-height: 1.55; }
+.team-graph-node-footer { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-width: 0; }
+.team-graph-node-wait { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warning); font-size: 10px; }
+.team-pane .team-map-state.status-queued { color: var(--on-secondary-container); background: var(--secondary-container); }
+
+.team-graph-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 10px 12px; color: var(--on-surface-muted); font-size: 10px; }
+.team-graph-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.team-graph-line { width: 22px; height: 0; border-top: 2px solid var(--on-surface-muted); }
+.team-graph-line.is-waiting { border-top-color: var(--warning); border-top-style: dashed; }
+.team-graph-selection { width: 10px; height: 10px; border: 2px solid var(--primary); border-radius: 3px; background: var(--primary-container); }
+.team-pane .team-focus-header { align-items: start; flex-wrap: wrap; }
+.team-pane .team-focus-header > div { min-width: 0; }
+.team-pane .team-focus-header > .text-link { margin-top: 4px; }
+
+@media (max-width: 600px) {
+	.team-graph-viewport { height: 320px; }
+	.team-pane .team-focus { padding: 12px; }
+}

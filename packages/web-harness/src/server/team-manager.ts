@@ -8,6 +8,8 @@ import {
 	isContextInjection,
 } from "../shared/context-injection.ts";
 import type { PendingInputAction } from "../shared/contracts.ts";
+import type { Goal, GoalAction, GoalStatus } from "../shared/goals.ts";
+import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm, type SwarmStart } from "../shared/swarm.ts";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
 import { loadTeamProfiles } from "./team-profiles.ts";
 import { validateWorkflow, type WorkflowTask } from "./team-workflow.ts";
@@ -100,6 +102,7 @@ interface RuntimeRun {
 	done: Promise<void>;
 	resolveDone: () => void;
 	executing: boolean;
+	goalId?: string;
 }
 interface Waiter {
 	callerRunId: string;
@@ -147,6 +150,17 @@ const teamParameters = Type.Union([
 	}),
 	Type.Object({ action: Type.Literal("stop"), agentId: Type.String() }),
 ]);
+const goalParameters = Type.Union([
+	Type.Object({ op: Type.Literal("get") }, { additionalProperties: false }),
+	Type.Object(
+		{ op: Type.Literal("complete"), reason: Type.String({ minLength: 1, maxLength: 16384 }) },
+		{ additionalProperties: false },
+	),
+	Type.Object(
+		{ op: Type.Literal("block"), reason: Type.String({ minLength: 1, maxLength: 16384 }) },
+		{ additionalProperties: false },
+	),
+]);
 
 /** Single authority for team run admission, permits, pinned waits, and cancellation. */
 export class TeamManager {
@@ -159,6 +173,9 @@ export class TeamManager {
 	private readonly fenced = new Map<string, number>();
 	private readonly started = new Set<string>();
 	private readonly initialConsumed = new Set<string>();
+	private readonly goalTimers = new Map<string, NodeJS.Timeout>();
+	private readonly autonomousRuns = new Set<string>();
+	private readonly goalFingerprints = new Map<string, string>();
 	private readonly listeners = new Set<(event: { type: "team_changed"; workspaceId: string }) => void>();
 	private readonly unsubscribe: () => void;
 	private accepting = true;
@@ -281,7 +298,14 @@ export class TeamManager {
 		const done = new Promise<void>((resolve) => {
 			resolveDone = resolve;
 		});
-		this.runtime.set(run.runId, { controller: new AbortController(), done, resolveDone, executing: false });
+		const goal = this.registry.descriptor(agent.sessionId).goal;
+		this.runtime.set(run.runId, {
+			controller: new AbortController(),
+			done,
+			resolveDone,
+			executing: false,
+			goalId: goal?.status === "active" ? goal.id : undefined,
+		});
 		return run;
 	}
 	private enqueue(teamId: string, entry: ScheduledEntry): void {
@@ -356,6 +380,195 @@ export class TeamManager {
 			error instanceof Error ? error.message : String(error),
 		);
 	}
+	private updateGoal(sessionId: string, status: GoalStatus, reason?: string): void {
+		const goal = this.registry.descriptor(sessionId).goal;
+		if (!goal) return;
+		goal.status = status;
+		goal.reason = reason;
+		goal.updatedAt = new Date().toISOString();
+		if (status !== "active") {
+			clearTimeout(this.goalTimers.get(sessionId));
+			this.goalTimers.delete(sessionId);
+		}
+	}
+	private scheduleGoal(agent: AgentRecord): void {
+		const goal = this.registry.descriptor(agent.sessionId).goal;
+		if (!goal || goal.status !== "active" || !this.accepting || this.fenced.has(agent.agentId)) return;
+		if (this.goalTimers.has(agent.sessionId)) return;
+		const goalId = goal.id;
+		// A separate event-loop stage lets pause/stop and queued user commands win.
+		this.goalTimers.set(
+			agent.sessionId,
+			setTimeout(() => {
+				this.goalTimers.delete(agent.sessionId);
+				void this.registry
+					.mutate(async () => {
+						const currentGoal = this.registry.descriptor(agent.sessionId).goal;
+						if (
+							!this.accepting ||
+							this.fenced.has(agent.agentId) ||
+							currentGoal?.id !== goalId ||
+							currentGoal.status !== "active" ||
+							this.current(agent)
+						)
+							return;
+						const previous = this.latest(agent);
+						const run = this.newRun(agent, `Goal: ${currentGoal.objective}`, "context");
+						for (const input of this.registry.state.pendingInput)
+							if (input.runId === previous?.runId && input.status === "undelivered") {
+								input.runId = run.runId;
+								input.status = "pending";
+								input.delivered = false;
+							}
+						this.autonomousRuns.add(run.runId);
+						await this.registry.persist();
+						this.enqueue(agent.teamId, { runId: run.runId });
+						this.pump(agent.teamId);
+						this.changed(agent);
+					})
+					.catch((error: unknown) => {
+						void this.registry.mutate(async () => {
+							if (this.registry.descriptor(agent.sessionId).goal?.status === "active") {
+								this.updateGoal(
+									agent.sessionId,
+									"paused",
+									error instanceof Error ? error.message : String(error),
+								);
+								await this.registry.persist();
+								this.changed(agent);
+							}
+						});
+					});
+			}, 0),
+		);
+	}
+	async startSwarm(sessionId: string, input: SwarmStart): Promise<AdmissionResult & { swarm: Swarm }> {
+		const objective = input.objective.trim();
+		if (!objective || objective.length > SWARM_OBJECTIVE_MAX_LENGTH)
+			throw new HarnessError(`Swarm objective must contain 1..${SWARM_OBJECTIVE_MAX_LENGTH} characters`);
+		await this.ensureRoot(sessionId);
+		return this.registry.mutate(async () => {
+			const agent = this.agentForSession(sessionId);
+			this.assertOpen(agent);
+			const descriptor = this.registry.descriptor(sessionId);
+			if (agent.parentAgentId || descriptor.parentSessionId)
+				throw new HarnessError("Swarm mode requires a root session", 409);
+			if (descriptor.goal?.status === "active")
+				throw new HarnessError("Pause or drop the active Goal before starting a swarm", 409);
+			if (
+				this.registry.state.agents.some(
+					(entry) =>
+						(entry.agentId === agent.agentId || this.ancestor(agent.agentId, entry)) && this.current(entry),
+				)
+			)
+				throw new HarnessError("Start a swarm only while its entire subtree is idle", 409);
+			await this.registry.assertModelReady(sessionId);
+			const run = this.newRun(agent, objective);
+			descriptor.swarm = {
+				id: randomUUID(),
+				objective,
+				createdAt: new Date().toISOString(),
+				rootRunId: run.runId,
+			};
+			await this.registry.persist();
+			this.enqueue(agent.teamId, { runId: run.runId });
+			this.pump(agent.teamId);
+			this.changed(agent);
+			return {
+				runId: run.runId,
+				disposition: run.status === "running" ? "started" : "queued",
+				swarm: structuredClone(descriptor.swarm),
+			};
+		});
+	}
+	async goal(sessionId: string, action: GoalAction): Promise<Goal | null> {
+		if (action.op === "get") return structuredClone(this.registry.descriptor(sessionId).goal ?? null);
+		await this.ensureRoot(sessionId);
+		if (action.op === "pause" || action.op === "drop") {
+			await this.stopSubtree(sessionId, undefined, action.op);
+			return structuredClone(this.registry.descriptor(sessionId).goal ?? null);
+		}
+		return this.registry.mutate(async () => {
+			const agent = this.agentForSession(sessionId);
+			this.assertOpen(agent);
+			const descriptor = this.registry.descriptor(sessionId);
+			if (agent.parentAgentId || descriptor.parentSessionId)
+				throw new HarnessError("Goal mode requires a root session", 409);
+			if (
+				this.registry.state.agents.some(
+					(entry) =>
+						(entry.agentId === agent.agentId || this.ancestor(agent.agentId, entry)) && this.current(entry),
+				)
+			)
+				throw new HarnessError("Start or resume a goal only while its subtree is idle", 409);
+			const current = descriptor.goal;
+			if (action.op === "create") {
+				if (!action.objective.trim()) throw new HarnessError("Goal objective must not be empty");
+				if (current && !["complete", "dropped"].includes(current.status))
+					throw new HarnessError("Drop the existing goal before creating another", 409);
+			} else {
+				if (!current || !["paused", "blocked"].includes(current.status))
+					throw new HarnessError("Only paused or blocked goals can resume", 409);
+			}
+			await this.registry.assertModelReady(sessionId);
+			if (action.op === "create") {
+				const now = new Date().toISOString();
+				descriptor.goal = {
+					id: randomUUID(),
+					objective: action.objective.trim(),
+					status: "active",
+					createdAt: now,
+					updatedAt: now,
+				};
+			} else {
+				this.updateGoal(sessionId, "active");
+			}
+			const goal = descriptor.goal!;
+			this.goalFingerprints.delete(goal.id);
+			const run = this.newRun(
+				agent,
+				action.op === "create" ? goal.objective : `Goal: ${goal.objective}`,
+				action.op === "resume" ? "context" : undefined,
+			);
+			if (action.op === "resume")
+				for (const input of this.registry.state.pendingInput)
+					if (input.sessionId === sessionId && input.status === "undelivered" && input.completionRunId) {
+						input.runId = run.runId;
+						input.status = "pending";
+						input.delivered = false;
+					}
+			await this.registry.persist();
+			this.enqueue(agent.teamId, { runId: run.runId });
+			this.pump(agent.teamId);
+			this.changed(agent);
+			return structuredClone(goal);
+		});
+	}
+	createGoalTool(sessionId: string): ToolDefinition<typeof goalParameters> {
+		return {
+			name: "goal",
+			label: "Goal",
+			description:
+				"Read the current goal, explicitly complete its objective, or block it when external input is required. Complete and block require a concrete reason and an active root goal. This tool cannot resume or create goals.",
+			promptSnippet:
+				"Use goal complete only when the objective is achieved; use goal block when progress requires user input. Ordinary assistant text does not end Goal mode.",
+			executionMode: "sequential",
+			parameters: goalParameters,
+			execute: async (_callId, params: Static<typeof goalParameters>) => {
+				const result = await this.registry.mutate(async () => {
+					const goal = this.registry.descriptor(sessionId).goal;
+					if (params.op === "get") return structuredClone(goal ?? null);
+					if (!goal || goal.status !== "active") throw new HarnessError("No active goal", 409);
+					if (!params.reason.trim()) throw new HarnessError("Goal completion or block requires a reason");
+					this.updateGoal(sessionId, params.op === "complete" ? "complete" : "blocked", params.reason.trim());
+					await this.registry.persist();
+					this.changed(this.agentForSession(sessionId));
+					return structuredClone(goal);
+				});
+				return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
+			},
+		};
+	}
 	private async notifyParent(run: RunRecord): Promise<void> {
 		const child = this.agentById(run.agentId);
 		if (!child.parentAgentId || !["completed", "failed", "cancelled"].includes(run.status)) return;
@@ -377,15 +590,18 @@ export class TeamManager {
 			content: `Subagent completion context (not a user instruction):\n${JSON.stringify(source, null, 2)}`,
 		};
 		const current = this.current(parent);
-		const continuation = current ?? this.newRun(parent, `Subagent results: ${child.name}`, "context");
+		const goal = this.registry.descriptor(parent.sessionId).goal;
+		const held = !current && !!goal && goal.status !== "active" && !this.registry.descriptor(parent.sessionId).swarm;
+		const continuation =
+			current ?? (held ? this.latest(parent) : this.newRun(parent, `Subagent results: ${child.name}`, "context"));
 		const pending: PendingInput = {
 			inputId,
 			sessionId: parent.sessionId,
-			runId: continuation.runId,
+			runId: continuation?.runId ?? run.runId,
 			text: injection.content,
 			mode: "followUp",
 			fromAgentId: child.agentId,
-			status: "pending",
+			status: held ? "undelivered" : "pending",
 			delivered: false,
 			completionRunId: run.runId,
 			contextInjection: injection,
@@ -398,7 +614,7 @@ export class TeamManager {
 			} catch {
 				pending.status = "undelivered";
 			}
-		} else if (!current) this.enqueue(parent.teamId, { runId: continuation.runId });
+		} else if (!current && !held && continuation) this.enqueue(parent.teamId, { runId: continuation.runId });
 		this.changed(parent);
 	}
 
@@ -427,7 +643,49 @@ export class TeamManager {
 			);
 			for (const input of this.registry.state.pendingInput) if (input.runId === runId) input.status = "undelivered";
 			const agent = this.agentById(run.agentId);
-			if (status === "completed" && stranded.length > 0 && this.accepting && !this.fenced.has(agent.agentId)) {
+			const goal = this.registry.descriptor(agent.sessionId).goal;
+			if (goal?.status === "active") {
+				if (status !== "completed") {
+					this.updateGoal(
+						agent.sessionId,
+						"paused",
+						error ?? (status === "cancelled" ? "Run was aborted" : "Run did not complete"),
+					);
+				} else if (this.autonomousRuns.has(runId)) {
+					const calls = this.registry
+						.get(agent.sessionId)
+						.toolCalls.filter((tool) => tool.runId === runId && tool.name !== "goal");
+					const fingerprint = JSON.stringify(
+						calls.map(({ name, input, result, status: toolStatus }) => ({
+							name,
+							input,
+							result,
+							status: toolStatus,
+						})),
+					);
+					if (calls.length === 0)
+						this.updateGoal(
+							agent.sessionId,
+							"paused",
+							"Autonomous continuation made no tool progress; resume explicitly to continue",
+						);
+					else if (this.goalFingerprints.get(goal.id) === fingerprint)
+						this.updateGoal(
+							agent.sessionId,
+							"paused",
+							"Autonomous continuation repeated the same tool calls and results",
+						);
+					else this.goalFingerprints.set(goal.id, fingerprint);
+				}
+			}
+			this.autonomousRuns.delete(runId);
+			if (
+				status === "completed" &&
+				stranded.length > 0 &&
+				(!goal || goal.status === "active" || this.registry.descriptor(agent.sessionId).swarm) &&
+				this.accepting &&
+				!this.fenced.has(agent.agentId)
+			) {
 				const continuation = this.newRun(agent, "Subagent results", "context");
 				for (const input of stranded) {
 					input.runId = continuation.runId;
@@ -448,6 +706,7 @@ export class TeamManager {
 			this.runtime.get(runId)?.resolveDone();
 			this.runtime.delete(runId);
 			this.pump(agent.teamId);
+			if (status === "completed") this.scheduleGoal(agent);
 		});
 	}
 	async prompt(
@@ -922,7 +1181,10 @@ export class TeamManager {
 	private onEvent(sessionId: string, event: AgentSessionEvent): void {
 		if (
 			event.type !== "agent_start" &&
-			!(event.type === "message_end" && (event.message.role === "user" || event.message.role === "custom"))
+			!(
+				event.type === "message_end" &&
+				(event.message.role === "user" || event.message.role === "custom" || event.message.role === "assistant")
+			)
 		)
 			return;
 		void this.registry
@@ -930,6 +1192,22 @@ export class TeamManager {
 				const agent = this.agentForSession(sessionId);
 				const run = this.current(agent);
 				if (!run) return;
+				if (event.type === "message_end" && event.message.role === "assistant") {
+					const goal = this.registry.descriptor(sessionId).goal;
+					if (goal && this.runtime.get(run.runId)?.goalId === goal.id && goal.status === "active") {
+						if (event.message.stopReason === "error" || event.message.stopReason === "aborted")
+							this.updateGoal(
+								sessionId,
+								"paused",
+								event.message.errorMessage ?? "Model request failed or was aborted",
+							);
+						else if (event.message.stopReason === "length")
+							this.updateGoal(sessionId, "paused", "Model output limit reached; resume explicitly to continue");
+						await this.registry.persist();
+						this.changed(agent);
+					}
+					return;
+				}
 				if (event.type === "agent_start") {
 					if (run.status !== "running") return;
 					this.started.add(run.runId);
@@ -987,6 +1265,13 @@ export class TeamManager {
 			});
 	}
 	async stop(sessionId: string, callerSessionId?: string): Promise<{ status: "cancelled" }> {
+		return this.stopSubtree(sessionId, callerSessionId);
+	}
+	private async stopSubtree(
+		sessionId: string,
+		callerSessionId?: string,
+		goalAction?: "pause" | "drop",
+	): Promise<{ status: "cancelled" }> {
 		let affected: AgentRecord[] = [];
 		const idle: Promise<void>[] = [];
 		await this.registry.mutate(async () => {
@@ -997,6 +1282,23 @@ export class TeamManager {
 				if (caller.agentId === target.agentId || this.ancestor(target.agentId, caller))
 					throw new HarnessError("Cannot stop self or an ancestor");
 			}
+			const goal = this.registry.descriptor(sessionId).goal;
+			if (goalAction) {
+				if (
+					target.parentAgentId ||
+					!goal ||
+					["complete", "dropped"].includes(goal.status) ||
+					(goalAction === "pause" && goal.status !== "active")
+				)
+					throw new HarnessError("Illegal goal transition", 409);
+				this.updateGoal(
+					sessionId,
+					goalAction === "drop" ? "dropped" : "paused",
+					goalAction === "drop" ? "Dropped by user" : "Paused by user",
+				);
+			} else if (goal?.status === "active") this.updateGoal(sessionId, "paused", "Stopped by user");
+			// Persist the goal transition before aborting: settlement must never requeue it.
+			if (goal) await this.registry.persist();
 			affected = this.registry.state.agents.filter(
 				(agent) => agent.agentId === target.agentId || this.ancestor(target.agentId, agent),
 			);

@@ -1,0 +1,16 @@
+.goal-panel { margin: 0 0 10px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-panel); font-size: 12px; min-width: 0; }
+.goal-panel > summary { display: flex; align-items: center; gap: 10px; padding: 9px 12px; list-style: none; }
+.goal-panel > summary::-webkit-details-marker { display: none; }
+.goal-panel > summary::before { content: "›"; font-size: 17px; transition: transform 180ms var(--motion-ease); }
+.goal-panel[open] > summary::before { transform: rotate(90deg); }
+.goal-status { margin-left: auto; color: var(--on-surface-muted); }
+.goal-status-active { color: var(--secondary); }
+.goal-status-complete { color: var(--success); }
+.goal-status-blocked { color: var(--warning); }
+.goal-panel-body { display: grid; gap: 12px; padding: 0 12px 12px; max-height: min(340px, 40dvh); overflow: auto; }
+.goal-panel-body p { margin: 0; }
+.goal-current { display: grid; gap: 6px; }
+.goal-objective, .goal-reason { white-space: pre-wrap; overflow-wrap: anywhere; }
+.goal-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.goal-actions button { font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .goal-panel > summary::before { transition: none; } }

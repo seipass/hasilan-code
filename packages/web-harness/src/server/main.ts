@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { CANVAS_LIMITS, canvasSaveSchema } from "../shared/canvas.ts";
 import {
 	credentialSchema,
 	modelSchema,
@@ -13,8 +14,11 @@ import {
 	workspaceCreateSchema,
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
+import { goalActionSchema } from "../shared/goals.ts";
+import { swarmStartSchema } from "../shared/swarm.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
+import { CanvasStore, CanvasStoreError } from "./canvas-store.ts";
 import { openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
 import { EventHub } from "./events.ts";
@@ -65,6 +69,7 @@ async function main() {
 				browser.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				search.createTool(),
 				teams.createTool(descriptor.sessionId),
+				teams.createGoalTool(descriptor.sessionId),
 			] as unknown as ToolDefinition[],
 	});
 	teams = new TeamManager(registry, {
@@ -75,6 +80,9 @@ async function main() {
 	await registry.initialize();
 	await teams.initialize();
 	await registry.addWorkspace(cwd);
+	const canvases = new CanvasStore(agentDir, (id) => {
+		registry.getWorkspaceRoot(id);
+	});
 	const terminals = new TerminalManager({ getWorkspaceRoot: (id) => files.getWorkspaceRoot(id) });
 	events = new EventHub((channel, id) =>
 		channel === "session" ? registry.get(id) : { sessions: registry.list(id), teams: teams.snapshot(id) },
@@ -143,6 +151,12 @@ async function main() {
 				if (parts[1] === "sessions" && parts[2]) {
 					const id = parts[2];
 					if (parts.length === 3 && method === "GET") return reply(registry.get(id));
+					if (parts[3] === "goal" && parts.length === 4) {
+						if (method === "GET") return reply(await teams.goal(id, { op: "get" }));
+						if (method === "POST") return reply(await teams.goal(id, await readJson(request, goalActionSchema)));
+					}
+					if (parts[3] === "swarm" && parts.length === 4 && method === "POST")
+						return reply(await teams.startSwarm(id, await readJson(request, swarmStartSchema)), 202);
 					if (parts[3] === "prompt" && method === "POST")
 						return reply(await teams.prompt(id, await readJson(request, promptSchema)), 202);
 					if (parts[3] === "pending-inputs" && parts.length === 5 && method === "PATCH") {
@@ -209,6 +223,13 @@ async function main() {
 				if (parts[1] === "workspaces" && parts[2]) {
 					const id = parts[2];
 					const path = url.searchParams.get("path") ?? "";
+					if (parts[3] === "canvas" && parts.length === 4) {
+						if (method === "GET") return reply(await canvases.get(id));
+						if (method === "PUT")
+							return reply(
+								await canvases.save(id, await readJson(request, canvasSaveSchema, CANVAS_LIMITS.bytes)),
+							);
+					}
 					if (parts[3] === "files" && method === "GET") return reply(await files.list(id, path));
 					if (parts[3] === "file" && method === "GET")
 						return reply(
@@ -251,6 +272,7 @@ async function main() {
 				return false;
 			} catch (error) {
 				if (error instanceof HarnessError) throw new HttpError(error.statusCode, error.message);
+				if (error instanceof CanvasStoreError) throw new HttpError(error.status, error.message);
 				throw error;
 			}
 		},

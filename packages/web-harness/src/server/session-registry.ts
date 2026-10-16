@@ -18,7 +18,10 @@ import {
 	isContextInjection,
 } from "../shared/context-injection.ts";
 import type { PendingInputAction } from "../shared/contracts.ts";
+import type { Goal } from "../shared/goals.ts";
+import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
 import { createHarnessSettings } from "./config.ts";
+import { swarmContext } from "./swarm.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
 
 export interface ModelSelection {
@@ -46,6 +49,8 @@ export interface SessionDescriptor {
 	model?: ModelSelection;
 	thinkingLevel?: ThinkingLevel;
 	tools?: string[];
+	goal?: Goal;
+	swarm?: Swarm;
 	availability: "ready" | "missing";
 }
 export interface ProjectedMessage {
@@ -211,6 +216,49 @@ function validateState(value: unknown): asserts value is HarnessState {
 			!["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(session.thinkingLevel)
 		)
 			throw new Error("Invalid session thinking level");
+		if (session.swarm) {
+			const swarm = session.swarm;
+			if (
+				session.parentSessionId ||
+				typeof swarm.id !== "string" ||
+				!swarm.id ||
+				typeof swarm.objective !== "string" ||
+				!swarm.objective.trim() ||
+				swarm.objective.length > SWARM_OBJECTIVE_MAX_LENGTH ||
+				typeof swarm.createdAt !== "string" ||
+				typeof swarm.rootRunId !== "string" ||
+				!swarm.rootRunId
+			)
+				throw new Error("Invalid session swarm state");
+		}
+		if (session.goal) {
+			const goal = session.goal as Omit<Goal, "status"> & { status: string };
+			if (
+				session.parentSessionId ||
+				typeof goal.id !== "string" ||
+				typeof goal.objective !== "string" ||
+				!goal.objective.trim() ||
+				!["active", "paused", "blocked", "complete", "dropped", "budget-limited"].includes(goal.status) ||
+				(goal.reason !== undefined && typeof goal.reason !== "string") ||
+				typeof goal.createdAt !== "string" ||
+				typeof goal.updatedAt !== "string"
+			)
+				throw new Error("Invalid session goal state");
+			// Rebuild saved goals from supported fields; obsolete limits and usage must not reach runtime or API.
+			const paused = goal.status === "budget-limited";
+			session.goal = {
+				id: goal.id,
+				objective: goal.objective,
+				status: paused ? "paused" : (goal.status as Goal["status"]),
+				...(paused
+					? { reason: "Saved goal requires explicit resume" }
+					: goal.reason === undefined
+						? {}
+						: { reason: goal.reason }),
+				createdAt: goal.createdAt,
+				updatedAt: paused ? new Date().toISOString() : goal.updatedAt,
+			};
+		}
 	}
 	const memberSessions = new Set<string>();
 	for (const team of state.teams)
@@ -256,6 +304,13 @@ function validateState(value: unknown): asserts value is HarnessState {
 			activeAgents.add(run.agentId);
 		}
 	}
+	for (const session of state.sessions) {
+		if (!session.swarm) continue;
+		const root = state.agents.find((agent) => agent.sessionId === session.sessionId);
+		const run = state.runs.find((entry) => entry.runId === session.swarm?.rootRunId);
+		if (!root || root.parentAgentId || !run || run.agentId !== root.agentId)
+			throw new Error("Invalid session swarm run state");
+	}
 	for (const input of state.pendingInput)
 		if (
 			!sessions.has(input.sessionId) ||
@@ -294,6 +349,7 @@ export class SessionRegistry {
 	}
 	async initialize(): Promise<void> {
 		let parsed: unknown;
+		let savedGoals = false;
 		try {
 			parsed = JSON.parse(await readFile(this.statePath, "utf8"));
 		} catch (error) {
@@ -302,6 +358,13 @@ export class SessionRegistry {
 		if (parsed !== undefined) {
 			validateState(parsed);
 			Object.assign(this.state, parsed);
+			savedGoals = this.state.sessions.some((descriptor) => descriptor.goal !== undefined);
+			for (const descriptor of this.state.sessions)
+				if (descriptor.goal?.status === "active") {
+					descriptor.goal.status = "paused";
+					descriptor.goal.reason = "Host restarted; resume explicitly to continue";
+					descriptor.goal.updatedAt = new Date().toISOString();
+				}
 		}
 		for (const workspace of this.state.workspaces) {
 			const registered = await this.options.workspaceFiles.register(workspace.path, workspace.id);
@@ -321,6 +384,7 @@ export class SessionRegistry {
 			descriptor.path = manager.getSessionFile();
 			this.addLive(descriptor, manager);
 		}
+		if (savedGoals) await this.persist();
 	}
 	private newManager(descriptor: SessionDescriptor): SessionManager {
 		const parent = descriptor.parentSessionId ? this.descriptor(descriptor.parentSessionId) : undefined;
@@ -330,19 +394,22 @@ export class SessionRegistry {
 		});
 	}
 	private addLive(descriptor: SessionDescriptor, manager: SessionManager): void {
-		const messages = manager.buildSessionContext().messages.map(
-			(message): ProjectedMessage => ({
-				messageId: randomUUID(),
-				role: message.role,
-				content: structuredClone("content" in message ? message.content : message),
-				partial: false,
-				...(message.role === "custom" &&
-				message.customType === CONTEXT_INJECTION_CUSTOM_TYPE &&
-				isContextInjection(message.details)
-					? { contextInjection: structuredClone(message.details) }
-					: {}),
-			}),
-		);
+		const messages = manager
+			.buildSessionContext()
+			.messages.filter((message) => message.role !== "custom" || message.display)
+			.map(
+				(message): ProjectedMessage => ({
+					messageId: randomUUID(),
+					role: message.role,
+					content: structuredClone("content" in message ? message.content : message),
+					partial: false,
+					...(message.role === "custom" &&
+					message.customType === CONTEXT_INJECTION_CUSTOM_TYPE &&
+					isContextInjection(message.details)
+						? { contextInjection: structuredClone(message.details) }
+						: {}),
+				}),
+			);
 		const toolCalls: ProjectedTool[] = [];
 		for (const message of manager.buildSessionContext().messages) {
 			if (message.role === "assistant")
@@ -505,6 +572,20 @@ export class SessionRegistry {
 		);
 		return result;
 	}
+	async assertModelReady(id: string): Promise<void> {
+		const descriptor = this.descriptor(id);
+		if (descriptor.availability !== "ready") throw new HarnessError("Conversation file is missing", 409);
+		if (this.options.adapterFactory) return;
+		if (!descriptor.model) throw new HarnessError("No model selected; choose a model in the composer");
+		const runtime = this.options.modelRuntime;
+		if (!runtime?.getModel(descriptor.model.provider, descriptor.model.id))
+			throw new HarnessError("Configured model is unavailable; select a model in the composer");
+		if (
+			!runtime.hasConfiguredAuth(descriptor.model.provider) &&
+			!(await runtime.checkAuth(descriptor.model.provider))
+		)
+			throw new HarnessError(`No authentication configured for ${descriptor.model.provider}`);
+	}
 
 	hasQueuedInput(sessionId: string, inputId: string): boolean {
 		return this.live.get(sessionId)?.adapter?.hasQueuedInput(inputId) ?? false;
@@ -558,6 +639,44 @@ export class SessionRegistry {
 										"You are an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files.";
 									event.systemPromptOptions.includeDocumentation = false;
 								});
+								pi.on("context", async (event) => {
+									if (descriptor.swarm && descriptor.goal?.status !== "active")
+										return {
+											messages: [
+												...event.messages,
+												{
+													role: "custom",
+													customType: "harness-swarm-context",
+													content: swarmContext(descriptor.swarm),
+													display: false,
+													timestamp: Date.now(),
+												},
+											],
+										};
+									if (!descriptor.goal) return;
+									// Settle completed messages and user commands before rendering each request.
+									await this.mutate(() => undefined);
+									const goal = descriptor.goal;
+									if (!goal) return;
+									return {
+										messages: [
+											...event.messages,
+											{
+												role: "custom",
+												customType: "harness-goal-context",
+												content: [
+													`Goal mode: ${JSON.stringify(goal)}`,
+													"While active, continue pursuing the objective after ordinary responses.",
+													"Never treat assistant prose as completion. Use goal complete or block with a concrete reason.",
+													"User instructions and subagent completion context take precedence over autonomous continuation.",
+													"Only the user may resume a paused or blocked goal.",
+												].join("\n"),
+												display: false,
+												timestamp: Date.now(),
+											},
+										],
+									};
+								});
 							},
 						],
 						appendSystemPrompt: [
@@ -571,6 +690,10 @@ export class SessionRegistry {
 						: undefined;
 					if (descriptor.model && !model)
 						throw new HarnessError("Configured model is unavailable; select a model in the composer");
+					// SDK `tools` is a registration allowlist, not merely the active loadout.
+					// Reserve the root coordination tool before a later swarm start; child grants stay exact.
+					const reserveTeam =
+						descriptor.tools && !descriptor.parentSessionId && !descriptor.tools.includes("team");
 					const { session } = await createAgentSession({
 						cwd: descriptor.cwd,
 						agentDir: this.options.agentDir,
@@ -580,19 +703,42 @@ export class SessionRegistry {
 						settingsManager,
 						resourceLoader: loader,
 						customTools: this.options.customTools?.(descriptor),
-						tools: descriptor.tools,
+						tools: reserveTeam ? [...descriptor.tools!, "team"] : descriptor.tools,
 					});
 					if (descriptor.thinkingLevel) session.setThinkingLevel(descriptor.thinkingLevel);
 					await session.bindExtensions({});
+					if (reserveTeam) session.setActiveToolsByName(descriptor.tools!);
 					const managedSession = session as unknown as {
 						queueManagedInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<unknown>;
 						hasQueuedInput(inputId: string): boolean;
 						mutateQueuedInput(inputId: string, action: PendingInputAction): boolean;
 						resumeContext(): Promise<void>;
 					};
+					// Disable SDK retry only for paid goal runs; normal sessions retain their settings.
+					const retryEnabled = settingsManager.getRetryEnabled();
 					adapter = {
-						subscribe: (listener) => session.subscribe(listener),
-						prompt: (text) => session.prompt(text, { expandPromptTemplates: false }),
+						subscribe: (listener) =>
+							session.subscribe((event) => {
+								listener(event);
+								if (
+									descriptor.goal?.status === "active" &&
+									event.type === "message_end" &&
+									event.message.role === "assistant" &&
+									["error", "aborted", "length"].includes(event.message.stopReason)
+								)
+									// Prevent SDK overflow recovery from turning a failed goal request into a paid retry.
+									void session.abort().catch(() => undefined);
+							}),
+						prompt: (text) => {
+							settingsManager.applyOverrides({
+								retry: { enabled: descriptor.goal?.status === "active" ? false : retryEnabled },
+							});
+							if (descriptor.goal?.status === "active" && !session.getActiveToolNames().includes("goal"))
+								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"]);
+							if (descriptor.swarm && !session.getActiveToolNames().includes("team"))
+								session.setActiveToolsByName([...session.getActiveToolNames(), "team"]);
+							return session.prompt(text, { expandPromptTemplates: false });
+						},
 						deliverInput: async (text, mode, inputId) => {
 							await managedSession.queueManagedInput(text, mode, inputId);
 						},
@@ -613,7 +759,27 @@ export class SessionRegistry {
 							await resumed;
 							return true;
 						},
-						resumeContext: () => managedSession.resumeContext(),
+						resumeContext: async () => {
+							settingsManager.applyOverrides({
+								retry: { enabled: descriptor.goal?.status === "active" ? false : retryEnabled },
+							});
+							if (descriptor.goal?.status === "active" && !session.getActiveToolNames().includes("goal"))
+								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"]);
+							if (descriptor.swarm && !session.getActiveToolNames().includes("team"))
+								session.setActiveToolsByName([...session.getActiveToolNames(), "team"]);
+							if (descriptor.goal?.status === "active")
+								await session.sendCustomMessage(
+									{
+										customType: "harness-goal-continuation",
+										content:
+											"Continue the active goal from existing context. Handle queued user input and child results first.",
+										display: false,
+										details: { goalId: descriptor.goal.id },
+									},
+									{ triggerTurn: false },
+								);
+							await managedSession.resumeContext();
+						},
 						hasQueuedInput: (inputId) => managedSession.hasQueuedInput(inputId),
 						mutateQueuedInput: (inputId, action) => managedSession.mutateQueuedInput(inputId, action),
 						abort: () => session.abort(),
@@ -644,6 +810,14 @@ export class SessionRegistry {
 		const live = this.live.get(id);
 		if (!live) return;
 		const projection = live.projection;
+		if (
+			(event.type === "message_start" || event.type === "message_update" || event.type === "message_end") &&
+			event.message.role === "custom" &&
+			!event.message.display
+		) {
+			for (const listener of this.executionListeners) listener(id, event);
+			return;
+		}
 		if (event.type === "message_start" || event.type === "message_update" || event.type === "message_end") {
 			if (event.type === "message_start" || !live.liveMessageId) live.liveMessageId = randomUUID();
 			const message: ProjectedMessage = {

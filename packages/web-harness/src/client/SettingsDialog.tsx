@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { api, command, errorMessage } from "./api.ts";
+import { transitionItems } from "./item-transition.ts";
 import { OAuthLogin } from "./OAuthLogin.tsx";
 import type { ModelCatalog, Settings } from "./types.ts";
 
@@ -124,9 +125,9 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 				else if (event.key === "Home") next = 0;
 				else if (event.key === "End") next = TABS.length - 1;
 				else return;
-				event.preventDefault(); setTab(TABS[next].id); tabRefs.current[next]?.focus();
+				event.preventDefault(); transitionItems(() => setTab(TABS[next].id)); tabRefs.current[next]?.focus();
 			}}>
-				{TABS.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => setTab(entry.id)}>{entry.label}</button>)}
+				{TABS.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => { if (tab !== entry.id) transitionItems(() => setTab(entry.id)); }}>{entry.label}</button>)}
 			</div>
 			{error && <div className="error" role="alert"><p>{error}</p>{!settings && <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>再読み込み</button>}</div>}
 			{notice && <p className="settings-notice" role="status">{notice}</p>}
@@ -138,8 +139,8 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 						<p className="settings-inline-status">認証設定あり: {catalog?.providers.filter((provider) => provider.configured).length ?? 0} / {catalog?.providers.length ?? 0} 件</p>
 						<label>プロバイダーを検索<input type="search" value={providerQuery} disabled={busy || loginActive} placeholder="名前または ID で検索" onChange={(event) => setProviderQuery(event.target.value)} /></label>
 						<label>プロバイダー<select value={llmProvider} disabled={busy || loginActive || !catalog?.providers.length} onChange={(event) => {
-							setLlmProvider(event.target.value);
-							setNotice(undefined);
+							const providerId = event.target.value;
+							transitionItems(() => { setLlmProvider(providerId); setNotice(undefined); });
 						}}>
 							{!llmProvider && <option value="">プロバイダーを選択</option>}
 							{selectedProvider && !matchingProviders.some((provider) => provider.id === selectedProvider.id) && <option value={selectedProvider.id}>{selectedProvider.name} · 現在の選択</option>}

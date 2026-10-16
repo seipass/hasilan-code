@@ -1,16 +1,22 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Goal, GoalAction } from "../shared/goals.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { ChatPane } from "./ChatPane.tsx";
+import { CanvasPane } from "./CanvasPane.tsx";
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
+import { GoalPanel } from "./GoalPanel.tsx";
+import { transitionItems } from "./item-transition.ts";
 import { ModelMenu } from "./ModelMenu.tsx";
 import { PanelResize } from "./PanelResize.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
+import { parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { TerminalPane } from "./terminal/TerminalPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
+import "./WorkspaceModes.css";
 
 function WorkspaceFeed({ id, onUpdate, onFiles }: { id: string; onUpdate: (id: string, data: WorkspaceProjection) => void; onFiles: () => void }) {
 	const channel = useChannel<WorkspaceProjection>("workspace", id, onFiles);
@@ -20,6 +26,11 @@ function WorkspaceFeed({ id, onUpdate, onFiles }: { id: string; onUpdate: (id: s
 
 export function App() {
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+	const [mode, setMode] = useState<"chat" | "canvas">("chat");
+	const [canvasTarget, setCanvasTarget] = useState<"chat" | "swarm">("chat");
+	const [canvasDirty, setCanvasDirty] = useState(false);
+	const [canvasOpened, setCanvasOpened] = useState(false);
+	const [draftInsertion, setDraftInsertion] = useState<{ id: string; text: string }>();
 	const [workspaceId, setWorkspaceId] = useState<string>();
 	const [sessionId, setSessionId] = useState<string | undefined>(() => { try { return localStorage.getItem("pi-web-selected-session") || undefined; } catch { return undefined; } });
 	const [projections, setProjections] = useState<Record<string, WorkspaceProjection>>({});
@@ -45,6 +56,8 @@ export function App() {
 	const [filesVersion, setFilesVersion] = useState(0);
 	const draftSession = useRef<string | undefined>(undefined);
 	const searchInput = useRef<HTMLInputElement>(null);
+	const commandPending = useRef(false);
+	const clearDraftInsertion = useCallback(() => setDraftInsertion(undefined), []);
 	const sidebarRef = useRef<HTMLElement>(null);
 	const sidebarOpener = useRef<HTMLButtonElement>(null);
 	const rightPanelRef = useRef<HTMLElement>(null);
@@ -61,6 +74,9 @@ export function App() {
 	const workspace = workspaces.find((entry) => entry.workspaceId === workspaceId);
 	const summaries = [...initialSessions.filter((entry) => !projections[entry.workspaceId]), ...Object.values(projections).flatMap((projection) => projection.sessions)];
 	const team = workspaceChannel.data?.teams;
+	const selectedAgent = team?.agents.find((agent) => agent.sessionId === sessionId);
+	const teamAgents = selectedAgent ? team?.agents.filter((agent) => agent.teamId === selectedAgent.teamId) ?? [] : [];
+	const workingAgents = teamAgents.filter((agent) => agent.parentAgentId && agent.currentRun?.status === "running").length;
 	const roots = summaries.filter((entry) => !entry.parentSessionId);
 	const history = roots.filter((entry) => `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
 	const updateProjection = useCallback((id: string, data: WorkspaceProjection) => setProjections((previous) => ({ ...previous, [id]: data })), []);
@@ -85,6 +101,7 @@ export function App() {
 			try { previousSession = localStorage.getItem("pi-web-selected-session"); previousWorkspace = localStorage.getItem("pi-web-workspace"); } catch { /* Browser storage is optional. */ }
 			const restored = sessions.find((entry) => entry.sessionId === previousSession);
 			setSessionId(restored?.sessionId);
+			setMode("chat");
 			setWorkspaceId(restored?.workspaceId ?? folders.find((entry) => entry.workspaceId === previousWorkspace)?.workspaceId ?? folders[0]?.workspaceId);
 		}).catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
 		return () => controller.abort();
@@ -103,17 +120,27 @@ export function App() {
 		window.addEventListener("keydown", keydown); return () => window.removeEventListener("keydown", keydown);
 	}, []);
 	function selectSession(id: string) {
-		const summary = summaries.find((entry) => entry.sessionId === id); if (summary) setWorkspaceId(summary.workspaceId);
+		if (commandPending.current) return;
+		const summary = summaries.find((entry) => entry.sessionId === id);
+		if (summary && summary.workspaceId !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
+		setDraftInsertion(undefined);
+		if (summary && summary.workspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
+		draftSession.current = undefined;
+		if (summary) setWorkspaceId(summary.workspaceId);
 		if (summary) setExpandedWorkspaces((previous) => ({ ...previous, [summary.workspaceId]: true }));
+		setMode("chat");
 		setSessionId(id); setError(undefined); setFileTarget(undefined); setModelOpen(false);
 		if (window.innerWidth < 900) setSidebarOpen(false);
 	}
 	function selectWorkspace(id: string) {
+		if (commandPending.current) return;
+		if (id !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
+		setDraftInsertion(undefined);
 		setExpandedWorkspaces((previous) => ({ ...previous, [id]: true }));
 		if (id === workspaceId) return;
-		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setDraftModel(undefined); setDraftThinking(undefined); setFileTarget(undefined); setModelOpen(false); setError(undefined);
+		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setDraftModel(undefined); setDraftThinking(undefined); setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setCanvasOpened(false); setMode("chat");
 	}
-	function newConversation() { setSessionId(undefined); draftSession.current = undefined; setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined); if (window.innerWidth < 900) setSidebarOpen(false); }
+	function newConversation() { if (commandPending.current) return; setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined); if (window.innerWidth < 900) setSidebarOpen(false); }
 	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: crypto.randomUUID() }); setRightTab("files"); setRightOpen(true); }
 	async function addWorkspace() {
 		if (addingWorkspace) return;
@@ -126,17 +153,67 @@ export function App() {
 			setHistoryQuery("");
 		} catch (reason) { setError(errorMessage(reason)); } finally { setAddingWorkspace(false); }
 	}
-	async function send(text: string, mode: "prompt" | "steer" | "followUp") {
+	async function inputSession(): Promise<string> {
 		if (!workspaceId) throw new Error("作業フォルダーを準備できません。フォルダーを選択してください。");
 		if (modelNeedsAuthentication) { setSettingsOpen(true); throw new Error("プロバイダーの認証を設定してください。"); }
 		if (!model) { setModelOpen(true); throw new Error("送信するモデルを選択してください。"); }
 		let target = sessionId ?? draftSession.current;
 		if (!target) { const created = await command<SessionSummary>("/api/sessions", { workspaceId, model: { provider: model.provider, id: model.id }, ...(draftThinking ? { thinkingLevel: draftThinking } : {}) }); target = created.sessionId; draftSession.current = target; }
-		const result = await command<{ runId: string; disposition: "queued" | "started" }>(`/api/sessions/${encodeURIComponent(target)}/prompt`, { text, mode });
-		try { localStorage.removeItem(`pi-web-draft:new:${workspaceId}`); } catch { /* Storage is optional. */ }
-		setSessionId(target); return result;
+		return target;
+	}
+	async function send(text: string, executionMode: "prompt" | "steer" | "followUp"): Promise<{ disposition?: "queued" | "started"; notice?: string }> {
+		if (commandPending.current) throw new Error("送信処理中です。完了してから送信してください。");
+		commandPending.current = true;
+		try {
+			const parsed = parseComposerCommand(text);
+			if (parsed.kind === "canvas") {
+				if (!workspaceId) throw new Error("ワークスペースを選択してください。");
+				setCanvasOpened(true); setMode("canvas"); setModelOpen(false);
+				return {};
+			}
+			if (parsed.kind === "chat") { setMode("chat"); setModelOpen(false); return {}; }
+			if (sessionId ? sessionChannel.connection !== "connected" : workspaceChannel.connection !== "connected") throw new Error("接続が完了してから送信してください。");
+			if (session?.availability === "missing") throw new Error("保存された会話が見つかりません。新しい会話を開始してください。");
+			let result: { disposition?: "queued" | "started"; notice?: string };
+			if (parsed.kind === "hyakki") {
+				await startSwarm(parsed.objective);
+				result = { notice: "スウォームを開始しました。追加指示はこの入力欄から送れます。" };
+			} else if (parsed.kind === "goal") {
+				const goal = await goalAction(parsed.action);
+				result = { notice: goal ? `Goal: ${goal.objective}` : "Goal は設定されていません。" };
+			} else {
+				const target = await inputSession();
+				result = await command<{ runId: string; disposition: "queued" | "started" }>(`/api/sessions/${encodeURIComponent(target)}/prompt`, { text: parsed.text, mode: executionMode });
+				setSessionId(target);
+			}
+			try { localStorage.removeItem(`pi-web-draft:${sessionId ?? `new:${workspaceId}`}`); } catch { /* Storage is optional. */ }
+			return result;
+		} finally { commandPending.current = false; }
 	}
 	async function stop(id: string) { try { await command(`/api/sessions/${encodeURIComponent(id)}/abort`, {}); } catch (reason) { setError(errorMessage(reason)); } }
+	async function goalAction(action: GoalAction): Promise<Goal | null> {
+		const target = action.op === "create" ? await inputSession() : sessionId;
+		if (!target) {
+			if (action.op === "get") return null;
+			throw new Error("会話を選択してください。");
+		}
+		const result = await command<Goal | null>(`/api/sessions/${encodeURIComponent(target)}/goal`, action);
+		if (action.op === "create") setSessionId(target);
+		return result;
+	}
+	async function startSwarm(objective: string): Promise<void> {
+		const target = await inputSession();
+		await command(`/api/sessions/${encodeURIComponent(target)}/swarm`, { objective });
+		setSessionId(target);
+		setMode("chat");
+		setRightTab("team");
+		if (window.innerWidth >= 1100) setRightOpen(true);
+	}
+	function composeCanvasDesign(text: string): void {
+		if (commandPending.current) throw new Error("送信が完了してから設計を入力欄に追加してください。");
+		setDraftInsertion({ id: crypto.randomUUID(), text: canvasTarget === "swarm" ? `/hyakki ${text}` : text });
+		setMode("chat");
+	}
 
 	async function mutatePendingInput(inputId: string, action: PendingInputAction): Promise<void> {
 		if (!sessionId) throw new Error("会話を選択してください。");
@@ -200,14 +277,17 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}>設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions"><button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{(session?.swarm || teamAgents.some((agent) => agent.parentAgentId)) && <button className="team-activity-button" aria-controls="detail-sidebar" aria-expanded={rightOpen && rightTab === "team"} onClick={() => { setRightTab("team"); setRightOpen((open) => rightTab !== "team" || !open); }}><span className={`status-dot ${workingAgents ? "status-running" : "status-idle"}`} aria-hidden="true" />{session?.swarm ? "百鬼夜行" : "チーム"}<span>{workingAgents ? `${workingAgents}人が作業中` : "状況を見る"}</span></button>}<button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
 			{(error || workspaceChannel.error || sessionChannel.error) && <div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div>}
 			<div className="main-layout"><main className="chat-column">{sessionId && sessionChannel.connection !== "connected" && <p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p>}
-				<ChatPane key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} />
+				{canvasOpened && <div className="mode-page" hidden={mode !== "canvas"} inert={mode !== "canvas"}>
+					{workspaceId && <CanvasPane key={workspaceId} workspaceId={workspaceId} destinationControl={<label className="canvas-destination"><span className="sr-only">入力欄に追加する設計の送信先</span><select aria-label="入力欄に追加する設計の送信先" value={canvasTarget} onChange={(event) => setCanvasTarget(event.target.value === "swarm" ? "swarm" : "chat")}><option value="chat">会話</option><option value="swarm">Hyakki-Yako</option></select></label>} onComposeDesign={composeCanvasDesign} onDirtyChange={setCanvasDirty} />}
+				</div>}
+				<ChatPane key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} goalControl={!session?.parentSessionId && session?.goal && <GoalPanel key={sessionId} goal={session.goal} busy={!!session.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} />
 				{modelOpen && <ModelMenu key={modelMenuKey} catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setModelClosing(false); setSettingsOpen(true); }} onClosingChange={setModelClosing} onClose={() => { setModelOpen(false); setModelClosing(false); }} disabled={!!session?.currentRun} />}
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : -actualRightWidth : undefined }}>
-					<div className="panel-tabs" role="tablist" aria-label="詳細パネル">{(["files", "team", "tools", "terminal"] as const).map((tab) => <button key={tab} id={`detail-tab-${tab}`} role="tab" aria-controls="detail-panel" aria-selected={rightTab === tab} onClick={() => setRightTab(tab)}>{tab === "files" ? "ファイル" : tab === "team" ? "チーム" : tab === "tools" ? "ツール" : "端末"}</button>)}</div>
+					<div className="panel-tabs" role="tablist" aria-label="詳細パネル">{(["files", "team", "tools", "terminal"] as const).map((tab) => <button key={tab} id={`detail-tab-${tab}`} role="tab" aria-controls="detail-panel" aria-selected={rightTab === tab} onClick={() => { if (rightTab !== tab) transitionItems(() => setRightTab(tab)); }}>{tab === "files" ? "ファイル" : tab === "team" ? "チーム" : tab === "tools" ? "ツール" : "端末"}</button>)}</div>
 					<div id="detail-panel" className={`right-panel-body ${rightTab === "files" ? "file-panel-body" : rightTab === "terminal" ? "terminal-panel-body" : ""}`} role="tabpanel" aria-labelledby={`detail-tab-${rightTab}`}>
 						{workspaceId && <FilePane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} onOpen={openFile} onClear={() => setFileTarget(undefined)} visible={rightOpen && rightTab === "files"} />}
 						{rightTab === "team" && <TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} onSelect={selectSession} onStop={(id) => { void stop(id); }} onMessage={messageAgent} onFile={openFile} />}
