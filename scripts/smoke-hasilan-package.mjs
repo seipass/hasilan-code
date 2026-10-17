@@ -84,7 +84,7 @@ try {
 	assert.equal(page.status, 200);
 	assert.match(await page.text(), /<title>Hasilan Code<\/title>/);
 	const workspaces = await (await fetch(`${origin}/api/workspaces`, { headers })).json();
-	const directory = workspaces.find((entry) => entry.path === realpathSync(workspace));
+	const directory = workspaces.find((entry) => entry.path === realpathSync.native(workspace));
 	assert.ok(directory, "Packaged launch keeps the caller's workspace");
 	const created = await fetch(`${origin}/api/terminals`, {
 		method: "POST",
