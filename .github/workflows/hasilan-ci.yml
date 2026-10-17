@@ -1,0 +1,75 @@
+name: Hasilan Code CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    if: github.repository == 'seipass/hasilan-code'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PI_OFFLINE: '1'
+      PI_NO_LOCAL_LLM: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Build the reviewed terminal addon only
+        run: npm rebuild node-pty --ignore-scripts=false --foreground-scripts
+      - name: Build Hasilan Code with the pinned model catalog
+        run: npm run build:hasilan
+      - name: Check
+        run: npm run check
+      - name: Test Web harness and patched SDK contracts without provider credentials
+        run: npm run test:hasilan
+      - name: Assemble the portable npm and GitHub release package
+        if: runner.os == 'Linux'
+        run: npm run pack:hasilan -- --skip-build
+      - name: Retain the exact release candidate
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hasilan-code-package
+          path: .artifacts/hasilan-code/
+          if-no-files-found: error
+          retention-days: 14
+
+  installed-package:
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: hasilan-code-package
+          path: .artifacts/hasilan-code
+      - name: Install the same archive outside the checkout and execute HTTP and PTY smoke
+        run: npm run smoke:hasilan -- ${{ runner.os == 'Linux' && '--build-pty' || '' }}

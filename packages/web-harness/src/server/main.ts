@@ -20,7 +20,7 @@ import { swarmStartSchema } from "../shared/swarm.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
 import { CanvasStore, CanvasStoreError } from "./canvas-store.ts";
-import { openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
+import { CLI_HELP, openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
 import { EventHub } from "./events.ts";
 import { fileView } from "./file-view.ts";
@@ -39,9 +39,7 @@ import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
 async function main() {
 	const options = parseCliArgs(process.argv.slice(2));
 	if (options.help) {
-		console.log(
-			"Hasilan Code: --no-open --port <0..65535> --cwd <directory>\nLocal single-user execution; file checks are not a sandbox.",
-		);
+		console.log(CLI_HELP);
 		return;
 	}
 	const cwd = await resolveCliWorkspace(options);

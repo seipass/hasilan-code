@@ -88,7 +88,7 @@ function checkSource(source, manifest) {
 	visit(source);
 }
 
-const packages = getPublicWorkspacePackages()
+const packages = [...getPublicWorkspacePackages(), { directory: "packages/web-harness" }]
 	.map(({ directory }) => ({ directory, sourceDirectory: resolve(directory, "src") }))
 	.filter(({ sourceDirectory }) => existsSync(sourceDirectory))
 	.map(({ directory, sourceDirectory }) => {

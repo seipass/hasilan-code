@@ -1,0 +1,72 @@
+name: Hasilan Code Release
+
+on:
+  push:
+    tags: ['hasilan-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hasilan-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'seipass/hasilan-code' && startsWith(github.ref, 'refs/tags/hasilan-v')
+    uses: ./.github/workflows/hasilan-ci.yml
+
+  github-release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: hasilan-code-package
+          path: .artifacts/hasilan-code
+      - name: Validate tag, source commit and release checksums
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; import assert from "node:assert/strict"; const release=JSON.parse(readFileSync(".artifacts/hasilan-code/release.json","utf8")); assert.equal(process.env.RELEASE_TAG,`hasilan-v${release.version}`); assert.equal(release.commit,process.env.GITHUB_SHA);'
+          cd .artifacts/hasilan-code
+          sha256sum --check SHA256SUMS
+      - name: Publish immutable verified GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" .artifacts/hasilan-code/* --verify-tag --title "Hasilan Code ${RELEASE_TAG#hasilan-v}" --notes "Independent Hasilan Code release, including its patched Pi SDK. The same archive passed installed-package checks on Windows, macOS and Linux. See README for installation and SHA256SUMS for artifact checksums."
+
+  npm-publish:
+    needs: github-release
+    if: vars.HASILAN_NPM_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - run: npm install --global --ignore-scripts npm@11.17.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: hasilan-code-package
+          path: package
+      - name: Publish the tested tarball using npm trusted publishing
+        working-directory: package
+        run: |
+          sha256sum --check SHA256SUMS
+          npm publish hasilan-code-*.tgz --access public --provenance --ignore-scripts

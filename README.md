@@ -8,6 +8,29 @@ Piを基盤にした、ローカル単一ユーザー用のWebコーディング
 - 専用ディレクトリへの設定・認証・会話の保存
 
 起動方法・使い方・セキュリティ上の制約は [WebハーネスのREADME](packages/web-harness/README.md) を参照してください。ホストの権限でコマンドとファイル操作を実行します。サンドボックスではありません。
+## 導入・更新
+
+Node.js 22.19以上が必要です。ビルド済み配布物には、このプロジェクトで変更したPi SDKと実行時依存を同梱します。本家のnpmパッケージへ置き換えて実行する構成ではありません。
+
+npm公開済みバージョンの導入・更新:
+
+```sh
+npm install --global --ignore-scripts hasilan-code
+hasilan-code setup
+hasilan-code --version
+hasilan-code
+```
+
+Linuxの端末にはnative addonのビルドが必要です。C++コンパイラー・make・Pythonを用意し、`hasilan-code setup --build-pty`を明示的に実行してください。この操作だけが`node-pty`の確認済みinstall scriptを実行します。通常のインストールではlifecycle scriptを実行しません。ChromiumのOS依存ライブラリは[Playwrightの要件](https://playwright.dev/docs/browsers#install-system-dependencies)も参照してください。
+
+npmアカウントなしで導入する場合は [GitHub Releases](https://github.com/seipass/hasilan-code/releases) の`install-hasilan.mjs`を保存して実行します。
+
+```sh
+node install-hasilan.mjs --version 1.1.0 --setup
+```
+
+インストーラーは配布物のSHA-256を確認して専用ディレクトリへ導入し、コマンドの配置先を表示します。`--prefix <directory>`で配置先を指定できます。`--version`を省略すると最新の公開リリースを使います。同じコマンドを再実行すると更新できます。認証・会話は配布物とは別の`~/.hasilan-code/agent`に保持します。Windows/macOS向けのPTY prebuildは同梱し、Linuxでのビルドには`--build-pty`を指定します。
+
 
 ## 本家Piとの関係
 
@@ -20,9 +43,10 @@ Piを基盤にした、ローカル単一ユーザー用のWebコーディング
 | Webハーネス | `packages/web-harness`（npm名 `hasilan-code`） |
 | 同梱するPiのソース | `packages/ai`、`packages/agent`、`packages/coding-agent`など |
 
-Pi SDKはこのモノレポ内のworkspaceを参照します。npmのPiパッケージだけを差し替える更新方法は使いません。内部の`@earendil-works/*`名は上流との差分を小さくするため保持しており、本リポジトリからその名前でnpm公開することは想定していません。`hasilan-code`自体も現在は`private: true`です。GitHubでのソース公開とは別の設定です。
+Pi SDKはこのモノレポ内のworkspaceを参照します。npmのPiパッケージだけを差し替える更新方法は使いません。内部の`@earendil-works/*`名は上流との差分を小さくするため保持し、`hasilan-code`の配布物に変更済みの実装を同梱します。本リポジトリから本家の名前でnpm公開しません。
+ソースworkspaceは誤公開を防ぐため`private: true`のままにし、ビルド済みの検証用tarballからだけ公開用パッケージを作ります。TypeScriptのOS別実行ファイルは、固定したバージョンを導入先のnpmで取得します。
 
-本家向けのGitHub Actionsは初回公開時にリポジトリ設定で無効化しています。自動同期・モデルカタログ公開・本家のIssue/PR受付制御は実行しません。上流の著作権表示とMITライセンスは保持します。oh-my-piのソース、prompt、fixture、native binaryは使用していません。
+独自のGitHub Actionsだけを有効にし、本家向けの自動公開・同期・Issue/PR受付制御は無効のままにします。上流の著作権表示とMITライセンスを保持します。oh-my-piのソース、prompt、fixture、native binaryは使用していません。
 
 ## 開発
 
@@ -30,11 +54,53 @@ Node.js 22.19以上が必要です。依存のlifecycle scriptは実行せずイ
 
 ```sh
 npm install --ignore-scripts
-npm run build
+npm run build:hasilan
 npm run check
 ```
 
-テストは`./test.sh`または各パッケージの対象ファイルを指定して実行します。実プロバイダーを使うテストには認証と料金が伴うため、Webハーネスの会話・チーム検証はfaux providerを使います。
+`npm run test:hasilan`はWebハーネスのテストと、独自変更を加えたSDKのコンテキスト再開・入力キューのテストを実行します。実プロバイダーの認証や有料APIは使いません。
+
+## 独自CI・リリース
+
+本体のバージョンは`packages/web-harness/package.json`、基盤Piのバージョンはその`hasilanCode.piVersion`で別々に管理します。本家の`release:patch`や`version:patch`はこのアプリのリリースに使いません。
+
+- [Hasilan Code CI](.github/workflows/hasilan-ci.yml): Windows・macOS・Linuxでビルド、全体チェック、対象テストを実行します。Ubuntuで作った同一の配布物を3 OSのリポジトリ外へインストールし、CLI・変更済みSDK・認証付きHTTP・実際のPTY入出力を検証します。
+- [Hasilan Code Release](.github/workflows/hasilan-release.yml): `hasilan-vX.Y.Z`タグだけで動作し、CIで検証した配布物・インストーラー・`SHA256SUMS`・ソース情報をGitHub Releasesへ公開します。本家の`vX.Y.Z`タグとは分離します。同じバージョンの配布物を上書きしません。
+- ビルドは`nix/model-catalog.json`で固定したPiのモデルカタログをSHA-256検証して使用します。実行時依存の解決結果がルートlockfileにないバージョンへ変わった場合はパッケージ作成を拒否します。
+
+ローカルで配布物を作り、作業ツリー外への導入を検証します。
+
+```sh
+npm run pack:hasilan
+npm run smoke:hasilan
+```
+
+Linuxの配布物検証は`npm run smoke:hasilan -- --build-pty`で行います。成果物は`.artifacts/hasilan-code/`です。ソースworkspaceを直接`npm publish`すると拒否します。公開するのは検証済みのtarballだけです。
+
+次のリリース:
+
+1. 修正なら`npm run version:hasilan:patch`、機能追加なら`npm run version:hasilan:minor`でアプリだけを更新する。Piのバージョンは変えない。
+2. 更新内容とlockfileを確認し、`npm run pack:hasilan`、`npm run smoke:hasilan`を実行する。
+3. 検証した変更をコミットして`main`へpushする。
+4. `git tag hasilan-vX.Y.Z`、`git push origin hasilan-vX.Y.Z`で公開する。初回は`hasilan-v1.1.0`。
+5. GitHub Actionsの成功と公開先を確認する。公開済みタグ・配布物は置き換えず、修正は次のバージョンで出す。npm公開だけが失敗した場合は失敗ジョブだけを再実行する。
+
+### npmの初回公開とtrusted publishing
+
+初回のみ所有者が`npm login --registry=https://registry.npmjs.org --auth-type=web`で認証し、検証済みの`hasilan-code-X.Y.Z.tgz`を`npm publish <tarball> --access public --ignore-scripts`で公開します。認証コードやトークンはリポジトリやチャットへ保存しません。
+
+以降はnpmのパッケージ設定のTrusted PublisherにGitHub Actionsを登録します。
+
+| 設定 | 値 |
+|---|---|
+| Organization or user | `seipass` |
+| Repository | `hasilan-code` |
+| Workflow filename | `hasilan-release.yml`（パスではなくファイル名） |
+| Environment name | `npm-publish` |
+| Allowed actions | `npm publish`を許可 |
+
+登録後にGitHubのリポジトリ変数`HASILAN_NPM_PUBLISH=true`を設定するとnpm公開ジョブが有効になります。長期保存するnpm tokenは不要です。未設定時もGitHub Releasesは公開しますが、npm公開ジョブは明示的にスキップします。詳細は[npmの公式手順](https://docs.npmjs.com/trusted-publishers/)を参照してください。
+新しいTrusted Publisher設定は2日以内の最初の公開で検証する必要があります。登録は次の未公開バージョンを出せる時点で行い、そのタグのnpm公開ジョブまで成功を確認してください。
 
 ## 本家Piを更新する手順
 
@@ -48,7 +114,7 @@ git remote add upstream https://github.com/earendil-works/pi.git
 
 1. 対象リリースの変更履歴を読み、タグとコミットを確認する。
 2. `git fetch upstream --tags`で取得し、作業ブランチで対象タグをmergeする。上流のGit履歴を保持し、WebハーネスとPi SDKへの独自変更を競合解決時に残す。
-3. `packages/web-harness/package.json`のPi依存3件を対象リリースへ揃える。外部依存の変更はリリースノートとlifecycle scriptを確認する。
+3. `packages/web-harness/package.json`のPi依存3件と`hasilanCode.piVersion`・`hasilanCode.piCommit`を対象リリースへ揃え、`nix/model-catalog.json`のカタログがそのPiのAPIに対応することも確認する。外部依存の変更はリリースノートとlifecycle scriptを確認する。
 4. `npm install --package-lock-only --ignore-scripts`、`npm install --ignore-scripts`、`node scripts/generate-coding-agent-install-lock.mjs`で依存と生成lockを更新する。
 5. `npm run check`、変更したSDK契約のテスト、Webハーネスの会話・チーム・再開・保存を検証する。既存認証や有料APIを使わず、隔離した設定ディレクトリとfaux providerで確認する。
 6. このREADMEとWebハーネスのREADMEの上流バージョン・コミットを更新する。ロックファイルを含む差分を確認してコミットする。

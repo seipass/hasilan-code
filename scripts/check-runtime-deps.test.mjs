@@ -108,3 +108,12 @@ test("ignores tests, declarations, and private packages", async (t) => {
 	});
 	assert.equal(result.status, 0, result.stderr);
 });
+
+test("checks runtime imports in the private workspace used to assemble Hasilan Code", async (t) => {
+	const result = await check(t, {}, "", {
+		"packages/web-harness/package.json": JSON.stringify({ name: "hasilan-code", version: "1.1.0", private: true, devDependencies: { typescript: "7.0.2" } }),
+		"packages/web-harness/src/server/main.ts": 'import { API } from "typescript/unstable/sync";',
+	});
+	assert.equal(result.status, 1);
+	assert.match(result.stderr, /typescript\/unstable\/sync is not declared in hasilan-code/);
+});

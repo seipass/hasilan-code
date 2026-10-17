@@ -4,13 +4,17 @@ Pi v1.3.0を基盤にしたローカル単一ユーザー用Web入口。上流CL
 
 ## 起動
 
+ビルド済みのnpmパッケージ・GitHub Releasesから導入する場合は、[導入・更新](../../README.md#導入更新)を参照してください。`hasilan-code --version`でアプリと基盤Piのバージョンを確認できます。
+
+### ソースから起動
+
 Node.js 22.19以上が必要です。リポジトリrootで実行します。
 
 ```sh
 npm install --ignore-scripts
 npm rebuild node-pty --ignore-scripts=false --foreground-scripts
-npm run build
-npx playwright install chromium
+npm run build:hasilan
+node packages/web-harness/bin/hasilan-code.mjs setup
 npm run web
 ```
 
@@ -21,7 +25,7 @@ npm run web
 Windowsのnode-pty native installが失敗する場合、Python 3.11/3.12、Visual Studio 2022 C++ Build Tools、Windows SDK、Spectre対応libraryを用意してrebuildします。pipeへのfallbackはありません。
 ネイティブフォルダー選択はホストのデスクトップ上に表示します。WindowsはPowerShell/WinForms、macOSは標準のフォルダー選択、Linuxはzenityまたはkdialogを使用します。SSHやデスクトップ環境のないホストではダイアログを利用できません。同時に開くダイアログは一つです。
 
-`npm run web` は `dist` の配信用ファイルを使います。Web側のソースを変更した後は `npm run build --workspace=hasilan-code` で更新し、サーバーを再起動してブラウザーを再読み込みしてください。依存パッケージのソースも変更した場合は、上記のリポジトリ全体のビルドが必要です。
+`npm run web` は `dist` の配信用ファイルを使います。Web側のソースを変更した後は `npm run build --workspace=hasilan-code` で更新し、サーバーを再起動してブラウザーを再読み込みしてください。依存するPiのソースも変更した場合は、`npm run build:hasilan`でアプリと依存SDKをまとめてビルドします。配布物の作成・検証・公開方法は[独自CI・リリース](../../README.md#独自ciリリース)を参照してください。
 
 ## 会話を始める
 

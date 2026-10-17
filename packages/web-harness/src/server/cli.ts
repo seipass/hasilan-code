@@ -11,12 +11,16 @@ export interface CliOptions {
 
 export const CLI_HELP = `Hasilan Code
 
-Usage: npm run web -- [--no-open] [--port <0..65535>] [--cwd <directory>]
+Usage: hasilan-code [--no-open] [--port <0..65535>] [--cwd <directory>]
 
   --port     Loopback HTTP port (default 3080; 0 chooses an OS-assigned port)
   --cwd      Initial workspace directory (default current working directory)
   --no-open  Show launch instructions only (default; never opens a browser automatically)
   --help     Show this help
+  --version  Show the Hasilan Code and bundled Pi versions
+  setup      Install Chromium; --build-pty explicitly builds the terminal addon
+
+Source checkout: npm run web -- [options]
 
 The server binds only to 127.0.0.1. Shell and browser tools run with your user
 permissions; workspace path checks are not a sandbox.

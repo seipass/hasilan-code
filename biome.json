@@ -27,6 +27,11 @@
 		"includes": [
 			"scripts/model-catalog-protocol.ts",
 			"scripts/model-catalog-protocol.test.ts",
+			"scripts/hasilan-*.mjs",
+			"scripts/install-hasilan.mjs",
+			"scripts/smoke-hasilan-package.mjs",
+			"scripts/test-hasilan.mjs",
+			"packages/web-harness/bin/*.mjs",
 			"packages/*/src/**/*.ts",
 			"packages/*/test/**/*.ts",
 			"packages/coding-agent/examples/**/*.ts",
