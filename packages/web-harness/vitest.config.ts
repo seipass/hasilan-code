@@ -1,5 +1,5 @@
 import { defineConfig, mergeConfig } from "vitest/config";
-import baseConfig from "../../vitest.base.ts";
+import baseConfig, { workspaceSourcePaths } from "../../vitest.base.ts";
 
 export default mergeConfig(
 	baseConfig,
@@ -10,7 +10,10 @@ export default mergeConfig(
 			include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
 			reporters: process.env.GITHUB_ACTIONS ? ["dot", "github-actions"] : ["dot"],
 		},
-		resolve: { conditions: ["source"] },
+		resolve: {
+			conditions: ["source"],
+			alias: [{ find: /^@earendil-works\/pi-coding-agent$/, replacement: workspaceSourcePaths.codingAgentIndex }],
+		},
 		ssr: { resolve: { conditions: ["source"] } },
 	}),
 );

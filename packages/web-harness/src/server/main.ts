@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
@@ -33,6 +33,7 @@ import { TerminalManager } from "./terminal-manager.ts";
 import { BrowserManager } from "./tools/browser.ts";
 import { createHashlineTools } from "./tools/hashline/index.ts";
 import { SearchService } from "./tools/search.ts";
+import { serveVideo, videoView } from "./video.ts";
 import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
 
 async function main() {
@@ -229,7 +230,7 @@ async function main() {
 						if (!isCanvasDocument(document)) throw new HttpError(400, "設計データの ID・接続先が不正です。");
 						const snapshot = await files.create(
 							id,
-							`.hasilan-code/canvas/design-${randomUUID()}.txt`,
+							`.hasilan-code/canvas/design-${randomBytes(8).toString("hex")}.txt`,
 							Buffer.from(`${serializeCanvasDesign(document.design)}\n`, "utf8"),
 						);
 						return reply({ path: snapshot.path }, 201);
@@ -244,13 +245,16 @@ async function main() {
 					if (parts[3] === "files" && method === "GET") return reply(await files.list(id, path));
 					if (parts[3] === "file" && method === "GET")
 						return reply(
-							fileView(
-								await files.read(id, path),
-								Number(url.searchParams.get("offset") ?? 1),
-								Number(url.searchParams.get("limit") ?? 200),
-							),
+							(await videoView(files, id, path)) ??
+								fileView(
+									await files.read(id, path),
+									Number(url.searchParams.get("offset") ?? 1),
+									Number(url.searchParams.get("limit") ?? 200),
+								),
 						);
-					if (parts[3] === "file-content" && method === "GET") {
+					if (parts[3] === "file-content" && (method === "GET" || method === "HEAD")) {
+						if (await serveVideo(files, id, path, url.searchParams.get("revision"), request, response))
+							return true;
 						const snapshot = await files.read(id, path);
 						if (snapshot.revision !== url.searchParams.get("revision"))
 							throw new HttpError(409, "File revision changed; refresh the viewer");
@@ -263,7 +267,7 @@ async function main() {
 							"X-Content-Type-Options": "nosniff",
 							"Cache-Control": "private, no-store",
 						});
-						response.end(snapshot.bytes);
+						response.end(method === "HEAD" ? undefined : snapshot.bytes);
 						return true;
 					}
 				}

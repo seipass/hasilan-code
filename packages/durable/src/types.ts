@@ -191,7 +191,7 @@ export interface TaskRuntime<I, S, R, H extends object> extends DocumentObserver
 	 * Commit on the Session line after rereading the task. Rejects when the task is terminal, the invocation ended, the
 	 * Harness is closing, or, in a run invocation, the task carries an abort mark. A returned state replaces the task's
 	 * state in the same commit; returning nothing leaves it unchanged. `tx.createTask()` defaults to the task's
-	 * conversation.
+	 * conversation. Inside the callback read only through `tx`: `snapshot()`, `documentState()`, `watchDoc()`, `getTask()`, and the other Session and runtime reads may queue on the line the callback holds, and then never resolve.
 	 */
 	commit(
 		change: (
@@ -213,6 +213,11 @@ export interface TaskRuntime<I, S, R, H extends object> extends DocumentObserver
 	 * another owns; resolves at once for a terminal one.
 	 */
 	abortOwned(id: TaskId, context: Context): Promise<void>;
+	/**
+	 * Live tasks this task owns directly, in ID order: also those an earlier invocation created, before a restart. Tasks
+	 * in conversations it owns are not included. Copies of the committed records.
+	 */
+	ownedTasks(context: Context): Promise<TaskRecord<JsonValue, JsonValue, JsonValue>[]>;
 	/** Outcomes of terminal tasks, in order; rejects when one is missing or not terminal. Used after a wait. */
 	outcomes<T>(ids: readonly TaskId<T>[], context: Context): Promise<TaskOutcome<T>[]>;
 	/**
@@ -943,7 +948,9 @@ export type SessionEnd = { readonly reason: "closed" } | { readonly reason: "fai
 
 /** Owner of one mutation line, its records, and its tracked documents. */
 export interface Session extends DocumentObserver {
-	/** Run one atomic transaction on the Session mutation line. */
+	/**
+	 * Run one atomic transaction on the Session mutation line. Inside the callback read only through `tx`: `snapshot()`, `documentState()`, `watchDoc()`, `getTask()`, and the other Session and runtime reads may queue on the line the callback holds, and then never resolve.
+	 */
 	commit<T>(change: (tx: Tx) => T | Promise<T>, context: Context): Promise<T>;
 	/** Seal admission, settle admitted commits, then close storage. */
 	close(context: Context): Promise<void>;

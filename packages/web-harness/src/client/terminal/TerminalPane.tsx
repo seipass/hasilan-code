@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import type { TerminalClientMessage, TerminalServerMessage, TerminalSummary } from "../../shared/terminal-protocol.ts";
+import { type PaneIndex, SplitActions, type SplitEdge, SplitLayout, type SplitMode } from "../SplitLayout.tsx";
 import "@xterm/xterm/css/xterm.css";
 import "./terminal.css";
 
@@ -33,6 +34,10 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 	const [terminals, setTerminals] = useState<TerminalSummary[]>([]);
 	const [selectedId, setSelectedId] = useState<string>();
 	const [viewStates, setViewStates] = useState(() => new Map<string, TerminalViewState>());
+	const [paneSelections, setPaneSelections] = useState<[string | undefined, string | undefined]>([undefined, undefined]);
+	const [assignments, setAssignments] = useState<Record<string, PaneIndex>>({});
+	const [focusedPane, setFocusedPane] = useState<PaneIndex>(0);
+	const [mode, setMode] = useState<SplitMode>("single");
 	const [error, setError] = useState("");
 	const [creating, setCreating] = useState(false);
 	const [closing, setClosing] = useState<string[]>([]);
@@ -47,14 +52,22 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 	const workspaceRef = useRef(workspaceId);
 	const terminalsRef = useRef(terminals);
 	const selectedRef = useRef(selectedId);
+	const modeRef = useRef(mode);
+	const assignmentsRef = useRef(assignments);
 	workspaceRef.current = workspaceId;
 	terminalsRef.current = terminals;
 	selectedRef.current = selectedId;
+	modeRef.current = mode;
+	assignmentsRef.current = assignments;
 
 	useEffect(() => {
 		setTerminals([]);
 		setSelectedId(undefined);
 		setViewStates(new Map());
+		setPaneSelections([undefined, undefined]);
+		setAssignments({});
+		setFocusedPane(0);
+		setMode("single");
 		setError("");
 		setListFailed(false);
 		setFocusRequest(0);
@@ -83,6 +96,16 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 		}
 		return () => { cancelled = true; };
 	}, [workspaceId, listAttempt]);
+	useEffect(() => {
+		if (!selectedId) return;
+		const group = assignments[selectedId] ?? 0;
+		setPaneSelections((previous) => {
+			if (previous[group] === selectedId) return previous;
+			const next: [string | undefined, string | undefined] = [...previous];
+			next[group] = selectedId;
+			return next;
+		});
+	}, [selectedId, assignments]);
 
 	const updateSummary = useCallback((terminalId: string, status: TerminalSummary["status"], exitCode?: number, signal?: number) => {
 		setTerminals((items) => items.map((item) => item.terminalId === terminalId ? { ...item, status, exitCode, signal } : item));
@@ -93,6 +116,7 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 
 	function select(terminalId: string) {
 		setSelectedId(terminalId);
+		setFocusedPane(assignments[terminalId] ?? 0);
 		setFocusRequest((value) => value + 1);
 		if (workspaceId) selectionByWorkspace.current.set(workspaceId, terminalId);
 	}
@@ -105,10 +129,25 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 		try {
 			const item = await terminalRequest<TerminalSummary>("/api/terminals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspaceId, cols: 80, rows: 24 }) });
 			if (workspaceRef.current !== requestWorkspace) return;
+			const destination = modeRef.current === "single" ? 0 : focusedPane;
 			setTerminals((items) => items.some((existing) => existing.terminalId === item.terminalId) ? items : [...items, item]);
-			select(item.terminalId);
+			setAssignments((previous) => ({ ...previous, [item.terminalId]: destination }));
+			setSelectedId(item.terminalId);
+			setPaneSelections((previous) => destination === 0 ? [item.terminalId, previous[1]] : [previous[0], item.terminalId]);
+			setFocusedPane(destination);
+			setFocusRequest((value) => value + 1);
+			selectionByWorkspace.current.set(requestWorkspace, item.terminalId);
 		} catch (cause) { if (workspaceRef.current === requestWorkspace) setError(cause instanceof Error ? cause.message : "PTYを作成できません"); }
 		finally { setCreating(false); }
+	}
+	function mergeTerminals(activeId?: string) {
+		setAssignments({});
+		setPaneSelections([activeId, undefined]);
+		setSelectedId(activeId);
+		setFocusedPane(0);
+		setMode("single");
+		setFocusRequest((value) => value + 1);
+		if (workspaceId && activeId) selectionByWorkspace.current.set(workspaceId, activeId);
 	}
 
 	async function close(terminalId: string) {
@@ -124,13 +163,26 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 			const index = current.findIndex((item) => item.terminalId === terminalId);
 			const remaining = current.filter((item) => item.terminalId !== terminalId);
 			setTerminals(remaining);
+			const currentAssignments = assignmentsRef.current;
+			const group = currentAssignments[terminalId] ?? 0;
+			const replacement = remaining.find((item) => (currentAssignments[item.terminalId] ?? 0) === group)?.terminalId;
+			if (modeRef.current !== "single" && !replacement) {
+				mergeTerminals(remaining.some((item) => item.terminalId === selectedRef.current) ? selectedRef.current : remaining[0]?.terminalId);
+			} else {
+				setPaneSelections((previous) => {
+					const next: [string | undefined, string | undefined] = [...previous];
+					if (next[group] === terminalId) next[group] = replacement;
+					return next;
+				});
+				setAssignments((previous) => { const next = { ...previous }; delete next[terminalId]; return next; });
+			}
 			setViewStates((states) => {
 				const next = new Map(states);
 				next.delete(terminalId);
 				return next;
 			});
 			if (selectedRef.current === terminalId) {
-				const next = remaining[Math.min(Math.max(index, 0), remaining.length - 1)]?.terminalId;
+				const next = replacement ?? remaining[Math.min(Math.max(index, 0), remaining.length - 1)]?.terminalId;
 				setSelectedId(next);
 				if (requestWorkspace) {
 					if (next) selectionByWorkspace.current.set(requestWorkspace, next);
@@ -141,14 +193,74 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 		finally { setClosing((ids) => ids.filter((id) => id !== terminalId)); }
 	}
 
-	const active = terminals.find((item) => item.terminalId === selectedId);
-	const state = selectedId ? viewStates.get(selectedId) : undefined;
-	const connectionLabel = state?.connection === "disconnected" ? "切断" : state?.connection === "connected" ? (active?.status === "exited" ? `終了 ${active.exitCode ?? "?"}` : state.controller ? undefined : "閲覧のみ") : "接続中";
+	const groups = [
+		terminals.filter((item) => (assignments[item.terminalId] ?? 0) === 0),
+		terminals.filter((item) => assignments[item.terminalId] === 1),
+	];
+	const shownIds = groups.map((items, group) => items.find((item) => item.terminalId === paneSelections[group])?.terminalId ?? items[0]?.terminalId);
+	function moveTerminal(terminalId: string, destination: PaneIndex) {
+		if (closing.includes(terminalId) || !terminals.some((item) => item.terminalId === terminalId)) return;
+		const source = assignments[terminalId] ?? 0;
+		if (mode !== "single" && source !== destination && groups[source].length === 1) {
+			mergeTerminals(terminalId);
+			return;
+		}
+		if (destination === 1 && mode === "single") setMode("columns");
+		setAssignments((previous) => ({ ...previous, [terminalId]: destination }));
+		setPaneSelections((previous) => {
+			const next: [string | undefined, string | undefined] = [...previous];
+			if (source !== destination && next[source] === terminalId) next[source] = groups[source].find((item) => item.terminalId !== terminalId)?.terminalId;
+			next[destination] = terminalId;
+			return next;
+		});
+		setSelectedId(terminalId);
+		setFocusedPane(destination);
+		setFocusRequest((value) => value + 1);
+	}
+	function dropTerminal(destination: PaneIndex) {
+		const source = draggedTerminal.current;
+		if (!source) return;
+		moveTerminal(source, destination);
+		draggedTerminal.current = undefined;
+		setDraggingId(undefined);
+		setDropTarget(undefined);
+	}
+	function changeSplit(next: SplitMode) {
+		if (next === "single") {
+			mergeTerminals(shownIds[focusedPane] ?? shownIds[0] ?? shownIds[1]);
+		} else if (mode === "single" && terminals.length > 1 && shownIds[0]) moveTerminal(shownIds[0], 1);
+		setMode(next);
+	}
+	function splitTerminalAt(edge: SplitEdge) {
+		const source = draggedTerminal.current;
+		if (!source || terminals.length < 2 || closing.includes(source) || !terminals.some((item) => item.terminalId === source)) return;
+		const destination: PaneIndex = edge === "left" || edge === "top" ? 0 : 1;
+		const other = shownIds[destination === 0 ? 1 : 0];
+		const remaining = other !== source && other ? other : terminals.find((item) => item.terminalId !== source)?.terminalId;
+		const next: Record<string, PaneIndex> = {};
+		for (const item of terminals) next[item.terminalId] = item.terminalId === source ? destination : destination === 0 ? 1 : 0;
+		setAssignments(next);
+		setPaneSelections(destination === 0 ? [source, remaining] : [remaining, source]);
+		setSelectedId(source);
+		setFocusedPane(destination);
+		setMode(edge === "left" || edge === "right" ? "columns" : "rows");
+		setFocusRequest((value) => value + 1);
+		draggedTerminal.current = undefined;
+		setDraggingId(undefined);
+		setDropTarget(undefined);
+	}
 
 	return <section className="terminal-pane" hidden={!visible} aria-label="ユーザー端末">
-		<header className="terminal-header">
-			<div className="terminal-tabs" role="tablist" aria-label="端末一覧">
-				{terminals.map((item, index) => <div className="terminal-tab-item" role="presentation" key={item.terminalId} data-terminal-id={item.terminalId} data-dragging={draggingId === item.terminalId || undefined} data-drop-edge={dropTarget?.terminalId === item.terminalId ? dropTarget.edge : undefined} onMouseDown={(event) => {
+		{(error || listFailed) && <div className="terminal-error" role="alert">{error || "端末一覧を取得できません"}{listFailed && <button type="button" onClick={() => { setError(""); setListFailed(false); setListAttempt((value) => value + 1); }}>一覧を再取得</button>}</div>}
+		<SplitLayout mode={mode} label="端末" dragging={!!draggingId && terminals.length > 1} onEdgeDrop={splitTerminalAt}>
+		{([0, 1] as const).map((group) => {
+			const items = groups[group];
+			const active = items.find((item) => item.terminalId === shownIds[group]);
+			const state = active ? viewStates.get(active.terminalId) : undefined;
+			const connectionLabel = state?.connection === "disconnected" ? "切断" : state?.connection === "connected" ? (active?.status === "exited" ? `終了 ${active.exitCode ?? "?"}` : state.controller ? undefined : "閲覧のみ") : "接続中";
+			return <header key={group} className="terminal-header split-tab-header" data-pane={group} data-focused={focusedPane === group} hidden={group === 1 && mode === "single"} onPointerDownCapture={() => setFocusedPane(group)} onFocusCapture={() => setFocusedPane(group)} onDragOver={(event) => { if (draggedTerminal.current) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => { if (draggedTerminal.current) { event.preventDefault(); dropTerminal(group); } }}>
+			<div className="terminal-tabs" role="tablist" aria-label={`端末 ペイン ${group + 1}`}>
+				{items.map((item, index) => <div className="terminal-tab-item" role="presentation" key={item.terminalId} data-terminal-id={item.terminalId} data-dragging={draggingId === item.terminalId || undefined} data-drop-edge={dropTarget?.terminalId === item.terminalId ? dropTarget.edge : undefined} onMouseDown={(event) => {
 					if (event.button === 1) event.preventDefault();
 				}} onAuxClick={(event) => {
 					if (event.button !== 1) return;
@@ -158,6 +270,7 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 					const sourceId = draggedTerminal.current;
 					if (!sourceId || sourceId === item.terminalId || !terminals.some((terminal) => terminal.terminalId === sourceId)) return;
 					event.preventDefault();
+					event.stopPropagation();
 					event.dataTransfer.dropEffect = "move";
 					const bounds = event.currentTarget.getBoundingClientRect();
 					setDropTarget({ terminalId: item.terminalId, edge: event.clientX < bounds.left + bounds.width / 2 ? "before" : "after" });
@@ -168,6 +281,8 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 					const sourceId = draggedTerminal.current;
 					if (!sourceId || sourceId === item.terminalId) return;
 					event.preventDefault();
+					event.stopPropagation();
+					if ((assignments[sourceId] ?? 0) !== group) moveTerminal(sourceId, group);
 					const bounds = event.currentTarget.getBoundingClientRect();
 					const after = event.clientX >= bounds.left + bounds.width / 2;
 					// Only change display order. Stable terminal keys retain sockets, emulators and selection.
@@ -183,7 +298,7 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 					setDraggingId(undefined);
 					setDropTarget(undefined);
 				}}>
-					<button className="terminal-tab" type="button" role="tab" id={`terminal-tab-${item.terminalId}`} aria-controls={`terminal-screen-${item.terminalId}`} aria-selected={selectedId === item.terminalId} tabIndex={selectedId === item.terminalId ? 0 : -1} title={viewStates.get(item.terminalId)?.title || `端末 ${index + 1}`} draggable={!closing.includes(item.terminalId)} onDragStart={(event) => {
+					<button className="terminal-tab" type="button" role="tab" id={`terminal-tab-${item.terminalId}`} aria-controls={`terminal-screen-${item.terminalId}`} aria-selected={shownIds[group] === item.terminalId} tabIndex={shownIds[group] === item.terminalId ? 0 : -1} title={viewStates.get(item.terminalId)?.title || `端末 ${terminals.indexOf(item) + 1}`} draggable={!closing.includes(item.terminalId)} onDragStart={(event) => {
 						draggedTerminal.current = item.terminalId;
 						setDraggingId(item.terminalId);
 						setDropTarget(undefined);
@@ -195,32 +310,43 @@ export function TerminalPane({ workspaceId, visible = true }: TerminalPaneProps)
 						setDropTarget(undefined);
 					}} onClick={() => select(item.terminalId)} onKeyDown={(event) => {
 						let next: number;
-						if (event.key === "ArrowRight") next = (index + 1) % terminals.length;
-						else if (event.key === "ArrowLeft") next = (index - 1 + terminals.length) % terminals.length;
+						if (event.key === "ArrowRight") next = (index + 1) % items.length;
+						else if (event.key === "ArrowLeft") next = (index - 1 + items.length) % items.length;
 						else if (event.key === "Home") next = 0;
-						else if (event.key === "End") next = terminals.length - 1;
+						else if (event.key === "End") next = items.length - 1;
 						else return;
 						event.preventDefault();
-						select(terminals[next].terminalId);
-					}}><span>端末 {index + 1}</span>{item.status === "exited" && <span className="terminal-tab-exit">終了 {item.exitCode ?? "?"}</span>}</button>
-					<button className="terminal-tab-close" type="button" aria-label={`端末 ${index + 1} を閉じる`} title={`端末 ${index + 1} を閉じる`} disabled={closing.includes(item.terminalId)} onClick={() => { void close(item.terminalId); }}>×</button>
+						select(items[next].terminalId);
+					}}><span>端末 {terminals.indexOf(item) + 1}</span>{item.status === "exited" && <span className="terminal-tab-exit">終了 {item.exitCode ?? "?"}</span>}</button>
+					<button className="split-tab-move" type="button" aria-label={`端末 ${terminals.indexOf(item) + 1} を別のペインへ移動`} title="別のペインへ移動" disabled={closing.includes(item.terminalId)} onClick={() => moveTerminal(item.terminalId, group === 0 ? 1 : 0)}>⇄</button>
+					<button className="terminal-tab-close" type="button" aria-label={`端末 ${terminals.indexOf(item) + 1} を閉じる`} title={`端末 ${terminals.indexOf(item) + 1} を閉じる`} disabled={closing.includes(item.terminalId)} onClick={() => { void close(item.terminalId); }}>×</button>
 				</div>)}
 			</div>
-			<button className="terminal-new" type="button" aria-label="新しい端末を作成" title="新しい端末を作成" disabled={!workspaceId || creating} onClick={() => { void create(); }}>{creating ? "作成中…" : "+"}</button>
+			<button className="terminal-new" type="button" aria-label={`ペイン ${group + 1}に新しい端末を作成`} title="このペインに新しい端末を作成" disabled={!workspaceId || creating} onClick={() => { void create(); }}>{creating ? "作成中…" : "+"}</button>
+			<SplitActions label={`端末 ペイン ${group + 1}`} mode={mode} onChange={changeSplit} />
 			{active && <div className="terminal-status-controls">
 				{connectionLabel && <span className="terminal-status" data-connection={state?.connection ?? "connecting"} role="status" title={state?.connection === "disconnected" && active.status === "running" ? "接続が切れています。PTYはホストで継続します。" : state?.title}>{connectionLabel}</span>}
 				{state?.connection === "connected" && !state.controller && active.status === "running" && <button className="terminal-take-control" type="button" onClick={state.takeControl}>操作権を取得</button>}
 				{state?.connection === "disconnected" && <button className="terminal-reconnect" type="button" onClick={state.reconnect}>再接続</button>}
 			</div>}
-		</header>
-		{(error || listFailed) && <div className="terminal-error" role="alert">{error || "端末一覧を取得できません"}{listFailed && <button type="button" onClick={() => { setError(""); setListFailed(false); setListAttempt((value) => value + 1); }}>一覧を再取得</button>}</div>}
-		{terminals.map((item) => <TerminalView key={item.terminalId} summary={item} visible={visible && selectedId === item.terminalId} selected={selectedId === item.terminalId} focusRequest={selectedId === item.terminalId ? focusRequest : 0} onSummary={updateSummary} onState={updateViewState} />)}
-		{!active && <p className="terminal-empty">{workspaceId ? "＋ で新しい端末を開始" : "ワークスペースを選択してください。"}</p>}
+			</header>;
+		})}
+		{terminals.map((item) => {
+			const group = assignments[item.terminalId] ?? 0;
+			const selected = shownIds[group] === item.terminalId && (group === 0 || mode !== "single");
+			return <TerminalView key={item.terminalId} summary={item} pane={group} visible={visible && selected} selected={selected} focusRequest={selectedId === item.terminalId ? focusRequest : 0} onSummary={updateSummary} onState={updateViewState} onActivate={() => { setFocusedPane(group); setSelectedId(item.terminalId); }} dragging={!!draggingId} onTabDrop={() => dropTerminal(group)} />;
+		})}
+		{([0, 1] as const).map((group) => !shownIds[group] && <p key={`empty-${group}`} className="terminal-empty split-tab-body" data-pane={group} hidden={group === 1 && mode === "single"} onPointerDown={() => setFocusedPane(group)} onDragOver={(event) => { if (draggedTerminal.current) event.preventDefault(); }} onDrop={(event) => { if (draggedTerminal.current) { event.preventDefault(); dropTerminal(group); } }}>{workspaceId ? "このペインを選択して ＋ で端末を開始、またはタブを移動" : "ワークスペースを選択してください。"}</p>)}
+		</SplitLayout>
 	</section>;
 }
 
-function TerminalView({ summary, visible, selected, focusRequest, onSummary, onState }: {
+function TerminalView({ summary, pane, visible, selected, focusRequest, onSummary, onState, onActivate, dragging, onTabDrop }: {
 	summary: TerminalSummary;
+	pane: PaneIndex;
+	onActivate: () => void;
+	dragging: boolean;
+	onTabDrop: () => void;
 	visible: boolean;
 	selected: boolean;
 	focusRequest: number;
@@ -430,7 +556,7 @@ function TerminalView({ summary, visible, selected, focusRequest, onSummary, onS
 		if (visible) fitRef.current();
 	}, [visible, focusRequest]);
 
-	return <div className="terminal-view" id={`terminal-screen-${terminalId}`} role="tabpanel" aria-labelledby={`terminal-tab-${terminalId}`} hidden={!selected}>
+	return <div className="terminal-view split-tab-body" data-pane={pane} onPointerDownCapture={onActivate} onDragOver={(event) => { if (dragging) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => { if (dragging) { event.preventDefault(); onTabDrop(); } }} id={`terminal-screen-${terminalId}`} role="tabpanel" aria-labelledby={`terminal-tab-${terminalId}`} hidden={!selected}>
 		{error && <div className="terminal-error" role="alert">{error}</div>}
 		<div className="terminal-emulator" ref={container} onKeyDown={(event) => event.stopPropagation()} />
 	</div>;

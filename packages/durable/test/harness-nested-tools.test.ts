@@ -20,7 +20,7 @@ import {
 	type Harness,
 	LiveDoc,
 	MemoryStorage,
-	NestedResultDoc,
+	NestedCallDoc,
 	type NestedToolExecutionResult,
 	type TaskId,
 	type ToolHookCall,
@@ -96,6 +96,79 @@ afterEach(async () => {
 });
 
 describe("nested tool calls", () => {
+	it("stores one document per nested call, keyed by its key, written only by that call", async () => {
+		const setup = chatSetup();
+		const echo = echoTool();
+		addTool(setup.registry, echo.registration);
+		addTool(
+			setup.registry,
+			tool("batch", async (_args, api, callContext) => {
+				await Promise.all([
+					api.executeTool("echo", { text: "a" }, callContext),
+					api.executeTool("echo", { text: "b" }, callContext, { key: "named" }),
+				]);
+				return {};
+			}),
+		);
+		setup.faux.setResponses([call("batch"), DONE]);
+		const storage = new MemoryStorage();
+		// Per document written, the keys of the nested calls it holds.
+		const written: { kind: string; key: string | undefined }[] = [];
+		const commit = storage.commit.bind(storage);
+		storage.commit = (writes, commitContext) => {
+			for (const write of writes) {
+				if (write.type === "document.create") written.push({ kind: write.record.kind, key: write.record.key });
+			}
+			return commit(writes, commitContext);
+		};
+		const { harness, root } = await openChat(storage, setup);
+		await (await root.submit({ type: "input", content: "go" }, context)).wait(context);
+		const nested = written.filter((write) => write.kind.startsWith("pi.tool."));
+		expect(nested).toEqual([
+			{ kind: NestedCallDoc.definition.kind, key: "1" },
+			{ kind: NestedCallDoc.definition.kind, key: "named" },
+		]);
+		await harness.close(context);
+	});
+
+	it("rejects a nested call of an aborted caller and leaves no document for it", async () => {
+		const setup = chatSetup();
+		const echo = echoTool();
+		addTool(setup.registry, echo.registration);
+		const started = deferred();
+		const marked = deferred();
+		let rejected: unknown;
+		let caller: TaskId | undefined;
+		addTool(
+			setup.registry,
+			tool("late", async (_args, api) => {
+				caller = api.taskId;
+				started.resolve();
+				await marked.promise;
+				// Its context is aborted too, so pass one that is not: the admission itself must refuse.
+				try {
+					await api.executeTool("echo", { text: "a" }, context);
+				} catch (error) {
+					rejected = error;
+				}
+				return {};
+			}),
+		);
+		setup.faux.setResponses([call("late"), DONE]);
+		const { harness, root } = await openChat(new MemoryStorage(), setup);
+		const submission = await root.submit({ type: "input", content: "go" }, context);
+		await started.promise;
+		await harness.commit(async (tx) => {
+			const record = (await tx.task(caller!))!;
+			(tx as unknown as { setTask(value: unknown): void }).setTask({ ...record, abortRequested: true });
+		}, context);
+		marked.resolve();
+		await submission.wait(context);
+		expect(String(rejected)).toMatch(/abort mark|aborted|has settled/);
+		expect(await harness.snapshot(NestedCallDoc, caller!, "1", context)).toBeUndefined();
+		await harness.close(context);
+	});
+
 	it("runs a nested call as its own tool task and returns its result to the caller, not the transcript", async () => {
 		const setup = chatSetup();
 		const echo = echoTool();
@@ -135,7 +208,7 @@ describe("nested tool calls", () => {
 			status: "terminal",
 			outcome: { status: "completed", result: { kind: "nested" } },
 		});
-		expect(await harness.snapshot(NestedResultDoc, parent!.id, String(child!.id), context)).toBeUndefined();
+		expect(await harness.snapshot(NestedCallDoc, parent!.id, "1", context)).toBeUndefined();
 		expect(await harness.snapshot(LiveDoc, root.id, context)).toEqual({});
 		await harness.close(context);
 	});

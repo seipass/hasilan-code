@@ -80,6 +80,9 @@ type ConversationHost<Tool extends ToolRegistration> = {
 	create(target: CreateTarget, options: CreateOptions, context: Context): Promise<Conversation>;
 };
 
+/** Key of the Harness's internal index-size getter, for tests. */
+export const SCHEDULER_INDEX_SIZES = Symbol.for("pi-durable.schedulerIndexSizes");
+
 class ConversationImpl<Tool extends ToolRegistration> implements Conversation {
 	readonly id: ConversationId;
 	readonly #host: ConversationHost<Tool>;
@@ -174,7 +177,8 @@ class HarnessImpl<Tool extends ToolRegistration> extends SessionImpl implements 
 	constructor(rawStorage: Storage, options: HarnessOptions<Tool>, context: Context) {
 		const report = safeReport(options.onReport);
 		const now = safeNow(options.now, report);
-		super(rawStorage, now);
+		// Read at each use, as all settings are, but only this field: it is read on every commit.
+		super(rawStorage, now, () => options.settings?.documentRetentionMs);
 		// Every component reads and writes through the Session's failure guard: `rawStorage` serves only `super()`.
 		const storage = this.storage;
 		this.#options = options;
@@ -244,6 +248,11 @@ class HarnessImpl<Tool extends ToolRegistration> extends SessionImpl implements 
 		return this.readOnLine(() => this.storage.task(id, context)) as Promise<
 			TaskRecord<JsonValue, JsonValue, R> | undefined
 		>;
+	}
+
+	/** Internal, for tests: sizes of the scheduler's ownership indexes. */
+	get [SCHEDULER_INDEX_SIZES](): TaskScheduler["indexSizes"] {
+		return this.#tasks.indexSizes;
 	}
 
 	inspect(context: Context): Promise<HarnessInspection> {

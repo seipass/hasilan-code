@@ -49,7 +49,7 @@ await sandbox.close();
 - `tools.<name>(args)` returns a promise. Arguments and results make a JSON round trip. A tool that throws rejects with an `Error` carrying the same message. Tool names are also exposed as identifiers: characters that are not valid in identifiers become `_` (`toCodemodeIdentifier`), so `my-tool` is `tools.my_tool` as well as `tools["my-tool"]`.
 - `ALL_TOOLS` lists `{ name, description }` for every tool, with `name` as the identifier.
 - `text(value)` appends a text item to `result.output`; values other than strings are JSON-stringified. `console.log/info/warn/error/debug` append text items with `console: true`.
-- `image(urlOrItem)` appends an image item. It accepts a base64 `data:` URL, `{ image_url }`, or an MCP `ImageContent` block (`{ type: "image", data, mimeType }`). Remote URLs are rejected.
+- `image(urlOrItem)` appends an image item. It accepts a base64 `data:` URL, `{ image_url }`, or an image block (`{ type: "image", data, mimeType }`, as MCP tools and `@earendil-works/pi-ai` produce). Remote URLs are rejected.
 - `exit()` ends the script successfully right away, keeping its output and store writes.
 - `globals` passed to the sandbox are called as top-level functions, for example a host helper `image(ref)`. They behave like tools but are not recorded in `result.calls`. A name like `models.classify` puts the function on a frozen `models` object. With `spread: true`, `execute` receives all call arguments as an array instead of the first one, and `signature` replaces the declaration generated from the schemas.
 - `store(key, value)` and `load(key)` read and write JSON values synchronously. See [Store](#store).
@@ -58,6 +58,24 @@ await sandbox.close();
 `timeoutMs: Infinity` disables the deadline; the script then runs until it settles or `signal` aborts it. A script that waits on a promise nothing can settle (no tool call pending, and the VM has no timers or I/O) fails right away instead of hanging.
 
 `memoryLimitBytes` caps the VM's heap. Allocations beyond it fail inside the script as `InternalError: out of memory`.
+
+Aborts, timeouts, and `close()` request worker termination without waiting for the worker to exit. On Bun, a built-in such as a long `String.prototype.indexOf` may not poll QuickJS's interrupt handler, so its worker can keep computing until the built-in returns. Stopping unrefs the worker after requesting termination, because `terminate()` refs it internally. This does not guarantee computation has stopped. On Bun 1.4.0, a pending `terminate()` can still delay host process exit despite `unref()`; cancellation results and `close()` do not wait for it.
+
+Hosts that limit concurrency can track actual worker lifetime with `onWorkerStarted(exited)`, called for each worker started by `execute()` or `start()`. Its promise resolves when that worker exits, not when the script result settles:
+
+```ts
+const workers = new Set<Promise<void>>();
+const sandbox = new CodemodeSandbox({
+	onWorkerStarted(exited) {
+		workers.add(exited);
+		void exited.then(() => workers.delete(exited));
+	},
+});
+```
+
+Keep a concurrency slot occupied until `exited` resolves. `close()` does not wait for these promises.
+
+To enforce an admission limit, pass `acquireWorker()`. It runs synchronously after WASM loading, immediately before each worker is created. Throw to reject the execution without starting a worker; otherwise return a release callback. The sandbox calls it once on actual worker exit or if the worker constructor fails. Share reservation state across sandbox instances, and do not release it when a script result settles.
 
 ## Store
 
@@ -83,7 +101,7 @@ const source = await tools.read({ path: "package.json" });
 text(JSON.parse(source).name);
 ```
 
-Supported fields are `max_output_tokens`, a token budget for the output, and `timeout_ms`, a hard deadline. The sandbox does not act on them; the caller decides. The options line is replaced by an empty line, so line numbers in stack traces still match the input. Empty input, invalid JSON, unknown fields, or an options line without code throw `CodemodeSourceError`. `CODEMODE_SOURCE_GRAMMAR` is a Lark grammar for providers that support grammar-constrained tool input. Both are also available from the lightweight `@earendil-works/pi-codemode/source` entry.
+Supported fields are `max_output_tokens`, a token budget for the output, and `timeout_ms`, a hard deadline. The sandbox does not act on them; the caller decides. The options line is replaced by an empty line, so line numbers in stack traces still match the input. Empty input, invalid JSON, unknown fields, an options line without code, or an options line on any line but the first throw `CodemodeSourceError`. `CODEMODE_SOURCE_GRAMMAR` is a Lark grammar for providers that support grammar-constrained tool input. Both are also available from the lightweight `@earendil-works/pi-codemode/source` entry.
 
 ## Bundled Node and Bun hosts
 
@@ -167,7 +185,7 @@ Bind the class with `script_name`. Binding a class exported from the agent's own
 }
 ```
 
-Then replace the sandbox. Tools, options other than `wasm` and `workerUrl`, and results stay the same:
+Then replace the sandbox. Tools, options other than the worker-specific `wasm`, `workerUrl`, `acquireWorker`, and `onWorkerStarted`, and results stay the same:
 
 ```ts
 import type { CodemodeSandboxDurableObject } from "@earendil-works/pi-codemode/cloudflare";
@@ -243,7 +261,7 @@ renderDeclarations({ tools: sandbox.tools, globals: sandbox.globals });
 // };
 ```
 
-Schemas only shape the declarations; values are not validated against them. Local references (`#/$defs/...`, `#/definitions/...`) are expanded; recursive and remote references render as `unknown`.
+Property descriptions become `//` comments. Constraints the type cannot express follow as tags, such as `// @integer @minimum 1 @default 20`; they are dropped first when a type exceeds the size limit. Schemas only shape the declarations; values are not validated against them. Local references (`#/$defs/...`, `#/definitions/...`) are expanded; recursive and remote references render as `unknown`.
 
 ## Using with pi-agent-core
 
@@ -293,6 +311,37 @@ const codemodeTool: AgentTool = {
 
 `result.output` items already have the shape of `@earendil-works/pi-ai`'s `TextContent` and `ImageContent`. Calling `tool.execute()` directly skips the agent's `beforeToolCall` and `afterToolCall` hooks. To apply them to nested calls too, run each call through `runToolCall()` from `@earendil-works/pi-agent-core`, as the [mcp-codemode example](https://github.com/earendil-works/pi/tree/main/packages/agent/examples/mcp-codemode) does. That example also rejects failed nested calls inside the script and combines codemode with MCP tools.
 
+## Deterministic runs
+
+`sandbox.start(code, options)` runs a script so that a host can run it again after a restart and get the same behavior, for example to resume it from a durable log of its calls' results. `execute()` is unaffected.
+
+The VM only runs when the host hands it something, and has no timers or I/O, so it is deterministic except for what it reads from its environment. `start()` fixes that:
+
+- **Time:** `Date.now()` reads `startedAt`, then the `now` of the result being processed, never going backwards. `performance.now()` counts from `startedAt`.
+- **Randomness:** `Math.random()` and the VM's other randomness come from `seed`.
+- **Timezone:** UTC, whatever the host's.
+- **Garbage collection:** `WeakRef` and `FinalizationRegistry` do not exist.
+- **Result order:** the host answers each call with a result number (1, 2, ...), and the VM applies results strictly in that order, whatever order a transport delivers them in.
+
+The run declares its own tools and globals, and the host answers every call itself:
+
+```ts
+const run = sandbox.start(code, {
+	startedAt: Date.now(),
+	seed: 7,
+	tools: [{ name: "read", description: "Read a file" }],
+	onStarted: (fingerprint) => {}, // what the VM is: engine versions, prelude hash, limits
+	onCall: (call) => {
+		// call.id is the VM's own number for the call, in the order the script made them.
+		void readFile(call.args).then((text) => run.deliver(nextResult++, Date.now(), call.id, { ok: true, value: text }));
+	},
+	onIdle: (seq, issued) => {}, // after result `seq` (0: the first run), `issued` calls in total
+});
+const result = await run.result;
+```
+
+A run has no deadline unless `timeoutMs` is given. Result numbers must run 1, 2, ... without gaps. The same script, `startedAt`, `seed`, tools (with their `jsName`), globals and store, answered with the same results in the same order, makes the same calls with the same arguments and produces the same output on any VM with the same fingerprint. To end a run with an error the script cannot catch, abort its `signal`.
+
 ## Results
 
 `execute()` never rejects for script failures. `result.error.kind` is one of:
@@ -300,8 +349,8 @@ const codemodeTool: AgentTool = {
 | kind      | meaning                                                                     |
 | --------- | --------------------------------------------------------------------------- |
 | `script`  | the script threw or failed to parse; `stack` points at `codemode.js:<line>` |
-| `timeout` | the deadline expired or the interrupt budget ran out; the VM was stopped    |
-| `aborted` | `options.signal` fired or `close()` was called; the VM was stopped          |
+| `timeout` | the deadline expired or the interrupt budget ran out; VM shutdown was requested |
+| `aborted` | `options.signal` fired or `close()` was called; VM shutdown was requested |
 | `sandbox` | the VM or its transport failed, for example a wasm trap, a missing worker file, or a failed remote |
 
 `result.output` holds the text and image items in the order the script produced them, also for failed executions. The host keeps all of it until the script ends, so output is limited to `MAX_OUTPUT_CHARS` (16 Mi) characters of text and base64 image data and `MAX_OUTPUT_ITEMS` (100000) items. Past either limit the script fails with a `RangeError`, even if it catches the error. `result.calls` lists every tool call with `status: "ok" | "error" | "cancelled"`. A call that is still running when the script returns (not awaited) is aborted through the tool's `signal` and reported as `cancelled`.
@@ -320,6 +369,6 @@ The worker keeps script execution off the host thread: QuickJS runs synchronousl
 
 ## Runtime notes
 
-- Works the same on Node and Bun, including memory limits, interrupts, and a catchable `RangeError` for deep recursion (QuickJS's stack guard is enabled; without it the wasm stack overflows and traps).
+- Node and Bun support memory limits, interrupts, and a catchable `RangeError` for deep recursion (QuickJS's stack guard is enabled; without it the wasm stack overflows and traps). Bun may delay worker exit during non-interruptible built-ins; results do not wait for exit.
 - Stack traces use QuickJS frames (`at f (codemode.js:2:31)`), prefixed with `Name: message` like V8. The wrapper prefix shares line 1 with the script, so line numbers are exact; column numbers on line 1 are shifted.
 - QuickJS is an interpreter. Glue code and filtering tool results are fast enough; heavy computation is slower than in V8.

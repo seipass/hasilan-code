@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { AgentSessionEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { type Static, Type } from "typebox";
 
@@ -9,6 +9,7 @@ import {
 } from "../shared/context-injection.ts";
 import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal, GoalAction, GoalStatus } from "../shared/goals.ts";
+import { nextId } from "../shared/ids.ts";
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm, type SwarmStart, type SwarmStatus } from "../shared/swarm.ts";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
 import { loadTeamProfiles } from "./team-profiles.ts";
@@ -219,7 +220,13 @@ export class TeamManager {
 	}
 	private addRoot(sessionId: string): AgentRecord {
 		const descriptor = this.registry.descriptor(sessionId);
-		const agent: AgentRecord = { agentId: randomUUID(), teamId: randomUUID(), sessionId, name: "Root", role: "root" };
+		const agent: AgentRecord = {
+			agentId: nextId("a", this.registry.state.agents, "agentId"),
+			teamId: nextId("t", this.registry.state.teams, "teamId"),
+			sessionId,
+			name: "Root",
+			role: "root",
+		};
 		this.registry.state.teams.push({
 			teamId: agent.teamId,
 			rootAgentId: agent.agentId,
@@ -298,7 +305,7 @@ export class TeamManager {
 	private newRun(agent: AgentRecord, task: string, inputKind?: "context"): RunRecord {
 		if (this.current(agent)) throw new HarnessError("Session is busy", 409);
 		const run: RunRecord = {
-			runId: randomUUID(),
+			runId: nextId("r", this.registry.state.runs, "runId"),
 			agentId: agent.agentId,
 			task,
 			status: "queued",
@@ -550,7 +557,7 @@ export class TeamManager {
 			await this.registry.assertModelReady(sessionId);
 			const run = this.newRun(agent, objective);
 			descriptor.swarm = {
-				id: randomUUID(),
+				id: randomBytes(8).toString("hex"),
 				objective,
 				createdAt: new Date().toISOString(),
 				rootRunId: run.runId,
@@ -604,7 +611,7 @@ export class TeamManager {
 			if (action.op === "create") {
 				const now = new Date().toISOString();
 				descriptor.goal = {
-					id: randomUUID(),
+					id: randomBytes(8).toString("hex"),
 					objective: action.objective.trim(),
 					status: "active",
 					createdAt: now,
@@ -664,7 +671,7 @@ export class TeamManager {
 		if (!child.parentAgentId || !["completed", "failed", "cancelled"].includes(run.status)) return;
 		const parent = this.agentById(child.parentAgentId);
 		if (!this.accepting || this.fenced.has(parent.agentId)) return;
-		const inputId = randomUUID();
+		const inputId = randomBytes(8).toString("hex");
 		const source: ContextInjection["source"] = {
 			type: "subagent_completion",
 			agentId: child.agentId,
@@ -960,7 +967,7 @@ export class TeamManager {
 		text: string,
 		mode: "steer" | "followUp",
 		fromAgentId?: string,
-		inputId = randomUUID(),
+		inputId = randomBytes(8).toString("hex"),
 	): Promise<AdmissionResult> {
 		const pending: PendingInput = {
 			inputId,
@@ -1041,7 +1048,7 @@ export class TeamManager {
 					tools: task.tools ?? tools,
 				});
 				const agent: AgentRecord = {
-					agentId: randomUUID(),
+					agentId: nextId("a", this.registry.state.agents, "agentId"),
 					teamId: parent.teamId,
 					parentAgentId: parent.agentId,
 					sessionId: child.sessionId,
@@ -1162,7 +1169,7 @@ export class TeamManager {
 			this.assertOpen(caller);
 			this.assertOpen(recipient);
 			this.assertTarget(caller, recipient);
-			const inputId = randomUUID();
+			const inputId = randomBytes(8).toString("hex");
 			const text = `[Team message inputId=${inputId} from=${caller.agentId}]\n${message}`;
 			const current = this.current(recipient);
 			if (current) return this.acceptInput(recipient, current, text, "followUp", caller.agentId, inputId);

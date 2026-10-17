@@ -186,6 +186,18 @@ export class WorkspaceFiles {
 		const bytes = await readFile(resolved.absolute);
 		return { path: resolved.relative, bytes, revision: fileRevision(bytes) };
 	}
+	/** Caller owns the handle; resolving here preserves the workspace/symlink boundary for streaming. */
+	async openRead(id: string, input: string): Promise<{ path: string; handle: FileHandle }> {
+		const resolved = await this.resolve(id, input);
+		const handle = await open(resolved.absolute, "r");
+		try {
+			if (!(await handle.stat()).isFile()) throw new Error("Path is not a regular file");
+			return { path: resolved.relative, handle };
+		} catch (error) {
+			await handle.close();
+			throw error;
+		}
+	}
 	private notify(id: string, paths: string[]): void {
 		if (paths.length) this.onChanged?.({ type: "files_changed", workspaceId: id, paths: [...new Set(paths)] });
 	}

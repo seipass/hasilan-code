@@ -7,6 +7,7 @@ import {
 	emptyCanvasDocument,
 	isCanvasDocument,
 } from "../shared/canvas.ts";
+import { nextId } from "../shared/ids.ts";
 import { api, command, errorMessage } from "./api.ts";
 import "./CanvasPane.css";
 
@@ -19,7 +20,7 @@ export interface CanvasPaneProps {
 
 const CARD_WIDTH = 240;
 const CARD_HEIGHT = 176;
-const MIN_ZOOM = 0.25;
+const MIN_ZOOM = 0.01;
 const MAX_ZOOM = 2;
 
 type Selection = { kind: "node" | "edge"; id: string } | undefined;
@@ -162,7 +163,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 
 	function connectNodes(source: string, destination: string) {
 		if (!ready || busyRef.current || !nodesById.has(source) || !nodesById.has(destination)) return;
-		const newEdge = { id: crypto.randomUUID(), source, target: destination, label: "" };
+		const newEdge = { id: nextId("e", design.edges, "id"), source, target: destination, label: "" };
 		edit((current) => ({ ...current, edges: [...current.edges, newEdge] }));
 		setSelection({ kind: "edge", id: newEdge.id });
 		setEditingNode(undefined);
@@ -219,7 +220,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 			y = Math.round(Math.max(-CANVAS_LIMITS.coordinate, Math.min(CANVAS_LIMITS.coordinate, centerY + Math.floor(index / 3) * (CARD_HEIGHT + 48))));
 			if (!design.nodes.some((item) => Math.abs(item.x - x) < CARD_WIDTH + 24 && Math.abs(item.y - y) < CARD_HEIGHT + 24)) break;
 		}
-		const newNode: CanvasNode = { id: crypto.randomUUID(), title: `ノード ${design.nodes.length + 1}`, description: "", x, y };
+		const newNode: CanvasNode = { id: nextId("n", design.nodes, "id"), title: `ノード ${design.nodes.length + 1}`, description: "", x, y };
 		edit((current) => ({ ...current, nodes: [...current.nodes, newNode] }));
 		setView((current) => ({ ...current, x: (bounds?.width ?? 600) / 2 - (x + CARD_WIDTH / 2) * current.zoom, y: (bounds?.height ?? 400) / 2 - (y + CARD_HEIGHT / 2) * current.zoom }));
 		editOnBoard(newNode);

@@ -38,8 +38,18 @@ export function App() {
 	const [error, setError] = useState<string>();
 	const [catalog, setCatalog] = useState<ModelCatalog>();
 	const [catalogVersion, setCatalogVersion] = useState(0);
-	const [draftModel, setDraftModel] = useState<Model>();
-	const [draftThinking, setDraftThinking] = useState<ThinkingLevel>();
+	const [savedSelection] = useState<{ model?: Model; thinkingLevel?: ThinkingLevel }>(() => {
+		try {
+			const saved = JSON.parse(localStorage.getItem("pi-web-model-selection") ?? "null") as { model?: Model; thinkingLevel?: ThinkingLevel } | null;
+			if (!saved || typeof saved.model?.provider !== "string" || typeof saved.model?.id !== "string") return {};
+			return {
+				model: { provider: saved.model.provider, id: saved.model.id },
+				thinkingLevel: saved.thinkingLevel && ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(saved.thinkingLevel) ? saved.thinkingLevel : undefined,
+			};
+		} catch { return {}; }
+	});
+	const [draftModel, setDraftModel] = useState<Model | undefined>(savedSelection.model);
+	const [draftThinking, setDraftThinking] = useState<ThinkingLevel | undefined>(savedSelection.thinkingLevel);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [modelOpen, setModelOpen] = useState(false);
 	const [modelClosing, setModelClosing] = useState(false);
@@ -116,6 +126,10 @@ export function App() {
 		try { if (sessionId) localStorage.setItem("pi-web-selected-session", sessionId); else localStorage.removeItem("pi-web-selected-session"); if (workspaceId) localStorage.setItem("pi-web-workspace", workspaceId); } catch { /* Selection remains functional without storage. */ }
 	}, [sessionId, workspaceId]);
 	useEffect(() => {
+		try { localStorage.setItem("pi-web-model-selection", JSON.stringify({ model: draftModel, thinkingLevel: draftThinking })); }
+		catch { /* Selection remains functional without browser storage. */ }
+	}, [draftModel, draftThinking]);
+	useEffect(() => {
 		const keydown = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); } if (event.key === "Escape") { setModelOpen(false); setRightOpen(false); } };
 		window.addEventListener("keydown", keydown); return () => window.removeEventListener("keydown", keydown);
 	}, []);
@@ -138,7 +152,7 @@ export function App() {
 		setDraftInsertion(undefined);
 		setExpandedWorkspaces((previous) => ({ ...previous, [id]: true }));
 		if (id === workspaceId) return;
-		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setDraftModel(undefined); setDraftThinking(undefined); setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setCanvasOpened(false); setMode("chat");
+		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setCanvasOpened(false); setMode("chat");
 	}
 	function newConversation() { if (commandPending.current) return; setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined); if (window.innerWidth < 900) setSidebarOpen(false); }
 	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: crypto.randomUUID() }); setRightTab("files"); setRightOpen(true); }
@@ -234,16 +248,18 @@ export function App() {
 		await command(`/api/sessions/${encodeURIComponent(target)}/team-message`, { agentId, message });
 	}
 	async function changeModel(selection: { provider: string; id: string }) {
-		if (!sessionId) {
-			setDraftModel(selection); draftSession.current = undefined;
-			const levels = catalog?.models.find((entry) => entry.provider === selection.provider && entry.id === selection.id)?.thinkingLevels;
-			if (draftThinking && !levels?.includes(draftThinking)) setDraftThinking(undefined);
-		}
-		else await command(`/api/sessions/${encodeURIComponent(sessionId)}/model`, selection);
+		const updated = sessionId ? await command<SessionDetail>(`/api/sessions/${encodeURIComponent(sessionId)}/model`, selection) : undefined;
+		setDraftModel(selection);
+		draftSession.current = undefined;
+		const levels = catalog?.models.find((entry) => entry.provider === selection.provider && entry.id === selection.id)?.thinkingLevels;
+		const thinking = updated?.thinkingLevel ?? draftThinking;
+		setDraftThinking(thinking && levels?.includes(thinking) ? thinking : undefined);
 	}
 	async function changeThinking(level: ThinkingLevel) {
-		if (!sessionId) { setDraftThinking(level); draftSession.current = undefined; }
-		else await command(`/api/sessions/${encodeURIComponent(sessionId)}/thinking`, { level }, "PATCH");
+		if (sessionId) await command(`/api/sessions/${encodeURIComponent(sessionId)}/thinking`, { level }, "PATCH");
+		setDraftThinking(level);
+		if (session?.model) setDraftModel(session.model);
+		draftSession.current = undefined;
 	}
 	const modelControl = <div className="model-control">
 		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} title="モデル・Thinkingを選択" onClick={() => { if (modelClosing) { setModelClosing(false); setModelMenuKey((value) => value + 1); } else setModelOpen((value) => !value); }}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span className="model-trigger-thinking">Thinking: {session?.thinkingLevel ?? draftThinking ?? "自動"}</span><span aria-hidden="true">⌄</span></button>

@@ -462,6 +462,104 @@ describe("nested tool calls across a restart", () => {
 		await opened.harness.close(context);
 	});
 
+	it("clears the slots of nested calls an earlier attempt finished when the rerun makes none", async () => {
+		const path = await sqlitePath();
+		const setup = chatSetup();
+		const finished = deferred();
+		let attempts = 0;
+		addTool(
+			setup.registry,
+			tool("quick", async () => ({ output: [{ type: "text", text: "ok" }] })),
+		);
+		addTool(
+			setup.registry,
+			tool(
+				"caller",
+				async (_args, api, callContext) => {
+					attempts++;
+					if (attempts === 1) {
+						await api.executeTool("quick", {}, callContext);
+						finished.resolve();
+						return aborted(callContext.abortSignal!);
+					}
+					return { output: [{ type: "text", text: "done" }] };
+				},
+				{ replay: "safe" },
+			),
+		);
+		setup.faux.setResponses([call("caller"), DONE]);
+		let opened = await open(path, setup);
+		const id = (await opened.root.submit({ type: "input", content: "go" }, context)).id;
+		await finished.promise;
+		// The finished nested call's slot is still listed, below its running caller.
+		expect((await opened.harness.snapshot(LiveDoc, opened.root.id, context))?.nestedTools).toHaveLength(1);
+		await opened.harness.close(context);
+
+		opened = await open(path, setup);
+		let slotsAfterCaller: number | undefined;
+		opened.harness.subscribeCommits((publication) => {
+			for (const change of publication.changes) {
+				if (change.type !== "task" || change.value.kind !== ToolTask.definition.name) continue;
+				if ((change.value.input as ToolTaskInput).kind !== "model" || change.value.state.status !== "terminal")
+					continue;
+				const live = publication.changes.find((each) => each.type === "document" && each.record.kind === "pi.live");
+				const value = live?.type === "document" ? (live.value as { nestedTools?: unknown[] } | null) : undefined;
+				slotsAfterCaller = value?.nestedTools?.length ?? 0;
+			}
+		});
+		opened.harness.resume();
+		expect((await (await opened.harness.submission(id, context))!.wait(context)).status).toBe("done");
+		expect(attempts).toBe(2);
+		// The caller's terminal commit removed the slot, though the rerun made no nested call.
+		expect(slotsAfterCaller).toBe(0);
+		await opened.harness.close(context);
+	});
+
+	it("aborts a nested call an earlier attempt of a replay-safe caller left running and the rerun never made again", async () => {
+		const path = await sqlitePath();
+		const setup = chatSetup();
+		const running = deferred();
+		let attempts = 0;
+		addTool(
+			setup.registry,
+			tool(
+				"slow",
+				async (_args, _api, callContext) => {
+					running.resolve();
+					return aborted(callContext.abortSignal!);
+				},
+				{ replay: "safe" },
+			),
+		);
+		addTool(
+			setup.registry,
+			tool(
+				"caller",
+				async (_args, api, callContext) => {
+					attempts++;
+					// Only the first attempt calls `slow`; the rerun after the restart returns at once.
+					if (attempts === 1) await api.executeTool("slow", {}, callContext, { key: "slow" });
+					return { output: [{ type: "text", text: "done" }] };
+				},
+				{ replay: "safe" },
+			),
+		);
+		setup.faux.setResponses([call("caller"), DONE]);
+		let opened = await open(path, setup);
+		const id = (await opened.root.submit({ type: "input", content: "go" }, context)).id;
+		await running.promise;
+		await opened.harness.close(context);
+
+		opened = await open(path, setup);
+		opened.harness.resume();
+		expect((await (await opened.harness.submission(id, context))!.wait(context)).status).toBe("done");
+		expect(attempts).toBe(2);
+		// The rerun's settlement found the leftover call among the tasks it owns and aborted it.
+		const [leftover] = await nestedTasks(opened.harness);
+		expect(leftover?.state).toMatchObject({ status: "terminal", outcome: { status: "aborted" } });
+		await opened.harness.close(context);
+	});
+
 	it("reattaches a replay-safe caller by default and explicit keys, and rejects a rerun that calls differently", async () => {
 		for (const order of ["same", "swapped"] as const) {
 			const path = await sqlitePath();

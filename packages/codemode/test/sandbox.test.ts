@@ -163,12 +163,12 @@ describe.each(Object.keys(BACKENDS))("%s backend", (name) => {
 			const errors = result.value as string[];
 			expect(errors[0]).toMatch(/^TypeError: .*circular/);
 			expect(errors.slice(1)).toEqual([
-				"TypeError: image expects a non-empty image URL string, an object with image_url, or a raw MCP image block",
+				'TypeError: image expects a non-empty image URL string, an object with image_url, or an image block { type: "image", data, mimeType }',
 				"TypeError: remote image URLs are not supported in tool outputs. Pass a base64 data URI instead",
 				"TypeError: invalid image output. Pass a base64 data URI instead",
-				'TypeError: image only accepts MCP image blocks, got "text"',
-				"TypeError: image expected MCP image data",
-				"TypeError: image expects a non-empty image URL string, an object with image_url, or a raw MCP image block",
+				'TypeError: image only accepts image blocks, got "text"',
+				"TypeError: image expected image block data",
+				'TypeError: image expects a non-empty image URL string, an object with image_url, or an image block { type: "image", data, mimeType }',
 				...Array(6).fill(
 					"TypeError: invalid image output. The image data is not valid base64 (truncated or corrupted?)",
 				),
@@ -833,6 +833,20 @@ describe("worker host", () => {
 			ok: false,
 			error: { kind: "sandbox", message: "Failed to load QuickJS: no wasm" },
 		});
+	});
+
+	// #10725: Node 24/26 `--watch` posts dependency reports on the worker channel.
+	it("ignores Node --watch notifications from the worker", async () => {
+		const sandbox = new CodemodeSandbox({ workerUrl: new URL("./fixtures/raw-worker.ts", import.meta.url) });
+		sandboxes.push(sandbox);
+		const result = await sandbox.execute(
+			JSON.stringify([
+				{ "watch:require": ["/worker.js"] },
+				{ "watch:import": ["file:///worker.js"] },
+				{ type: "done", ok: true, value: "42", writes: "[]" },
+			]),
+		);
+		expect(result).toMatchObject({ ok: true, value: 42 });
 	});
 
 	// #10444: a malformed payload from the worker must fail the run as a sandbox error instead of

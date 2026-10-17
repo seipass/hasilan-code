@@ -40,6 +40,7 @@ export {
 export { Harness } from "./harness/harness.ts";
 export { InboxDoc, type InboxItem, type InboxState } from "./harness/inbox.ts";
 export {
+	type CompactionFailure,
 	type CompactionStatus,
 	LiveDoc,
 	type LiveState,
@@ -51,7 +52,8 @@ export { ProviderDoc, type ProviderState } from "./harness/provider.ts";
 export { createRegistry } from "./harness/registry.ts";
 export type { TaskGraph, TaskGraphNode, TaskGraphState, TaskGraphWatch } from "./harness/task-graph.ts";
 export {
-	NestedResultDoc,
+	NestedCallDoc,
+	type NestedCallState,
 	ToolTask,
 	type ToolTaskCheckpoint,
 	type ToolTaskInput,
@@ -85,6 +87,7 @@ export type {
 	HookRegistration,
 	HookResult,
 	HooksOf,
+	InputEntry,
 	InputSubmissionDraft,
 	ModelRef,
 	NestedToolExecutionResult,

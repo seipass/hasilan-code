@@ -19,6 +19,7 @@ import {
 } from "../shared/context-injection.ts";
 import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal } from "../shared/goals.ts";
+import { nextId } from "../shared/ids.ts";
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
 import { createHarnessSettings } from "./config.ts";
 import { swarmContext } from "./swarm.ts";
@@ -500,7 +501,7 @@ export class SessionRegistry {
 			throw new HarnessError("Model not found; select a model in the composer");
 		const descriptor: SessionDescriptor = {
 			...options,
-			sessionId: randomUUID(),
+			sessionId: options.parentSessionId ? nextId("s", this.state.sessions, "sessionId") : randomUUID(),
 			cwd,
 			materialized: false,
 			availability: "ready",

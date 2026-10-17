@@ -27,12 +27,8 @@ export function selectedTeamAgents(
 	return selected ? snapshot.agents.filter((agent) => agent.teamId === selected.teamId) : [];
 }
 
-/** Each leaf owns a column; saved positions override the automatic layout. */
-export function layoutTeamGraph(
-	agents: TeamAgent[],
-	snapshot: TeamSnapshot,
-	positions?: ReadonlyMap<string, { x: number; y: number }>,
-) {
+/** Each leaf owns a column; parents are centered above their children. */
+export function layoutTeamGraph(agents: TeamAgent[], snapshot: TeamSnapshot) {
 	const byId = new Map(agents.map((agent) => [agent.agentId, agent]));
 	const children = new Map<string, TeamAgent[]>();
 	for (const agent of agents) {
@@ -71,11 +67,6 @@ export function layoutTeamGraph(
 	let maxX = -Infinity;
 	let maxY = -Infinity;
 	for (const node of nodes) {
-		const saved = positions?.get(node.agent.agentId);
-		if (saved) {
-			node.x = saved.x;
-			node.y = saved.y;
-		}
 		minX = Math.min(minX, node.x);
 		minY = Math.min(minY, node.y);
 		maxX = Math.max(maxX, node.x + TEAM_NODE_WIDTH);

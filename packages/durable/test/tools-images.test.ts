@@ -1,4 +1,6 @@
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
@@ -6,7 +8,7 @@ import type { Model } from "@earendil-works/pi-ai";
 import type { ToolDiagnostic, ToolExecutionApi, ToolExecutionResult } from "@earendil-works/pi-durable";
 import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import { createCodingTools } from "@earendil-works/pi-durable/tools";
-import { PhotonImage } from "@silvia-odwyer/photon/photon_rs.js";
+import { initSync, PhotonImage } from "@silvia-odwyer/photon/photon_rs.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getOrThrow } from "../src/env/index.ts";
 import { NodeExecutionEnv } from "../src/env/node.ts";
@@ -19,6 +21,10 @@ const directory = mkdtempSync(join(tmpdir(), "pi-durable-images-"));
 let processor: ImageProcessor;
 
 beforeAll(async () => {
+	// Fixtures are built with Photon here; the processor prepares them in its worker thread.
+	initSync({
+		module: readFileSync(createRequire(import.meta.url).resolve("@silvia-odwyer/photon/photon_rs_bg.wasm")),
+	});
 	processor = await createNodePhotonImages();
 });
 
@@ -313,6 +319,7 @@ describe("read of images, with the Photon image processor", () => {
 		]);
 	});
 
+	// Multiple full-image encodes can exceed Vitest's 5s default on shared CI runners.
 	it("re-encodes a PNG too large for the byte limit as JPEG at its size, and shrinks it when that is not enough", async () => {
 		const result = await read("big.png", noisyPng(1100, 1100), { images: processor });
 		const jpeg = onlyImage(result);
@@ -325,7 +332,7 @@ describe("read of images, with the Photon image processor", () => {
 		expect(shrunk!.data.length).toBeLessThanOrEqual(tight.maxBytes);
 		expect(shrunk!.resized?.from).toEqual({ width: 2000, height: 2000 });
 		expect(shrunk!.resized!.to.width).toBeLessThan(2000);
-	});
+	}, 60_000);
 
 	it("keeps at least one pixel on each side of an extreme aspect ratio", async () => {
 		const result = await processor.prepare(encode(6000, 2, "png"), "image/png", DEFAULT_IMAGE_LIMITS);
@@ -480,9 +487,79 @@ describe("imageDimensions", () => {
 
 describe("toBase64", () => {
 	it("matches Buffer for every remainder length", () => {
-		for (const length of [0, 1, 2, 3, 4, 5, 10_000]) {
+		for (const length of [0, 1, 2, 3, 4, 5, 8191, 8192, 8193, 10_000, 16_385]) {
 			const bytes = Uint8Array.from({ length }, (_, index) => (index * 37) % 256);
 			expect(toBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
 		}
+	});
+
+	// #10923: building the output a character at a time took 138 MB of heap for a 3 MiB image.
+	it("encodes a 3 MiB image within a 128 MB heap", () => {
+		const source = new URL("../src/tools/image-processor.ts", import.meta.url).href;
+		const script = `
+			const { toBase64 } = await import(${JSON.stringify(source)});
+			const bytes = Uint8Array.from({ length: 3147295 }, (_, index) => (index * 37) % 256);
+			if (toBase64(bytes) !== Buffer.from(bytes).toString("base64")) throw new Error("mismatch");
+		`;
+		const args = ["--experimental-strip-types", "--max-heap-size=128", "--input-type=module", "-e", script];
+		const result = spawnSync(process.execPath, args, { encoding: "utf8" });
+		expect(result.stderr).not.toMatch(/heap out of memory|mismatch/);
+		expect(result.status).toBe(0);
+	});
+});
+
+describe("createNodePhotonImages", () => {
+	it("prepares in a worker thread, leaving the event loop free", async () => {
+		const photo = noisyPng(3000, 2000);
+		const prepareOn = async (images: ImageProcessor): Promise<number> => {
+			// The longest gap between timer ticks while the image is prepared: the time the event loop was blocked.
+			let longest = 0;
+			let last = performance.now();
+			const ticks = setInterval(() => {
+				const now = performance.now();
+				longest = Math.max(longest, now - last);
+				last = now;
+			}, 5);
+			try {
+				const prepared = images.prepare(photo, "image/png", DEFAULT_IMAGE_LIMITS);
+				expect(await prepared).toBeDefined();
+				// Counted until the result arrived, including the gap the last tick did not see.
+				longest = Math.max(longest, performance.now() - last);
+			} finally {
+				clearInterval(ticks);
+			}
+			return longest;
+		};
+		const inline = await prepareOn(await createNodePhotonImages({ worker: false }));
+		const threaded = await prepareOn(processor);
+		expect(inline).toBeGreaterThan(200);
+		expect(threaded).toBeLessThan(100);
+	}, 60_000);
+
+	it("gives the same result as the calling thread, and keeps the caller's bytes", async () => {
+		const png = noisyPng(1100, 1100);
+		const copy = png.slice();
+		const threaded = await processor.prepare(png, "image/png", DEFAULT_IMAGE_LIMITS);
+		const inline = await (await createNodePhotonImages({ worker: false })).prepare(
+			png,
+			"image/png",
+			DEFAULT_IMAGE_LIMITS,
+		);
+		expect(threaded).toEqual(inline);
+		expect(png).toEqual(copy);
+	}, 60_000);
+
+	it("prepares concurrent images, and starts a new worker after the idle one exited", async () => {
+		const images = await createNodePhotonImages({ idleMs: 10 });
+		const results = await Promise.all([
+			images.prepare(bmp(4, 4), "image/bmp", DEFAULT_IMAGE_LIMITS),
+			images.prepare(encode(4000, 1000, "png"), "image/png", DEFAULT_IMAGE_LIMITS),
+			images.prepare(new Uint8Array([1, 2, 3]), "image/png", DEFAULT_IMAGE_LIMITS),
+		]);
+		expect(results[0]?.mimeType).toBe("image/png");
+		expect(results[1]?.resized?.to).toEqual({ width: 2000, height: 500 });
+		expect(results[2]).toBeUndefined();
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect((await images.prepare(bmp(2, 2), "image/bmp", DEFAULT_IMAGE_LIMITS))?.mimeType).toBe("image/png");
 	});
 });

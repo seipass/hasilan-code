@@ -1,59 +1,106 @@
-.team-pane {
-	width: 100%;
-	max-width: none;
+.right-panel-body:has(> .team-pane) {
+	display: flex;
+	padding: 0;
+	overflow: hidden;
 }
 
-.team-graph {
-	min-width: 0;
+.right-panel-body > .team-pane {
+	position: relative;
+	container-type: inline-size;
+	display: block;
+	flex: 1;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	max-width: none;
 	overflow: hidden;
+}
+
+.team-pane > .team-graph {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: var(--surface-sunken);
+}
+
+.team-graph-top {
+	position: absolute;
+	inset: 12px 12px auto;
+	z-index: 2;
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 8px;
+	pointer-events: none;
+}
+
+.team-graph-top > .team-overview {
+	flex: 1 1 220px;
+	max-width: 340px;
+	padding: 12px;
+	pointer-events: auto;
+}
+
+.team-graph-top .team-overview h2 { margin-top: 0; font-size: 14px; }
+.team-graph-top .team-overview p { font-size: 11px; }
+.team-graph-controls {
+	flex: 0 1 300px;
+	max-width: 100%;
+	margin-left: auto;
 	border: 1px solid var(--border);
 	border-radius: 12px;
 	background: var(--surface-raised);
+	pointer-events: auto;
 }
 
-.team-graph-heading {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	padding: 14px 14px 10px;
+.team-pane > .team-focus {
+	position: absolute;
+	right: 12px;
+	bottom: 12px;
+	z-index: 2;
+	width: min(420px, calc(100% - 24px));
+	max-height: 45%;
+	overflow: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: var(--scroll-thumb) transparent;
+	box-shadow: 0 6px 24px #0004;
 }
 
-.team-graph-heading h3 { margin: 0; font-size: 13px; }
-.team-graph-heading p { margin: 4px 0 0; color: var(--on-surface-muted); font-size: 11px; }
-.team-graph-total { flex-shrink: 0; color: var(--on-surface-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.team-pane > .team-empty { margin: 12px; }
+
 
 .team-graph-toolbar {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 6px;
-	padding: 0 12px;
+	padding: 8px;
 }
 
 .team-graph-toolbar button { min-height: 30px; padding: 4px 8px; font-size: 11px; }
 .team-graph-zoom { display: flex; align-items: center; gap: 3px; margin-right: auto; }
 .team-graph-zoom button { min-width: 30px; font-size: 14px; }
 .team-graph-zoom output { min-width: 40px; text-align: center; font-size: 11px; color: var(--on-surface-secondary); font-variant-numeric: tabular-nums; }
-.team-graph-help { margin: 9px 14px; color: var(--on-surface-muted); font-size: 10px; line-height: 1.5; }
 
 .team-graph-viewport {
-	position: relative;
-	height: clamp(280px, 43dvh, 420px);
+	position: absolute;
+	inset: 0;
+	height: 100%;
 	overflow: clip;
 	overscroll-behavior: contain;
 	touch-action: none;
 	user-select: none;
 	cursor: grab;
-	border-block: 1px solid var(--border-subtle);
+	border: 0;
 	background-color: var(--surface-sunken);
 	background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
 	background-size: 18px 18px;
 }
 
 .team-graph-viewport:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
-.team-graph-viewport.is-dragging,
-.team-graph-viewport.is-dragging .team-graph-node { cursor: grabbing; }
+.team-graph-viewport.is-dragging { cursor: grabbing; }
 .team-graph-canvas { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
 .team-graph-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .team-graph-edge { fill: none; stroke: var(--on-surface-muted); stroke-width: 1.6; }
@@ -73,7 +120,7 @@
 	box-shadow: 0 4px 12px #0003;
 	color: var(--on-surface);
 	text-align: left;
-	cursor: grab;
+	cursor: pointer;
 }
 
 .team-graph-node.is-root { border-radius: 14px; background: var(--surface-raised); border-top-width: 4px; }
@@ -99,7 +146,7 @@
 .team-graph-node-wait { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warning); font-size: 10px; }
 .team-pane .team-map-state.status-queued { color: var(--on-secondary-container); background: var(--secondary-container); }
 
-.team-graph-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 10px 12px; color: var(--on-surface-muted); font-size: 10px; }
+.team-graph-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 0 8px 8px; color: var(--on-surface-muted); font-size: 10px; }
 .team-graph-legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .team-graph-line { width: 22px; height: 0; border-top: 2px solid var(--on-surface-muted); }
 .team-graph-line.is-waiting { border-top-color: var(--warning); border-top-style: dashed; }
@@ -108,7 +155,8 @@
 .team-pane .team-focus-header > div { min-width: 0; }
 .team-pane .team-focus-header > .text-link { margin-top: 4px; }
 
-@media (max-width: 600px) {
-	.team-graph-viewport { height: 320px; }
-	.team-pane .team-focus { padding: 12px; }
+@container (max-width: 540px) {
+	.team-graph-top > .team-overview { flex-basis: 100%; max-width: none; }
+	.team-graph-controls { flex-basis: 100%; }
+	.team-pane > .team-focus { padding: 12px; max-height: 40%; }
 }

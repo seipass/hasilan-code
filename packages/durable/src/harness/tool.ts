@@ -1,10 +1,17 @@
 import { type Context, copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import { overlap } from "@earendil-works/chord/delta";
+import {
+	boundOutput,
+	OutputBuffer,
+	type OutputLimits,
+	PROGRESS_BYTES_PER_SECOND,
+	Progress,
+} from "@earendil-works/chord/output";
 import type { ImageContent, TextContent, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { validateToolArguments } from "@earendil-works/pi-ai/utils/validation";
 import { Compile } from "typebox/compile";
-import { defineDoc, defineDocFamily } from "../documents.ts";
+import { defineDocFamily } from "../documents.ts";
 import { AssistantEntry, ToolResultEntry } from "../entries.ts";
 import { errorMessage } from "../errors.ts";
 import { defineTask } from "../tasks.ts";
@@ -32,7 +39,6 @@ import {
 	type ToolSlot,
 	toolSlot,
 } from "./live.ts";
-import { boundOutput, OutputBuffer, type OutputLimits, PROGRESS_BYTES_PER_SECOND, Progress } from "./output.ts";
 import type {
 	NestedToolExecutionResult,
 	ToolControl,
@@ -68,31 +74,37 @@ export type ToolTaskCheckpoint =
 
 /**
  * A model-issued call's result is its transcript entry; a nested call's result is in its caller's
- * `NestedResultDoc`, so the receipt stays small and the result retires with the caller. A version 1 task that was
+ * `NestedCallDoc`, so the receipt stays small and the result retires with the caller. A version 1 task that was
  * already holding its outcome as `completing` when the Harness upgraded finishes with a version 1 result,
  * `{ entryId, control? }` without `kind`; treat a result without `kind` as a model-issued call's.
  */
 export type ToolTaskResult = { kind: "model"; entryId: EntryId; control?: ToolControl } | { kind: "nested" };
 
-/** Index of a call's nested calls by key, so a rerun of the call finds the nested calls it already made. */
-const NestedCallsDoc = defineDoc<{ calls: Record<string, TaskId<ToolTaskResult>> }>({
-	kind: "pi.tool.nested",
-	version: 1,
-	scope: "task",
-	initial: () => ({ calls: {} }),
-});
+/**
+ * Memo of a tool task that made a nested call, in any attempt, committed before the first admission of each attempt:
+ * only then can `pi.live` hold slots below it, which settling removes. A crash between the two only costs a scan.
+ */
+const MADE_NESTED_CALLS = "pi.tool.madeNestedCalls";
+
+/** One nested call of a running tool: its task, and once it ended, its result. */
+export type NestedCallState = {
+	/** Absent only inside the commit that creates the call; a creation that fails leaves no member. */
+	taskId?: TaskId<ToolTaskResult>;
+	/** Exactly what `executeTool()` returns; absent while running, and for a call the scheduler faulted or orphaned. */
+	result?: JsonRepresentation<NestedToolExecutionResult>;
+};
 
 /**
- * The result of one nested call, exactly as `executeTool()` returns it, a member of its caller's family keyed by the
- * nested task ID. Written in the nested call's terminal commit; one document per result, so no write rewrites other
- * results. Retires with the caller.
+ * The nested calls of a tool call, a task-scoped family of the calling task keyed by the nested call's key: so a rerun
+ * finds the calls it already made, and the caller reads each result. Created with the nested task; the nested call's
+ * terminal commit adds its result. One document per call, so no commit rewrites the others. Retires with the caller.
  */
-export const NestedResultDoc = defineDocFamily<{ result: JsonRepresentation<NestedToolExecutionResult> }, JsonObject>({
-	kind: "pi.tool.nested-result",
+export const NestedCallDoc = defineDocFamily<NestedCallState, null>({
+	kind: "pi.tool.nested-call",
 	version: 1,
 	scope: "task",
 	family: true,
-	initial: (seed) => seed as { result: JsonRepresentation<NestedToolExecutionResult> },
+	initial: () => ({}),
 });
 
 type Runtime = TaskRuntime<ToolTaskInput, ToolTaskCheckpoint, ToolTaskResult, ToolHooks>;
@@ -102,7 +114,7 @@ type Content = (TextContent | ImageContent)[];
  * Built-in tool task: resolves the called tool among its phase agent's tools, validates, runs `beforeTool`, records intent,
  * executes, runs `afterTool`, and settles the result, all in one `call` handler so nothing separates resolution from
  * settlement. `execute` is reached only by recovery and applies the replay rule. A model-issued call settles by
- * appending its result entry; a nested call by writing its result to its caller's `NestedResultDoc`.
+ * appending its result entry; a nested call by writing its result to its caller's `NestedCallDoc`.
  */
 export const ToolTask = defineTask<ToolTaskInput, ToolTaskCheckpoint, ToolTaskResult, ToolHooks>({
 	name: "pi.tool",
@@ -277,6 +289,8 @@ async function run(
 	const resumes = tool.replay === "safe";
 	/** Default keys: the order of this invocation's calls, so a rerun that calls in the same order reattaches. */
 	let sequence = 0;
+	/** This attempt's commit of the `MADE_NESTED_CALLS` memo. */
+	let madeNestedMemo: Promise<unknown> | undefined;
 	let ended = false;
 	const assertLive = (): void => {
 		if (ended) throw new Error(`Tool call ${call.id} has settled`);
@@ -353,22 +367,30 @@ async function run(
 			assertLive();
 			const key = options.key ?? String(++sequence);
 			if (options.key !== undefined) checkKey(options.key);
-			const admission = startNestedCall(
-				runtime,
-				call.id,
-				name,
-				toolArgs,
-				{ key, progress: options.progress, abandonOnRestart: !resumes },
-				callContext,
+			// The memo first, once per attempt; a failed one is tried again by the next call.
+			madeNestedMemo ??= runtime.memo(MADE_NESTED_CALLS, true, callContext).catch((error: unknown) => {
+				madeNestedMemo = undefined;
+				throw error;
+			});
+			// Registered now, so cleanup waits for it.
+			const admission = madeNestedMemo.then(() =>
+				startNestedCall(
+					runtime,
+					call.id,
+					name,
+					toolArgs,
+					{ key, progress: options.progress, abandonOnRestart: !resumes },
+					callContext,
+				),
 			);
 			admissions.push(admission);
 			const id = await admission;
 			const settled = await runtime.waitForTask(id, callContext);
-			const stored = await runtime.snapshot(NestedResultDoc, runtime.taskId, String(id), callContext);
+			const stored = (await runtime.snapshot(NestedCallDoc, runtime.taskId, key, callContext))?.result;
 			// A copy the tool may change; a nested call the scheduler faulted or orphaned stored none.
 			return stored === undefined
 				? fallbackResult(id, name, settled.state.outcome)
-				: (copyJson(stored.result as unknown as JsonValue) as unknown as NestedToolExecutionResult);
+				: (copyJson(stored as unknown as JsonValue) as unknown as NestedToolExecutionResult);
 		},
 	};
 
@@ -512,9 +534,22 @@ async function finalResult(
 			runtime.report(new Error(broken));
 		}
 	}
-	// Without a schema, programs get the output itself; the model reads only `output`, so model-issued calls skip it.
+	// Programs get the tool's own value: without a schema, its output. The model reads only `output`, so model-issued
+	// calls skip both.
 	if (input.kind === "nested" && tool.structuredOutputSchema === undefined) {
 		final = { ...final, structuredOutput: outputValue(bounded.content) as JsonValue };
+	}
+	// A schema tool's error result without structured output has its text only in the output, which programs never
+	// get: it becomes an error diagnostic, as a thrown error's message does, unless one says what went wrong already.
+	if (
+		input.kind === "nested" &&
+		tool.structuredOutputSchema !== undefined &&
+		final.isError === true &&
+		final.structuredOutput === undefined &&
+		![...(final.diagnostics ?? []), ...harness].some((diagnostic) => diagnostic.severity === "error")
+	) {
+		const text = bounded.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
+		if (text !== "") harness.push(toolDiagnostic("tool_error", text));
 	}
 	return { ...final, output: bounded.content, diagnostics: [...(final.diagnostics ?? []), ...harness] };
 }
@@ -546,7 +581,7 @@ function structuredOutputError(tool: ToolRegistration, result: ToolExecutionResu
 
 /**
  * Commit the tool's terminal state and mark its slot done. A model-issued call appends its result entry and ends with
- * the entry ID; a nested call writes its result to the caller's `NestedResultDoc`, records its usage, and ends with a
+ * the entry ID; a nested call writes its result to the caller's `NestedCallDoc`, records its usage, and ends with a
  * small receipt. Nested calls this call left running are aborted first, so they report into their slots before the
  * slots below the call leave `pi.live`. `build` receives the slot so interruption and abort can report the durable
  * partial output.
@@ -561,8 +596,12 @@ async function settle(
 	durationMs?: number,
 ): Promise<void> {
 	// A crash in between leaves the call in `execute`: a safe rerun reattaches to the calls, an interruption ends here.
-	const index = await runtime.snapshot(NestedCallsDoc, runtime.taskId, context);
-	const nestedIds = Object.values(index?.calls ?? {}).sort((a, b) => a - b);
+	// Every live nested call the task owns, also those an earlier attempt made and this one never called again.
+	const nestedIds = (await runtime.ownedTasks(context))
+		.filter((record) => record.kind === ToolTask.definition.name && (record.input as ToolTaskInput).kind === "nested")
+		.map((record) => record.id);
+	// Read before the settling commit: no admission starts after `ended`, and those underway were awaited.
+	const madeNested = (await runtime.memo(MADE_NESTED_CALLS, context)) === true;
 	// Mark them all before waiting for any: one may run until a sibling is cancelled.
 	await Promise.all(nestedIds.map((id) => runtime.abortOwned(id, context)));
 	await runtime.commit(async (tx) => {
@@ -574,12 +613,11 @@ async function settle(
 		if (input.kind === "nested") {
 			const nested = nestedResult(runtime.taskId, result, durationMs);
 			if (nested.usage !== undefined) await recordUsage(tx, conversationId, "tools", call.name, nested.usage);
-			// The caller is never terminal before its owned nested calls; a missing entry is a bug, not a race.
-			if ((await tx.doc(NestedCallsDoc, input.parent)).calls[input.key] !== runtime.taskId) {
-				throw new Error(`Nested call ${call.id} is not in its caller's index`);
-			}
-			const stored = { result: nested as unknown as JsonRepresentation<NestedToolExecutionResult> };
-			await tx.doc(NestedResultDoc, input.parent, String(runtime.taskId), stored);
+			// The caller is never terminal before its owned nested calls, so its document is open; another task in it is a
+			// bug, not a race.
+			const state = await tx.doc(NestedCallDoc, input.parent, input.key, null);
+			if (state.taskId !== runtime.taskId) throw new Error(`Nested call ${call.id} is not in its caller's index`);
+			state.result = nested as unknown as Draft<JsonRepresentation<NestedToolExecutionResult>>;
 			if (slot !== undefined && "parentTaskId" in slot) {
 				finishSlot(slot);
 				slot.summary = summaryOf(nested, result.output ?? []);
@@ -599,8 +637,9 @@ async function settle(
 					: { control: copyJson(result.control as JsonValue, { omitUndefinedProperties: true }) as ToolControl };
 			settled = { kind: "model", entryId: entry.id, ...control };
 		}
-		// A call that made no nested calls has no slots below it; skipping the scan keeps many leaves linear.
-		if (nestedIds.length > 0) removeNestedSlots(live, runtime.taskId);
+		// A call that made no nested calls, in any attempt, has no slots below it; skipping the scan keeps many leaves
+		// linear. Committed before the read: no nested call is admitted after `ended`.
+		if (madeNested) removeNestedSlots(live, runtime.taskId);
 		if (ending.status === "aborted") return { status: "terminal", outcome: { status: "aborted", result: settled } };
 		if (ending.status === "failed") {
 			const error = { message: ending.message };
@@ -635,7 +674,7 @@ function nestedResult(
 
 /**
  * Create nested call `key` of the call `parentCallId` in one commit: its tool task, owned by the calling task, its slot,
- * and its index entry. A key already in the index returns that call's task when it names the same tool and arguments.
+ * and its `NestedCallDoc`. A key already made returns that call's task when it names the same tool and arguments.
  */
 async function startNestedCall(
 	runtime: Runtime,
@@ -654,13 +693,13 @@ async function startNestedCall(
 	};
 	let id: TaskId<ToolTaskResult> | undefined;
 	await runtime.commit(async (tx) => {
-		const index = await tx.doc(NestedCallsDoc, runtime.taskId);
-		const existing = Object.hasOwn(index.calls, key) ? index.calls[key] : undefined;
+		// Opened, or created empty for a key not made yet.
+		const state = await tx.doc(NestedCallDoc, runtime.taskId, key, null);
+		const existing = state.taskId;
 		if (existing !== undefined) {
 			const input = (await tx.task(existing))?.input as ToolTaskInput | undefined;
 			const same =
 				input?.kind === "nested" &&
-				input.parent === runtime.taskId &&
 				input.call.name === name &&
 				jsonEqual(input.call.arguments as JsonValue, call.arguments as JsonValue);
 			if (!same) throw new Error(`Nested call ${call.id} was already made with another tool or other arguments`);
@@ -679,7 +718,7 @@ async function startNestedCall(
 			ownership: { kind: "task", taskId: runtime.taskId },
 			abandonOnRestart: options.abandonOnRestart,
 		});
-		index.calls[key] = created;
+		state.taskId = created;
 		const live = await tx.doc(LiveDoc, runtime.conversationId);
 		live.nestedTools ??= [];
 		const slot: NestedToolSlot = {
@@ -846,7 +885,7 @@ function boundContent(
 
 /**
  * Explicit nested call keys are path segments of the call ID, so IDs of different nested calls never collide, and are
- * never plain positive integers, which default keys use. `__proto__` would not land in the index as an own key.
+ * never plain positive integers, which default keys use. `__proto__` stays reserved, as it was when keys indexed a JSON object.
  */
 function checkKey(key: string): void {
 	if (key === "" || key.includes("/") || key === "__proto__" || /^[1-9][0-9]*$/.test(key)) {

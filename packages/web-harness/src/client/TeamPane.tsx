@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type SubmitEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type SubmitEvent } from "react";
 import { Content } from "./Content.tsx";
 import { transitionItems } from "./item-transition.ts";
 import { layoutTeamGraph, selectedTeamAgents, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "./team-graph.ts";
@@ -73,19 +73,17 @@ type GraphGesture = {
 	clientY: number;
 	x: number;
 	y: number;
-	zoom: number;
-	nodeId?: string;
 	moved: boolean;
 };
 
-function TeamGraph({ agents, snapshot, focusedId, focus }: {
+function TeamGraph({ agents, snapshot, focusedId, focus, overview }: {
 	agents: TeamAgent[];
 	snapshot: TeamSnapshot;
 	focusedId: string;
 	focus: (id: string) => void;
+	overview: ReactNode;
 }) {
-	const [positions, setPositions] = useState(() => new Map<string, { x: number; y: number }>());
-	const graph = useMemo(() => layoutTeamGraph(agents, snapshot, positions), [agents, snapshot, positions]);
+	const graph = useMemo(() => layoutTeamGraph(agents, snapshot), [agents, snapshot]);
 	const waitingByAgent = useMemo(() => {
 		const waiting = new Map<string, string[]>();
 		for (const edge of graph.edges) {
@@ -104,7 +102,6 @@ function TeamGraph({ agents, snapshot, focusedId, focus }: {
 	const suppressClick = useRef(false);
 	const initialized = useRef(false);
 	const markerId = useId();
-	const helpId = useId();
 	const focused = graph.nodes.find((node) => node.agent.agentId === focusedId);
 	const fitGraph = useCallback((target = graph) => {
 		const element = viewport.current;
@@ -124,16 +121,18 @@ function TeamGraph({ agents, snapshot, focusedId, focus }: {
 	useEffect(() => {
 		const element = viewport.current;
 		if (!element) return;
-		const pan = (event: WheelEvent) => {
-			if (event.ctrlKey || event.metaKey) return;
+		const wheel = (event: WheelEvent) => {
 			event.preventDefault();
-			const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? element.clientHeight : 1;
-			const dx = event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX;
-			const dy = event.shiftKey && !event.deltaX ? 0 : event.deltaY;
-			setView((current) => ({ ...current, x: current.x - dx * unit, y: current.y - dy * unit }));
+			const bounds = element.getBoundingClientRect();
+			const x = event.clientX - bounds.left;
+			const y = event.clientY - bounds.top;
+			setView((current) => {
+				const zoom = Math.max(0.01, Math.min(2, current.zoom * (event.deltaY > 0 ? 0.9 : 1.1)));
+				return { zoom, x: x - (x - current.x) * zoom / current.zoom, y: y - (y - current.y) * zoom / current.zoom };
+			});
 		};
-		element.addEventListener("wheel", pan, { passive: false });
-		return () => element.removeEventListener("wheel", pan);
+		element.addEventListener("wheel", wheel, { passive: false });
+		return () => element.removeEventListener("wheel", wheel);
 	}, []);
 	function zoomTo(nextZoom: number) {
 		const element = viewport.current;
@@ -141,7 +140,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus }: {
 		const x = element.clientWidth / 2;
 		const y = element.clientHeight / 2;
 		setView((current) => {
-			const next = Math.max(0.01, Math.min(1.4, nextZoom));
+			const next = Math.max(0.01, Math.min(2, nextZoom));
 			return { zoom: next, x: x - (x - current.x) * next / current.zoom, y: y - (y - current.y) * next / current.zoom };
 		});
 	}
@@ -154,14 +153,14 @@ function TeamGraph({ agents, snapshot, focusedId, focus }: {
 			y: element.clientHeight / 2 - (y + TEAM_NODE_HEIGHT / 2) * current.zoom,
 		}));
 	}
-	function beginGesture(event: ReactPointerEvent<HTMLElement>, node?: { agent: TeamAgent; x: number; y: number }) {
+	function beginGesture(event: ReactPointerEvent<HTMLDivElement>) {
 		if (event.button !== 0 || !event.isPrimary || gesture.current) return;
+		if (event.target instanceof Element && event.target.closest("button")) return;
 		event.preventDefault();
 		event.stopPropagation();
 		gesture.current = {
 			pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY,
-			x: node?.x ?? view.x, y: node?.y ?? view.y, zoom,
-			nodeId: node?.agent.agentId, moved: false,
+			x: view.x, y: view.y, moved: false,
 		};
 		event.currentTarget.focus({ preventScroll: true });
 		event.currentTarget.setPointerCapture(event.pointerId);
@@ -176,12 +175,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus }: {
 		current.moved = true;
 		suppressClick.current = true;
 		setDragging(true);
-		const nodeId = current.nodeId;
-		if (nodeId) {
-			setPositions((saved) => new Map(saved).set(nodeId, { x: current.x + dx / current.zoom, y: current.y + dy / current.zoom }));
-		} else {
-			setView((value) => ({ ...value, x: current.x + dx, y: current.y + dy }));
-		}
+		setView((value) => ({ ...value, x: current.x + dx, y: current.y + dy }));
 	}
 	function endGesture(event: ReactPointerEvent<HTMLDivElement>) {
 		if (gesture.current?.pointerId !== event.pointerId) return;
@@ -189,16 +183,19 @@ function TeamGraph({ agents, snapshot, focusedId, focus }: {
 		setDragging(false);
 	}
 	return <section className="team-graph" aria-label="エージェントの親子関係">
-		<div className="team-graph-heading"><div><h3>チームの関係図</h3><p>親AIと並行して動く担当</p></div><span className="team-graph-total">{agents.length} ノード</span></div>
+		<div className="team-graph-top">
+			{overview}
+			<div className="team-graph-controls">
 		<div className="team-graph-toolbar" role="group" aria-label="関係図の表示">
-			<div className="team-graph-zoom"><button type="button" aria-label="関係図を縮小" disabled={zoom <= 0.01} onClick={() => zoomTo(zoom - 0.1)}>−</button><output aria-label="関係図の拡大率">{Math.round(zoom * 100)}%</output><button type="button" aria-label="関係図を拡大" disabled={zoom >= 1.4} onClick={() => zoomTo(zoom + 0.1)}>＋</button></div>
+			<div className="team-graph-zoom"><button type="button" aria-label="関係図を縮小" disabled={zoom <= 0.01} onClick={() => zoomTo(zoom / 1.2)}>−</button><output aria-label="関係図の拡大率">{Math.round(zoom * 100)}%</output><button type="button" aria-label="関係図を拡大" disabled={zoom >= 2} onClick={() => zoomTo(zoom * 1.2)}>＋</button></div>
 			<button type="button" onClick={() => zoomTo(1)}>等倍</button>
 			<button type="button" onClick={() => fitGraph()}>全体表示</button>
 			<button type="button" disabled={!focused} onClick={() => { if (focused) centerNode(focused.x, focused.y); }}>選択へ</button>
-			<button type="button" disabled={!positions.size} onClick={() => { setPositions(new Map()); fitGraph(layoutTeamGraph(agents, snapshot)); }}>配置を戻す</button>
 		</div>
-		<p id={helpId} className="team-graph-help">ノードをドラッグして配置 · 空白をドラッグ／スクロールで移動 · 選択すると下に詳細を表示（Tab・Enterでも選択）</p>
-		<div ref={viewport} className={`team-graph-viewport${dragging ? " is-dragging" : ""}`} tabIndex={0} role="region" aria-label="チーム関係図の操作領域" aria-describedby={helpId}
+				<div className="team-graph-legend" aria-label="関係図の凡例"><span><i className="team-graph-line" />親 → 子</span><span><i className="team-graph-line is-waiting" />結果を待つ相手 →</span><span><i className="team-graph-selection" />選択中</span></div>
+			</div>
+		</div>
+		<div ref={viewport} className={`team-graph-viewport${dragging ? " is-dragging" : ""}`} tabIndex={0} role="region" aria-label="チーム関係図。空白をドラッグして移動、ホイールで拡大縮小、Tab・Enterで担当を選択。"
 			onPointerDown={(event) => beginGesture(event)} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} onLostPointerCapture={endGesture}
 			onClickCapture={(event) => {
 				if (event.detail && suppressClick.current) { event.preventDefault(); event.stopPropagation(); }
@@ -237,7 +234,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus }: {
 						const stateLabel = state === "idle" ? "作業なし" : RUN_LABELS[state];
 						const waiting = waitingByAgent.get(agent.agentId) ?? [];
 						const task = run ? taskText(run) : "まだ作業はありません";
-						return <button key={agent.agentId} type="button" className={`team-graph-node status-${state} ${!agent.parentAgentId ? "is-root" : "is-child"} ${focusedId === agent.agentId ? "is-selected" : ""}`} style={{ left: x, top: y, width: TEAM_NODE_WIDTH, height: TEAM_NODE_HEIGHT }} aria-pressed={focusedId === agent.agentId} aria-label={`${label(agent)}、${!agent.parentAgentId ? "親AI" : "子の担当"}、${stateLabel}。${task}${waiting.length ? `。${waiting.join("、")}の結果待ち` : ""}`} title={`${label(agent)}\n${task}`} onPointerDown={(event) => beginGesture(event, { agent, x, y })} onFocus={(event) => { if (!gesture.current && event.currentTarget.matches(":focus-visible")) centerNode(x, y); }} onClick={() => focus(agent.agentId)}>
+						return <button key={agent.agentId} type="button" className={`team-graph-node status-${state} ${!agent.parentAgentId ? "is-root" : "is-child"} ${focusedId === agent.agentId ? "is-selected" : ""}`} style={{ left: x, top: y, width: TEAM_NODE_WIDTH, height: TEAM_NODE_HEIGHT }} aria-pressed={focusedId === agent.agentId} aria-label={`${label(agent)}、${!agent.parentAgentId ? "親AI" : "子の担当"}、${stateLabel}。${task}${waiting.length ? `。${waiting.join("、")}の結果待ち` : ""}`} title={`${label(agent)}\n${task}`} onFocus={(event) => { if (!gesture.current && event.currentTarget.matches(":focus-visible")) centerNode(x, y); }} onClick={() => focus(agent.agentId)}>
 							<span className="team-graph-node-role">{!agent.parentAgentId ? "親AI / チームの起点" : "子の担当"}<span>{focusedId === agent.agentId ? "選択中" : ""}</span></span>
 							<span className="team-graph-node-name">{label(agent)}</span>
 							<span className="team-graph-node-task">{task}</span>
@@ -246,7 +243,6 @@ function TeamGraph({ agents, snapshot, focusedId, focus }: {
 					})}
 				</div>
 		</div>
-		<div className="team-graph-legend" aria-label="関係図の凡例"><span><i className="team-graph-line" />親 → 子</span><span><i className="team-graph-line is-waiting" />結果を待つ相手 →</span><span><i className="team-graph-selection" />選択中</span></div>
 	</section>;
 }
 
@@ -308,10 +304,10 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, onSelect, onSt
 	function focusAgent(id: string) {
 		if (id !== focused?.agentId) transitionItems(() => setFocusedId(id));
 	}
+	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>子の担当 {workers.length}人 <span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> 完了 {counts.completed}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}</header>;
 	return <section className="team-pane" aria-label="チームの進行状況">
 		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2><p>会話を始めると親AIを、担当が起動すると親子関係と実際の作業状況をここに表示します。</p></div> : <>
-			<header className="team-overview"><span className="team-section-label">ライブ · この会話のチーム</span><h2 role="status">{situation}</h2><p>子の担当 {workers.length}人 <span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> 完了 {counts.completed}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}</header>
-			{snapshot && <TeamGraph key={selected?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} />}
+			{snapshot && <TeamGraph key={selected?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} />}
 			{focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
 				<header className="team-focus-header"><div><span className="team-section-label">選択中の担当</span><h3>{label(focused)}</h3></div><button type="button" className="text-link" onClick={() => onSelect(focused.sessionId)}>会話を開く ↗</button></header>
 				<div className="team-relationship">{parent ? <>親: <button type="button" className="text-link" onClick={() => focusAgent(parent.agentId)}>{label(parent)}</button></> : "親AI · チームの起点"}{directChildren > 0 && <span> · 子 {directChildren}人</span>}{model && <span> · {model.name ?? model.id}</span>}</div>
