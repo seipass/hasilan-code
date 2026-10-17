@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
       PI_OFFLINE: '1'
@@ -33,6 +33,8 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Build the reviewed terminal addon only
         run: npm rebuild node-pty --ignore-scripts=false --foreground-scripts
+      - name: Install Chromium and its system dependencies for real browser tests
+        run: node node_modules/playwright/cli.js install --with-deps chromium
       - name: Build Hasilan Code with the pinned model catalog
         run: npm run build:hasilan
       - name: Check
@@ -56,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -113,7 +113,7 @@ describe("WorkspaceFiles", () => {
 		const changes = await Promise.all(
 			["first", "second", "third"].map((name) => update(files, id, name, name.toUpperCase())),
 		);
-		failure.destination = path.join(root, "second");
+		failure.destination = path.join(files.getWorkspaceRoot(id), "second");
 		const result = await files.commit(id, changes);
 		expect(result.files.map((file) => file.status)).toEqual(["applied", "not_applied", "not_applied"]);
 		expect(result.files[1].error).toContain("Injected rename");
