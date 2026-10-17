@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,8 +32,15 @@ try {
 					"node-pty build failed. Install your platform's C++ build tools and Python before retrying.",
 				);
 		}
+		const require = createRequire(import.meta.url);
+		if (process.platform === "darwin") {
+			const ptyRoot = dirname(require.resolve("node-pty/package.json"));
+			for (const directory of [`prebuilds/darwin-${process.arch}`, "build/Release"]) {
+				const helper = join(ptyRoot, directory, "spawn-helper");
+				if (existsSync(helper)) chmodSync(helper, 0o755);
+			}
+		}
 		if (!args.includes("--skip-browser")) {
-			const require = createRequire(import.meta.url);
 			const cli = join(dirname(require.resolve("playwright/package.json")), "cli.js");
 			const result = spawnSync(process.execPath, [cli, "install", "chromium"], { cwd: root, stdio: "inherit" });
 			if (result.error) throw result.error;

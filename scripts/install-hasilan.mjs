@@ -116,7 +116,7 @@ try {
 	console.log(`Add ${process.platform === "win32" ? prefix : join(prefix, "bin")} to PATH, then run hasilan-code.`);
 	if (!setup)
 		console.log(
-			"Run hasilan-code setup to install Chromium. Linux terminals also require hasilan-code setup --build-pty.",
+			"Run hasilan-code setup to prepare terminal permissions and install Chromium. Linux terminals also require hasilan-code setup --build-pty.",
 		);
 } finally {
 	await rm(temporary, { recursive: true, force: true });

@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { WebSocket } from "ws";
 import { execNpmSync } from "./npm-command.mjs";
 
@@ -23,7 +24,6 @@ try {
 	execNpmSync(["install", "--ignore-scripts", "--no-audit", "--no-fund", join(releaseDirectory, release.tarball)], {
 		cwd: consumer,
 		stdio: "inherit",
-		timeout: 300_000,
 	});
 	const application = join(consumer, "node_modules/hasilan-code");
 	const cli = join(application, "bin/hasilan-code.mjs");
@@ -41,11 +41,14 @@ try {
 		`import assert from "node:assert/strict";\nimport { AgentSession } from ${JSON.stringify(pathToFileURL(join(application, "node_modules/@earendil-works/pi-coding-agent/dist/index.js")).href)};\nimport { resolveBlock } from ${JSON.stringify(pathToFileURL(join(application, "dist/server/tools/hashline/blocks.js")).href)};\nassert.equal(typeof AgentSession.prototype.resumeContext, "function");\nassert.equal(typeof AgentSession.prototype.mutateQueuedInput, "function");\nassert.deepEqual(resolveBlock("smoke.ts", ["export function example() {", "  return 1;", "}"], 1), { start: 1, end: 3 });\n`,
 	);
 	execFileSync(process.execPath, [contract], { cwd: workspace, stdio: "inherit" });
-	if (process.argv.includes("--build-pty"))
-		execFileSync(process.execPath, [cli, "setup", "--build-pty", "--skip-browser"], {
+	execFileSync(
+		process.execPath,
+		[cli, "setup", "--skip-browser", ...(process.argv.includes("--build-pty") ? ["--build-pty"] : [])],
+		{
 			cwd: workspace,
 			stdio: "inherit",
-		});
+		},
+	);
 	const launched = Promise.withResolvers();
 	let logs = "";
 	server = spawn(process.execPath, [cli, "--port", "0", "--cwd", workspace], {
@@ -88,7 +91,7 @@ try {
 		headers,
 		body: JSON.stringify({ workspaceId: directory.id, cols: 80, rows: 24 }),
 	});
-	assert.equal(created.status, 201);
+	assert.equal(created.status, 201, await created.clone().text());
 	const terminal = await created.json();
 	const output = Promise.withResolvers();
 	let screen = "";
@@ -102,7 +105,11 @@ try {
 		if (message.type === "snapshot" || message.type === "data") {
 			screen += message.vt ?? message.data;
 			socket.send(JSON.stringify({ type: "ack", generation: terminal.generation, seq: message.seq }));
-			if (/\r?\nHASILAN_PACKAGE_PTY_OK\r?\n/.test(screen.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")))
+			if (
+				stripVTControlCharacters(screen)
+					.split(/[\r\n]+/)
+					.includes("HASILAN_PACKAGE_PTY_OK")
+			)
 				output.resolve();
 		}
 		if (message.type === "control" && !message.controller) socket.send('{"type":"take_control"}');
@@ -115,7 +122,7 @@ try {
 		if (message.type === "error") output.reject(new Error(message.message));
 	});
 	const terminalTimeout = setTimeout(
-		() => output.reject(new Error("Packaged PTY did not execute the smoke command")),
+		() => output.reject(new Error(`Packaged PTY did not execute the smoke command: ${JSON.stringify(screen)}`)),
 		30_000,
 	);
 	try {

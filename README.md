@@ -23,6 +23,8 @@ hasilan-code
 
 Linuxの端末にはnative addonのビルドが必要です。C++コンパイラー・make・Pythonを用意し、`hasilan-code setup --build-pty`を明示的に実行してください。この操作だけが`node-pty`の確認済みinstall scriptを実行します。通常のインストールではlifecycle scriptを実行しません。ChromiumのOS依存ライブラリは[Playwrightの要件](https://playwright.dev/docs/browsers#install-system-dependencies)も参照してください。
 
+macOSでも初回に`hasilan-code setup`を実行してください。Chromiumの導入に加え、同梱するPTY補助プログラムの実行権限を設定します。ブラウザーを使わない場合は`hasilan-code setup --skip-browser`で端末だけを準備できます。
+
 npmアカウントなしで導入する場合は [GitHub Releases](https://github.com/seipass/hasilan-code/releases) の`install-hasilan.mjs`を保存して実行します。
 
 ```sh
