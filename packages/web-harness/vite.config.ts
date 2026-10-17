@@ -9,6 +9,7 @@ export default defineConfig({
 		outDir: "dist/client",
 		emptyOutDir: true,
 		sourcemap: true,
+		license: { fileName: "THIRD_PARTY_LICENSES.txt" },
 		rolldownOptions: {
 			output: {
 				codeSplitting: {

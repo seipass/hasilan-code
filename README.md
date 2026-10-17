@@ -270,3 +270,5 @@ Hasilan Code は既定で `127.0.0.1` に待ち受け、起動時に認証付き
 ## ライセンス
 
 本リポジトリは [MIT License](LICENSE) で公開しています。本家 Pi の著作権表示を保持しています。フォントなどの同梱素材には、それぞれのライセンスが適用されます。
+
+配布パッケージには、ブラウザー側に組み込む外部ライブラリの通知を`dist/client/THIRD_PARTY_LICENSES.txt`として同梱します。Gen Interface JP の著作権表示と [SIL Open Font License](packages/web-harness/public/fonts/GenInterfaceJP-OFL.txt) もフォントと一緒に配布します。
