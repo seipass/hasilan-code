@@ -1,6 +1,6 @@
 # Hasilan Code
 
-Pi v1.3.0を基盤にしたローカル単一ユーザー用Web入口。上流CLI/TUIとは独立したworkspaceです。上流コミット: `71023aec1546d6d677a65669c5665c0927ce0dd0`。独自リポジトリは [seipass/hasilan-code](https://github.com/seipass/hasilan-code)、本家の取り込み方は [ルートREADME](../../README.md#本家piを更新する手順) を参照してください。oh-my-piのソース、prompt、fixture、native binaryは使用しません。
+Pi v1.3.0を基盤にしたローカル単一ユーザー用Web入口。上流CLI/TUIとは独立したworkspaceです。上流コミット: `71023aec1546d6d677a65669c5665c0927ce0dd0`。独自リポジトリは [seipass/hasilan-code](https://github.com/seipass/hasilan-code)、本家の取り込み方は [ルートREADME](../../README.md#本家-pi-との関係) を参照してください。oh-my-piのソース、prompt、fixture、native binaryは使用しません。
 
 ## 起動
 
