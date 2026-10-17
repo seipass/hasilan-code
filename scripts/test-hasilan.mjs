@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const vitest = join(root, "node_modules/vitest/dist/cli.js");
 const web = join(root, "packages/web-harness");
 const files = readdirSync(join(web, "test"))
-	.filter((name) => name.endsWith(".test.ts") && !name.endsWith("-e2e.test.ts"))
+	.filter((name) => name.endsWith(".test.ts") && !name.endsWith("-e2e.test.ts") && name !== "browser.test.ts")
 	.map((name) => `test/${name}`);
 execFileSync(process.execPath, ["--test", "scripts/hasilan-release.test.mjs", "scripts/check-runtime-deps.test.mjs"], {
 	cwd: root,
@@ -18,6 +18,16 @@ execFileSync(process.execPath, [vitest, "--run", "--maxWorkers=2", ...files], {
 	stdio: "inherit",
 	env: { ...process.env, PI_OFFLINE: "1", PI_NO_LOCAL_LLM: "1" },
 });
+// Real Chromium launch and navigation are integration operations, not five-second unit work.
+execFileSync(
+	process.execPath,
+	[vitest, "--run", "--maxWorkers=1", "--testTimeout=30000", "--hookTimeout=30000", "test/browser.test.ts"],
+	{
+		cwd: web,
+		stdio: "inherit",
+		env: { ...process.env, PI_OFFLINE: "1", PI_NO_LOCAL_LLM: "1" },
+	},
+);
 execFileSync(
 	process.execPath,
 	[

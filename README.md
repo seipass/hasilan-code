@@ -168,6 +168,8 @@ npm run check
 npm run test:hasilan
 ```
 
+`npm run test:hasilan`は単体検証と実 Chromium の操作検証を分けて実行します。実プロバイダーの認証や有料 API は使いません。Chromium は起動手順の`setup`で準備してください。
+
 Web 側のコードだけを変更した場合は、`npm run build --workspace=hasilan-code` でビルドできます。ビルド後はサーバーを再起動し、ブラウザーを再読み込みしてください。
 
 開発時の規則は [`AGENTS.md`](AGENTS.md)、貢献に関する案内は [`CONTRIBUTING.md`](CONTRIBUTING.md) を参照してください。実際の AI プロバイダーを呼び出すテストには、認証や利用料金が必要な場合があります。
