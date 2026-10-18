@@ -2,6 +2,28 @@ import { spawn } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
+/** Actionable remedy shown when the terminal native module is missing. */
+function terminalSupportRemedy(platform: NodeJS.Platform): string {
+	return platform === "linux"
+		? "No prebuilt binary is bundled for Linux. Install a C++ compiler, make and Python, then run: hasilan-code setup --build-pty"
+		: "Reinstall Hasilan Code with the command you used before, then run: hasilan-code setup";
+}
+
+/**
+ * Reports a terminal addon that cannot load before the server starts, so the user reads the remedy
+ * instead of a node-pty stack trace. `load` performs the real native import.
+ */
+export function terminalSupportFailure(load: () => unknown, platform: NodeJS.Platform): Error | undefined {
+	try {
+		load();
+		return undefined;
+	} catch (error) {
+		return new Error(
+			`The terminal native module (node-pty) cannot be loaded.\n${terminalSupportRemedy(platform)}\nDetails: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
 export interface CliOptions {
 	port: number;
 	cwd: string;

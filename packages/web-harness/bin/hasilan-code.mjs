@@ -4,11 +4,21 @@ import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CLI_HELP, parseCliArgs } from "../dist/server/cli.js";
+import { CLI_HELP, parseCliArgs, terminalSupportFailure } from "../dist/server/cli.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const args = process.argv.slice(2);
+
+/** Terminal support is a native addon: loading it here reports a missing build as guidance, not a stack trace. */
+function terminalModuleFailure() {
+	return terminalSupportFailure(() => createRequire(import.meta.url)("node-pty"), process.platform);
+}
+
+function requireTerminalSupport() {
+	const failure = terminalModuleFailure();
+	if (failure) throw failure;
+}
 try {
 	if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) {
 		console.log(`Hasilan Code ${manifest.version} (Pi ${manifest.hasilanCode.piVersion})`);
@@ -48,10 +58,15 @@ try {
 				throw new Error("Chromium installation failed. Check the Playwright platform dependencies.");
 		}
 		console.log("Hasilan Code setup completed.");
+		if (process.platform === "linux" && !args.includes("--build-pty") && terminalModuleFailure())
+			console.log(
+				"Terminal support is not built yet. Run hasilan-code setup --build-pty before starting the server; the terminal feature needs a C++ compiler, make and Python.",
+			);
 	} else {
 		const options = parseCliArgs(args);
 		if (options.help) console.log(CLI_HELP);
 		else {
+			requireTerminalSupport();
 			const child = spawn(process.execPath, [join(root, "dist/server/main.js"), ...args], { stdio: "inherit" });
 			child.once("error", (error) => {
 				console.error(error.message);

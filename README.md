@@ -100,7 +100,7 @@ hasilan-code
 
 更新は同じコマンドの再実行です。`npm install --global --ignore-scripts hasilan-code`を実行すると、npmの`latest`がそのまま置き換わります。`hasilan-code --version`で反映を確認してください。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.3`のように指定します。アプリ内に自己更新コマンドはありません。
 
-Linux で端末機能を使う場合は、C++ コンパイラー・make・Python を用意し、`hasilan-code setup --build-pty`を実行してください。この操作でのみ、確認済みの`node-pty` install scriptを実行します。Chromium の OS 依存ライブラリは[Playwright の要件](https://playwright.dev/docs/browsers#install-system-dependencies)も参照してください。
+Linux で端末機能を使う場合は、C++ コンパイラー・make・Python を用意し、`hasilan-code setup --build-pty`を実行してください。この操作でのみ、確認済みの`node-pty` install scriptを実行します。Linux向けのプリビルドは同梱していないため、ビルド前に起動すると案内を表示して終了します。Chromium の OS 依存ライブラリは[Playwright の要件](https://playwright.dev/docs/browsers#install-system-dependencies)も参照してください。
 
 起動コマンド`hasilan-code`は既定で`127.0.0.1:3080`にサーバーを立ち上げ、認証付きURLを表示します。ブラウザーは自動で開きません。URLには認証情報が含まれるため、第三者に共有しないでください。
 

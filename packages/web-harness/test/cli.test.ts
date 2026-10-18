@@ -2,7 +2,7 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openBrowser, parseCliArgs, resolveCliWorkspace } from "../src/server/cli.ts";
+import { openBrowser, parseCliArgs, resolveCliWorkspace, terminalSupportFailure } from "../src/server/cli.ts";
 
 vi.mock("node:child_process", () => ({
 	spawn: () => {
@@ -63,5 +63,21 @@ describe("CLI startup boundaries", () => {
 		await expect(openBrowser("https://evil.example/", { noOpen: false, env: {} })).rejects.toThrow(
 			"loopback launch URL",
 		);
+	});
+
+	it("turns a missing terminal addon into the platform remedy instead of a stack trace", () => {
+		const missing = () => {
+			throw new Error("Cannot find module './prebuilds/linux-x64/pty.node'");
+		};
+		expect(terminalSupportFailure(() => ({}), "linux")).toBeUndefined();
+		const linux = terminalSupportFailure(missing, "linux");
+		expect(linux?.message).toContain("setup --build-pty");
+		expect(linux?.message).toContain("Cannot find module './prebuilds/linux-x64/pty.node'");
+		// Windows and macOS ship prebuilds, so a failure there means a broken install, not a build step.
+		for (const platform of ["win32", "darwin"] as const) {
+			const broken = terminalSupportFailure(missing, platform);
+			expect(broken?.message).toContain("Reinstall Hasilan Code");
+			expect(broken?.message).not.toContain("--build-pty");
+		}
 	});
 });
