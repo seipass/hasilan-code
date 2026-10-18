@@ -17,6 +17,7 @@ import {
 } from "../shared/contracts.ts";
 import { goalActionSchema } from "../shared/goals.ts";
 import { swarmStartSchema } from "../shared/swarm.ts";
+import { readAccountUsage } from "./account-usage.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
 import { CanvasStore, CanvasStoreError } from "./canvas-store.ts";
@@ -118,6 +119,16 @@ async function main() {
 					sendJson(response, status, data);
 					return true;
 				};
+				if (url.pathname === "/api/account-usage" && method === "GET") {
+					const controller = new AbortController();
+					const abort = () => controller.abort();
+					response.once("close", abort);
+					try {
+						return reply(await readAccountUsage(modelRuntime, controller.signal));
+					} finally {
+						response.off("close", abort);
+					}
+				}
 				if (url.pathname === "/api/workspaces") {
 					if (method === "GET")
 						return reply(registry.listWorkspaces().map((item) => ({ ...item, workspaceId: item.id })));

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
 import { api, command, errorMessage } from "./api.ts";
 import { transitionItems } from "./item-transition.ts";
 import { OAuthLogin } from "./OAuthLogin.tsx";
@@ -6,6 +7,7 @@ import type { ModelCatalog, Settings } from "./types.ts";
 
 const TABS = [
 	{ id: "providers", label: "プロバイダー" },
+	{ id: "usage", label: "使用量" },
 	{ id: "search", label: "検索" },
 	{ id: "agents", label: "エージェント" },
 	{ id: "environment", label: "環境" },
@@ -159,6 +161,9 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 							{keyForm}
 						</>)}
 					</div>}
+				</section>
+				<section className="settings-content" role="tabpanel" id={`${tabsId}-usage-panel`} aria-labelledby={`${tabsId}-usage-tab`} hidden={tab !== "usage"}>
+					{tab === "usage" && <AccountUsagePanel />}
 				</section>
 				<section className="settings-content" role="tabpanel" id={`${tabsId}-search-panel`} aria-labelledby={`${tabsId}-search-tab`} hidden={tab !== "search"}>
 					<h3>Web 検索</h3>

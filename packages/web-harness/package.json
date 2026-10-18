@@ -1,6 +1,6 @@
 {
 	"name": "hasilan-code",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"private": true,
 	"description": "Local authenticated web harness for Pi sessions, teams, browser tools and user terminals",
 	"type": "module",

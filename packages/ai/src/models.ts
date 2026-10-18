@@ -1,3 +1,4 @@
+import type { AccountUsageReader } from "./account-usage.ts";
 import { lazyStream } from "./api/lazy.ts";
 import { defaultProviderAuthContext as defaultAuthContext } from "./auth/context.ts";
 import { InMemoryCredentialStore } from "./auth/credential-store.ts";
@@ -191,6 +192,9 @@ export interface Provider<TApi extends Api = Api> {
 	 * shared abort signal for blocking work.
 	 */
 	refreshModels?(context: RefreshModelsContext): Promise<void>;
+
+	/** Optional account-wide subscription limits and balances, not conversation token usage. */
+	getAccountUsage?: AccountUsageReader;
 
 	/**
 	 * Optional provider policy for credential-specific model availability.
@@ -1017,6 +1021,8 @@ export interface CreateProviderOptions<TApi extends Api = Api> {
 	 * publishes it transactionally and drops models of unknown types.
 	 */
 	fetchModels?: (context: RefreshModelsContext) => Promise<readonly ProviderModel<TApi>[]>;
+	/** Account usage supported by this provider's authentication methods. */
+	getAccountUsage?: AccountUsageReader;
 	/** Credential-specific chat model availability. See `Provider.filterModels`. */
 	filterModels?: (models: readonly Model<TApi>[], credential: Credential | undefined) => readonly Model<TApi>[];
 	/** Credential-specific availability across every model type. See `Provider.filterAllModels`. */
@@ -1094,6 +1100,7 @@ export function createProvider<TApi extends Api = Api>(input: CreateProviderOpti
 		baseUrl: input.baseUrl,
 		headers: input.headers,
 		auth: input.auth,
+		getAccountUsage: input.getAccountUsage,
 		getModels: () => currentModels().filter((model): model is Model<TApi> => isModelType(model, "chat")),
 		getAllModels: currentModels,
 		refreshModels: fetchModels

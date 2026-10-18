@@ -37,6 +37,7 @@ export function UsagePanel({ title, groups, trigger }: {
 		};
 	}, [isPopover, open]);
 	const total = { input: 0, cacheRead: 0, cacheWrite: 0, cost: 0, responses: 0, failures: 0, auxiliary: 0 };
+	let unpriced = false;
 	for (const group of groups) for (const usage of group.usage ?? []) {
 		total.input += usage.input;
 		total.cacheRead += usage.cacheRead;
@@ -45,6 +46,7 @@ export function UsagePanel({ title, groups, trigger }: {
 		total.responses += usage.responses;
 		total.failures += usage.failures;
 		total.auxiliary += usage.auxiliary;
+		if (usage.provider === "devin") unpriced = true;
 	}
 	const percent = cacheReadPercent(total);
 	useEffect(() => {
@@ -70,7 +72,7 @@ export function UsagePanel({ title, groups, trigger }: {
 			<table><thead><tr><th scope="col">担当</th><th scope="col">モデル</th><th scope="col">ヒット率</th><th scope="col">未キャッシュ入力</th><th scope="col">読取</th><th scope="col">書込</th><th scope="col">出力</th><th scope="col">概算USD</th></tr></thead>
 				<tbody>{groups.flatMap((group) => (group.usage ?? []).map((usage) => {
 					const hit = cacheReadPercent(usage);
-					return <tr key={`${group.id}:${usage.provider}:${usage.model}`}><th scope="row">{group.label}</th><td>{usage.provider && <span className="usage-provider">{usage.provider} / </span>}{usage.model}</td><td>{hit === null ? "—" : `${hit.toFixed(1)}%`}</td><td>{tokens.format(usage.input)}</td><td>{tokens.format(usage.cacheRead)}</td><td>{tokens.format(usage.cacheWrite)}</td><td>{tokens.format(usage.output)}</td><td>{money.format(usage.cost)}</td></tr>;
+					return <tr key={`${group.id}:${usage.provider}:${usage.model}`}><th scope="row">{group.label}</th><td>{usage.provider && <span className="usage-provider">{usage.provider} / </span>}{usage.model}</td><td>{hit === null ? "—" : `${hit.toFixed(1)}%`}</td><td>{tokens.format(usage.input)}</td><td>{tokens.format(usage.cacheRead)}</td><td>{tokens.format(usage.cacheWrite)}</td><td>{tokens.format(usage.output)}</td><td>{usage.provider === "devin" ? "未計測" : money.format(usage.cost)}</td></tr>;
 				}))}</tbody>
 			</table>
 		</div> : <p>モデルの使用量はまだ記録されていません。</p>}
@@ -83,7 +85,7 @@ export function UsagePanel({ title, groups, trigger }: {
 		</div>}
 	</div>;
 	return <details className="usage-panel">
-		<summary><span>{title}</span><span>キャッシュ {percent === null ? "—" : `${percent.toFixed(1)}%`} · {total.responses || total.auxiliary ? money.format(total.cost) : "未計測"}</span></summary>
+		<summary><span>{title}</span><span>キャッシュ {percent === null ? "—" : `${percent.toFixed(1)}%`} · {!unpriced && (total.responses || total.auxiliary) ? money.format(total.cost) : "未計測"}</span></summary>
 		<div className="usage-panel-body">{body}</div>
 	</details>;
 }

@@ -4,6 +4,7 @@ import { envApiKeyAuth, lazyOAuth } from "../auth/helpers.ts";
 import { loadOpenAIChatGPTOAuth } from "../auth/oauth/load.ts";
 import { createProvider, isModelType, type Provider } from "../models.ts";
 import type { ClassifierModel } from "../types.ts";
+import { codexAccountUsage } from "./account-usage/codex.ts";
 import { OPENAI_CLASSIFIER_MODELS, OPENAI_MODELS } from "./openai.models.ts";
 
 export function openaiProvider(): Provider<"openai-responses"> {
@@ -28,6 +29,7 @@ export function openaiProvider(): Provider<"openai-responses"> {
 		filterAllModels: (models, credential) =>
 			credential?.type === "oauth" ? models.filter((model) => !isModelType(model, "classifier")) : models,
 		api: openAIResponsesApi(),
+		getAccountUsage: codexAccountUsage,
 		classifiers: {
 			"openai-decisions": openAIDecisionsApi(),
 		},

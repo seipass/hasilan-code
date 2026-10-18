@@ -57,6 +57,7 @@ import {
 	type StreamOptions,
 } from "@hasilan-code/pi-ai";
 import * as builtinProviderCatalog from "@hasilan-code/pi-ai/providers/all";
+import { devinProvider } from "@hasilan-code/pi-ai/providers/devin/index";
 import { personalizeOpenRouterCatalog } from "@hasilan-code/pi-ai/providers/openrouter";
 import {
 	assertChatModel,
@@ -238,6 +239,7 @@ export class ModelRuntime implements Models {
 			}
 			return withRemoteCatalog(provider, options.catalogBaseUrl, builtinModelDataGeneratedAt);
 		});
+		providers.push(devinProvider());
 		const runtime = new ModelRuntime(
 			credentials,
 			config,
@@ -607,7 +609,11 @@ export class ModelRuntime implements Models {
 			this.recomposeProvider(providerId);
 			const compositionError = this.compositionErrors.get(providerId);
 			if (compositionError) throw new Error(compositionError);
-			const result = await this.models.refresh({ allowNetwork: false, providers: [providerId], signal });
+			const result = await this.models.refresh({
+				allowNetwork: this.modelNetworkEnabled && operation === "login" && credential?.type === "oauth",
+				providers: [providerId],
+				signal,
+			});
 			if (result.aborted) signal.throwIfAborted();
 			const refreshError = result.errors.get(providerId);
 			if (refreshError) throw refreshError;

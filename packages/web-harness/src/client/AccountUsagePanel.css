@@ -1,0 +1,18 @@
+.account-usage-panel { display: grid; gap: 14px; }
+.account-usage-toolbar, .account-usage-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.account-usage-toolbar h3, .account-usage-card h4 { margin: 0; }
+.account-usage-card { min-width: 0; }
+.account-usage-plan { color: var(--muted); overflow-wrap: anywhere; }
+.account-usage-account { color: var(--muted); overflow-wrap: anywhere; }
+.account-usage-card dl { margin: 16px 0; }
+.account-usage-metric { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr); gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
+.account-usage-metric dt { color: var(--on-surface); }
+.account-usage-metric dd { margin: 0; min-width: 0; }
+.account-usage-percent { display: block; font-variant-numeric: tabular-nums; }
+.account-usage-metric progress { display: block; width: 100%; height: 8px; margin: 8px 0; accent-color: var(--accent); }
+.account-usage-amounts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
+.account-usage-reset, .account-usage-checked { display: block; margin-top: 8px; color: var(--muted); font-size: 11px; }
+@media (max-width: 520px) {
+	.account-usage-metric { grid-template-columns: 1fr; gap: 6px; }
+	.account-usage-card > header { align-items: flex-start; flex-wrap: wrap; }
+}
