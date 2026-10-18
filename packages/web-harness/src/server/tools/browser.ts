@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import type { AgentToolResult, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { AgentToolResult, ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";

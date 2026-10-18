@@ -1,5 +1,5 @@
 {
-	"name": "@earendil-works/chord",
+	"name": "@hasilan-code/chord",
 	"version": "1.3.0",
 	"description": "Typed host runtime for plugins, contracts, replicated state, and RPC over JSON links",
 	"type": "module",
@@ -58,7 +58,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi.git",
+		"url": "git+https://github.com/seipass/hasilan-code.git",
 		"directory": "packages/chord"
 	},
 	"engines": {

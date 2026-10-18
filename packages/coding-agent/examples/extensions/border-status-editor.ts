@@ -3,9 +3,9 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 	type KeybindingsManager,
-} from "@earendil-works/pi-coding-agent";
-import type { Component, EditorTheme, TUI } from "@earendil-works/pi-tui";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+} from "@hasilan-code/pi-coding-agent";
+import type { Component, EditorTheme, TUI } from "@hasilan-code/pi-tui";
+import { truncateToWidth, visibleWidth } from "@hasilan-code/pi-tui";
 
 function fitBorder(
 	left: string,

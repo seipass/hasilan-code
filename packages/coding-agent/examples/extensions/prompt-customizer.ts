@@ -9,7 +9,7 @@
  * 2. Use the extension — it automatically adapts to your active tools and skills
  */
 
-import type { BuildSystemPromptOptions, ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { BuildSystemPromptOptions, ExtensionAPI } from "@hasilan-code/pi-coding-agent";
 
 function buildToolGuidance(options: BuildSystemPromptOptions): string {
 	const hasTool = (name: string) => options.selectedTools?.includes(name) ?? false;

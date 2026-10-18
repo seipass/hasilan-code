@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { runInNewContext } from "node:vm";
-import type { TUI } from "@earendil-works/pi-tui";
+import type { TUI } from "@hasilan-code/pi-tui";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { exportFromFile } from "../src/core/export-html/index.ts";
 import {

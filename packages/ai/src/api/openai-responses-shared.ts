@@ -129,6 +129,8 @@ export interface ConvertResponsesMessagesOptions {
 	supportsMidConvoSystemMessages?: boolean;
 	supportsAdditionalTools?: boolean;
 	supportsToolSearch?: boolean;
+	/** Keep removed declarations only when the caller enforces the active set through tool_choice. */
+	preserveRemovedTools?: boolean;
 	toolOptions?: ConvertResponsesToolsOptions;
 	/**
 	 * Effort for the reply being generated. When set, the thinking level is sent as
@@ -191,10 +193,17 @@ export function convertResponsesMessages<TApi extends Api>(
 	const transcriptTools = resolveTranscriptTools(
 		normalizedContext.messages,
 		(options?.supportsAdditionalTools ?? false) || (options?.supportsToolSearch ?? false),
+		options?.preserveRemovedTools,
 	);
+	const retainedNames = options?.preserveRemovedTools
+		? new Set(transcriptTools.requestTools.map((tool) => tool.name))
+		: undefined;
 	const appendSystemToolAdditions = (message: SystemMessage, seed: string): void => {
-		const tools = transcriptTools.anchorsAdditions ? (message.toolsAdded ?? []) : [];
+		const additions = message.toolsAdded;
+		if (!transcriptTools.anchorsAdditions || !additions?.length) return;
+		const tools = retainedNames ? additions.filter((tool) => !retainedNames.has(tool.name)) : additions;
 		if (tools.length === 0) return;
+		if (retainedNames) for (const tool of tools) retainedNames.add(tool.name);
 		if (options?.supportsAdditionalTools) {
 			messages.push({
 				type: "additional_tools",

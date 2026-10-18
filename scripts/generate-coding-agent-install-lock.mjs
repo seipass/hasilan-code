@@ -11,9 +11,9 @@ const outputDir = join(codingAgentDir, "install-lock");
 const rootLockfilePath = join(repoRoot, "package-lock.json");
 const outputPackageJsonPath = join(outputDir, "package.json");
 const outputLockfilePath = join(outputDir, "package-lock.json");
-const internalPackagePrefix = "@earendil-works/pi-";
-const internalPackageNames = new Set(["@earendil-works/chord"]);
-const installPackageName = "@earendil-works/pi-coding-agent-install";
+const internalPackagePrefix = "@hasilan-code/pi-";
+const internalPackageNames = new Set(["@hasilan-code/chord"]);
+const installPackageName = "@hasilan-code/pi-coding-agent-install";
 const allowedInstallScriptPackages = new Map([
 	["@google/genai@2.21.0", "preinstall is a no-op in the published package"],
 	["protobufjs@7.6.6", "postinstall only warns about protobufjs version scheme mismatches"],

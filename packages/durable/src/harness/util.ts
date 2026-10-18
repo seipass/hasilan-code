@@ -1,4 +1,4 @@
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@hasilan-code/chord";
 import { SessionFailed } from "../errors.ts";
 import type { Cursor, Page } from "../types.ts";
 

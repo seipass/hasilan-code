@@ -301,7 +301,7 @@ jobs:
             exit 1
           fi
 
-  # The pi-env daemon for every remote system @earendil-works/pi-env supports; the npm package ships them all.
+  # The pi-env daemon for every remote system @hasilan-code/pi-env supports; the npm package ships them all.
   env-daemons:
     uses: ./.github/workflows/env-daemons.yml
     permissions:

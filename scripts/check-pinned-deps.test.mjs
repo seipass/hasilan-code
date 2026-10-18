@@ -19,20 +19,20 @@ async function check(t, manifest) {
 test("rejects internal and external registry dependency ranges in every direct dependency section", async (t) => {
 	const result = await check(t, {
 		dependencies: {
-			"@earendil-works/pi-codemode": "^1.2.0",
-			"@earendil-works/chord": "~1.2.0",
+			"@hasilan-code/pi-codemode": "^1.2.0",
+			"@hasilan-code/chord": "~1.2.0",
 			external: "^1.0.0",
 		},
-		devDependencies: { "@earendil-works/pi-ai": "1.x" },
-		optionalDependencies: { "@earendil-works/pi-tui": "*" },
+		devDependencies: { "@hasilan-code/pi-ai": "1.x" },
+		optionalDependencies: { "@hasilan-code/pi-tui": "*" },
 	});
 	assert.equal(result.status, 1);
 	for (const dependency of [
-		"dependencies.@earendil-works/pi-codemode",
-		"dependencies.@earendil-works/chord",
+		"dependencies.@hasilan-code/pi-codemode",
+		"dependencies.@hasilan-code/chord",
 		"dependencies.external",
-		"devDependencies.@earendil-works/pi-ai",
-		"optionalDependencies.@earendil-works/pi-tui",
+		"devDependencies.@hasilan-code/pi-ai",
+		"optionalDependencies.@hasilan-code/pi-tui",
 	]) {
 		assert.ok(result.stderr.includes(`${dependency} must be pinned`), result.stderr);
 	}
@@ -41,22 +41,22 @@ test("rejects internal and external registry dependency ranges in every direct d
 test("accepts exact internal and external versions, exact registry aliases, and non-registry specifiers", async (t) => {
 	const result = await check(t, {
 		dependencies: {
-			"@earendil-works/pi-codemode": "1.2.0",
-			"@earendil-works/chord": "1.2.0",
+			"@hasilan-code/pi-codemode": "1.2.0",
+			"@hasilan-code/chord": "1.2.0",
 			external: "1.0.0",
-			alias: "npm:@earendil-works/pi-ai@1.1.0",
+			alias: "npm:@hasilan-code/pi-ai@1.1.0",
 			local: "file:../local",
 			workspace: "workspace:*",
 		},
-		devDependencies: { "@earendil-works/pi-ai": "1.2.0" },
-		optionalDependencies: { "@earendil-works/pi-tui": "1.2.0-rc.1" },
+		devDependencies: { "@hasilan-code/pi-ai": "1.2.0" },
+		optionalDependencies: { "@hasilan-code/pi-tui": "1.2.0-rc.1" },
 	});
 	assert.equal(result.status, 0, result.stderr);
 });
 
 test("rejects registry alias ranges", async (t) => {
 	const result = await check(t, {
-		dependencies: { alias: "npm:@earendil-works/pi-ai@^1.2.0" },
+		dependencies: { alias: "npm:@hasilan-code/pi-ai@^1.2.0" },
 	});
 	assert.equal(result.status, 1);
 	assert.match(result.stderr, /dependencies\.alias must be pinned/);

@@ -1,4 +1,4 @@
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@hasilan-code/chord";
 import {
 	type ExecutionEnv,
 	err,
@@ -9,8 +9,8 @@ import {
 	type ListFilesOptions,
 	ok,
 	type Result,
-} from "@earendil-works/pi-durable/env";
-import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
+} from "@hasilan-code/pi-durable/env";
+import { NodeExecutionEnv } from "@hasilan-code/pi-durable/env/node";
 import type { Connection } from "./connection.ts";
 import { abortResult, toFileError } from "./errors.ts";
 

@@ -38,7 +38,7 @@ try {
 	const contract = join(temporary, "sdk-contract.mjs");
 	writeFileSync(
 		contract,
-		`import assert from "node:assert/strict";\nimport { AgentSession } from ${JSON.stringify(pathToFileURL(join(application, "node_modules/@earendil-works/pi-coding-agent/dist/index.js")).href)};\nimport { resolveBlock } from ${JSON.stringify(pathToFileURL(join(application, "dist/server/tools/hashline/blocks.js")).href)};\nassert.equal(typeof AgentSession.prototype.resumeContext, "function");\nassert.equal(typeof AgentSession.prototype.mutateQueuedInput, "function");\nassert.deepEqual(resolveBlock("smoke.ts", ["export function example() {", "  return 1;", "}"], 1), { start: 1, end: 3 });\n`,
+		`import assert from "node:assert/strict";\nimport { AgentSession } from ${JSON.stringify(pathToFileURL(join(application, "node_modules/@hasilan-code/pi-coding-agent/dist/index.js")).href)};\nimport { resolveBlock } from ${JSON.stringify(pathToFileURL(join(application, "dist/server/tools/hashline/blocks.js")).href)};\nassert.equal(typeof AgentSession.prototype.resumeContext, "function");\nassert.equal(typeof AgentSession.prototype.mutateQueuedInput, "function");\nassert.deepEqual(resolveBlock("smoke.ts", ["export function example() {", "  return 1;", "}"], 1), { start: 1, end: 3 });\n`,
 	);
 	execFileSync(process.execPath, [contract], { cwd: workspace, stdio: "inherit" });
 	execFileSync(

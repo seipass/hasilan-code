@@ -1,5 +1,5 @@
-import { type AssistantMessage, type Model, type Models, normalizeContext, uuidv7 } from "@earendil-works/pi-ai";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { type AssistantMessage, type Model, type Models, normalizeContext, uuidv7 } from "@hasilan-code/pi-ai";
+import { builtinModels } from "@hasilan-code/pi-ai/providers/all";
 import {
 	AssistantEntry,
 	type ConversationId,
@@ -8,7 +8,7 @@ import {
 	Harness,
 	MemoryStorage,
 	ProviderDoc,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { streamSimple as streamSimpleOpenAICodexResponses } from "../../ai/src/api/openai-codex-responses.ts";
 import { resolveApiKey } from "../../ai/test/oauth.ts";

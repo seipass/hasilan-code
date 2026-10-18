@@ -1,7 +1,8 @@
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import type { ContextInjection } from "../shared/context-injection.ts";
 import type { Goal } from "../shared/goals.ts";
 import type { Swarm } from "../shared/swarm.ts";
+import type { ModelUsage } from "../shared/usage.ts";
 
 export interface Workspace {
 	workspaceId: string;
@@ -62,6 +63,7 @@ export interface SessionSummary {
 	pendingInput: PendingInput[];
 	goal?: Goal;
 	swarm?: Swarm;
+	usage?: ModelUsage[];
 }
 export interface ChatMessage {
 	messageId: string;

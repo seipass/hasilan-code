@@ -1,4 +1,4 @@
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@hasilan-code/chord";
 import {
 	createModels,
 	type FauxProviderHandle,
@@ -7,7 +7,7 @@ import {
 	type Message,
 	type Models,
 	type RegisterFauxProviderOptions,
-} from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-ai";
 import {
 	type Conversation,
 	createRegistry,
@@ -18,7 +18,7 @@ import {
 	type Registry,
 	type Storage,
 	type ToolRegistration,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import type { ExecutionEnv } from "../src/env/index.ts";
 import { context } from "./session-support.ts";
 

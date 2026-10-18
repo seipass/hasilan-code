@@ -3,7 +3,7 @@
  * execute.lazy.ts so the sandbox runtime only loads when a script runs.
  */
 
-import type { AgentTool, AgentToolCallOutcome, AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentToolCallOutcome, AgentToolResult } from "@hasilan-code/pi-agent-core";
 import type {
 	AnyModel,
 	ClassifierContext,
@@ -13,7 +13,7 @@ import type {
 	ModelTypeMap,
 	TextContent,
 	Usage,
-} from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-ai";
 import {
 	type CodemodeOutputItem,
 	type CodemodeResult,
@@ -23,7 +23,7 @@ import {
 	parseCodemodeSource,
 	renderToolSample,
 	toCodemodeIdentifier,
-} from "@earendil-works/pi-codemode";
+} from "@hasilan-code/pi-codemode";
 import { getCodemodeWorkerSpecifier, getQuickJSWasmPath } from "../../config.ts";
 import type { ExtensionToolContext, ToolNamespace } from "../../core/extensions/types.ts";
 import type { SessionEntry } from "../../core/session-manager.ts";

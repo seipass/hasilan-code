@@ -155,3 +155,31 @@ workspace Vitestは既存 `vitest.base.ts` のaliasを再利用する。恒久�
 - 独自Hashlineはoh-my-pi形式を保ち、stale自動回復なし、N*の対応はMarkdownとTS/JS。その他言語は明示rangeを使用できる。これをtool descriptionとUIに明記し、完全なoh-my-pi互換とは称さない。
 - フォーク先GitHub URLとブランド指定がないため、ローカルforkとpackage名 `@hasilan/pi-web-harness` を使用する。URLが後で与えられた場合のみoriginの付替え/pushを追加する。
 - npm依存の具体的versionは実装時にregistryで確認してexact pinし、lockへ固定する。利用可能な公開版を使い、Node非対応やBun専用のライブラリを避ける。既存rootのTypeScript compilerをHashline AST解決に再利用する。
+
+## キャッシュ改善調査（2026-10-18）
+
+この節は調査時点の設計比較であり、上記の初期計画とは分けて読む。以下の改善は実装済み。動的状態の永続追記、共通プロンプトの先頭への配置、ツール名・スキーマ順序の安定化、対応するOpenAI APIキー経路での宣言保持と利用制限、親子・モデル別の使用量表示を追加した。system更新は既存SDKのモデル別能力を引き続き使用する。現在の仕様は[Web README](packages/web-harness/README.md#キャッシュと使用量)を参照。モデル API は呼び出しておらず、実際のヒット率・料金・応答時間の改善は未測定。
+
+### DeepSeek Harnessで参考になる設計
+
+- 固定の指示と動的な実行状態を分離する。動的状態は変更時だけ履歴末尾へ永続スナップショットを追加し、圧縮で失われたときは再投入する。[設計と実装](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/agent-loop/src/runtime-context.ts)
+- system promptの途中更新はモデル単位の能力で選択する。対応モデルでは変更済みの完全なsystem promptを履歴末尾へ追加し、未対応モデルや圧縮後の新しい系列では先頭へ集約する。後勝ちの完全置換を全モデルへ仮定しない。[設計](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-09-02-in-history-system-prompt-replacement.md)
+- ツール定義とその順序を安定させる。動的な追加・削除も、対応するモデルだけ履歴内更新を使う。既存定義の変更はキャッシュを維持できるとは限らない。[組み立て順序](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/system-prompt/README.md)、[動的ツール更新](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/architecture/2026-09-20-dynamic-tool-updates.md)
+
+### 調査時点の差分と実装の優先順位
+
+| 優先度 | 調査時の実装 | 採用した改善案 |
+| --- | --- | --- |
+| 1 | `SessionRegistry`の`context`フックはGoal/Swarm状態を各リクエストの末尾へ一時追加するが、会話履歴には保持しない。 | 状態の変更時だけ永続スナップショットを追記する。変化がなければ履歴内の同じメッセージを維持し、重複追加しない。圧縮・再起動・解除時も有効状態を正しく復元する。 |
+| 2 | `buildSystemPromptSections()`は子のroleや追加指示を`addendum`に置き、その後に共通のproject contextやskillsを置く。 | 共通指示を先、担当固有の内容を後へ配置する。同じモデル・ツール集合の子同士で共有可能な先頭部分を長くする。 |
+| 3 | Swarm開始・終了やGoal開始で`setActiveToolsByName()`がツール集合を切り替える。 | ツール順序・スキーマを正規化し、モデルが対応する場合だけ宣言を保った利用制限や遅延追加を使う。子の実行権限は広げない。 |
+| 4 | SDKにはsystem section差分と`supportsMidConvoSystemMessages`による送信分岐が既にある。 | 第二の仕組みを新設せず既存機能を使う。各モデルの能力を確認してから有効化する。 |
+| 5 | SDKは`usage.cacheRead`・`cacheWrite`を集計できるが、Web projectionにはassistantのusageを載せていない。 | モデル別・親子別に入力のキャッシュ読み取り率と料金を表示し、モード切替・圧縮の前後を比較できるようにする。 |
+
+ローカルの実際の`convertMessages()`で、system sectionをMode AからMode Bへ変更する送信シナリオを実行した。現在固定しているカタログの`deepseek-flash`は途中system対応フラグがなく、先頭systemが書き換わるため旧入力のprefixを保持しなかった。`deepseek-v4-pro`は同フラグが有効で、途中systemを追加し旧入力のprefixを保持した。これはシリアライズの確認であり、モデル側が更新指示をどう解釈するかやキャッシュヒットの実証ではない。DeepSeek Harnessの独自アダプターが宣言する能力をPiの互換アダプターへそのまま移さない。
+
+SDKでは`input`がキャッシュ読み取り・書き込みを除いた値なので、入力の読み取り率は`cacheRead / (input + cacheRead + cacheWrite)`で計算する。集計は率の単純平均ではなくトークン数の合計から求め、入力ゼロは率なしとする。実際の改善判定ではヒット率だけでなく、完了タスクあたりの料金・応答時間・失敗数も比較する。
+
+キャッシュは先頭部分の一致が条件であり、UUIDを短いIDへ変えるだけでは主要な対策にならない。履歴を不変に保つこと、同一モデル内で比較すること、必要な圧縮や権限制限をヒット率のために無効化しないことを優先する。DeepSeekは自動キャッシュを提供するがbest effortで、完全一致する保存済みprefix単位が必要。[DeepSeek公式仕様](https://api-docs.deepseek.com/guides/kv_cache)
+
+OpenAIも共有指示・履歴・ツール定義の安定化を推奨する。ただし`prompt_cache_key`の効果や明示breakpoint・保持期間はモデル世代で異なるため、全モデルへ一つの設定を強制しない。[OpenAI公式仕様](https://developers.openai.com/api/docs/guides/prompt-caching)

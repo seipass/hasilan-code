@@ -13,8 +13,8 @@
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { oauthErrorHtml, oauthSuccessHtml } from "@earendil-works/pi-ai/utils/oauth-page";
-import type { AuthProvider, McpFetch } from "@earendil-works/pi-mcp";
+import { oauthErrorHtml, oauthSuccessHtml } from "@hasilan-code/pi-ai/utils/oauth-page";
+import type { AuthProvider, McpFetch } from "@hasilan-code/pi-mcp";
 import {
 	type AuthorizationServerMetadata,
 	authorizeMcp,
@@ -30,7 +30,7 @@ import {
 	type OAuthClientMetadataDocument,
 	parseWwwAuthenticate,
 	stepUpScope,
-} from "@earendil-works/pi-mcp/oauth";
+} from "@hasilan-code/pi-mcp/oauth";
 import lockfile from "proper-lockfile";
 import { APP_NAME, getAgentDir } from "../../config.ts";
 import { type AuthStorageBackend, FileAuthStorageBackend } from "../../core/auth-storage.ts";

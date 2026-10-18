@@ -11,16 +11,16 @@
  */
 
 import { createHash } from "node:crypto";
-import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { ImageContent, JsonValue, TextContent } from "@earendil-works/pi-ai";
+import type { AgentToolResult } from "@hasilan-code/pi-agent-core";
+import type { ImageContent, JsonValue, TextContent } from "@hasilan-code/pi-ai";
 import {
 	type CallToolResult,
 	type ContentBlock,
 	type McpRequestOptions,
 	type Tool as McpTool,
 	toLlmContent,
-} from "@earendil-works/pi-mcp";
-import { Container, Spacer, Text } from "@earendil-works/pi-tui";
+} from "@hasilan-code/pi-mcp";
+import { Container, Spacer, Text } from "@hasilan-code/pi-tui";
 import type { TSchema } from "typebox";
 import type {
 	ToolAnnotations,

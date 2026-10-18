@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { AgentSessionEvent, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { AgentSessionEvent, ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
 
 import {

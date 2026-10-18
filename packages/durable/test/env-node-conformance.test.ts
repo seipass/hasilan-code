@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
 import { afterEach, describe, expect, it } from "vitest";
 import { getOrThrow, type WatchChange } from "../src/env/index.ts";
 import { NodeExecutionEnv } from "../src/env/node.ts";

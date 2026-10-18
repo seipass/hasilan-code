@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "@hasilan-code/pi-ai";
 import {
 	type AgentState,
 	CompactionTask,
@@ -14,7 +14,7 @@ import {
 	ToolTask,
 	wrapSection,
 	wrapTool,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { agentHooks, resolveAgent, resolveSettings } from "../src/harness/agent.ts";
 import { context } from "./session-support.ts";

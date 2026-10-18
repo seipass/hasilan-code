@@ -1,4 +1,4 @@
-import { createModels } from "@earendil-works/pi-ai";
+import { createModels } from "@hasilan-code/pi-ai";
 import {
 	type AnyTask,
 	createRegistry,
@@ -8,7 +8,7 @@ import {
 	type Registry,
 	type RegistryReader,
 	type Storage,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { context, flush } from "./session-support.ts";
 
 export type Deferred<T = void> = {

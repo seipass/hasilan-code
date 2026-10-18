@@ -2,10 +2,10 @@
 // view or the snapshot event, and then only what changes after that.
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/21-late-join.ts
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { Type } from "@earendil-works/pi-ai";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import { Type } from "@hasilan-code/pi-ai";
+import { createModels } from "@hasilan-code/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@hasilan-code/pi-ai/providers/faux";
 import {
 	type AgentEvent,
 	createRegistry,

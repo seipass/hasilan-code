@@ -1,5 +1,5 @@
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
 import type { Model, ModelCatalog } from "./types.ts";
@@ -27,6 +27,36 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 	const [closing, setClosing] = useState(false);
 	const menu = useRef<HTMLDivElement>(null);
 	const titleId = useId();
+	useLayoutEffect(() => {
+		const anchor = document.querySelector<HTMLButtonElement>(".model-trigger");
+		const element = menu.current;
+		if (!anchor || !element) return;
+		function position() {
+			const bounds = anchor!.getBoundingClientRect();
+			const width = Math.min(480, window.innerWidth - 24);
+			Object.assign(element!.style, {
+				position: "fixed",
+				width: `${width}px`,
+				left: `${Math.max(12, Math.min(bounds.left, window.innerWidth - width - 12))}px`,
+				bottom: `${window.innerHeight - bounds.top + 8}px`,
+				maxHeight: `${Math.max(0, Math.min(590, bounds.top - 20))}px`,
+			});
+		}
+		position();
+		const observer = new ResizeObserver(position);
+		observer.observe(anchor);
+		const column = anchor.closest(".chat-column");
+		if (column) observer.observe(column);
+		const composer = anchor.closest(".composer");
+		if (composer) observer.observe(composer);
+		window.addEventListener("resize", position);
+		window.addEventListener("scroll", position, true);
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", position);
+			window.removeEventListener("scroll", position, true);
+		};
+	}, []);
 	const requestClose = () => {
 		if (closing || busy) return;
 		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) onClose();

@@ -34,8 +34,8 @@
  * or when the script diverges: it makes another call, or calls in another order, than the journal says. Each ends the
  * call with an error result.
  */
-import { type Context, copyJson, type JsonValue } from "@earendil-works/chord";
-import type { TextContent } from "@earendil-works/pi-ai";
+import { type Context, copyJson, type JsonValue } from "@hasilan-code/chord";
+import type { TextContent } from "@hasilan-code/pi-ai";
 import {
 	type CodemodeHostCall,
 	type CodemodeOutcome,
@@ -43,8 +43,8 @@ import {
 	type CodemodeRun,
 	type CodemodeSandboxBase,
 	toCodemodeIdentifier,
-} from "@earendil-works/pi-codemode/portable";
-import { CODEMODE_SOURCE_GRAMMAR, parseCodemodeSource } from "@earendil-works/pi-codemode/source";
+} from "@hasilan-code/pi-codemode/portable";
+import { CODEMODE_SOURCE_GRAMMAR, parseCodemodeSource } from "@hasilan-code/pi-codemode/source";
 import { type Static, Type } from "typebox";
 import { defineDoc } from "../documents.ts";
 import type { ExecutionEnv } from "../env/index.ts";

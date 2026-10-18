@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@hasilan-code/chord";
 import {
 	type AssistantImages,
 	type ClassifierResult,
@@ -10,9 +10,9 @@ import {
 	fauxText,
 	fauxToolCall,
 	type MutableModels,
-} from "@earendil-works/pi-ai";
-import { CodemodeSandbox } from "@earendil-works/pi-codemode";
-import { MemoryStorage, ToolResultEntry, UsageDoc } from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-ai";
+import { CodemodeSandbox } from "@hasilan-code/pi-codemode";
+import { MemoryStorage, ToolResultEntry, UsageDoc } from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { createCodemodeExtension } from "../src/codemode/codemode.ts";
 import type { ExecutionEnv } from "../src/env/index.ts";

@@ -10,7 +10,7 @@ import {
 	fauxToolCall,
 	type Context as ModelContext,
 	Type,
-} from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-ai";
 import {
 	type AgentEvent,
 	type Conversation,
@@ -23,7 +23,7 @@ import {
 	MemoryStorage,
 	type SubmissionDraft,
 	watchEvents,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import { allEntries, type ChatSetup, chatSetup, openChat, textOf, waitFor } from "./chat-support.ts";

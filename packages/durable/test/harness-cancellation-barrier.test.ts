@@ -1,5 +1,5 @@
-import type { Context } from "@earendil-works/chord";
-import { createSession, defineTask, MemoryStorage, type StorageWrite, type TaskId } from "@earendil-works/pi-durable";
+import type { Context } from "@hasilan-code/chord";
+import { createSession, defineTask, MemoryStorage, type StorageWrite, type TaskId } from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { context, flush } from "./session-support.ts";
 import { aborted, deferred, eventually, openTasks } from "./task-support.ts";

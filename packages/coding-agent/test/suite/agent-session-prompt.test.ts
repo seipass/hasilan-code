@@ -1,14 +1,14 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "@hasilan-code/pi-agent-core";
 import {
 	fauxAssistantMessage,
 	fauxToolCall,
 	getCurrentSystemPrompt,
 	type Model,
 	type TranscriptContext,
-} from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BeforeAgentStartEvent, ExtensionAPI, InputEvent } from "../../src/core/extensions/index.ts";

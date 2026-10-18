@@ -36,7 +36,7 @@ function createFixture(t, { importUndeclared = false } = {}) {
 			bin: { pi: "dist/bundle/cli.js" },
 		},
 		{
-			"dist/index.js": `${importUndeclared ? 'import "@earendil-works/undeclared";' : ""}
+			"dist/index.js": `${importUndeclared ? 'import "@hasilan-code/undeclared";' : ""}
 export function createAgentSession() {}
 export class SessionManager { static inMemory() {} }
 export class ModelRuntime { static create() {} }
@@ -59,5 +59,5 @@ test("accepts a valid coding-agent package", (t) => {
 // #9132: smoke-test the public SDK, not just a bundled CLI that hides missing imports.
 test("fails when the SDK imports an undeclared package despite a working CLI", (t) => {
 	const directory = createFixture(t, { importUndeclared: true });
-	assert.throws(() => smokeTestCodingAgent(directory), /Cannot find package '@earendil-works\/undeclared'/);
+	assert.throws(() => smokeTestCodingAgent(directory), /Cannot find package '@hasilan-code\/undeclared'/);
 });

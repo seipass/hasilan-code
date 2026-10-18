@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { registerStorageConformance } from "@earendil-works/pi-durable/testing";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import { registerStorageConformance } from "@hasilan-code/pi-durable/testing";
 import { describe, expect, it } from "vitest";
 import { idFromNumber } from "../src/ids.ts";
 import {

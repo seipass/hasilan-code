@@ -1,5 +1,5 @@
-import type { Context } from "@earendil-works/chord";
-import { characterEnd } from "@earendil-works/chord/output";
+import type { Context } from "@hasilan-code/chord";
+import { characterEnd } from "@hasilan-code/chord/output";
 import { type Static, Type } from "typebox";
 import {
 	type BinaryReader,

@@ -42,7 +42,7 @@ async function verifyPublished() {
 
 if (!(await verifyPublished())) {
 	if (!publish) throw new Error(`${release.name}@${release.version} is not publicly available`);
-	execNpmSync(["publish", tarball, "--access", "public", "--provenance", "--ignore-scripts"], {
+	execNpmSync(["publish", tarball, "--tag", "latest", "--access", "public", "--provenance", "--ignore-scripts"], {
 		cwd: directory,
 		stdio: "inherit",
 	});

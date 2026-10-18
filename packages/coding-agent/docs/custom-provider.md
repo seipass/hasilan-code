@@ -22,7 +22,7 @@ Call `pi.registerProvider()` from the extension factory. Pi waits for asynchrono
 
 There are two registration forms:
 
-- Register a complete `Provider` from `@earendil-works/pi-ai` for native authentication, filtering, discovery, refresh, and streaming behavior.
+- Register a complete `Provider` from `@hasilan-code/pi-ai` for native authentication, filtering, discovery, refresh, and streaming behavior.
 - Register a provider name with `ProviderConfig` for the legacy configuration form used by existing extensions.
 
 Prefer a complete provider for new integrations that own more than static endpoint and model metadata. Pi composes `models.json` overrides above a registered native provider.

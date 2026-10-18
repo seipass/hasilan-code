@@ -79,13 +79,13 @@ let
     # The install lock points internal packages at registry releases. Replace
     # them with the packages built from this checkout.
     packageSourceOverrides = {
-      "node_modules/@earendil-works/pi-agent-core" = workspacePackages + "/agent.tgz";
-      "node_modules/@earendil-works/pi-ai" = workspacePackages + "/ai.tgz";
-      "node_modules/@earendil-works/pi-codemode" = workspacePackages + "/codemode.tgz";
-      "node_modules/@earendil-works/pi-coding-agent" = workspacePackages + "/coding-agent.tgz";
-      "node_modules/@earendil-works/pi-mcp" = workspacePackages + "/mcp.tgz";
-      "node_modules/@earendil-works/pi-telemetry" = workspacePackages + "/telemetry.tgz";
-      "node_modules/@earendil-works/pi-tui" = workspacePackages + "/tui.tgz";
+      "node_modules/@hasilan-code/pi-agent-core" = workspacePackages + "/agent.tgz";
+      "node_modules/@hasilan-code/pi-ai" = workspacePackages + "/ai.tgz";
+      "node_modules/@hasilan-code/pi-codemode" = workspacePackages + "/codemode.tgz";
+      "node_modules/@hasilan-code/pi-coding-agent" = workspacePackages + "/coding-agent.tgz";
+      "node_modules/@hasilan-code/pi-mcp" = workspacePackages + "/mcp.tgz";
+      "node_modules/@hasilan-code/pi-telemetry" = workspacePackages + "/telemetry.tgz";
+      "node_modules/@hasilan-code/pi-tui" = workspacePackages + "/tui.tgz";
     };
   };
 in
@@ -123,7 +123,7 @@ stdenv.mkDerivation {
     # bash tool keep the user's node/npm (e.g. from mise or nvm). fd, ripgrep,
     # and the clipboard tools are Pi's own dependencies and take precedence.
     makeWrapper ${nodejs}/bin/node "$out/bin/pi" \
-      --add-flags "$out/lib/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js" \
+      --add-flags "$out/lib/pi/node_modules/@hasilan-code/pi-coding-agent/dist/bundle/cli.js" \
       --suffix PATH : ${lib.makeBinPath [ nodejs ]} \
       --prefix PATH : ${
         lib.makeBinPath (
@@ -150,7 +150,7 @@ stdenv.mkDerivation {
     ${nodejs}/bin/node -e \
       "const fs = require('node:fs');
        const path = require('node:path');
-       const dir = '$out/lib/pi/node_modules/@earendil-works/pi-tui/native/' + process.platform + '/prebuilds/' + process.platform + '-' + process.arch;
+       const dir = '$out/lib/pi/node_modules/@hasilan-code/pi-tui/native/' + process.platform + '/prebuilds/' + process.platform + '-' + process.arch;
        if (fs.existsSync(dir)) {
          for (const file of fs.readdirSync(dir)) {
            if (file.endsWith('.node')) require(path.join(dir, file));

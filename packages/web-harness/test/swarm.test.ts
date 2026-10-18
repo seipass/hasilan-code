@@ -8,8 +8,8 @@ import {
 	fauxToolCall,
 	getCurrentSystemPrompt,
 	InMemoryModelsStore,
-} from "@earendil-works/pi-ai";
-import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+} from "@hasilan-code/pi-ai";
+import { ModelRuntime, type ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
 import { afterEach, describe, expect, it } from "vitest";

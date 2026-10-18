@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { getSupportedThinkingLevels } from "@hasilan-code/pi-ai";
+import type { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
 

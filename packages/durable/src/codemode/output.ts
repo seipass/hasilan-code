@@ -5,8 +5,8 @@
  * the token budget is cut to its start and end, with the complete text in a temp file; images are saved to temp files
  * too, with their path next to them, because a script has no other way to hand their bytes on.
  */
-import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import type { CodemodeOutputItem, CodemodeResult } from "@earendil-works/pi-codemode/portable";
+import type { ImageContent, TextContent } from "@hasilan-code/pi-ai";
+import type { CodemodeOutputItem, CodemodeResult } from "@hasilan-code/pi-codemode/portable";
 
 type Item = TextContent | ImageContent;
 

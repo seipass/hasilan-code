@@ -1,4 +1,4 @@
-import type { Draft } from "@earendil-works/chord";
+import type { Draft } from "@hasilan-code/chord";
 import {
 	type AssistantMessage,
 	type FauxResponseStep,
@@ -7,7 +7,7 @@ import {
 	fauxThinking,
 	fauxToolCall,
 	Type,
-} from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-ai";
 import {
 	AgentDoc,
 	type AgentEvent,
@@ -22,7 +22,7 @@ import {
 	type SnapshotEvent,
 	UsageDoc,
 	watchEvents,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { type ChatSetup, chatSetup, openChat, textOf, waitFor } from "./chat-support.ts";
 import { addTool } from "./harness-support.ts";

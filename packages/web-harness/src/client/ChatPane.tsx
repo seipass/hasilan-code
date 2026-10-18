@@ -6,6 +6,7 @@ import { COMPOSER_COMMANDS } from "./slash-command.ts";
 import { RUN_LABELS } from "./TeamPane.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
 import type { PendingInputAction, SessionDetail } from "./types.ts";
+import { UsagePanel } from "./UsagePanel.tsx";
 
 export function ChatPane({ session, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings }: {
 	session?: SessionDetail;
@@ -207,7 +208,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 					<div className="composer-context">{modelControl}</div>
 					<div className="composer-delivery">
 						{busy && <label><span className="sr-only">追加指示の送信方法</span><select aria-label="追加指示の送信方法" value={mode} onChange={(event) => setMode(event.target.value as "steer" | "followUp")}><option value="followUp">完了後に続ける</option><option value="steer">実行中に指示</option></select></label>}
-						{hasContextLimit && <div className="composer-usage"><span className="context-usage" aria-label={`コンテキスト使用量 ${contextTokens == null ? "未計測" : `${contextTokens.toLocaleString("ja-JP")} トークン`} / ${contextLimit.toLocaleString("ja-JP")} トークン`}>コンテキスト {contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span></div>}
+						{hasContextLimit && <UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage">コンテキスト {contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span>} />}
 						{busy && !text.trim() ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title="Ctrl / Cmd + Enter で送信" disabled={sending || !text.trim() || !slashInput && (!connected || session?.availability === "missing")}>{sending ? "…" : "↑"}</button>}
 					</div>
 				</div>

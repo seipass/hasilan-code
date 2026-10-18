@@ -424,9 +424,7 @@ export class HostImpl implements Host, HostCore {
 	async resolve(plugins: readonly PluginRef[]): Promise<Facet[]> {
 		const modules = plugins.filter((ref): ref is string | URL => !isFacet(ref));
 		if (modules.length > 0 && this.#loader === undefined) {
-			throw new Error(
-				"loading modules needs createHost({ loader }), e.g. nodeLoader from @earendil-works/chord/node",
-			);
+			throw new Error("loading modules needs createHost({ loader }), e.g. nodeLoader from @hasilan-code/chord/node");
 		}
 		const loaded = modules.length > 0 && this.#loader !== undefined ? await this.#loader(modules) : [];
 		return plugins.map((ref) => (isFacet(ref) ? ref : loaded.shift()!));

@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type { ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
 import { BraveSearchProvider } from "../search-providers/brave.ts";

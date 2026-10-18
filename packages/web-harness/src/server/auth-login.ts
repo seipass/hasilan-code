@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { AuthEvent, AuthPrompt, LoginOptions, Provider } from "@earendil-works/pi-ai";
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { AuthEvent, AuthPrompt, LoginOptions, Provider } from "@hasilan-code/pi-ai";
+import type { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { Type } from "typebox";
 import type { AuthLoginPrompt, AuthLoginView } from "../shared/auth-login.ts";
 import { HttpError } from "./http-host.ts";

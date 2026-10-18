@@ -39,7 +39,6 @@ export function GoalPanel({ goal, busy, connected, unavailable, onAction }: {
 				<p className="goal-objective">{goal.objective}</p>
 				{goal.reason && <p className="goal-reason">{goal.reason}</p>}
 			</div>
-			<p className="fine-print">目標の達成まで自動で続けます。新しい目標は /goal 目標、一時停止や入力待ちから再開するには /goal resume を入力してください。</p>
 			{goal.status !== "complete" && goal.status !== "dropped" && <div className="goal-actions">
 				{goal.status === "active" && <button type="button" disabled={disabled} onClick={() => { void act({ op: "pause" }); }}>Goal を一時停止</button>}
 				{canResume && <button type="button" disabled={disabled || busy} onClick={() => { void act({ op: "resume" }); }}>Goal を再開</button>}

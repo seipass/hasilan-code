@@ -5,7 +5,7 @@ import {
 	type Models,
 	type SimpleStreamOptions,
 	type SystemMessage,
-} from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-ai";
 import {
 	AssistantEntry,
 	type CommitPublication,
@@ -24,7 +24,7 @@ import {
 	type TaskId,
 	UserEntry,
 	wrapSection,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { resolveSettings } from "../src/harness/agent.ts";
 import type { SessionImpl } from "../src/session/session.ts";

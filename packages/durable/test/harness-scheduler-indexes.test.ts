@@ -3,7 +3,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createSession, defineTask, type Harness, type TaskId, type TaskRuntime } from "@earendil-works/pi-durable";
+import { createSession, defineTask, type Harness, type TaskId, type TaskRuntime } from "@hasilan-code/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import { context } from "./session-support.ts";

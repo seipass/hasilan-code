@@ -2,11 +2,11 @@
 // so a restart resumes unfinished triage runs and keeps every decision.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { type ModelThinkingLevel, StringEnum, Type } from "@earendil-works/pi-ai";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
-import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import { type ModelThinkingLevel, StringEnum, Type } from "@hasilan-code/pi-ai";
+import { createModels } from "@hasilan-code/pi-ai/models";
+import { anthropicProvider } from "@hasilan-code/pi-ai/providers/anthropic";
+import { openaiCodexProvider } from "@hasilan-code/pi-ai/providers/openai-codex";
 import { AuthStorage } from "../../packages/coding-agent/src/core/auth-storage.ts";
 import {
 	type ConversationId,

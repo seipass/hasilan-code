@@ -1,4 +1,4 @@
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Goal, GoalAction } from "../shared/goals.ts";
 import { api, command, errorMessage } from "./api.ts";

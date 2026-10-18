@@ -5,10 +5,10 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import type { ToolResultMessage } from "@hasilan-code/pi-ai";
+import { createModels } from "@hasilan-code/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@hasilan-code/pi-ai/providers/faux";
 import { NodeExecutionEnv } from "../../src/env/node.ts";
 import {
 	createRegistry,

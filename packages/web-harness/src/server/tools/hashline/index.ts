@@ -4,7 +4,7 @@ import {
 	createReadToolDefinition,
 	type ExtensionToolContext,
 	type ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+} from "@hasilan-code/pi-coding-agent";
 import { Type } from "typebox";
 import { type CommitResult, type FileSnapshot, imageMime, type WorkspaceFiles } from "../../workspace-files.ts";
 import { patchDiff, preparePatch } from "./applier.ts";

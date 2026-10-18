@@ -1,4 +1,4 @@
-import type { AuthEvent } from "@earendil-works/pi-ai";
+import type { AuthEvent } from "@hasilan-code/pi-ai";
 
 export interface AuthLoginPrompt {
 	id: string;

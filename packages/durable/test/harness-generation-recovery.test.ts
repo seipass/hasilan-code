@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AssistantMessage, createModels, fauxAssistantMessage, type Message } from "@earendil-works/pi-ai";
-import { AssistantEntry, type Harness, LiveDoc, type TaskId } from "@earendil-works/pi-durable";
+import { type AssistantMessage, createModels, fauxAssistantMessage, type Message } from "@hasilan-code/pi-ai";
+import { AssistantEntry, type Harness, LiveDoc, type TaskId } from "@hasilan-code/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import { allEntries, type ChatSetup, chatSetup, openChat, textOf, unanswered, waitFor } from "./chat-support.ts";

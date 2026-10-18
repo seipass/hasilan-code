@@ -58,7 +58,6 @@
 .canvas-inline-editor textarea { min-height: 43px; height: 43px; resize: none; line-height: 1.4; }
 .canvas-inline-editor button { align-self: flex-end; margin-top: auto; padding: 3px 8px; min-height: 26px; font-size: 10px; }
 .canvas-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; cursor: default; }
-.canvas-empty-eyebrow { font-size: 11px; color: var(--primary); letter-spacing: 0.06em; }
 .canvas-empty h3 { margin: 12px 0 0; font-size: 19px; }
 .canvas-empty p { margin: 12px 0 20px; color: var(--on-surface-muted); font-size: 12px; line-height: 1.8; }
 .canvas-empty button { min-height: 42px; font-size: 12px; }

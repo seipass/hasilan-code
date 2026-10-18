@@ -1,4 +1,4 @@
-import type { RgbColor, TerminalColors, TUI } from "@earendil-works/pi-tui";
+import type { RgbColor, TerminalColors, TUI } from "@hasilan-code/pi-tui";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 import {
 	getTerminalTheme,

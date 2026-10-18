@@ -1,10 +1,10 @@
-# @earendil-works/pi-durable
+# @hasilan-code/pi-durable
 
 > **Experimental.** The API changes without notice between releases.
 
 A durable agent harness. Conversations, model turns, tool calls, and your own state are committed to storage before anything is shown. If the process dies mid-turn, reopening the storage picks the work up where it stopped.
 
-Built on [`@earendil-works/pi-ai`](../ai/README.md) for model access and `@earendil-works/chord` for document state.
+Built on [`@hasilan-code/pi-ai`](../ai/README.md) for model access and `@hasilan-code/chord` for document state.
 
 ## Table of Contents
 
@@ -40,16 +40,16 @@ Built on [`@earendil-works/pi-ai`](../ai/README.md) for model access and `@earen
 ## Installation
 
 ```bash
-npm install @earendil-works/pi-durable @earendil-works/pi-ai @earendil-works/chord
+npm install @hasilan-code/pi-durable @hasilan-code/pi-ai @hasilan-code/chord
 ```
 
 ## Quick Start
 
 ```typescript
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
-import { AssistantEntry, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import { createModels } from "@hasilan-code/pi-ai/models";
+import { openaiProvider } from "@hasilan-code/pi-ai/providers/openai";
+import { AssistantEntry, createRegistry, Harness, MemoryStorage } from "@hasilan-code/pi-durable";
 
 const context = BACKGROUND_CONTEXT;
 
@@ -105,7 +105,7 @@ submit(input) → pi.user
 Use SQLite or JSONL storage to keep conversations across restarts:
 
 ```typescript
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { openNodeSqliteStorage } from "@hasilan-code/pi-durable/storage/sqlite/node";
 
 const harness = await Harness.open(await openNodeSqliteStorage("./session.sqlite"), { models, registry }, context);
 const root = await harness.root(context); // the same root as last time
@@ -130,8 +130,8 @@ const again = await root.submit({ type: "input", content: "Hello", requestId: "g
 Code the Harness runs, other than its built-in tasks, comes in named extensions installed in a registry your process owns:
 
 ```typescript
-import { createRegistry, defineExtension, defineTool, hook, section, ToolTask } from "@earendil-works/pi-durable";
-import { CodingTools } from "@earendil-works/pi-durable/tools";
+import { createRegistry, defineExtension, defineTool, hook, section, ToolTask } from "@hasilan-code/pi-durable";
+import { CodingTools } from "@hasilan-code/pi-durable/tools";
 
 const Coding = defineExtension({
 	name: "coding",
@@ -148,13 +148,13 @@ An extension may bring `tools`, `sections`, `hooks`, `wraps` (decorators of a to
 
 ## Tools
 
-`@earendil-works/pi-durable/tools` provides `read`, `write`, `edit`, and `bash`, and the `CodingTools` extension with all four. They touch files and processes only through the call's environment (see [Environment](#environment)).
+`@hasilan-code/pi-durable/tools` provides `read`, `write`, `edit`, and `bash`, and the `CodingTools` extension with all four. They touch files and processes only through the call's environment (see [Environment](#environment)).
 
 `read` returns an image file as one image block, which programs calling it get as an `ImageContent`. Limits are the model's `inputLimits.images.resize`, by default 2000x2000 pixels and 4.5 MB of base64. Without an image processor it sends PNG, JPEG, GIF, and WebP files within them (dimensions read from the file's header) as they are, without decoding them, and refuses larger ones and other formats. With one, it decodes every image, turns it upright by its EXIF orientation, converts BMP to PNG, and shrinks it to fit. The Photon-based processor runs on WebAssembly and is only loaded when you import it:
 
 ```typescript
-import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node"; // or /images/cloudflare, or createPhotonImages(wasm) from /images
-import { createCodingTools } from "@earendil-works/pi-durable/tools";
+import { createNodePhotonImages } from "@hasilan-code/pi-durable/images/node"; // or /images/cloudflare, or createPhotonImages(wasm) from /images
+import { createCodingTools } from "@hasilan-code/pi-durable/tools";
 
 registry.install(createCodingTools({ images: await createNodePhotonImages() }));
 ```
@@ -164,7 +164,7 @@ A model without image input sees a placeholder instead of the image, and `read` 
 Define your own tool with a TypeBox schema. `defineTool()` types `args` from `parameters`, which the Harness validates before `execute()`. `api.output()` streams running output, which becomes the result when `execute()` returns no `output`:
 
 ```typescript
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "@hasilan-code/pi-ai";
 
 const count = defineTool({
 	name: "count",
@@ -250,7 +250,7 @@ await root.configure({ modelTools: { remove: [bash] } }, context);
 
 `conversation.agent()` resolves both lists: `tools`, offered to the model, and `callable`, which nested calls resolve among. `tools` still decides what is enabled at all; `modelTools` cannot add to it.
 
-A `deferred: true` tool is not offered to the model until it is loaded, though other tools can call it any time. The `tool_search` tool from `@earendil-works/pi-durable/tool-search` (`createToolSearchExtension()`) lets the model search the deferred tools and loads the matches with `control.addTools`, which records them in `modelTools`; loaded tools stay offered on that branch, also after a compaction, and the `codemode` section leaves deferred tools out. Use it for large tool sets, such as an MCP server's.
+A `deferred: true` tool is not offered to the model until it is loaded, though other tools can call it any time. The `tool_search` tool from `@hasilan-code/pi-durable/tool-search` (`createToolSearchExtension()`) lets the model search the deferred tools and loads the matches with `control.addTools`, which records them in `modelTools`; loaded tools stay offered on that branch, also after a compaction, and the `codemode` section leaves deferred tools out. Use it for large tool sets, such as an MCP server's.
 
 ### Tasks a restart abandons
 
@@ -258,11 +258,11 @@ A task that its creator awaits only in memory, and that the creator never resume
 
 ## Code Mode
 
-`@earendil-works/pi-durable/codemode` adds a `codemode` tool: the model writes JavaScript that calls the conversation's tools as `await tools.<name>(args)`, in a QuickJS sandbox (`@earendil-works/pi-codemode`). Each call is a nested tool call, and only the script's output reaches the model. The script survives a restart: it resumes where it was, without running its finished calls again.
+`@hasilan-code/pi-durable/codemode` adds a `codemode` tool: the model writes JavaScript that calls the conversation's tools as `await tools.<name>(args)`, in a QuickJS sandbox (`@hasilan-code/pi-codemode`). Each call is a nested tool call, and only the script's output reaches the model. The script survives a restart: it resumes where it was, without running its finished calls again.
 
 ```typescript
-import { CodemodeSandbox } from "@earendil-works/pi-codemode";
-import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
+import { CodemodeSandbox } from "@hasilan-code/pi-codemode";
+import { createCodemodeExtension } from "@hasilan-code/pi-durable/codemode";
 
 registry.install(createCodemodeExtension({ sandbox: new CodemodeSandbox({ memoryLimitBytes: 256 * 1024 * 1024 }) }));
 ```
@@ -333,7 +333,7 @@ const harness = await Harness.open(storage, {
 `env` builds the execution environment for each tool call, section rendering, and `runtime.env()`. It receives the conversation's ID, its agent `cwd`, and committed reads, so one function serves a directory per conversation or a container per conversation:
 
 ```typescript
-import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
+import { NodeExecutionEnv } from "@hasilan-code/pi-durable/env/node";
 
 const harness = await Harness.open(storage, {
 	models,
@@ -355,7 +355,7 @@ await env.exec(["git", "status", "--porcelain=v2", "-z"], {
 }, context);
 ```
 
-Abort the context to stop one call; `cleanup()` is for shutting the environment down. A custom environment can check itself with `registerEnvConformance()` from `@earendil-works/pi-durable/testing`, like storage below.
+Abort the context to stop one call; `cleanup()` is for shutting the environment down. A custom environment can check itself with `registerEnvConformance()` from `@hasilan-code/pi-durable/testing`, like storage below.
 
 Some environments also implement the optional `listFiles()`: the files and directories below a directory at any depth, as `fd` lists them, skipping what git ignores and stopping at bounds with `truncated`. `NodeExecutionEnv` does not; pi-env's `RemoteExecutionEnv` and `LocalExecutionEnv` do. Callers fall back to their own walk when the method is missing or fails with `not_supported`:
 
@@ -490,7 +490,7 @@ Running compactions are listed in `docs["pi.live"].compactions` with their reaso
 For consumers that want coding-agent style events (`message_start`, `message_update`, `tool_execution_start`, ...) instead of structural state:
 
 ```typescript
-import { watchEvents } from "@earendil-works/pi-durable";
+import { watchEvents } from "@hasilan-code/pi-durable";
 
 const stream = await watchEvents(harness, root.id, context);
 initialize(stream.snapshot); // entries, run, in-flight generation, tools, compactions, inbox, agent, usage
@@ -506,7 +506,7 @@ Events are derived from commits, one batch per commit, and apply on top of the s
 Hooks let extensions observe or adjust the built-in tasks, in the conversations that select them:
 
 ```typescript
-import { GenerationTask, hook, ToolTask } from "@earendil-works/pi-durable";
+import { GenerationTask, hook, ToolTask } from "@hasilan-code/pi-durable";
 
 const Guard = defineExtension({
 	name: "guard",
@@ -626,7 +626,7 @@ A task appears with the commit that creates it and leaves with the commit that m
 Documents are typed JSON objects committed together with entries. Define one, and edit it in a commit:
 
 ```typescript
-import { defineDoc } from "@earendil-works/pi-durable";
+import { defineDoc } from "@hasilan-code/pi-durable";
 
 const Todos = defineDoc<{ items: string[] }>({
 	kind: "app.todos",
@@ -658,9 +658,9 @@ const usage = await harness.usage(context); // { models: { "openai/gpt-6-sol": U
 | Backend | Import | Notes |
 |---|---|---|
 | Memory | `MemoryStorage` from the package root | Nothing is persisted. |
-| SQLite | `openNodeSqliteStorage(file)` from `@earendil-works/pi-durable/storage/sqlite/node` | One database file. WAL mode with `synchronous = NORMAL`: commits survive process crashes; the newest may be lost on power or host failure. |
-| JSONL | `openNodeJsonlStorage(directory, context)` from `@earendil-works/pi-durable/storage/jsonl/node` | Append-only files in one directory. Pass `{ fsync: true }` to flush before each commit marker. Keeps the whole history in memory too, so memory grows with it; use SQLite for long-running agents. |
-| Cloudflare Durable Object | `openDurableObjectSqliteStorage(ctx.storage)` from `@earendil-works/pi-durable/storage/sqlite/cloudflare` | The SQLite storage of one SQLite-backed Durable Object; commits are its storage transactions. |
+| SQLite | `openNodeSqliteStorage(file)` from `@hasilan-code/pi-durable/storage/sqlite/node` | One database file. WAL mode with `synchronous = NORMAL`: commits survive process crashes; the newest may be lost on power or host failure. |
+| JSONL | `openNodeJsonlStorage(directory, context)` from `@hasilan-code/pi-durable/storage/jsonl/node` | Append-only files in one directory. Pass `{ fsync: true }` to flush before each commit marker. Keeps the whole history in memory too, so memory grows with it; use SQLite for long-running agents. |
+| Cloudflare Durable Object | `openDurableObjectSqliteStorage(ctx.storage)` from `@hasilan-code/pi-durable/storage/sqlite/cloudflare` | The SQLite storage of one SQLite-backed Durable Object; commits are its storage transactions. |
 
 SQLite storage can namespace its tables and indexes when sharing a database: pass `{ prefix: "pi_" }` to
 `SqliteStorage.open(database, options)`, `openNodeSqliteStorage(path, options)`, or
@@ -679,7 +679,7 @@ await database.exec("CREATE TABLE IF NOT EXISTS host_notes (text TEXT)");
 await database.run("INSERT INTO host_notes (text) VALUES (?)", text);
 ```
 
-One process owns a storage at a time; there is no cross-process locking. The portable SQLite and JSONL cores (`/storage/sqlite`, `/storage/jsonl`) run without Node APIs, for example on Bun or in Cloudflare Durable Objects, given an asynchronous `SqliteDatabase` facade or a `FileSystem` from `@earendil-works/pi-durable/env`.
+One process owns a storage at a time; there is no cross-process locking. The portable SQLite and JSONL cores (`/storage/sqlite`, `/storage/jsonl`) run without Node APIs, for example on Bun or in Cloudflare Durable Objects, given an asynchronous `SqliteDatabase` facade or a `FileSystem` from `@hasilan-code/pi-durable/env`.
 
 SQLite adapters implement promise-based `exec`, `run`, `get`, `all`, `transaction`, and `close`. `run`, `get`, and `all` take SQL text plus positional bindings; adapters may cache prepared statements by SQL text. A transaction callback receives a transaction handle; all work in the transaction must use it, and the handle expires when the callback settles. Adapters must queue unrelated operations and other transactions until the transaction finishes, so calling `database` itself inside the callback never settles:
 
@@ -693,7 +693,7 @@ await database.transaction(async (transaction) => {
 Custom backends can run the shared conformance suite with any Vitest- or Jest-compatible runner:
 
 ```typescript
-import { registerStorageConformance } from "@earendil-works/pi-durable/testing";
+import { registerStorageConformance } from "@hasilan-code/pi-durable/testing";
 import { describe, expect, it } from "vitest";
 
 registerStorageConformance({ describe, expect, it }, "My Storage", async (use) => {

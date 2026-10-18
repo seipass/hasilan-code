@@ -10,7 +10,7 @@ import {
 	LiveDoc,
 	type Storage,
 	type TaskId,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { SCHEDULER_INDEX_SIZES } from "../src/harness/harness.ts";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";

@@ -1,5 +1,5 @@
-import { applyImmutable, type Op } from "@earendil-works/chord/delta";
-import { type AssistantMessage, type FauxResponseStep, fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai";
+import { applyImmutable, type Op } from "@hasilan-code/chord/delta";
+import { type AssistantMessage, type FauxResponseStep, fauxAssistantMessage, fauxText } from "@hasilan-code/pi-ai";
 import {
 	AgentDoc,
 	type Conversation,
@@ -11,7 +11,7 @@ import {
 	MemoryStorage,
 	ProviderDoc,
 	UsageDoc,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { allEntries, chatSetup, openChat, waitFor } from "./chat-support.ts";
 import { context } from "./session-support.ts";

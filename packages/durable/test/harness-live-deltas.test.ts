@@ -1,5 +1,5 @@
-import type { Op } from "@earendil-works/chord/delta";
-import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import type { Op } from "@hasilan-code/chord/delta";
+import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from "@hasilan-code/pi-ai";
 import {
 	type CommitPublication,
 	defineTool,
@@ -9,7 +9,7 @@ import {
 	MemoryStorage,
 	type ToolExecutionApi,
 	type ToolRegistration,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { chatSetup, openChat, waitFor } from "./chat-support.ts";
 import { addTool } from "./harness-support.ts";

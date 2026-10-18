@@ -3,6 +3,7 @@ import { Content } from "./Content.tsx";
 import { transitionItems } from "./item-transition.ts";
 import { layoutTeamGraph, selectedTeamAgents, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "./team-graph.ts";
 import type { Run, RunStatus, SessionSummary, TeamAgent, TeamSnapshot } from "./types.ts";
+import { UsagePanel } from "./UsagePanel.tsx";
 import "./TeamPane.css";
 
 export const RUN_LABELS: Record<RunStatus, string> = {
@@ -304,9 +305,10 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, onSelect, onSt
 	function focusAgent(id: string) {
 		if (id !== focused?.agentId) transitionItems(() => setFocusedId(id));
 	}
-	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>子の担当 {workers.length}人 <span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> 完了 {counts.completed}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}</header>;
+	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
+	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>子の担当 {workers.length}人 <span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> 完了 {counts.completed}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}<UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></header>;
 	return <section className="team-pane" aria-label="チームの進行状況">
-		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2><p>会話を始めると親AIを、担当が起動すると親子関係と実際の作業状況をここに表示します。</p></div> : <>
+		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2></div> : <>
 			{snapshot && <TeamGraph key={selected?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} />}
 			{focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
 				<header className="team-focus-header"><div><span className="team-section-label">選択中の担当</span><h3>{label(focused)}</h3></div><button type="button" className="text-link" onClick={() => onSelect(focused.sessionId)}>会話を開く ↗</button></header>

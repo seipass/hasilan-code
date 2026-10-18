@@ -1,4 +1,4 @@
-import { type Context, copyJson, type Draft, type JsonValue } from "@earendil-works/chord";
+import { type Context, copyJson, type Draft, type JsonValue } from "@hasilan-code/chord";
 import type {
 	Api,
 	AssistantMessage,
@@ -8,10 +8,10 @@ import type {
 	ModelThinkingLevel,
 	SimpleStreamOptions,
 	ToolCall,
-} from "@earendil-works/pi-ai";
-import { isContextOverflow } from "@earendil-works/pi-ai/utils/overflow";
-import { isRetryableAssistantError, retryDelayMs } from "@earendil-works/pi-ai/utils/retry";
-import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
+} from "@hasilan-code/pi-ai";
+import { isContextOverflow } from "@hasilan-code/pi-ai/utils/overflow";
+import { isRetryableAssistantError, retryDelayMs } from "@hasilan-code/pi-ai/utils/retry";
+import { getCurrentTools } from "@hasilan-code/pi-ai/utils/transcript";
 import { AssistantEntry, ResetEntry, SystemEntry, UserEntry } from "../entries.ts";
 import type { ExecutionEnv } from "../env/index.ts";
 import { defineTask } from "../tasks.ts";

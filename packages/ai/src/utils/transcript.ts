@@ -124,7 +124,14 @@ export function toToolDeclaration(tool: Tool): Tool {
 	return {
 		name: tool.name,
 		description: tool.description,
-		parameters: JSON.parse(JSON.stringify(tool.parameters)) as Tool["parameters"],
+		parameters: JSON.parse(
+			JSON.stringify(tool.parameters, (_key, value: unknown) => {
+				if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+				const ordered: Record<string, unknown> = Object.create(null);
+				for (const key of Object.keys(value).sort()) ordered[key] = (value as Record<string, unknown>)[key];
+				return ordered;
+			}),
+		) as Tool["parameters"],
 		...(tool.constrainedSampling === undefined ? {} : { constrainedSampling: tool.constrainedSampling }),
 	};
 }
@@ -133,9 +140,9 @@ export function toToolDeclaration(tool: Tool): Tool {
  * Whether two tools declare the same interface to the model.
  *
  * Both sides go through {@link toToolDeclaration} first: its JSON round-trip drops the
- * typebox symbol keys and `undefined` fields that a structural comparison would see, and
- * builds both objects with the same key order, so comparing the serialized declarations
- * is exact. This avoids a deep-equal dependency in a browser-safe package.
+ * typebox symbol keys and `undefined` fields and canonicalizes schema object keys without
+ * reordering arrays. Equivalent schemas therefore do not produce tool replacements
+ * just because they were constructed in a different property order.
  */
 export function declarationsEqual(left: Tool, right: Tool): boolean {
 	return JSON.stringify(toToolDeclaration(left)) === JSON.stringify(toToolDeclaration(right));
@@ -222,12 +229,28 @@ export interface TranscriptTools {
 
 /**
  * Split tool declarations between the top-level request field and in-place additions.
- * Transports that can anchor additions at a system message keep the initial tools at the
- * top and load later ones where they appear; that only works when no tool was removed or
- * redeclared, so everything else sends the current tool list.
+ * Transports that can anchor additions keep the initial tools at the top. A transport
+ * that also restricts tool choice can retain removed definitions, but a changed
+ * definition still requires rebuilding the current tool list.
  */
-export function resolveTranscriptTools(messages: TranscriptMessages, supportsToolAdditions: boolean): TranscriptTools {
-	const anchorsAdditions = supportsToolAdditions && !hasNonAdditiveToolChanges(messages);
+export function resolveTranscriptTools(
+	messages: TranscriptMessages,
+	supportsToolAdditions: boolean,
+	preserveRemovedTools = false,
+): TranscriptTools {
+	let anchorsAdditions = supportsToolAdditions && !hasNonAdditiveToolChanges(messages);
+	if (supportsToolAdditions && preserveRemovedTools && !anchorsAdditions) {
+		anchorsAdditions = true;
+		const definitions = new Map<string, Tool>();
+		for (const message of messages) {
+			if (!isSystemMessage(message)) continue;
+			for (const tool of message.toolsAdded ?? []) {
+				const previous = definitions.get(tool.name);
+				if (previous && !declarationsEqual(previous, tool)) anchorsAdditions = false;
+				definitions.set(tool.name, tool);
+			}
+		}
+	}
 	return {
 		requestTools: anchorsAdditions
 			? (getInitialSystemMessage(messages)?.toolsAdded ?? [])

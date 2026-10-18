@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { getOrThrow } from "@earendil-works/pi-durable/env";
-import { registerEnvConformance } from "@earendil-works/pi-durable/testing";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import { getOrThrow } from "@hasilan-code/pi-durable/env";
+import { registerEnvConformance } from "@hasilan-code/pi-durable/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import { type Connection, nodePlatform } from "../src/connection.ts";
 import { RemoteExecutionEnv } from "../src/remote-env.ts";

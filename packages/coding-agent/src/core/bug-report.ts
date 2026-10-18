@@ -1,7 +1,7 @@
 import * as os from "node:os";
-import type { AgentMessage, StreamFn, ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { contentText, normalizeContext, type RetryPolicy, uuidv7 } from "@earendil-works/pi-ai";
-import type { Api, Model, Provider, SimpleStreamOptions } from "@earendil-works/pi-ai/compat";
+import type { AgentMessage, StreamFn, ThinkingLevel } from "@hasilan-code/pi-agent-core";
+import { contentText, normalizeContext, type RetryPolicy, uuidv7 } from "@hasilan-code/pi-ai";
+import type { Api, Model, Provider, SimpleStreamOptions } from "@hasilan-code/pi-ai/compat";
 import { VERSION } from "../config.ts";
 import { getPiUserAgent } from "../utils/pi-user-agent.ts";
 import { writeZipArchive } from "../utils/zip.ts";

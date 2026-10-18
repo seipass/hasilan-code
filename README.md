@@ -31,11 +31,14 @@
 ### 必要なもの
 
 - Node.js 22.19.0 以上
-- Git
-- AI モデルを利用するための認証または API キー
-- `node-pty` をビルドできる環境（環境によって追加の開発ツールが必要です）
+- AI モデルの認証または API キー（利用開始時に設定）
+- Git（ソースからビルドする場合）、Linux で端末機能を使う場合は C++ コンパイラー・make・Python
 
-### ソースからのインストールと起動
+### ビルド済み版を使う
+
+通常の利用では npm または GitHub Releases から導入します。手順は[導入・更新](#導入更新)を参照してください。ビルド済み版に Git は不要です。Linux で端末機能を使う場合だけ、別途ネイティブビルド環境が必要です。
+
+### ソースから起動する（開発者向け）
 
 リポジトリを取得し、ターミナルで次のコマンドを順番に実行します。
 
@@ -76,7 +79,9 @@ Windows で `node-pty` の準備に失敗した場合や、フォルダー選択
 
 ビルド済み配布物には、このプロジェクトで変更した Pi SDK と実行時依存を同梱します。本家の npm パッケージへ置き換えて実行する構成ではありません。
 
-npm 公開済みバージョンの導入・更新:
+### npm から導入・更新
+
+Node.js 22.19.0 以上が必要です。
 
 ```sh
 npm install --global --ignore-scripts hasilan-code
@@ -85,17 +90,21 @@ hasilan-code --version
 hasilan-code
 ```
 
-Linux の端末には native addon のビルドが必要です。C++ コンパイラー・make・Python を用意し、`hasilan-code setup --build-pty`を明示的に実行してください。この操作だけが`node-pty`の確認済み install script を実行します。通常のインストールでは lifecycle script を実行しません。Chromium の OS 依存ライブラリは[Playwright の要件](https://playwright.dev/docs/browsers#install-system-dependencies)も参照してください。
+`setup`はインストール後の初回準備です。既定ではブラウザー機能用の Chromium をダウンロードし、macOS では端末用補助プログラムの実行権限も設定します。アプリの起動やログインは行いません。Chromium が不要なら`hasilan-code setup --skip-browser`を使います。
 
-macOS でも初回に`hasilan-code setup`を実行してください。Chromium の導入に加え、同梱する PTY 補助プログラムの実行権限を設定します。ブラウザーを使わない場合は`hasilan-code setup --skip-browser`で端末だけを準備できます。
+Linux で端末機能を使う場合は、C++ コンパイラー・make・Python を用意し、`hasilan-code setup --build-pty`を実行してください。この操作でのみ、確認済みの`node-pty` install scriptを実行します。Chromium の OS 依存ライブラリは[Playwright の要件](https://playwright.dev/docs/browsers#install-system-dependencies)も参照してください。
 
-npm アカウントなしで導入する場合は [GitHub Releases](https://github.com/seipass/hasilan-code/releases) の`install-hasilan.mjs`を保存して実行します。
+起動コマンド`hasilan-code`は既定で`127.0.0.1:3080`にサーバーを立ち上げ、認証付きURLを表示します。ブラウザーは自動で開きません。URLには認証情報が含まれるため、第三者に共有しないでください。
+
+### GitHub Releases から導入
+
+npm を使わない場合は、[GitHub Releases](https://github.com/seipass/hasilan-code/releases)から`install-hasilan.mjs`を保存して実行します。
 
 ```sh
-node install-hasilan.mjs --version 1.1.0 --setup
+node install-hasilan.mjs --setup
 ```
 
-インストーラーは配布物の SHA-256 を確認して専用ディレクトリへ導入し、コマンドの配置先を表示します。`--prefix <directory>`で配置先を指定できます。`--version`を省略すると最新の公開リリースを使います。同じコマンドを再実行すると更新できます。認証・会話は配布物とは別の`~/.hasilan-code/agent`に保持します。Windows/macOS 向けの PTY prebuild は同梱し、Linux でのビルドには`--build-pty`を指定します。
+インストーラーは配布物の SHA-256 を確認して専用ディレクトリへ導入し、コマンドの配置先を表示します。`--version`を省略すると最新リリースを使い、`--prefix <directory>`で配置先を指定できます。同じコマンドを再実行すると更新できます。認証・会話は配布物とは別の`~/.hasilan-code/agent`に保持します。Windows/macOS 向けの PTY prebuild は同梱し、Linux でのビルドには`hasilan-code setup --build-pty`を指定してください。
 
 ## 使い方
 
@@ -196,12 +205,12 @@ Linux の配布物検証は`npm run smoke:hasilan -- --build-pty`で行います
 1. 修正なら`npm run version:hasilan:patch`、機能追加なら`npm run version:hasilan:minor`でアプリだけを更新する。Pi のバージョンは変えない。
 2. 更新内容と lockfile を確認し、`npm run pack:hasilan`、`npm run smoke:hasilan`を実行する。
 3. 検証した変更をコミットして`main`へ push する。
-4. `git tag hasilan-vX.Y.Z`、`git push origin hasilan-vX.Y.Z`で公開する。初回は`hasilan-v1.1.0`。
+4. `git tag hasilan-vX.Y.Z`、`git push origin hasilan-vX.Y.Z`で公開する。npm の通常導入先は明示的に`latest`へ設定する。
 5. GitHub Actions の成功と公開先を確認する。公開済みタグ・配布物は置き換えず、修正は次のバージョンで出す。npm 公開だけが失敗した場合は失敗ジョブだけを再実行する。
 
 ### npmの初回公開とtrusted publishing
 
-初回のみ所有者が`npm login --registry=https://registry.npmjs.org --auth-type=web`で認証し、検証済みの`hasilan-code-X.Y.Z.tgz`を`npm publish <tarball> --access public --ignore-scripts`で公開します。認証コードやトークンはリポジトリやチャットへ保存しません。
+初回のみ所有者が`npm login --registry=https://registry.npmjs.org --auth-type=web`で認証し、検証済みの`hasilan-code-X.Y.Z.tgz`を`npm publish <tarball> --tag latest --access public --ignore-scripts`で公開します。認証コードやトークンはリポジトリやチャットへ保存しません。
 
 以降は npm 11.15 以上で GitHub Actions を Trusted Publisher として登録します。ブラウザーでの本人認証が求められたら、その画面で承認してください。
 
@@ -232,7 +241,7 @@ Hasilan Code は [Pi](https://github.com/earendil-works/pi) を基盤にした�
 | 取り込み済みのリリース | [Pi v1.3.0](https://github.com/earendil-works/pi/releases/tag/v1.3.0) |
 | 上流のコミット | `71023aec1546d6d677a65669c5665c0927ce0dd0` |
 
-Pi の主要パッケージは、リポジトリ内の共有パッケージを参照します。内部の`@earendil-works/*`という名前は、上流との差分を小さくするために残しています。Hasilan Code の配布物に変更済みの実装を同梱し、本家の名前で npm 公開しません。ソース workspace は誤公開を防ぐため`private: true`のままにし、検証済み tarball からだけ公開用パッケージを作ります。TypeScript の OS 別実行ファイルは、固定したバージョンを導入先の npm で取得します。
+Pi 由来の共有パッケージは、独自の`@hasilan-code/*`名前空間で管理します。たとえば`@hasilan-code/pi-ai`・`@hasilan-code/pi-agent-core`・`@hasilan-code/pi-coding-agent`です。SDK を利用するコードや拡張機能の import も、この名前へ変更してください。旧名前空間への互換エイリアスは用意しません。第三者ライブラリの名前と著作権表示は維持します。これらの共有パッケージは現時点では個別に npm 公開せず、製品パッケージ`hasilan-code`へ同梱します。ソース workspace は誤公開を防ぐため`private: true`のままにし、検証済み tarball からだけ公開用パッケージを作ります。TypeScript の OS 別実行ファイルは、固定したバージョンを導入先の npm で取得します。
 
 上流の更新は手動で行います。独自の GitHub Actions だけを有効にし、本家向けの自動公開・同期・Issue/PR 受付制御は無効にします。`oh-my-pi`のソース、プロンプト、テスト用データ、ネイティブバイナリは使用していません。
 

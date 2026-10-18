@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai/compat";
-import type { AgentSessionEvent, SessionManager } from "@earendil-works/pi-coding-agent";
+import { fauxAssistantMessage } from "@hasilan-code/pi-ai/compat";
+import type { AgentSessionEvent, SessionManager } from "@hasilan-code/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	type ExecutionAdapter,

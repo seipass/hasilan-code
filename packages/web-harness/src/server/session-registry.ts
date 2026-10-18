@@ -2,16 +2,17 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import type { AgentMessage, ThinkingLevel } from "@hasilan-code/pi-agent-core";
+import { clampThinkingLevel, getSupportedThinkingLevels } from "@hasilan-code/pi-ai";
 import {
 	type AgentSessionEvent,
 	createAgentSession,
 	DefaultResourceLoader,
+	estimateProjectedContextTokens,
 	type ModelRuntime,
 	SessionManager,
 	type ToolDefinition,
-} from "@earendil-works/pi-coding-agent";
+} from "@hasilan-code/pi-coding-agent";
 import {
 	CONTEXT_INJECTION_CUSTOM_TYPE,
 	type ContextInjection,
@@ -21,8 +22,10 @@ import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal } from "../shared/goals.ts";
 import { nextId } from "../shared/ids.ts";
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
+import type { ModelUsage } from "../shared/usage.ts";
 import { createHarnessSettings } from "./config.ts";
-import { swarmContext } from "./swarm.ts";
+import { appendRuntimeContext } from "./runtime-context.ts";
+import { SessionUsage } from "./session-usage.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
 
 export interface ModelSelection {
@@ -84,6 +87,7 @@ export interface PendingInputProjection extends PendingInput {
 export interface SessionSnapshot extends SessionDescriptor {
 	title?: string;
 	contextUsage?: ContextUsageSnapshot;
+	usage?: ModelUsage[];
 	messages: ProjectedMessage[];
 	toolCalls: ProjectedTool[];
 	activity: {
@@ -144,6 +148,7 @@ export class HarnessError extends Error {
 }
 interface LiveSession {
 	manager: SessionManager;
+	usage: SessionUsage;
 	adapter?: ExecutionAdapter;
 	loading?: Promise<ExecutionAdapter>;
 	unsubscribe?: () => void;
@@ -454,6 +459,7 @@ export class SessionRegistry {
 		}
 		this.live.set(descriptor.sessionId, {
 			manager,
+			usage: new SessionUsage(manager),
 			projection: { ...descriptor, messages, toolCalls, activity: {}, pendingInput: [] },
 			aborted: false,
 		});
@@ -536,10 +542,26 @@ export class SessionRegistry {
 		const agent = this.state.agents.find((entry) => entry.sessionId === id);
 		const runs = agent ? this.state.runs.filter((run) => run.agentId === agent.agentId) : [];
 		const currentRun = runs.find((run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status));
+		const live = this.live.get(id);
+		let contextUsage = live?.adapter?.getContextUsage?.();
+		if (live && !live.adapter && descriptor.materialized && descriptor.model) {
+			const contextWindow = this.options.modelRuntime?.getModel(
+				descriptor.model.provider,
+				descriptor.model.id,
+			)?.contextWindow;
+			if (contextWindow && contextWindow > 0) {
+				const tokens = estimateProjectedContextTokens(
+					live.manager.buildSessionProjection(),
+					live.manager.getBranch(),
+				).tokens;
+				contextUsage = { tokens, contextWindow, percent: (tokens / contextWindow) * 100 };
+			}
+		}
 		return structuredClone({
 			...projection,
 			...descriptor,
-			contextUsage: this.live.get(id)?.adapter?.getContextUsage?.(),
+			contextUsage,
+			usage: this.live.get(id)?.usage.snapshot(),
 			thinkingLevel: this.live.get(id)?.adapter?.getThinkingLevel?.() ?? descriptor.thinkingLevel,
 			title: runs[0]?.task,
 			currentRun,
@@ -560,6 +582,7 @@ export class SessionRegistry {
 				);
 				return structuredClone({
 					...descriptor,
+					usage: this.live.get(descriptor.sessionId)?.usage.snapshot(),
 					title: runs[0]?.task,
 					currentRun,
 					latestRun: runs.at(-1),
@@ -658,49 +681,7 @@ export class SessionRegistry {
 									event.systemPromptOptions.defaultPreamble =
 										"You are an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files.";
 									event.systemPromptOptions.includeDocumentation = false;
-								});
-								pi.on("context", async (event) => {
-									await this.mutate(() => undefined);
-									if (
-										descriptor.swarm &&
-										(descriptor.swarm.status === "active" || live.delegatedTools) &&
-										descriptor.goal?.status !== "active"
-									)
-										return {
-											messages: [
-												...event.messages,
-												{
-													role: "custom",
-													customType: "harness-swarm-context",
-													content: swarmContext(descriptor.swarm),
-													display: false,
-													timestamp: Date.now(),
-												},
-											],
-										};
-									if (!descriptor.goal) return;
-									// Settle completed messages and user commands before rendering each request.
-									await this.mutate(() => undefined);
-									const goal = descriptor.goal;
-									if (!goal) return;
-									return {
-										messages: [
-											...event.messages,
-											{
-												role: "custom",
-												customType: "harness-goal-context",
-												content: [
-													`Goal mode: ${JSON.stringify(goal)}`,
-													"While active, continue pursuing the objective after ordinary responses.",
-													"Never treat assistant prose as completion. Use goal complete or block with a concrete reason.",
-													"User instructions and subagent completion context take precedence over autonomous continuation.",
-													"Only the user may resume a paused or blocked goal.",
-												].join("\n"),
-												display: false,
-												timestamp: Date.now(),
-											},
-										],
-									};
+									event.systemPromptOptions.selectedTools.sort();
 								});
 							},
 						],
@@ -732,6 +713,15 @@ export class SessionRegistry {
 					});
 					if (descriptor.thinkingLevel) session.setThinkingLevel(descriptor.thinkingLevel);
 					await session.bindExtensions({});
+					const prepareRequest = session.agent.prepareRequest;
+					session.agent.prepareRequest = async (request, signal) => {
+						const prepared = (await prepareRequest?.(request, signal)) ?? undefined;
+						await this.mutate(() => undefined);
+						if (signal?.aborted) return prepared;
+						const context = prepared?.context ?? request.context;
+						const messages = appendRuntimeContext(live.manager, context.messages, descriptor);
+						return messages === context.messages ? prepared : { ...prepared, context: { ...context, messages } };
+					};
 					if (reserveTeam) session.setActiveToolsByName(descriptor.tools!);
 					const managedSession = session as unknown as {
 						queueManagedInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<unknown>;
@@ -746,17 +736,21 @@ export class SessionRegistry {
 						});
 						if (activeSwarm) {
 							live.delegatedTools ??= session.getActiveToolNames();
-							session.setActiveToolsByName([
-								...live.delegatedTools.filter((name) => ["read", "grep", "glob", "web_search"].includes(name)),
-								"team",
-							]);
+							session.setActiveToolsByName(
+								[
+									...live.delegatedTools.filter((name) =>
+										["read", "grep", "glob", "web_search"].includes(name),
+									),
+									"team",
+								].sort(),
+							);
 						} else {
 							if (live.delegatedTools) {
-								session.setActiveToolsByName(live.delegatedTools);
+								session.setActiveToolsByName([...live.delegatedTools].sort());
 								live.delegatedTools = undefined;
 							}
 							if (descriptor.goal?.status === "active" && !session.getActiveToolNames().includes("goal"))
-								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"]);
+								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"].sort());
 						}
 					};
 					// Disable SDK retries for autonomous modes; normal sessions retain their settings.

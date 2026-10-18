@@ -1,6 +1,6 @@
 import { runInNewContext } from "node:vm";
-import type { Context } from "@earendil-works/chord";
-import { createModels } from "@earendil-works/pi-ai";
+import type { Context } from "@hasilan-code/chord";
+import { createModels } from "@hasilan-code/pi-ai";
 import {
 	createRegistry,
 	defineExtension,
@@ -12,7 +12,7 @@ import {
 	StorageRequestError,
 	type TaskId,
 	watchEvents,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { safeNow } from "../src/harness/harness.ts";
 import { conversationViews } from "../src/harness/view.ts";

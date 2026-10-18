@@ -37,7 +37,10 @@ export function ModelPicker({ catalog, value, onChange, disabled = false, autoFo
 			return (compact ? 0 : Number(value?.provider === b.provider && value.id === b.id) - Number(value?.provider === a.provider && value.id === a.id) || Number(configured.has(b.provider)) - Number(configured.has(a.provider))) || a.provider.localeCompare(b.provider) || (a.name ?? a.id).localeCompare(b.name ?? b.id);
 		}) ?? [];
 	}, [catalog, provider, query, connectedOnly, compact, value?.provider, value?.id]);
-	useEffect(() => { setCursor(0); }, [matches]);
+	useEffect(() => {
+		const selected = compact && !query ? matches.findIndex((model) => model.provider === value?.provider && model.id === value.id) : -1;
+		setCursor(Math.max(0, selected));
+	}, [matches, compact, query, value?.provider, value?.id]);
 	const lastPage = Math.max(0, Math.ceil(matches.length / PAGE_SIZE) - 1);
 	const activeIndex = Math.min(cursor, Math.max(0, matches.length - 1));
 	const currentPage = Math.floor(activeIndex / PAGE_SIZE);

@@ -14,6 +14,7 @@ export default defineConfig({
 			output: {
 				codeSplitting: {
 					groups: [
+						{ name: "react", test: /node_modules[\\/](?:react|react-dom|scheduler)(?:[\\/]|$)/ },
 						{ name: "terminal", test: /node_modules[\\/]@xterm[\\/]/ },
 						{ name: "markdown", test: /node_modules[\\/](?:react-markdown|remark|rehype|micromark|mdast|hast|unist)/ },
 					],

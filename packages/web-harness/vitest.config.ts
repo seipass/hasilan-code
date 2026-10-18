@@ -12,7 +12,7 @@ export default mergeConfig(
 		},
 		resolve: {
 			conditions: ["source"],
-			alias: [{ find: /^@earendil-works\/pi-coding-agent$/, replacement: workspaceSourcePaths.codingAgentIndex }],
+			alias: [{ find: /^@hasilan-code\/pi-coding-agent$/, replacement: workspaceSourcePaths.codingAgentIndex }],
 		},
 		ssr: { resolve: { conditions: ["source"] } },
 	}),

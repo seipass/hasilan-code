@@ -1,4 +1,4 @@
-import type { AuthInteraction, Credential, OAuthCredential, Provider } from "@earendil-works/pi-ai";
+import type { AuthInteraction, Credential, OAuthCredential, Provider } from "@hasilan-code/pi-ai";
 import { Check } from "typebox/value";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {

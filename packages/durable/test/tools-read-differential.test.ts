@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { characterEnd } from "@earendil-works/chord/output";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import { characterEnd } from "@hasilan-code/chord/output";
 import { afterAll, describe, expect, it } from "vitest";
 import { NodeExecutionEnv } from "../src/env/node.ts";
 import type { ToolDiagnostic, ToolExecutionApi } from "../src/harness/types.ts";

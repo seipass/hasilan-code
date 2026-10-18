@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ModelsStore, ModelsStoreEntry, ModelsStoreOperationOptions } from "@earendil-works/pi-ai";
+import type { ModelsStore, ModelsStoreEntry, ModelsStoreOperationOptions } from "@hasilan-code/pi-ai";
 import { getAgentDir } from "../config.ts";
 import { raceWithAbortSignal } from "../utils/abort.ts";
 import { getFileRevision, normalizePath } from "../utils/paths.ts";

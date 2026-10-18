@@ -10,7 +10,7 @@ import {
 	type TranscriptContext,
 	Type,
 	type UserMessage,
-} from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-ai";
 import {
 	type AgentEvent,
 	type CompactionPolicy,
@@ -28,7 +28,7 @@ import {
 	type TaskId,
 	UsageDoc,
 	watchEvents,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { afterEach, describe, expect, it } from "vitest";
 import { selectCut, serializeConversation } from "../src/harness/compaction.ts";
 import { orderToolResults } from "../src/harness/context.ts";

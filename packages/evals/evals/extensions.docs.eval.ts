@@ -1,4 +1,4 @@
-import { contentText } from "@earendil-works/pi-ai";
+import { contentText } from "@hasilan-code/pi-ai";
 import { describeEval, StructuredOutputJudge, ToolCallJudge } from "vitest-evals";
 import { createPiDocumentationEvalHarness, DOCUMENTATION_EVAL_TOOLS } from "../src/harness.ts";
 

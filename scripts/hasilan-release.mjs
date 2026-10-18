@@ -35,7 +35,7 @@ export function releaseVersion(manifest, tag) {
 export function localPiPackages(workspaces, dependencies) {
 	const selected = new Map();
 	function visit(name, version) {
-		if (!name.startsWith("@earendil-works/")) return;
+		if (!name.startsWith("@hasilan-code/")) return;
 		const pkg = workspaces.get(name);
 		if (!pkg) throw new Error(`Missing local Pi package: ${name}`);
 		if (version !== pkg.version)
@@ -76,7 +76,7 @@ export async function buildHasilan(root) {
 		"pi-agent-core",
 		"pi-coding-agent",
 	]) {
-		execNpmSync(["run", name === "pi-ai" ? "build:offline" : "build", `--workspace=@earendil-works/${name}`], {
+		execNpmSync(["run", name === "pi-ai" ? "build:offline" : "build", `--workspace=@hasilan-code/${name}`], {
 			cwd: root,
 			stdio: "inherit",
 		});

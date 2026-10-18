@@ -25,7 +25,7 @@ Install Termux from [GitHub or F-Droid](https://github.com/termux/termux-app#ins
 3. Install Pi:
 
    ```bash
-   npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+   npm install -g --ignore-scripts @hasilan-code/pi-coding-agent
    ```
 
 4. Verify the installation:

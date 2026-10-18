@@ -1,4 +1,4 @@
-import { Key, type KeyId } from "@earendil-works/pi-tui";
+import { Key, type KeyId } from "@hasilan-code/pi-tui";
 import { type TSchemaOptions, Type } from "typebox";
 
 const modifiers = ["ctrl", "shift", "alt", "super"] as const;

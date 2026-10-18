@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { SettingsManager } from "@earendil-works/pi-coding-agent";
+import { SettingsManager } from "@hasilan-code/pi-coding-agent";
 
 /** Never consult PI_CODING_AGENT_DIR or Pi's default directory. */
 export function getHarnessAgentDir(): string {

@@ -1,8 +1,8 @@
 // Run a durable task.
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/12-tasks.ts
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import { createModels } from "@hasilan-code/pi-ai/models";
 import { createRegistry, defineExtension, defineTask, Harness, MemoryStorage } from "../../src/index.ts";
 
 const context = BACKGROUND_CONTEXT;

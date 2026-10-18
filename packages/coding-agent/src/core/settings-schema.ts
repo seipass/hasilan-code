@@ -1,4 +1,4 @@
-import { ModelThinkingLevelSchema } from "@earendil-works/pi-ai/providers/model-schema";
+import { ModelThinkingLevelSchema } from "@hasilan-code/pi-ai/providers/model-schema";
 import { type Static, type TSchemaOptions, Type } from "typebox";
 import { SETTINGS_DEFAULTS } from "./settings-defaults.ts";
 

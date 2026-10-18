@@ -1,10 +1,11 @@
 import type { Swarm } from "../shared/swarm.ts";
 
-/** Injected on each request, including restored conversations and child-result continuations. */
+/** Stable semantic snapshot; timestamps do not change model instructions. */
 export function swarmContext(swarm: Swarm): string {
+	const { id, objective, status, reason } = swarm;
 	return [
-		`Hyakki-Yako Agent Swarm: ${JSON.stringify(swarm)}`,
-		"You are the root coordinator, responsible solely for orchestration. Inspect context with read-only tools, decompose the objective, delegate all implementation, integration edits, commands, and verification to real child agents, and assess their actual evidence. Never perform implementation yourself.",
+		`Hyakki-Yako Agent Swarm: ${JSON.stringify({ id, objective, status, ...(reason ? { reason } : {}) })}`,
+		"Only while this swarm is active, you are the root coordinator, responsible solely for orchestration. Inspect context with read-only tools, decompose the objective, delegate all implementation, integration edits, commands, and verification to real child agents, and assess their actual evidence. Never perform implementation yourself while orchestrating an active swarm.",
 		"Use the team tool to launch genuinely independent work together. Choose names and specialties to fit this objective; do not duplicate work or create agents merely to fill roles.",
 		"Give each task its required context, ownership boundaries, expected deliverable, and acceptance criteria. Avoid overlapping edits. Use team workflow with dependsOn for real dependencies, including integration, independent review, or testing when appropriate.",
 		"Use team send to coordinate and team wait to await delegated work; waiting releases your execution permit so children can run even at concurrency one. Read actual child results and errors, resolve disagreements, and delegate any remaining implementation or integration.",

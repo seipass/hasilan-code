@@ -13,10 +13,10 @@ RUN --mount=type=bind,source=.,target=/repo,rw \
 # coding-agent documentation whose effect the experiment measures.
 FROM builder AS without-docs-install
 RUN rm -rf \
-    /opt/evaluator/install/node_modules/@earendil-works/pi-coding-agent/README.md \
-    /opt/evaluator/install/node_modules/@earendil-works/pi-coding-agent/CHANGELOG.md \
-    /opt/evaluator/install/node_modules/@earendil-works/pi-coding-agent/docs \
-    /opt/evaluator/install/node_modules/@earendil-works/pi-coding-agent/examples
+    /opt/evaluator/install/node_modules/@hasilan-code/pi-coding-agent/README.md \
+    /opt/evaluator/install/node_modules/@hasilan-code/pi-coding-agent/CHANGELOG.md \
+    /opt/evaluator/install/node_modules/@hasilan-code/pi-coding-agent/docs \
+    /opt/evaluator/install/node_modules/@hasilan-code/pi-coding-agent/examples
 
 FROM node:24-slim AS evaluator
 COPY --from=builder /opt/evaluator/root /repo

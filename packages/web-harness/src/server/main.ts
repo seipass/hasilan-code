@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, type ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { CANVAS_LIMITS, canvasSaveSchema, isCanvasDocument, serializeCanvasDesign } from "../shared/canvas.ts";
 import {
 	credentialSchema,

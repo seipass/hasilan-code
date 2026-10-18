@@ -16,9 +16,9 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentToolResult, ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { Message } from "@earendil-works/pi-ai";
-import { StringEnum } from "@earendil-works/pi-ai";
+import type { AgentToolResult, ThinkingLevel } from "@hasilan-code/pi-agent-core";
+import type { Message } from "@hasilan-code/pi-ai";
+import { StringEnum } from "@hasilan-code/pi-ai";
 import {
 	CONFIG_DIR_NAME,
 	type ExtensionAPI,
@@ -26,8 +26,8 @@ import {
 	getAgentDir,
 	getMarkdownTheme,
 	withFileMutationQueue,
-} from "@earendil-works/pi-coding-agent";
-import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
+} from "@hasilan-code/pi-coding-agent";
+import { Container, Markdown, Spacer, Text } from "@hasilan-code/pi-tui";
 import { Type } from "typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
 

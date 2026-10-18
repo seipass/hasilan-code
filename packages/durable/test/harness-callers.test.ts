@@ -1,4 +1,4 @@
-import { type AssistantMessage, fauxAssistantMessage, fauxText, fauxToolCall, Type } from "@earendil-works/pi-ai";
+import { type AssistantMessage, fauxAssistantMessage, fauxText, fauxToolCall, Type } from "@hasilan-code/pi-ai";
 import {
 	AgentDoc,
 	type Conversation,
@@ -6,7 +6,7 @@ import {
 	MemoryStorage,
 	type NestedToolExecutionResult,
 	type ToolRegistration,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { type ChatSetup, chatSetup, openChat } from "./chat-support.ts";
 import { addTool } from "./harness-support.ts";

@@ -17,7 +17,7 @@ An extension exports a default factory that receives `ExtensionAPI`. The factory
 Create `~/.pi/agent/extensions/hello.ts`:
 
 ```typescript
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@hasilan-code/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
   pi.registerCommand("hello", {

@@ -21,7 +21,7 @@ import { headersToRecord } from "../utils/headers.ts";
 import { getPiUserAgent } from "../utils/pi-user-agent.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
-import { getDeclaredTools, resolveTranscript, resolveTranscriptTools } from "../utils/transcript.ts";
+import { getCurrentTools, getDeclaredTools, resolveTranscript, resolveTranscriptTools } from "../utils/transcript.ts";
 import { createGrammarToolInputProperties } from "./constrained-sampling.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
@@ -336,15 +336,26 @@ function buildParams(
 	grammarToolInputProperties: ReadonlyMap<string, string>,
 	configurationUpdateEffort: string | undefined,
 ) {
+	// Only first-party API-key routes with verified anchored additions use allowed_tools.
+	// ChatGPT sign-in and compatible endpoints retain their existing fallback.
+	const preserveRemovedTools =
+		model.provider === "openai" &&
+		model.baseUrl === "https://api.openai.com/v1" &&
+		options?.apiKey?.startsWith("sk-") === true &&
+		compat.supportsMidConvoSystemMessages &&
+		compat.supportsAdditionalTools &&
+		(options.toolChoice === undefined || typeof options.toolChoice === "string");
 	const transcriptTools = resolveTranscriptTools(
 		context.messages,
 		compat.supportsAdditionalTools || compat.supportsToolSearch,
+		preserveRemovedTools,
 	);
 	const messages = convertResponsesMessages(model, context, OPENAI_TOOL_CALL_PROVIDERS, {
 		grammarToolInputProperties,
 		supportsMidConvoSystemMessages: compat.supportsMidConvoSystemMessages,
 		supportsAdditionalTools: compat.supportsAdditionalTools,
 		supportsToolSearch: compat.supportsToolSearch,
+		preserveRemovedTools,
 		toolOptions: {
 			supportsStrictMode: compat.supportsStrictMode,
 			supportsOpenAIGrammarTools: compat.supportsOpenAIGrammarTools,
@@ -386,6 +397,26 @@ function buildParams(
 
 	if (options?.toolChoice !== undefined) {
 		params.tool_choice = options.toolChoice;
+	}
+	if (preserveRemovedTools && transcriptTools.anchorsAdditions && options?.toolChoice !== "none") {
+		const active = getCurrentTools(context.messages);
+		if (active.length < getDeclaredTools(context.messages).length) {
+			params.tool_choice =
+				active.length === 0
+					? "none"
+					: {
+							type: "allowed_tools",
+							mode: options?.toolChoice === "required" ? "required" : "auto",
+							tools: convertResponsesTools(active, {
+								supportsStrictMode: compat.supportsStrictMode,
+								supportsOpenAIGrammarTools: compat.supportsOpenAIGrammarTools,
+							}).map((tool) => {
+								if (tool.type !== "function" && tool.type !== "custom")
+									throw new Error("Expected a declared function or custom tool");
+								return { type: tool.type, name: tool.name };
+							}),
+						};
+		}
 	}
 
 	const reasoningEffort = options?.reasoningEffort ?? (options?.reasoningSummary ? "medium" : undefined);

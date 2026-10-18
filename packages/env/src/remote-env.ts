@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { type PlatformPath, posix, win32 } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@hasilan-code/chord";
 import {
 	type BinaryReader,
 	type DirReader,
@@ -27,7 +27,7 @@ import {
 	type TextLineReader,
 	type WatchChange,
 	type WatchTarget,
-} from "@earendil-works/pi-durable/env";
+} from "@hasilan-code/pi-durable/env";
 import { type Connection, type Json, nodePlatform, RemoteError, type RemoteInfo } from "./connection.ts";
 import { abortResult, toFileError } from "./errors.ts";
 import { listFilesOver } from "./list-files.ts";

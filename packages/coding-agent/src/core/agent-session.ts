@@ -30,8 +30,8 @@ import {
 	type PrepareNextTurnContext,
 	runToolCall,
 	type ThinkingLevel,
-} from "@earendil-works/pi-agent-core";
-import { contentText, getCurrentSystemMessage, retryDelayMs } from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-agent-core";
+import { contentText, getCurrentSystemMessage, retryDelayMs } from "@hasilan-code/pi-ai";
 import type {
 	AssistantMessage,
 	AuthResult,
@@ -43,7 +43,7 @@ import type {
 	ToolResultMessage,
 	Usage,
 	UserMessage,
-} from "@earendil-works/pi-ai/compat";
+} from "@hasilan-code/pi-ai/compat";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -55,7 +55,7 @@ import {
 	type RetryCallbacks,
 	resetApiProviders,
 	streamSimple,
-} from "@earendil-works/pi-ai/compat";
+} from "@hasilan-code/pi-ai/compat";
 import { getThemeByName, theme } from "../modes/interactive/theme/theme.ts";
 import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { processImage } from "../utils/image-process.ts";

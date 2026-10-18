@@ -1,4 +1,4 @@
-import { defineDoc, defineDocFamily } from "@earendil-works/pi-durable";
+import { defineDoc, defineDocFamily } from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { context, createConversation, documentChanges, flush, openTestSession } from "./session-support.ts";
 

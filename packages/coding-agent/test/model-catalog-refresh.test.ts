@@ -1,4 +1,4 @@
-import type { ModelsRefreshOptions, ModelsRefreshResult } from "@earendil-works/pi-ai";
+import type { ModelsRefreshOptions, ModelsRefreshResult } from "@hasilan-code/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import { refreshModelCatalogs } from "../src/modes/interactive/model-catalog-refresh.ts";
 

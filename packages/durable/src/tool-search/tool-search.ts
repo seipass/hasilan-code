@@ -3,7 +3,7 @@
  * and the matches are loaded with `control.addTools`, so the next request offers them. Loading writes the
  * conversation's `modelTools` (its `add`), so loaded tools stay offered on that branch, also after a compaction.
  */
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "@hasilan-code/pi-ai";
 import { defineExtension, defineTool } from "../harness/define.ts";
 import type { ToolRegistration } from "../harness/types.ts";
 import { rankDocuments } from "../search.ts";

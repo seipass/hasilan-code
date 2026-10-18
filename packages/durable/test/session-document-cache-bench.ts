@@ -8,8 +8,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { BACKGROUND_CONTEXT as context } from "@hasilan-code/chord/context";
+import { createModels } from "@hasilan-code/pi-ai/models";
 import {
 	type ConversationId,
 	createRegistry,

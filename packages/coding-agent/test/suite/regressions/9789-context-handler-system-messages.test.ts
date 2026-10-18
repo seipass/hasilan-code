@@ -1,10 +1,10 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@hasilan-code/pi-agent-core";
 import {
 	fauxAssistantMessage,
 	getCurrentSystemPrompt,
 	getCurrentTools,
 	type TranscriptContext,
-} from "@earendil-works/pi-ai";
+} from "@hasilan-code/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionFactory } from "../../../src/index.ts";
 import { createHarness, type Harness } from "../harness.ts";

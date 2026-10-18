@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSy
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { ModelThinkingLevel } from "@hasilan-code/pi-ai";
 import { Corpus, issueStatus, REPO } from "./github.ts";
 import { PRIORITIES, type Priority, Triage } from "./triage.ts";
 

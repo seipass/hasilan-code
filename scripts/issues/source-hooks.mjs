@@ -3,12 +3,12 @@
 import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const DIST_JS = /(\/(?:packages|node_modules\/@earendil-works)\/[^/]+)\/dist\/(.+)\.js$/;
+const DIST_JS = /(\/(?:packages|node_modules\/@hasilan-code)\/[^/]+)\/dist\/(.+)\.js$/;
 
 function toSource(url) {
 	if (!url?.startsWith("file:")) return undefined;
 	const path = fileURLToPath(url);
-	if (path.includes("/node_modules/") && !path.includes("/node_modules/@earendil-works/")) return undefined;
+	if (path.includes("/node_modules/") && !path.includes("/node_modules/@hasilan-code/")) return undefined;
 	if (!DIST_JS.test(path)) return undefined;
 	const source = path.replace(DIST_JS, "$1/src/$2.ts");
 	if (!existsSync(source)) return undefined;

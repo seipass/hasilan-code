@@ -1,7 +1,7 @@
-import { type AssistantMessage, fauxAssistantMessage, fauxText, Type } from "@earendil-works/pi-ai";
-import { CodemodeSandbox } from "@earendil-works/pi-codemode";
-import { CODEMODE_SOURCE_GRAMMAR } from "@earendil-works/pi-codemode/source";
-import { defineTool, MemoryStorage, type ToolRegistration } from "@earendil-works/pi-durable";
+import { type AssistantMessage, fauxAssistantMessage, fauxText, Type } from "@hasilan-code/pi-ai";
+import { CodemodeSandbox } from "@hasilan-code/pi-codemode";
+import { CODEMODE_SOURCE_GRAMMAR } from "@hasilan-code/pi-codemode/source";
+import { defineTool, MemoryStorage, type ToolRegistration } from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { createCodemodeExtension } from "../src/codemode/codemode.ts";
 import { type CodemodeNamespace, codemodeDescription, codemodeSection } from "../src/codemode/describe.ts";

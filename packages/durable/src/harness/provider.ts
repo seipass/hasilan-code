@@ -1,5 +1,5 @@
-import type { Context } from "@earendil-works/chord";
-import { uuidv7 } from "@earendil-works/pi-ai/utils/uuid";
+import type { Context } from "@hasilan-code/chord";
+import { uuidv7 } from "@hasilan-code/pi-ai/utils/uuid";
 import { defineDoc } from "../documents.ts";
 import type { TaskRuntime } from "../types.ts";
 

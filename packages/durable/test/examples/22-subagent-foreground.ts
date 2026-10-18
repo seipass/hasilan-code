@@ -4,12 +4,12 @@
 // Uses OpenAI when OPENAI_API_KEY is set, and a scripted faux model otherwise.
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/22-subagent-foreground.ts
-import type { Context } from "@earendil-works/chord";
-import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { type AssistantMessage, type FauxResponseStep, Type } from "@earendil-works/pi-ai";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
+import type { Context } from "@hasilan-code/chord";
+import { BACKGROUND_CONTEXT } from "@hasilan-code/chord/context";
+import { type AssistantMessage, type FauxResponseStep, Type } from "@hasilan-code/pi-ai";
+import { createModels } from "@hasilan-code/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@hasilan-code/pi-ai/providers/faux";
+import { openaiProvider } from "@hasilan-code/pi-ai/providers/openai";
 import {
 	type AgentEvent,
 	AssistantEntry,

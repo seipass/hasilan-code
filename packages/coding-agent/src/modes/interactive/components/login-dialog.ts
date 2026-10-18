@@ -1,5 +1,5 @@
-import type { AuthInfoLink, OAuthDeviceCodeInfo } from "@earendil-works/pi-ai";
-import { Container, type Focusable, getKeybindings, Input, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
+import type { AuthInfoLink, OAuthDeviceCodeInfo } from "@hasilan-code/pi-ai";
+import { Container, type Focusable, getKeybindings, Input, Spacer, Text, type TUI } from "@hasilan-code/pi-tui";
 import { openBrowser } from "../../../utils/open-browser.ts";
 import { theme } from "../theme/theme.ts";
 import { AuthUrlComponent } from "./auth-url.ts";

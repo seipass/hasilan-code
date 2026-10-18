@@ -1,4 +1,4 @@
-import type { AuthEvent } from "@earendil-works/pi-ai";
+import type { AuthEvent } from "@hasilan-code/pi-ai";
 import { useEffect, useId, useRef, useState } from "react";
 import type { AuthLoginPrompt, AuthLoginView } from "../shared/auth-login.ts";
 import { ApiError, api, command, errorMessage } from "./api.ts";

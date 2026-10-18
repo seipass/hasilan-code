@@ -1,11 +1,11 @@
 # SDK
 
-`@earendil-works/pi-coding-agent` embeds Pi in a Node.js or Bun process. It provides direct TypeScript access to the agent, sessions, tools, models, and resources used by the command-line application.
+`@hasilan-code/pi-coding-agent` embeds Pi in a Node.js or Bun process. It provides direct TypeScript access to the agent, sessions, tools, models, and resources used by the command-line application.
 
 Use the SDK for in-process TypeScript integration. For a language-independent or isolated subprocess, see [CLI Integration](cli-integration.md).
 
 ```typescript
-import { createAgentSession } from "@earendil-works/pi-coding-agent";
+import { createAgentSession } from "@hasilan-code/pi-coding-agent";
 
 const { session } = await createAgentSession();
 
@@ -42,7 +42,7 @@ Sessions are persistent by default. `SessionManager` owns the persisted or in-me
 Use an in-memory manager when the host does not want session files:
 
 ```typescript
-import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, SessionManager } from "@hasilan-code/pi-coding-agent";
 
 const { session } = await createAgentSession({
   sessionManager: SessionManager.inMemory(),
@@ -132,7 +132,7 @@ skill discovery.
 
 ```typescript
 import { join } from "node:path";
-import { createAgentSession, DefaultResourceLoader, ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, DefaultResourceLoader, ModelRuntime, SettingsManager } from "@hasilan-code/pi-coding-agent";
 
 const cwd = process.cwd();
 const agentDir = "/absolute/path/to/my-app/agent";

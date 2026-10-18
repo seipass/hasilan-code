@@ -114,6 +114,32 @@ describe("system message replay", () => {
 		expect(declarationsEqual(tool("a"), { ...tool("a"), constrainedSampling: false })).toBe(false);
 	});
 
+	test("schema property construction order does not replace a tool, but changed constraints do", () => {
+		const first = {
+			...tool("ordered"),
+			parameters: { type: "object", properties: { path: { type: "string", minLength: 1 } } },
+		};
+		const reordered = {
+			...first,
+			parameters: { properties: { path: { minLength: 1, type: "string" } }, type: "object" },
+		};
+		expect(getToolStateChanges([first], [reordered])).toEqual({ toolsAdded: [], toolsRemoved: [] });
+		const changed = {
+			...first,
+			parameters: { ...first.parameters, properties: { path: { type: "string", minLength: 2 } } },
+		};
+		expect(getToolStateChanges([first], [changed]).toolsRemoved).toEqual([{ name: "ordered" }]);
+	});
+
+	test("does not discard a schema property named __proto__ during canonicalization", () => {
+		const first = {
+			...tool("special"),
+			parameters: { type: "object", properties: { ["__proto__"]: { type: "string" } } },
+		};
+		const changed = { ...first, parameters: { type: "object", properties: { ["__proto__"]: { type: "number" } } } };
+		expect(getToolStateChanges([first], [changed]).toolsRemoved).toEqual([{ name: "special" }]);
+	});
+
 	test("tool state changes treat changed definitions as removal plus addition", () => {
 		const changes = getToolStateChanges([tool("a"), tool("b")], [tool("b", "changed"), tool("c")]);
 		expect(changes).toEqual({

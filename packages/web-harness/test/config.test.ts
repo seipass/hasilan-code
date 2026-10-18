@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
+import { DefaultResourceLoader } from "@hasilan-code/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHarnessSettings, getHarnessAgentDir } from "../src/server/config.ts";
 

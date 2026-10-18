@@ -27,8 +27,8 @@ import {
 	type ResourceTemplate,
 	StdioTransport,
 	StreamableHttpTransport,
-} from "@earendil-works/pi-mcp";
-import { McpOAuthAuthorizationRequiredError, type OAuthChallenge } from "@earendil-works/pi-mcp/oauth";
+} from "@hasilan-code/pi-mcp";
+import { McpOAuthAuthorizationRequiredError, type OAuthChallenge } from "@hasilan-code/pi-mcp/oauth";
 import { VERSION } from "../../config.ts";
 import { resolveConfigValueOrThrow, resolveHeadersOrThrow } from "../../core/resolve-config-value.ts";
 import type { McpServerEntry } from "./config.ts";

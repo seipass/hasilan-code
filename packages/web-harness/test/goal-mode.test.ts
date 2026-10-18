@@ -10,8 +10,8 @@ import {
 	fauxToolCall,
 	getCurrentSystemPrompt,
 	InMemoryModelsStore,
-} from "@earendil-works/pi-ai";
-import { ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+} from "@hasilan-code/pi-ai";
+import { ModelRuntime, type ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../../coding-agent/src/core/auth-storage.ts";
@@ -120,6 +120,38 @@ describe("Goal mode production SDK boundaries", () => {
 		await idle(f.registry, f.session.sessionId);
 		expect(f.faux.state.callCount).toBe(1);
 		expect(f.registry.get(f.session.sessionId).goal).toBeUndefined();
+	});
+
+	it("keeps an unchanged runtime snapshot in the actual request prefix and persists completion for reload", async () => {
+		const requests: string[][] = [];
+		const f = await fixture([
+			(context) => {
+				requests.push(context.messages.map((message) => JSON.stringify(message)));
+				return progress(1);
+			},
+			(context) => {
+				requests.push(context.messages.map((message) => JSON.stringify(message)));
+				return complete();
+			},
+			(context) => {
+				requests.push(context.messages.map((message) => JSON.stringify(message)));
+				return fauxAssistantMessage("Verified");
+			},
+		]);
+		await f.teams.goal(f.session.sessionId, { op: "create", objective: "Cache-stable work" });
+		await idle(f.registry, f.session.sessionId);
+		expect(requests).toHaveLength(3);
+		expect(requests[1].slice(0, requests[0].length)).toEqual(requests[0]);
+		expect(requests[1].filter((message) => message.includes("Current runtime context."))).toHaveLength(1);
+		const snapshots = requests[2].filter((message) => message.includes("Current runtime context."));
+		expect(snapshots).toHaveLength(2);
+		expect(snapshots.at(-1)).toContain('\\"status\\":\\"complete\\"');
+		expect(f.registry.get(f.session.sessionId).goal?.status).toBe("complete");
+		expect(f.registry.get(f.session.sessionId).usage?.reduce((sum, row) => sum + row.responses, 0)).toBe(3);
+		const restored = new SessionRegistry({ agentDir: f.root, workspaceFiles: new WorkspaceFiles() });
+		await restored.initialize();
+		expect(restored.get(f.session.sessionId).usage).toEqual(f.registry.get(f.session.sessionId).usage);
+		await restored.close();
 	});
 
 	it("performs two autonomous rounds and ends only through the production goal tool", async () => {

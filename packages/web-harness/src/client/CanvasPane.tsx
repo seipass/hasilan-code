@@ -404,7 +404,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 							<button className="canvas-connect-handle" type="button" disabled={disabled} aria-label={`${item.title || "無題のノード"}から接続を開始`} aria-pressed={connectingFrom === item.id} onClick={() => connectingFrom === item.id ? cancelConnection() : startConnection(item)}>接続 <span aria-hidden="true">＋</span></button>
 						</div>)}
 					</div>
-					{ready && design.nodes.length === 0 && <div className="canvas-empty"><span className="canvas-empty-eyebrow">アイデアを、つながる設計に</span><h3>最初のノードを置きましょう</h3><p>機能・画面・課題などを並べて、関係を線でつなぎます。<br />できた設計は AI への相談の下書きにできます。</p><button className="canvas-add" type="button" disabled={disabled} onClick={addNode}>＋ 最初のノードを追加</button></div>}
+					{ready && design.nodes.length === 0 && <div className="canvas-empty"><h3>ノードを追加して始める</h3><p>ノードを並べて、線でつなぎます。</p><button className="canvas-add" type="button" disabled={disabled} onClick={addNode}>＋ ノードを追加</button></div>}
 				</div>
 			</div>
 		</div>

@@ -1,15 +1,15 @@
-import { type Context, copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@earendil-works/chord";
-import { awaitWithContext } from "@earendil-works/chord/context";
-import { overlap } from "@earendil-works/chord/delta";
+import { type Context, copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@hasilan-code/chord";
+import { awaitWithContext } from "@hasilan-code/chord/context";
+import { overlap } from "@hasilan-code/chord/delta";
 import {
 	boundOutput,
 	OutputBuffer,
 	type OutputLimits,
 	PROGRESS_BYTES_PER_SECOND,
 	Progress,
-} from "@earendil-works/chord/output";
-import type { ImageContent, TextContent, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { validateToolArguments } from "@earendil-works/pi-ai/utils/validation";
+} from "@hasilan-code/chord/output";
+import type { ImageContent, TextContent, ToolCall, ToolResultMessage } from "@hasilan-code/pi-ai";
+import { validateToolArguments } from "@hasilan-code/pi-ai/utils/validation";
 import { Compile } from "typebox/compile";
 import { defineDocFamily } from "../documents.ts";
 import { AssistantEntry, ToolResultEntry } from "../entries.ts";

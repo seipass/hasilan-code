@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import type { Container, EditorComponent, TUI } from "@earendil-works/pi-tui";
+import type { Container, EditorComponent, TUI } from "@hasilan-code/pi-tui";
 import { getAuthCredential } from "../../cli/auth-command.ts";
 import type { AgentSession } from "../../core/agent-session.ts";
 import {

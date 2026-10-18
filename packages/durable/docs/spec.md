@@ -1,6 +1,6 @@
 # Durable specification
 
-`@earendil-works/pi-durable` is a durable, extensible agent harness. This document is normative.
+`@hasilan-code/pi-durable` is a durable, extensible agent harness. This document is normative.
 It uses existing package types as follows:
 
 ```ts
@@ -11,8 +11,8 @@ import type {
   JsonRepresentation,
   JsonValue,
   ReplicatedState,
-} from "@earendil-works/chord";
-import type { Op } from "@earendil-works/chord/delta";
+} from "@hasilan-code/chord";
+import type { Op } from "@hasilan-code/chord/delta";
 import type {
   AssistantMessage,
   CacheRetention,
@@ -27,8 +27,8 @@ import type {
   ToolResultMessage,
   Transport,
   UserMessage,
-} from "@earendil-works/pi-ai";
-import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
+} from "@hasilan-code/pi-ai";
+import type { ExecutionEnv } from "@hasilan-code/pi-durable/env";
 
 type JsonObject = { [key: string]: JsonValue };
 type TaskOutcomeError = { message: string; detail?: JsonValue };
@@ -3049,7 +3049,7 @@ tool loads deferred tools with `control.addTools`, which writes their names to
 fork's entry, loaded tools are per branch, and a baseline after a head marker
 declares them, built from the resolved tools. Loaded tools follow the other
 tools in load order, so a load appends declarations to the transcript and the
-cached prefix holds. `@earendil-works/pi-durable/tool-search` provides the
+cached prefix holds. `@hasilan-code/pi-durable/tool-search` provides the
 coding agent's `tool_search` (`createToolSearchExtension()`): it ranks
 `Agent.deferred` with BM25 over the tools' names, descriptions, and parameter
 names and descriptions, and loads the matches. The `codemode` section does not
@@ -3387,7 +3387,7 @@ diagnostic with one of the codes `tool_unavailable`, `invalid_arguments`,
 and the error text as its message. Their content is the durable partial output,
 if any, and `details` is the tool's last reported value, if any.
 
-`@earendil-works/pi-durable/tools` provides `read`, `write`, `edit`, and `bash`
+`@hasilan-code/pi-durable/tools` provides `read`, `write`, `edit`, and `bash`
 factories, ported from the agent harness tools, the `CodingTools` extension
 with all four, and `createCodingTools({ images })`, the same with an image
 processor for `read`. They use only `api.env`; nothing installs them
@@ -3407,7 +3407,7 @@ With one, `await processor.prepare(bytes, mimeType, limits)` returns the image f
 diagnostic says when its format changed or it was resized, with the factor that
 maps coordinates back. The Photon processor decodes every image, returns it as
 it is when it is upright, inline, and within the limits, and otherwise
-re-encodes it as PNG or JPEG (JPEG first for JPEG sources). `@earendil-works/pi-durable/images` provides `createPhotonImages(wasm)`,
+re-encodes it as PNG or JPEG (JPEG first for JPEG sources). `@hasilan-code/pi-durable/images` provides `createPhotonImages(wasm)`,
 on Photon's WebAssembly, given its module or bytes; `/images/node` reads the
 wasm from the installed package and prepares images in a worker thread, which
 exits after 30 s without images (`{ worker: false }` prepares them inline);
@@ -3599,7 +3599,7 @@ any more (section 2.2).
 
 ### 7.6 Code mode
 
-`@earendil-works/pi-durable/codemode` provides the `codemode` tool (`createCodemodeExtension({ sandbox })`):
+`@hasilan-code/pi-durable/codemode` provides the `codemode` tool (`createCodemodeExtension({ sandbox })`):
 `callers: ["model"]`, `replay: "safe"`. Its argument is a script, run with
 pi-codemode's deterministic `sandbox.start()`. The script calls the agent's
 `callable` tools as `tools.<name>(args)`; each call is a nested call with key

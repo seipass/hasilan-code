@@ -27,7 +27,7 @@
  */
 
 import { join, resolve } from "node:path";
-import type { SelectItem } from "@earendil-works/pi-tui";
+import type { SelectItem } from "@hasilan-code/pi-tui";
 import type { TSchema } from "typebox";
 import { getAgentDir } from "../../config.ts";
 import type {

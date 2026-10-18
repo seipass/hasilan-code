@@ -1,11 +1,5 @@
-import type { Op } from "@earendil-works/chord/delta";
-import {
-	defineDoc,
-	defineDocFamily,
-	type EntryId,
-	type JsonObject,
-	type StorageWrite,
-} from "@earendil-works/pi-durable";
+import type { Op } from "@hasilan-code/chord/delta";
+import { defineDoc, defineDocFamily, type EntryId, type JsonObject, type StorageWrite } from "@hasilan-code/pi-durable";
 import { describe, expect, it } from "vitest";
 import { context, createConversation, documentChanges, flush, openTestSession } from "./session-support.ts";
 

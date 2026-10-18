@@ -3,8 +3,8 @@
  * the names the spec leaves to the application declared below. Keep the two in sync; `test/examples/` runs the same
  * patterns end to end.
  */
-import type { Context, Draft } from "@earendil-works/chord";
-import { type AssistantMessage, type Models, type ToolCall, Type } from "@earendil-works/pi-ai";
+import type { Context, Draft } from "@hasilan-code/chord";
+import { type AssistantMessage, type Models, type ToolCall, Type } from "@hasilan-code/pi-ai";
 import {
 	type ConversationId,
 	configure,
@@ -30,7 +30,7 @@ import {
 	type Tx,
 	type UserInput,
 	wrapTool,
-} from "@earendil-works/pi-durable";
+} from "@hasilan-code/pi-durable";
 import { expect, expectTypeOf, it } from "vitest";
 import type { ExecutionEnv } from "../src/env/index.ts";
 import { CodingTools, createBashTool, createEditTool, createReadTool } from "../src/tools/index.ts";

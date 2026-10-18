@@ -2,7 +2,7 @@
  * System prompt construction and project context loading
  */
 
-import { getSystemMessageText } from "@earendil-works/pi-ai";
+import { getSystemMessageText } from "@hasilan-code/pi-ai";
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.ts";
 import { formatSkillsForPrompt, type Skill } from "./skills.ts";
 
@@ -28,7 +28,7 @@ export interface BuildSystemPromptOptions {
 	toolGuidelines?: Record<string, string[]>;
 	/** Additional guideline bullets appended to the default system prompt rules. */
 	promptGuidelines?: string[];
-	/** Text appended from user configuration before project context, skills, and cwd. */
+	/** Session-specific text appended after shared project context, skills, and cwd. */
 	appendSystemPrompt?: string;
 	/** Additional XML-wrapped prompt sections keyed by tag name. */
 	sections?: Record<string, string>;
@@ -180,7 +180,6 @@ export function buildSystemPromptSections(input: BuildSystemPromptOptions): Syst
 		}
 	}
 
-	if (appendSystemPrompt) promptSections.addendum = appendSystemPrompt;
 	if (contextFiles.length > 0) promptSections.project_context = renderProjectContext(contextFiles);
 	// A hidden reader is still reachable through another tool, so skills stay but the hint names no tool.
 	const readers = ["read", "bash"] as const;
@@ -192,6 +191,7 @@ export function buildSystemPromptSections(input: BuildSystemPromptOptions): Syst
 		if (skillsPrompt) promptSections.skills = skillsPrompt;
 	}
 	promptSections.cwd = cwd.replace(/\\/g, "/");
+	if (appendSystemPrompt) promptSections.addendum = appendSystemPrompt;
 	for (const [name, content] of Object.entries(customSections)) {
 		if (content) promptSections[name] = content;
 	}
