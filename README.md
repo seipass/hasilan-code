@@ -203,19 +203,23 @@ Linux の配布物検証は`npm run smoke:hasilan -- --build-pty`で行います
 
 初回のみ所有者が`npm login --registry=https://registry.npmjs.org --auth-type=web`で認証し、検証済みの`hasilan-code-X.Y.Z.tgz`を`npm publish <tarball> --access public --ignore-scripts`で公開します。認証コードやトークンはリポジトリやチャットへ保存しません。
 
-以降は npm のパッケージ設定の Trusted Publisher に GitHub Actions を登録します。
+以降は npm 11.15 以上で GitHub Actions を Trusted Publisher として登録します。ブラウザーでの本人認証が求められたら、その画面で承認してください。
 
-| 設定 | 値 |
-| --- | --- |
-| Organization or user | `seipass` |
-| Repository | `hasilan-code` |
-| Workflow filename | `hasilan-release.yml`（パスではなくファイル名） |
-| Environment name | `npm-publish` |
-| Allowed actions | `npm publish`を許可 |
+```sh
+npm trust github hasilan-code --file hasilan-release.yml --repository seipass/hasilan-code --environment npm-publish --allow-publish --yes
+```
 
 登録後に GitHub のリポジトリ変数`HASILAN_NPM_PUBLISH=true`を設定すると npm 公開ジョブが有効になります。長期保存する npm token は不要です。未設定時も GitHub Releases は公開しますが、npm 公開ジョブは明示的にスキップします。詳細は[npm の公式手順](https://docs.npmjs.com/trusted-publishers/)を参照してください。
 
 新しい Trusted Publisher 設定は 2 日以内の最初の公開で検証する必要があります。登録は次の未公開バージョンを出せる時点で行い、そのタグの npm 公開ジョブまで成功を確認してください。
+
+自動公開は、npm上の同じバージョンが検証済みアーカイブと一致する場合だけ再実行をスキップします。公開要求が受け付けられても、メタデータと実際にダウンロードした配布物のSHA-512が一致するまでは成功にしません。公開反映待ちは上流と同じ最大10分です。
+
+公開結果だけを手動で確認する場合は、検証済み配布物のディレクトリを指定します。このコマンドは公開操作を行いません。
+
+```sh
+node scripts/hasilan-publish.mjs .artifacts/hasilan-code
+```
 
 ## 本家 Pi との関係
 

@@ -56,6 +56,9 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
@@ -69,4 +72,4 @@ jobs:
         working-directory: package
         run: |
           sha256sum --check SHA256SUMS
-          npm publish hasilan-code-*.tgz --access public --provenance --ignore-scripts
+          node ../scripts/hasilan-publish.mjs . --publish
