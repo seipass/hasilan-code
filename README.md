@@ -87,7 +87,7 @@ Devinの非公開プロトコルを利用する非公式連携です。Devin側�
 
 ### npm から導入・更新
 
-Node.js 22.19.0 以上が必要です。
+Node.js 22.19.0以上が必要です。Linuxでは、先に[Linuxのセットアップ](#linuxのセットアップ)を参照してください。
 
 ```sh
 npm install --global --ignore-scripts hasilan-code
@@ -96,17 +96,65 @@ hasilan-code --version
 hasilan-code
 ```
 
-`setup`はインストール後の初回準備です。既定ではブラウザー機能用の Chromium をダウンロードし、macOS では端末用補助プログラムの実行権限も設定します。アプリの起動やログインは行いません。Chromium が不要なら`hasilan-code setup --skip-browser`を使います。
+`setup`はインストール後の初回準備です。ブラウザー機能用のChromiumをダウンロードし、macOSでは端末用補助プログラムの実行権限も設定します。アプリの起動やログインは行いません。Chromiumが不要なら`hasilan-code setup --skip-browser`を使います。
 
-更新は同じコマンドの再実行です。`npm install --global --ignore-scripts hasilan-code`を実行すると、npmの`latest`がそのまま置き換わります。`hasilan-code --version`で反映を確認してください。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.3`のように指定します。アプリ内に自己更新コマンドはありません。
+#### Linuxのセットアップ
 
-Linux で端末機能を使う場合は、C++ コンパイラー・make・Python を用意し、`hasilan-code setup --build-pty`を実行してください。この操作でのみ、確認済みの`node-pty` install scriptを実行します。Linux向けのプリビルドは同梱していないため、ビルド前に起動すると案内を表示して終了します。Chromium の OS 依存ライブラリは[Playwright の要件](https://playwright.dev/docs/browsers#install-system-dependencies)も参照してください。
+Linux向けの端末用ネイティブモジュールは同梱していないため、起動前にビルドが必要です。C++コンパイラー・make・Pythonを用意し、`hasilan-code setup --build-pty`を実行してください。この操作で、確認済みの`node-pty`のインストールスクリプトを実行します。ビルド前に起動すると、準備手順を表示して終了します。
+
+Debian / Ubuntuでのセットアップ例です。
+
+```sh
+sudo apt-get update
+sudo apt-get install -y build-essential python3
+npm install --global --ignore-scripts hasilan-code
+hasilan-code setup --build-pty
+```
+
+ほかのディストリビューションでは、ビルドツールを次のコマンドで用意します。利用しているものだけを実行してください。
+
+| ディストリビューション | コマンド |
+| --- | --- |
+| Fedora / RHEL | `sudo dnf install -y gcc-c++ make python3` |
+| Arch Linux | `sudo pacman -S --needed base-devel python` |
+
+ブラウザー機能に必要なOSライブラリは、Chromium本体とは別にインストールします。Playwrightが対応するLinux環境では、次のコマンドを使えます。管理者権限を求められる場合があります。
+
+```sh
+node "$(npm root -g)/hasilan-code/node_modules/playwright/cli.js" install-deps chromium
+```
+
+対応OSと依存ライブラリは[Playwrightの要件](https://playwright.dev/docs/browsers#install-system-dependencies)を参照してください。Alpine Linuxなどのmusl環境は、Playwrightのブラウザーの対応対象外です。
+
+ブラウザー機能が不要なら、セットアップには`hasilan-code setup --build-pty --skip-browser`を使い、OSライブラリのインストールも省略できます。
+
+準備が終わったら起動します。
+
+```sh
+hasilan-code --version
+hasilan-code
+```
+
+#### 更新
+
+実行中のHasilan Codeを終了してから、次のコマンドを実行してください。
+
+```sh
+npm install --global --ignore-scripts hasilan-code
+hasilan-code setup
+hasilan-code --version
+hasilan-code
+```
+
+Linuxでは`hasilan-code setup`を`hasilan-code setup --build-pty`に置き換えてください。
+
+この手順で、インストール済みのアプリをnpmの`latest`に更新します。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.4`のように指定します。アプリ内に自己更新コマンドはありません。
 
 起動コマンド`hasilan-code`は既定で`127.0.0.1:3080`にサーバーを立ち上げ、認証付きURLを表示します。ブラウザーは自動で開きません。URLには認証情報が含まれるため、第三者に共有しないでください。
 
 ### GitHub Releases から導入
 
-npm を使わない場合は、[GitHub Releases](https://github.com/seipass/hasilan-code/releases)から`install-hasilan.mjs`を保存して実行します。
+npmレジストリからではなくGitHubの配布物を使う場合は、[GitHub Releases](https://github.com/seipass/hasilan-code/releases)から`install-hasilan.mjs`を保存して実行します。
 
 ```sh
 node install-hasilan.mjs --setup
@@ -253,7 +301,9 @@ Hasilan Code は [Pi](https://github.com/earendil-works/pi) を基盤にした�
 | 取り込み済みのリリース | [Pi v1.3.0](https://github.com/earendil-works/pi/releases/tag/v1.3.0) |
 | 上流のコミット | `71023aec1546d6d677a65669c5665c0927ce0dd0` |
 
-Pi 由来の共有パッケージは、独自の`@hasilan-code/*`名前空間で管理します。たとえば`@hasilan-code/pi-ai`・`@hasilan-code/pi-agent-core`・`@hasilan-code/pi-coding-agent`です。SDK を利用するコードや拡張機能の import も、この名前へ変更してください。旧名前空間への互換エイリアスは用意しません。第三者ライブラリの名前と著作権表示は維持します。これらの共有パッケージは現時点では個別に npm 公開せず、製品パッケージ`hasilan-code`へ同梱します。ソース workspace は誤公開を防ぐため`private: true`のままにし、検証済み tarball からだけ公開用パッケージを作ります。TypeScript の OS 別実行ファイルは、固定したバージョンを導入先の npm で取得します。
+Pi由来の共有パッケージは、独自の`@hasilan-code/*`名前空間で管理します。たとえば`@hasilan-code/pi-ai`・`@hasilan-code/pi-agent-core`・`@hasilan-code/pi-coding-agent`です。SDKを利用するコードや拡張機能のimportも、この名前へ変更してください。旧名前空間への互換エイリアスは用意しません。第三者ライブラリの名前と著作権表示は維持します。
+
+これらの共有パッケージは個別にnpm公開せず、製品パッケージ`hasilan-code`へ同梱します。ソースのworkspaceは誤公開を防ぐため`private: true`のままにし、検証済みtarballからだけ公開用パッケージを作ります。TypeScriptのOS別実行ファイルは、固定したバージョンを導入先のnpmで取得します。
 
 上流の更新は手動で行います。独自の GitHub Actions だけを有効にし、本家向けの自動公開・同期・Issue/PR 受付制御は無効にします。`oh-my-pi`のソース、プロンプト、テスト用データ、ネイティブバイナリは使用していません。
 
