@@ -32,7 +32,7 @@
 
 - Node.js 22.19.0 以上
 - AI モデルの認証または API キー（利用開始時に設定）
-- Git（ソースからビルドする場合）、Linux で端末機能を使う場合は C++ コンパイラー・make・Python
+- ソースからビルドする場合は Git、Linux で端末機能を使う場合は C++ コンパイラー・make・Python
 
 ### ビルド済み版を使う
 
@@ -73,7 +73,7 @@ npm run web -- --cwd /path/to/project
 
 ポート番号は `--port` で変更できます。たとえば `--port 0` を指定すると、OS が空いているポートを割り当てます。
 
-Windows で `node-pty` の準備に失敗した場合や、フォルダー選択を利用できない環境については、[詳しい起動手順](packages/web-harness/README.md#起動) を参照してください。
+Windows で `node-pty` の準備に失敗した場合の対処方法や、フォルダー選択を利用できない環境での操作方法は[詳しい起動手順](packages/web-harness/README.md#起動) を参照してください。
 
 ### Devinアカウントを使う
 
@@ -111,7 +111,7 @@ npm install --global --ignore-scripts hasilan-code
 hasilan-code setup --build-pty
 ```
 
-ほかのディストリビューションではビルドツールを次のコマンドで用意します。利用しているものだけを実行してください。
+ほかのディストリビューションでは次のコマンドでビルドツールを用意します。利用中のディストリビューションに対応するコマンドだけを実行してください。
 
 | ディストリビューション | コマンド |
 | --- | --- |
@@ -193,7 +193,7 @@ node install-hasilan.mjs --setup
 
 ### アカウントの使用量
 
-「設定 → 使用量」で、接続中の対応プロバイダーの利用上限・残量・リセット日時を確認できます。CommandCode、Devin、ChatGPT認証のOpenAI/Codexに対応しています。会話内のトークン集計とは別の、プロバイダーから取得したアカウント全体の情報です。「更新」で再取得できます。
+「設定 → 使用量」で、接続中の対応プロバイダーの利用上限・残量・リセット日時を確認できます。CommandCode、Devin、ChatGPT認証のOpenAI/Codexに対応しています。ここに表示するのはプロバイダーから取得したアカウント全体の情報で、会話内のトークン集計とは別です。「更新」で再取得できます。
 
 操作の詳細、チームの制約、検索設定、保存形式については [Web ハーネスの README](packages/web-harness/README.md) にまとめています。
 
@@ -247,11 +247,11 @@ Web 側のコードだけを変更した場合は、`npm run build --workspace=h
 
 ## 独自CI・リリース
 
-本体のバージョンは`packages/web-harness/package.json`、基盤 Pi のバージョンはその`hasilanCode.piVersion`で別々に管理します。本家の`release:patch`や`version:patch`はこのアプリのリリースに使いません。
+本体のバージョンは`packages/web-harness/package.json`のバージョン、基盤 Pi のバージョンは同ファイルの`hasilanCode.piVersion`で別々に管理します。本家の`release:patch`や`version:patch`はこのアプリのリリースに使いません。
 
 - [Hasilan Code CI](.github/workflows/hasilan-ci.yml): Windows・macOS・Linux でビルド、全体チェック、対象テストを実行します。Ubuntu で作った同一の配布物を 3 OS のリポジトリ外へインストールし、CLI・変更済み SDK・認証付き HTTP・実際の PTY 入出力を検証します。
 - [Hasilan Code Release](.github/workflows/hasilan-release.yml): `hasilan-vX.Y.Z`タグだけで動作し、CI で検証した配布物・インストーラー・`SHA256SUMS`・ソース情報を GitHub Releases へ公開します。本家の`vX.Y.Z`タグとは分離します。同じバージョンの配布物を上書きしません。
-- ビルドは`nix/model-catalog.json`で固定した Pi のモデルカタログを SHA-256 検証して使用します。実行時依存の解決結果がルート lockfile にないバージョンへ変わった場合はパッケージ作成を拒否します。
+- ビルドには`nix/model-catalog.json`で固定した Pi のモデルカタログを、SHA-256 で検証してから使用します。実行時依存の解決結果がルート lockfile にないバージョンへ変わった場合はパッケージ作成を拒否します。
 
 ローカルで配布物を作り、作業ツリー外への導入を検証します。
 
@@ -274,7 +274,7 @@ Linux の配布物検証は`npm run smoke:hasilan -- --build-pty`で行います
 
 初回のみ所有者が`npm login --registry=https://registry.npmjs.org --auth-type=web`で認証し、検証済みの`hasilan-code-X.Y.Z.tgz`を`npm publish <tarball> --tag latest --access public --ignore-scripts`で公開します。認証コードやトークンはリポジトリやチャットへ保存しません。
 
-以降は npm 11.15 以上で GitHub Actions を Trusted Publisher として登録します。ブラウザーでの本人認証が求められたら、その画面で承認してください。
+以降の公開では npm 11.15 以上を使い、GitHub Actions を Trusted Publisher として登録します。ブラウザーでの本人認証が求められたら、その画面で承認してください。
 
 ```sh
 npm trust github hasilan-code --file hasilan-release.yml --repository seipass/hasilan-code --environment npm-publish --allow-publish --yes
@@ -282,7 +282,7 @@ npm trust github hasilan-code --file hasilan-release.yml --repository seipass/ha
 
 登録後に GitHub のリポジトリ変数`HASILAN_NPM_PUBLISH=true`を設定すると npm 公開ジョブが有効になります。長期保存する npm token は不要です。未設定時も GitHub Releases は公開しますが、npm 公開ジョブは明示的にスキップします。詳細は[npm の公式手順](https://docs.npmjs.com/trusted-publishers/)を参照してください。
 
-新しい Trusted Publisher 設定は 2 日以内の最初の公開で検証する必要があります。登録は次の未公開バージョンを出せる時点で行い、そのタグの npm 公開ジョブまで成功を確認してください。
+新しい Trusted Publisher 設定は 2 日以内の最初の公開で検証する必要があります。次の未公開バージョンを公開できる時点で登録し、そのタグの npm 公開ジョブが成功することまで確認してください。
 
 自動公開の再実行をスキップするのは、npm上の同じバージョンが検証済みアーカイブと一致する場合だけです。公開要求が受け付けられても、メタデータと実際にダウンロードした配布物のSHA-512が一致するまでは成功にしません。公開反映待ちは上流と同じ最大10分です。
 
