@@ -2,13 +2,13 @@
 
 ## Context
 
-`https://github.com/earendil-works/pi` を土台としてフォークし、ローカルWebサーバーとブラウザーUIから操作するAIハーネスを作る。必須機能は、動的エージェントチームとその可視化、内蔵Playwright Browser use、設定で切り替える複数Web検索、独自実装のHashline読み書き、ファイルビューア、ユーザー操作のPTY、複数セッションの同時実行と切り替え。oh-my-piのコードはコピー・移植・依存として使用しない。参考リポジトリの内部構造やWeb体験の再現は要求ではなく、このアプリの責務から設計する。
+`https://github.com/earendil-works/pi` をフォークし、ローカルWebサーバーとブラウザーUIから操作するAIハーネスを作る。必須機能は動的エージェントチームとその可視化、内蔵Playwright Browser use、設定で切り替える複数Web検索、独自実装のHashline読み書き、ファイルビューア、ユーザー操作のPTY、複数セッションの同時実行と切り替えである。oh-my-piのコードはコピー・移植・依存として使用しない。参考リポジトリの内部構造やWeb体験の再現は要求ではなく、このアプリの責務に基づいて設計する。
 
 ## Grounded baseline
 
 - 作業ディレクトリは空。このセッションで確認済み。フォーク元のベースを `c5f5b3282d5e4203c085e59837ba17aeaf2829b5` に固定する。[revision](https://api.github.com/repos/earendil-works/pi/commits/main)
 - PiはMIT、Node.js 22.19以上、npm workspaces。公開SDKは `createAgentSession(options): Promise<{session, extensionsResult, modelFallbackMessage?}>`。`tools?: string[]` は名前指定、実装は `customTools?: ToolDefinition[]`。同名のcustom toolはbuiltinを置換する。[SDK source](https://github.com/earendil-works/pi/blob/c5f5b3282d5e4203c085e59837ba17aeaf2829b5/packages/coding-agent/src/core/sdk.ts)
-- 現行PiにWeb UI workspaceはない。実験的 `packages/server` はUnixソケットのルーターで、このWindows対応Webアプリの土台には使わない。[packages](https://api.github.com/repos/earendil-works/pi/contents/packages?ref=c5f5b3282d5e4203c085e59837ba17aeaf2829b5) / [server](https://github.com/earendil-works/pi/blob/c5f5b3282d5e4203c085e59837ba17aeaf2829b5/packages/server/README.md)
+- 現行PiにWeb UI workspaceはない。実験的 `packages/server` はUnixソケットのルーターで、このWindows対応Webアプリの基盤には使わない。[packages](https://api.github.com/repos/earendil-works/pi/contents/packages?ref=c5f5b3282d5e4203c085e59837ba17aeaf2829b5) / [server](https://github.com/earendil-works/pi/blob/c5f5b3282d5e4203c085e59837ba17aeaf2829b5/packages/server/README.md)
 - DeepSeek HarnessはループバックWebサーバー、チャット・履歴・設定・ツール詳細を持つ。ローカルでも認証とHost/Origin検査を行う。[reference](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/web-app/README.md)
 - oh-my-piのHashlineは行ごとのハッシュではない。全文由来の4桁タグ `[PATH#TAG]` と `LINE:TEXT`、`PUT` / `CUT` / `REM` / `MV` を使う。[format reference](https://github.com/can1357/oh-my-pi/blob/8d95cc008233d8526816d2afc775e96257c2c323/packages/hashline/src/format.ts) / [grammar reference](https://github.com/can1357/oh-my-pi/blob/8d95cc008233d8526816d2afc775e96257c2c323/packages/hashline/src/grammar.lark)。ユーザー指定に従い形式の参考だけにし、ソース・パッケージ・native binary・prompt・test fixtureを流用しない。
 
@@ -54,7 +54,7 @@
 
 1. 新規 `src/server/team-manager.ts` に `TeamManager` を実装する。sessionは会話、agentは安定したteam所属、runは一回の実行として分ける。root sessionごとに永続teamId/root agentIdを持ち、別root sessionは独立teamで同時実行可能。agentは `{agentId,teamId,parentAgentId?,sessionId,name,role}`、runは `{runId,agentId,task,status,result?,error?,waitingOnRunIds?,startedAt?,settledAt?}`。statusは `queued|running|waiting|cancelling|completed|failed|cancelled|interrupted`。同agentを再開しても旧run/resultを書き換えない。
 2. `SessionRegistry` はPi実行と会話projectionのみ、TeamManagerがrun/admission/schedulerを唯一所有する。TeamManagerからregistryを呼び、registryのsettlement通知を受ける。一つのteam-specific schedulerへroot prompt、spawn、idle宛send、再開を全て通す。session busy中のsteer/followUpは現runへ。runはagent_settledまでのretry/compaction/入力continuationを含む。abortedはcancelled、最後の未回復errorはfailed、それ以外completed。resultは現runの最終assistant textだけ。run settlementを永続化してからwaiterへ通知する。
-3. 全agentへ `team` toolを `executionMode:'sequential'` で提供する。契約:
+3. 全agentへ `team` toolを `executionMode:'sequential'` で提供する。入出力は次のとおり。
    - `{action:'spawn',tasks:[{name,task,context?,systemPrompt?,model?:{provider,id},tools?:string[]}]} → {agents:[{agentId,sessionId,runId,name,status}]}`。
    - `{action:'list'} → {agents:[{agentId,parentAgentId?,sessionId,name,currentRun?,latestRun?}]}`。
    - `{action:'send',agentId,message} → {inputId,runId,disposition:'queued'|'started'}`。
@@ -111,21 +111,21 @@
 
 ## Critical files & anchors
 
-実装前に固定commitの実ファイルを再読する。以下は調査済み既存seamであり、新規fileの推測ではない。
+実装前に固定commitの実ファイルを再読する。以下は調査済みの既存コードと、その利用箇所である。新規fileの推測ではない。
 
-- `packages/coding-agent/src/core/sdk.ts` — CreateAgentSessionOptionsとfactory。同名customToolsとservices注入。
-- `packages/coding-agent/src/core/agent-session.ts` — subscribe/prompt/steer/followUp/abort/waitForIdle、agent_settled、tool registry。Webとteamのlifecycleをここへ合わせる。
-- `packages/coding-agent/src/core/session-manager.ts` — create/open、parentSession、JSONLのauthoritative context。
-- `packages/coding-agent/src/core/resource-loader.ts` — DefaultResourceLoader、appendSystemPrompt、reload。子のroleとresourceを分離する。
-- `packages/coding-agent/src/core/extensions/types.ts` — ToolDefinition、TypeBox、executeとAgentToolResult。旧SDKの引数順を使わない。
+- `packages/coding-agent/src/core/sdk.ts`: CreateAgentSessionOptionsとfactory。同名customToolsとservicesの注入。
+- `packages/coding-agent/src/core/agent-session.ts`: subscribe/prompt/steer/followUp/abort/waitForIdle、agent_settled、tool registry。Webとteamのlifecycleをここへ合わせる。
+- `packages/coding-agent/src/core/session-manager.ts`: create/open、parentSession、JSONLのauthoritative context。
+- `packages/coding-agent/src/core/resource-loader.ts`: DefaultResourceLoader、appendSystemPrompt、reload。子のroleとresourceを分離する。
+- `packages/coding-agent/src/core/extensions/types.ts`: ToolDefinition、TypeBox、executeとAgentToolResult。旧SDKの引数順を使わない。
 
 ## Verification
 
-計画段階はremote source調査のみ。以下を実装後に実行し、未実行を成功と報告しない。
+計画段階で行ったのはremote sourceの調査のみ。以下を実装後に実行し、未実行のものを成功と報告しない。
 
 ### Commands and prerequisites
 
-repo root、Node >=22.19、npm、Chromiumのダウンロード接続。実API smokeにはPi対応LLMの有効credential、Brave/Tavilyの各keyが必要。
+repo rootで実行する。Node >=22.19、npm、Chromiumをダウンロードできる接続が必要。実API smokeにはPi対応LLMの有効credentialと、Brave/Tavilyの各keyも必要。
 
 1. `npm install --ignore-scripts`、次に明示許可したnative packageだけ `npm rebuild node-pty --ignore-scripts=false --foreground-scripts`。node-ptyのinstall/postinstallでnative binaryとConPTY resourcesを準備する。load確認 `node -e "console.log(typeof require('node-pty').spawn)"` のあと実PTY smokeを行う。prebuildが使えなければPython 3.11/3.12、VS2022 C++ Build Tools/Windows SDK/Spectre libraryを用意して同rebuildを実行する。rootの全dependency lifecycle scriptを無条件に許可しない。
 2. `npm run build`（ネットワーク利用不可で既存model dataが揃っている場合は `npm run build:offline`）
@@ -158,13 +158,13 @@ workspace Vitestは既存 `vitest.base.ts` のaliasを再利用する。恒久�
 
 ## キャッシュ改善調査（2026-10-18）
 
-この節は調査時点の設計比較であり、上記の初期計画とは分けて読む。以下の改善は実装済み。動的状態の永続追記、共通プロンプトの先頭への配置、ツール名・スキーマ順序の安定化、対応するOpenAI APIキー経路での宣言保持と利用制限、親子・モデル別の使用量表示を追加した。system更新は既存SDKのモデル別能力を引き続き使用する。現在の仕様は[Web README](packages/web-harness/README.md#キャッシュと使用量)を参照。モデル API は呼び出しておらず、実際のヒット率・料金・応答時間の改善は未測定。
+この節は調査時点の設計比較であり、上記の初期計画とは分けて読む。動的状態の永続追記、共通プロンプトの先頭への配置、ツール名・スキーマ順序の安定化、対応するOpenAI APIキー経路での宣言保持と利用制限、親子・モデル別の使用量表示は実装済みである。system更新には既存SDKのモデル別能力を引き続き使用する。現在の仕様は[Web README](packages/web-harness/README.md#キャッシュと使用量)を参照。モデル API は呼び出しておらず、実際のヒット率・料金・応答時間の改善は未測定である。
 
 ### DeepSeek Harnessで参考になる設計
 
 - 固定の指示と動的な実行状態を分離する。動的状態は変更時だけ履歴末尾へ永続スナップショットを追加し、圧縮で失われたときは再投入する。[設計と実装](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/agent-loop/src/runtime-context.ts)
 - system promptの途中更新はモデル単位の能力で選択する。対応モデルでは変更済みの完全なsystem promptを履歴末尾へ追加し、未対応モデルや圧縮後の新しい系列では先頭へ集約する。後勝ちの完全置換を全モデルへ仮定しない。[設計](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/feature/2026-09-02-in-history-system-prompt-replacement.md)
-- ツール定義とその順序を安定させる。動的な追加・削除も、対応するモデルだけ履歴内更新を使う。既存定義の変更はキャッシュを維持できるとは限らない。[組み立て順序](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/system-prompt/README.md)、[動的ツール更新](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/architecture/2026-09-20-dynamic-tool-updates.md)
+- ツール定義とその順序を安定させる。動的な追加・削除も対応するモデルだけ履歴内更新を使う。既存定義を変更すると、キャッシュを維持できるとは限らない。[組み立て順序](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/core/system-prompt/README.md)、[動的ツール更新](https://github.com/deepseek-ai/deepseek-harness/blob/master/.agents/notes/implemented/architecture/2026-09-20-dynamic-tool-updates.md)
 
 ### 調査時点の差分と実装の優先順位
 

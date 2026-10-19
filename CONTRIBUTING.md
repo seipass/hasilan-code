@@ -8,7 +8,7 @@ First things first: **pi's core is minimal**.
 
 If your feature does not belong in the core, it should be an extension. PRs that bloat the core will likely be rejected.
 
-Pi's core exists to be minimal and to be extensible so that it can be influenced and manipulated by extensions.  Even hook points for extensions however should be well considered and discussed to avoid adding unmaintainable bloat and complex interactions.
+Pi's core is designed to be minimal and extensible so that extensions can influence and manipulate it. Even extension hook points should be carefully considered and discussed to avoid unmaintainable bloat and complex interactions.
 
 ## The One Rule
 
@@ -35,9 +35,7 @@ The command must be at the start of the reply (optionally after one or more `@us
 
 ## Quality Bar For Issues
 
-If you open an issue, you must use one of the two GitHub issue templates.
-
-If you open an issue, keep it short, concrete, and worth reading.
+If you open an issue, you must use one of the two GitHub issue templates. Keep it short, concrete, and worth reading.
 
 - Keep it concise. If it does not fit on one screen, it is too long.
 - Write in your own voice (do not use an LLM to generate text, if you must, follow up with a clearly AI labeled comment).
@@ -51,7 +49,7 @@ If the issue is real and written well, a maintainer may reopen it or reply with 
 
 If you ignore this document twice, or if you spam the tracker with agent-generated issues, your GitHub account will be permanently blocked.
 
-If you send a large volume of issues through automation, your GitHub account will be permanently blocked. No taksies backsies.
+If you send a large volume of issues through automation, your GitHub account will be permanently blocked. This decision will not be reversed.
 
 ## Before Submitting a PR
 

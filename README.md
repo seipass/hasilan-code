@@ -3,7 +3,7 @@
 
   # Hasilan Code
 
-  Hasilan Code は、Pi を基盤にしたローカルの単一ユーザー向け Web コーディング環境です。
+  Hasilan Code はPi を基盤にしたローカルの単一ユーザー向け Web コーディング環境です。
   AI との会話、複数の AI による作業分担、設計画面、ファイル閲覧、端末操作をひとつの画面で行えます。
 
   [使い始める](#クイックスタート) · [主な機能](#主な機能) · [詳しい使い方](packages/web-harness/README.md)
@@ -77,17 +77,17 @@ Windows で `node-pty` の準備に失敗した場合や、フォルダー選択
 
 ### Devinアカウントを使う
 
-「設定 → プロバイダー」で **Devin** を選び、「Devinでログイン」を押します。ブラウザーでのログイン、Devin CLIの資格情報の読み込み、セッショントークンの入力に対応します。接続後は、そのアカウントで利用できるモデルとThinking強度を選べます。
+「設定 → プロバイダー」で **Devin** を選び、「Devinでログイン」を押します。ブラウザーでのログイン、Devin CLIの資格情報の読み込み、セッショントークンの入力に対応します。接続後はそのアカウントで利用できるモデルとThinking強度を選べます。
 
 Devinの非公開プロトコルを利用する非公式連携です。Devin側の変更で接続できなくなる場合があります。対応範囲と保存方法は[Devinアカウントの説明](packages/web-harness/README.md#devinアカウント)を参照してください。
 
 ## 導入・更新
 
-ビルド済み配布物には、このプロジェクトで変更した Pi SDK と実行時依存を同梱します。本家の npm パッケージへ置き換えて実行する構成ではありません。
+ビルド済み配布物にはこのプロジェクトで変更した Pi SDK と実行時依存を同梱します。本家の npm パッケージへ置き換えて実行する構成ではありません。
 
 ### npm から導入・更新
 
-Node.js 22.19.0以上が必要です。Linuxでは、先に[Linuxのセットアップ](#linuxのセットアップ)を参照してください。
+Node.js 22.19.0以上が必要です。Linuxでは先に[Linuxのセットアップ](#linuxのセットアップ)を参照してください。
 
 ```sh
 npm install --global --ignore-scripts hasilan-code
@@ -100,7 +100,7 @@ hasilan-code
 
 #### Linuxのセットアップ
 
-Linux向けの端末用ネイティブモジュールは同梱していないため、起動前にビルドが必要です。C++コンパイラー・make・Pythonを用意し、`hasilan-code setup --build-pty`を実行してください。この操作で、確認済みの`node-pty`のインストールスクリプトを実行します。ビルド前に起動すると、準備手順を表示して終了します。
+Linux向けの端末用ネイティブモジュールは同梱していないため、起動前にビルドが必要です。C++コンパイラー・make・Pythonを用意し、`hasilan-code setup --build-pty`を実行してください。この操作で確認済みの`node-pty`のインストールスクリプトを実行します。ビルド前に起動すると、準備手順を表示して終了します。
 
 Debian / Ubuntuでのセットアップ例です。
 
@@ -111,7 +111,7 @@ npm install --global --ignore-scripts hasilan-code
 hasilan-code setup --build-pty
 ```
 
-ほかのディストリビューションでは、ビルドツールを次のコマンドで用意します。利用しているものだけを実行してください。
+ほかのディストリビューションではビルドツールを次のコマンドで用意します。利用しているものだけを実行してください。
 
 | ディストリビューション | コマンド |
 | --- | --- |
@@ -148,7 +148,7 @@ hasilan-code
 
 Linuxでは`hasilan-code setup`を`hasilan-code setup --build-pty`に置き換えてください。
 
-この手順で、インストール済みのアプリをnpmの`latest`に更新します。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.4`のように指定します。アプリ内に自己更新コマンドはありません。
+この手順でインストール済みのアプリをnpmの`latest`に更新します。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.4`のように指定します。アプリ内に自己更新コマンドはありません。
 
 起動コマンド`hasilan-code`は既定で`127.0.0.1:3080`にサーバーを立ち上げ、認証付きURLを表示します。ブラウザーは自動で開きません。URLには認証情報が含まれるため、第三者に共有しないでください。
 
@@ -160,11 +160,13 @@ npmレジストリからではなくGitHubの配布物を使う場合は、[GitH
 node install-hasilan.mjs --setup
 ```
 
-インストーラーは配布物の SHA-256 を確認して専用ディレクトリへ導入し、コマンドの配置先を表示します。`--version`を省略すると最新リリースを使い、`--prefix <directory>`で配置先を指定できます。同じコマンドを再実行すると更新できます。認証・会話は配布物とは別の`~/.hasilan-code/agent`に保持します。Windows/macOS 向けの PTY prebuild は同梱し、Linux でのビルドには`hasilan-code setup --build-pty`を指定してください。
+インストーラーは配布物の SHA-256 を確認して専用ディレクトリへ導入し、コマンドの配置先を表示します。`--version`を省略すると最新リリースを使い、`--prefix <directory>`で配置先を指定できます。同じコマンドを再実行すると更新できます。
+
+認証・会話は配布物とは別の`~/.hasilan-code/agent`に保持します。Windows/macOS 向けの PTY prebuild は同梱しています。Linux では`hasilan-code setup --build-pty`でビルドしてください。
 
 ## 使い方
 
-チャットの入力欄では、通常の指示に加えて次のコマンドを使用できます。
+チャットの入力欄では通常の指示に加えて次のコマンドを使用できます。
 
 | コマンド | 用途 |
 | --- | --- |
@@ -211,7 +213,7 @@ node install-hasilan.mjs --setup
 
 ## 開発
 
-このリポジトリには、複数のパッケージが含まれています。
+このリポジトリには複数のパッケージが含まれています。
 
 | ディレクトリ | 内容 |
 | --- | --- |
@@ -221,7 +223,7 @@ node install-hasilan.mjs --setup
 | [`packages/coding-agent`](packages/coding-agent) | コーディング用エージェントの機能 |
 | [`packages/tui`](packages/tui) | Pi 由来の端末表示機能 |
 
-次のコマンドは、リポジトリのルートで実行してください。
+次のコマンドはリポジトリのルートで実行してください。
 
 ```sh
 # Hasilan Code と必要な SDK のビルド
@@ -260,13 +262,13 @@ npm run smoke:hasilan
 
 Linux の配布物検証は`npm run smoke:hasilan -- --build-pty`で行います。成果物は`.artifacts/hasilan-code/`です。ソース workspace を直接`npm publish`すると拒否します。公開するのは検証済みの tarball だけです。
 
-次のリリース:
+次の手順でリリースします。
 
-1. 修正なら`npm run version:hasilan:patch`、機能追加なら`npm run version:hasilan:minor`でアプリだけを更新する。Pi のバージョンは変えない。
-2. 更新内容と lockfile を確認し、`npm run pack:hasilan`、`npm run smoke:hasilan`を実行する。
-3. 検証した変更をコミットして`main`へ push する。
-4. `git tag hasilan-vX.Y.Z`、`git push origin hasilan-vX.Y.Z`で公開する。npm の通常導入先は明示的に`latest`へ設定する。
-5. GitHub Actions の成功と公開先を確認する。公開済みタグ・配布物は置き換えず、修正は次のバージョンで出す。npm 公開だけが失敗した場合は失敗ジョブだけを再実行する。
+1. 修正なら`npm run version:hasilan:patch`、機能追加なら`npm run version:hasilan:minor`でアプリだけを更新します。Pi のバージョンは変えません。
+2. 更新内容と lockfile を確認し、`npm run pack:hasilan`、`npm run smoke:hasilan`を実行します。
+3. 検証した変更をコミットして`main`へ push します。
+4. `git tag hasilan-vX.Y.Z`、`git push origin hasilan-vX.Y.Z`で公開します。npm の通常導入先は明示的に`latest`へ設定します。
+5. GitHub Actions の成功と公開先を確認します。公開済みタグ・配布物は置き換えず、修正は次のバージョンで出します。npm 公開だけが失敗した場合は失敗ジョブだけを再実行します。
 
 ### npmの初回公開とtrusted publishing
 
@@ -282,7 +284,7 @@ npm trust github hasilan-code --file hasilan-release.yml --repository seipass/ha
 
 新しい Trusted Publisher 設定は 2 日以内の最初の公開で検証する必要があります。登録は次の未公開バージョンを出せる時点で行い、そのタグの npm 公開ジョブまで成功を確認してください。
 
-自動公開は、npm上の同じバージョンが検証済みアーカイブと一致する場合だけ再実行をスキップします。公開要求が受け付けられても、メタデータと実際にダウンロードした配布物のSHA-512が一致するまでは成功にしません。公開反映待ちは上流と同じ最大10分です。
+自動公開の再実行をスキップするのは、npm上の同じバージョンが検証済みアーカイブと一致する場合だけです。公開要求が受け付けられても、メタデータと実際にダウンロードした配布物のSHA-512が一致するまでは成功にしません。公開反映待ちは上流と同じ最大10分です。
 
 公開結果だけを手動で確認する場合は、検証済み配布物のディレクトリを指定します。このコマンドは公開操作を行いません。
 
@@ -301,9 +303,9 @@ Hasilan Code は [Pi](https://github.com/earendil-works/pi) を基盤にした�
 | 取り込み済みのリリース | [Pi v1.3.0](https://github.com/earendil-works/pi/releases/tag/v1.3.0) |
 | 上流のコミット | `71023aec1546d6d677a65669c5665c0927ce0dd0` |
 
-Pi由来の共有パッケージは、独自の`@hasilan-code/*`名前空間で管理します。たとえば`@hasilan-code/pi-ai`・`@hasilan-code/pi-agent-core`・`@hasilan-code/pi-coding-agent`です。SDKを利用するコードや拡張機能のimportも、この名前へ変更してください。旧名前空間への互換エイリアスは用意しません。第三者ライブラリの名前と著作権表示は維持します。
+Pi由来の共有パッケージは独自の`@hasilan-code/*`名前空間で管理します。たとえば`@hasilan-code/pi-ai`・`@hasilan-code/pi-agent-core`・`@hasilan-code/pi-coding-agent`です。SDKを利用するコードや拡張機能のimportも、この名前へ変更してください。旧名前空間への互換エイリアスは用意しません。第三者ライブラリの名前と著作権表示は維持します。
 
-これらの共有パッケージは個別にnpm公開せず、製品パッケージ`hasilan-code`へ同梱します。ソースのworkspaceは誤公開を防ぐため`private: true`のままにし、検証済みtarballからだけ公開用パッケージを作ります。TypeScriptのOS別実行ファイルは、固定したバージョンを導入先のnpmで取得します。
+これらの共有パッケージは個別にnpm公開せず、製品パッケージ`hasilan-code`へ同梱します。ソースのworkspaceは誤公開を防ぐため`private: true`のままにし、検証済みtarballからだけ公開用パッケージを作ります。TypeScriptのOS別実行ファイルは固定したバージョンを導入先のnpmで取得します。
 
 上流の更新は手動で行います。独自の GitHub Actions だけを有効にし、本家向けの自動公開・同期・Issue/PR 受付制御は無効にします。`oh-my-pi`のソース、プロンプト、テスト用データ、ネイティブバイナリは使用していません。
 
@@ -332,7 +334,7 @@ Pi由来の共有パッケージは、独自の`@hasilan-code/*`名前空間で�
 6. この README と [`packages/web-harness/README.md`](packages/web-harness/README.md) に記載した上流のバージョンとコミットを更新し、差分を確認します。
 7. ビルド後、実行中の Web サーバーを再起動します。
 
-本家への変更提案は、[Pi 側の貢献ルール](https://github.com/earendil-works/pi/blob/main/CONTRIBUTING.md) に従ってください。
+本家への変更提案は[Pi 側の貢献ルール](https://github.com/earendil-works/pi/blob/main/CONTRIBUTING.md) に従ってください。
 
 </details>
 
@@ -346,4 +348,4 @@ Hasilan Code は既定で `127.0.0.1` に待ち受け、起動時に認証付き
 
 本リポジトリは [MIT License](LICENSE) で公開しています。本家 Pi の著作権表示を保持しています。フォントなどの同梱素材には、それぞれのライセンスが適用されます。
 
-配布パッケージには、ブラウザー側に組み込む外部ライブラリの通知を`dist/client/THIRD_PARTY_LICENSES.txt`として同梱します。Gen Interface JP の著作権表示と [SIL Open Font License](packages/web-harness/public/fonts/GenInterfaceJP-OFL.txt) もフォントと一緒に配布します。
+配布パッケージにはブラウザー側に組み込む外部ライブラリの通知を`dist/client/THIRD_PARTY_LICENSES.txt`として同梱します。Gen Interface JP の著作権表示と [SIL Open Font License](packages/web-harness/public/fonts/GenInterfaceJP-OFL.txt) もフォントと一緒に配布します。

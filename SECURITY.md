@@ -1,12 +1,11 @@
 # Security Policy
 
-This document should guide you about understanding the security concept behind
-Pi and also where the boundaries are.
+This document explains Pi's security model and its boundaries.
 
-In general Pi is a coding agent that runs locally within the security boundary
-of the user that is running it.  It's the responsibility of the user to monitor
-its operations or to contain it within a container, virtual machine or other
-Sandbox solution.
+In general, Pi is a coding agent that runs locally within the security boundary
+of the user running it. The user is responsible for monitoring
+its operations or containing it within a container, virtual machine, or other
+sandbox solution.
 
 Pi treats the local user account and files writable by that account as inside
 the same trust boundary as the Pi process itself.  If an attacker can modify files
@@ -16,10 +15,10 @@ Reports that depend on such prior local write access are not security
 vulnerabilities unless they demonstrate how Pi grants that write access or crosses
 an operating-system privilege boundary.
 
-Pi relies on users installing trustworthy extensions and loading trustworthy
-skills and only to use pi within trusted repositories.  This is because files
-like `AGENTS.md` or instructions in comments can be used to prompt inject the
-coding agent trivially and this cannot be protected against.
+Pi relies on users installing trustworthy extensions, loading trustworthy
+skills, and using pi only within trusted repositories. This is because files
+such as `AGENTS.md` and instructions in comments can easily be used to inject
+prompts into the coding agent, and Pi cannot protect against this.
 
 ## Reporting a Vulnerability
 
@@ -51,7 +50,7 @@ on `pi.dev`.
 - Behavior of pi extensions or skills installed by the user
 - Risks from working in untrusted repositories
 - Risks from installing untrusted extensions, skills, packages, or tools
-- Isuses caused by non trustworthy MITM proxies
+- Issues caused by untrustworthy MITM proxies
 - Public internet exposure of a Pi installation
 - Prompt injection attacks
 - Exposed secrets that are third-party/user-controlled credentials
