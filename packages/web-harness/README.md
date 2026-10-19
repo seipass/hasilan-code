@@ -25,7 +25,7 @@ npm run web
 Windowsのnode-pty native installが失敗する場合、Python 3.11/3.12、Visual Studio 2022 C++ Build Tools、Windows SDK、Spectre対応libraryを用意してrebuildします。pipeへのfallbackはありません。Linux向けのプリビルドは同梱していないため、C++コンパイラー・make・Pythonを用意して`hasilan-code setup --build-pty`を実行します。プリビルドまたはビルド済みモジュールが無いまま起動した場合は、ビルド方法を表示して終了し、スタックトレースは表示しません。
 ネイティブフォルダー選択はホストのデスクトップ上に表示します。WindowsはPowerShell/WinForms、macOSは標準のフォルダー選択、Linuxはzenityまたはkdialogを使用します。SSHやデスクトップ環境のないホストではダイアログを利用できません。同時に開くダイアログは一つです。
 
-`npm run web` は `dist` の配信用ファイルを使います。Web側のソースを変更した後は `npm run build --workspace=hasilan-code` で更新し、サーバーを再起動してブラウザーを再読み込みしてください。依存するPiのソースも変更した場合は、`npm run build:hasilan`でアプリと依存SDKをまとめてビルドします。配布物の作成・検証・公開方法は[独自CI・リリース](../../README.md#独自ciリリース)を参照してください。
+`npm run web` は `dist` の配信用ファイルを使います。Web側のソースを変更した後は `npm run build --workspace=hasilan-code` で更新し、サーバーを再起動してブラウザーを再読み込みしてください。依存するPiのソースも変更した場合は、`npm run build:hasilan`でアプリと依存SDKをまとめてビルドします。配布物の作成・検証・公開方法は[リリース手順](../../docs/release.md)を参照してください。
 
 ## 会話を始める
 

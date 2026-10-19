@@ -54,8 +54,7 @@ npm run web
 
 起動したら、ターミナルに表示される認証付き URL をブラウザーで開いてください。ブラウザーは自動で開きません。既定の待ち受け先は `127.0.0.1:3080` です。
 
-> [!CAUTION]
-> 起動時に表示される URL には認証情報が含まれます。第三者に共有しないでください。AI モデルや検索サービスの利用には、各サービスの料金が発生する場合があります。
+表示される認証URLは共有しないでください。
 
 ### 最初の会話
 
@@ -75,12 +74,6 @@ npm run web -- --cwd /path/to/project
 
 Windows で `node-pty` の準備に失敗した場合の対処方法や、フォルダー選択を利用できない環境での操作方法は[詳しい起動手順](packages/web-harness/README.md#起動) を参照してください。
 
-### Devinアカウントを使う
-
-「設定 → プロバイダー」で **Devin** を選び、「Devinでログイン」を押します。ブラウザーでのログイン、Devin CLIの資格情報の読み込み、セッショントークンの入力に対応します。接続後はそのアカウントで利用できるモデルとThinking強度を選べます。
-
-Devinの非公開プロトコルを利用する非公式連携です。Devin側の変更で接続できなくなる場合があります。対応範囲と保存方法は[Devinアカウントの説明](packages/web-harness/README.md#devinアカウント)を参照してください。
-
 ## 導入・更新
 
 ビルド済み配布物にはこのプロジェクトで変更した Pi SDK と実行時依存を同梱します。本家の npm パッケージへ置き換えて実行する構成ではありません。
@@ -88,6 +81,8 @@ Devinの非公開プロトコルを利用する非公式連携です。Devin側�
 ### npm から導入・更新
 
 Node.js 22.19.0以上が必要です。Linuxでは先に[Linuxのセットアップ](#linuxのセットアップ)を参照してください。
+
+更新時も、実行中のHasilan Codeを終了してから同じコマンドを実行してください。Linuxでは`hasilan-code setup`を`hasilan-code setup --build-pty`に置き換えます。
 
 ```sh
 npm install --global --ignore-scripts hasilan-code
@@ -97,6 +92,10 @@ hasilan-code
 ```
 
 `setup`はインストール後の初回準備です。ブラウザー機能用のChromiumをダウンロードし、macOSでは端末用補助プログラムの実行権限も設定します。アプリの起動やログインは行いません。Chromiumが不要なら`hasilan-code setup --skip-browser`を使います。
+
+更新するとnpmの`latest`に置き換わります。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.4`のように指定します。アプリ内に自己更新コマンドはありません。
+
+起動コマンド`hasilan-code`は既定で`127.0.0.1:3080`にサーバーを立ち上げ、認証付きURLを表示します。ブラウザーは自動で開きません。表示される認証URLは共有しないでください。
 
 #### Linuxのセットアップ
 
@@ -134,23 +133,6 @@ node "$(npm root -g)/hasilan-code/node_modules/playwright/cli.js" install-deps c
 hasilan-code --version
 hasilan-code
 ```
-
-#### 更新
-
-実行中のHasilan Codeを終了してから、次のコマンドを実行してください。
-
-```sh
-npm install --global --ignore-scripts hasilan-code
-hasilan-code setup
-hasilan-code --version
-hasilan-code
-```
-
-Linuxでは`hasilan-code setup`を`hasilan-code setup --build-pty`に置き換えてください。
-
-この手順でインストール済みのアプリをnpmの`latest`に更新します。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.4`のように指定します。アプリ内に自己更新コマンドはありません。
-
-起動コマンド`hasilan-code`は既定で`127.0.0.1:3080`にサーバーを立ち上げ、認証付きURLを表示します。ブラウザーは自動で開きません。URLには認証情報が含まれるため、第三者に共有しないでください。
 
 ### GitHub Releases から導入
 
@@ -211,6 +193,12 @@ node install-hasilan.mjs --setup
 
 モデル選択など、一部の画面設定はブラウザー内にも保存されます。設定画面で入力した AI モデル用の API キーは、実行中のプロセスだけで有効です。再起動後は再設定してください。
 
+### Devinアカウントを使う
+
+「設定 → プロバイダー」で **Devin** を選び、「Devinでログイン」を押します。ブラウザーでのログイン、Devin CLIの資格情報の読み込み、セッショントークンの入力に対応します。接続後はそのアカウントで利用できるモデルとThinking強度を選べます。
+
+Devinの非公開プロトコルを利用する非公式連携です。Devin側の変更で接続できなくなる場合があります。対応範囲と保存方法は[Devinアカウントの説明](packages/web-harness/README.md#devinアカウント)を参照してください。
+
 ## 開発
 
 このリポジトリには複数のパッケージが含まれています。
@@ -245,52 +233,10 @@ Web 側のコードだけを変更した場合は、`npm run build --workspace=h
 
 開発時の規則は [`AGENTS.md`](AGENTS.md)、貢献に関する案内は [`CONTRIBUTING.md`](CONTRIBUTING.md) を参照してください。実際の AI プロバイダーを呼び出すテストには、認証や利用料金が必要な場合があります。
 
-## 独自CI・リリース
+## メンテナー向け文書
 
-本体のバージョンは`packages/web-harness/package.json`のバージョン、基盤 Pi のバージョンは同ファイルの`hasilanCode.piVersion`で別々に管理します。本家の`release:patch`や`version:patch`はこのアプリのリリースに使いません。
-
-- [Hasilan Code CI](.github/workflows/hasilan-ci.yml): Windows・macOS・Linux でビルド、全体チェック、対象テストを実行します。Ubuntu で作った同一の配布物を 3 OS のリポジトリ外へインストールし、CLI・変更済み SDK・認証付き HTTP・実際の PTY 入出力を検証します。
-- [Hasilan Code Release](.github/workflows/hasilan-release.yml): `hasilan-vX.Y.Z`タグだけで動作し、CI で検証した配布物・インストーラー・`SHA256SUMS`・ソース情報を GitHub Releases へ公開します。本家の`vX.Y.Z`タグとは分離します。同じバージョンの配布物を上書きしません。
-- ビルドには`nix/model-catalog.json`で固定した Pi のモデルカタログを、SHA-256 で検証してから使用します。実行時依存の解決結果がルート lockfile にないバージョンへ変わった場合はパッケージ作成を拒否します。
-
-ローカルで配布物を作り、作業ツリー外への導入を検証します。
-
-```sh
-npm run pack:hasilan
-npm run smoke:hasilan
-```
-
-Linux の配布物検証は`npm run smoke:hasilan -- --build-pty`で行います。成果物は`.artifacts/hasilan-code/`です。ソース workspace を直接`npm publish`すると拒否します。公開するのは検証済みの tarball だけです。
-
-次の手順でリリースします。
-
-1. 修正なら`npm run version:hasilan:patch`、機能追加なら`npm run version:hasilan:minor`でアプリだけを更新します。Pi のバージョンは変えません。
-2. 更新内容と lockfile を確認し、`npm run pack:hasilan`、`npm run smoke:hasilan`を実行します。
-3. 検証した変更をコミットして`main`へ push します。
-4. `git tag hasilan-vX.Y.Z`、`git push origin hasilan-vX.Y.Z`で公開します。npm の通常導入先は明示的に`latest`へ設定します。
-5. GitHub Actions の成功と公開先を確認します。公開済みタグ・配布物は置き換えず、修正は次のバージョンで出します。npm 公開だけが失敗した場合は失敗ジョブだけを再実行します。
-
-### npmの初回公開とtrusted publishing
-
-初回のみ所有者が`npm login --registry=https://registry.npmjs.org --auth-type=web`で認証し、検証済みの`hasilan-code-X.Y.Z.tgz`を`npm publish <tarball> --tag latest --access public --ignore-scripts`で公開します。認証コードやトークンはリポジトリやチャットへ保存しません。
-
-以降の公開では npm 11.15 以上を使い、GitHub Actions を Trusted Publisher として登録します。ブラウザーでの本人認証が求められたら、その画面で承認してください。
-
-```sh
-npm trust github hasilan-code --file hasilan-release.yml --repository seipass/hasilan-code --environment npm-publish --allow-publish --yes
-```
-
-登録後に GitHub のリポジトリ変数`HASILAN_NPM_PUBLISH=true`を設定すると npm 公開ジョブが有効になります。長期保存する npm token は不要です。未設定時も GitHub Releases は公開しますが、npm 公開ジョブは明示的にスキップします。詳細は[npm の公式手順](https://docs.npmjs.com/trusted-publishers/)を参照してください。
-
-新しい Trusted Publisher 設定は 2 日以内の最初の公開で検証する必要があります。次の未公開バージョンを公開できる時点で登録し、そのタグの npm 公開ジョブが成功することまで確認してください。
-
-自動公開の再実行をスキップするのは、npm上の同じバージョンが検証済みアーカイブと一致する場合だけです。公開要求が受け付けられても、メタデータと実際にダウンロードした配布物のSHA-512が一致するまでは成功にしません。公開反映待ちは上流と同じ最大10分です。
-
-公開結果だけを手動で確認する場合は、検証済み配布物のディレクトリを指定します。このコマンドは公開操作を行いません。
-
-```sh
-node scripts/hasilan-publish.mjs .artifacts/hasilan-code
-```
+- [リリースとnpm公開の手順](docs/release.md)
+- [上流 Pi の更新手順](docs/upstream-sync.md)
 
 ## 本家 Pi との関係
 
@@ -309,38 +255,13 @@ Pi由来の共有パッケージは独自の`@hasilan-code/*`名前空間で管�
 
 上流の更新は手動で行います。独自の GitHub Actions だけを有効にし、本家向けの自動公開・同期・Issue/PR 受付制御は無効にします。`oh-my-pi`のソース、プロンプト、テスト用データ、ネイティブバイナリは使用していません。
 
-<details>
-<summary>上流 Pi の更新手順</summary>
-
-作業前に自分の変更をコミットし、ほかの作業者による変更がないことを確認してください。対象リリースの変更点も先に確認します。
-
-1. 初回のみ、上流リポジトリを登録します。
-
-   ```sh
-   git remote add upstream https://github.com/earendil-works/pi.git
-   ```
-
-2. `git fetch upstream --tags` で上流のタグを取得し、作業ブランチで対象のタグをマージします。競合を解決するときは、独自の変更を残してください。
-3. `packages/web-harness/package.json`の Pi 関連の依存 3 件と`hasilanCode.piVersion`・`hasilanCode.piCommit`を対象リリースへ揃え、`nix/model-catalog.json`のカタログがその Pi の API に対応することも確認します。外部依存の変更はリリースノートと lifecycle script を確認してください。
-4. 次のコマンドで依存関係とロックファイルを更新します。
-
-   ```sh
-   npm install --package-lock-only --ignore-scripts
-   npm install --ignore-scripts
-   node scripts/generate-coding-agent-install-lock.mjs
-   ```
-
-5. `npm run check` と変更箇所のテストを実行します。隔離した設定領域と疑似プロバイダーを使い、会話、チーム、再開、保存の動作も確認してください。
-6. この README と [`packages/web-harness/README.md`](packages/web-harness/README.md) に記載した上流のバージョンとコミットを更新し、差分を確認します。
-7. ビルド後、実行中の Web サーバーを再起動します。
-
-本家への変更提案は[Pi 側の貢献ルール](https://github.com/earendil-works/pi/blob/main/CONTRIBUTING.md) に従ってください。
-
-</details>
+上流の取り込み手順は[上流 Pi の更新手順](docs/upstream-sync.md)を参照してください。
 
 ## セキュリティ
 
-Hasilan Code は既定で `127.0.0.1` に待ち受け、起動時に認証付き URL を表示します。AI によるファイル編集、コマンド実行、ブラウザー操作には、アプリケーションを起動したユーザーの権限が使われます。外部に公開したり、信頼できない作業フォルダーで使用したりしないでください。
+起動時に表示されるURLには認証情報が含まれるため、第三者に共有しないでください。サーバーを外部に公開したり、信頼できない作業フォルダーで使用したりしないでください。実行権限と作業の隔離に関する制約は[冒頭の注意](#hasilan-code)を参照してください。
+
+AI モデルや検索サービスの利用には、各サービスの料金が発生する場合があります。
 
 セキュリティ上の問題を報告する場合は [`SECURITY.md`](SECURITY.md) を参照してください。
 
@@ -348,4 +269,4 @@ Hasilan Code は既定で `127.0.0.1` に待ち受け、起動時に認証付き
 
 本リポジトリは [MIT License](LICENSE) で公開しています。本家 Pi の著作権表示を保持しています。フォントなどの同梱素材には、それぞれのライセンスが適用されます。
 
-配布パッケージにはブラウザー側に組み込む外部ライブラリの通知を`dist/client/THIRD_PARTY_LICENSES.txt`として同梱します。Gen Interface JP の著作権表示と [SIL Open Font License](packages/web-harness/public/fonts/GenInterfaceJP-OFL.txt) もフォントと一緒に配布します。
+配布パッケージにはブラウザー側に組み込む外部ライブラリの通知を`dist/client/THIRD_PARTY_LICENSES.txt`として同梱します。
