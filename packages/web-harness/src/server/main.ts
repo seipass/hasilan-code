@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime, type ToolDefinition } from "@hasilan-code/pi-coding-agent";
+import { toString as qrCodeText } from "qrcode";
 import { CANVAS_LIMITS, canvasSaveSchema, isCanvasDocument, serializeCanvasDesign } from "../shared/canvas.ts";
 import {
 	credentialSchema,
@@ -99,6 +100,7 @@ async function main() {
 	let selectingWorkspace = false;
 	const host = createHttpHost({
 		port: options.port,
+		lan: options.lan,
 		staticDir: fileURLToPath(new URL("../client/", import.meta.url)),
 		artifacts,
 		acceptWebSocket: (url) =>
@@ -305,6 +307,15 @@ async function main() {
 	console.log(`Hasilan Code: ${launch.url}`);
 	if (!(await openBrowser(launch.launchUrl, { noOpen: options.noOpen })))
 		console.log(`Open authenticated launch URL: ${launch.launchUrl}`);
+	for (const url of launch.lanLaunchUrls) {
+		console.log(`LAN authenticated launch URL: ${url}`);
+		if (process.stdout.isTTY)
+			console.log(await qrCodeText(url, { type: "utf8", margin: 4, color: { dark: "#ffffff", light: "#000000" } }));
+	}
+	if (options.lan)
+		console.log(
+			"LAN access grants control of this account's files and terminal. Use only a trusted network; HTTP is not encrypted.",
+		);
 	const shutdown = async () => {
 		if (shuttingDown) return;
 		shuttingDown = true;

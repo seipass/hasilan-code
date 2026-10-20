@@ -114,3 +114,10 @@
 	.files-content { animation: none; }
 	.files-tab, .files-view-mode button, .files-tree-entry, .files-tree-marker, .files-tree-children { transition: none; }
 }
+
+@media (max-width: 900px) {
+	.files-pane { display: flex; flex-direction: column; }
+	.files-layout { flex: 1; height: auto; }
+	.files-tree-toggle { flex: none; min-height: 44px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: var(--surface-panel); color: var(--on-surface); text-align: left; font-size: 13px; }
+	.mobile-sheet .files-tree-entry { min-height: 44px; }
+}

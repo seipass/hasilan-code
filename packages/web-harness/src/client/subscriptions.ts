@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { websocketUrl } from "./api.ts";
+import { nextClientId } from "./ids.ts";
 
 interface Envelope<T> {
 	type: "snapshot" | "event" | "error";
@@ -40,7 +41,7 @@ export function useChannel<T>(
 		const subscribe = () => {
 			if (socket?.readyState !== WebSocket.OPEN) return;
 			if (subscriptionId) socket.send(JSON.stringify({ type: "unsubscribe", subscriptionId }));
-			subscriptionId = crypto.randomUUID();
+			subscriptionId = nextClientId();
 			epoch = undefined;
 			seq = -1;
 			socket.send(JSON.stringify({ type: "subscribe", subscriptionId, channel, id }));

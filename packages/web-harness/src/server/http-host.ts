@@ -6,12 +6,14 @@ import type { Static, TSchema } from "typebox";
 import { Check } from "typebox/value";
 import { WebSocket, WebSocketServer } from "ws";
 import type { ArtifactStore } from "./artifacts.ts";
+import { getLanAddresses } from "./network.ts";
 import { HttpError, LOOPBACK_HOST, LoopbackSecurity, setSecurityHeaders } from "./security.ts";
 
 export { HttpError } from "./security.ts";
 
 export interface HttpHostOptions {
 	port?: number;
+	lan?: boolean;
 	staticDir?: string;
 	artifacts?: ArtifactStore;
 	handleApi?: (request: IncomingMessage, response: ServerResponse, url: URL) => boolean | Promise<boolean>;
@@ -24,6 +26,8 @@ export interface ListeningHost {
 	url: string;
 	/** Use only to open the browser or explicitly show launch instructions, not in ordinary logs. */
 	launchUrl: string;
+	/** Authenticated LAN links; do not publish through APIs or projections. */
+	lanLaunchUrls: string[];
 }
 
 const STATIC_MIME_TYPES: Record<string, string> = {
@@ -131,7 +135,7 @@ export async function readJson<T extends TSchema>(
 
 export class HttpHost {
 	private readonly options: HttpHostOptions;
-	private readonly security = new LoopbackSecurity();
+	private readonly security: LoopbackSecurity;
 	private readonly server: Server;
 	private readonly webSockets: WebSocketServer;
 	private started = false;
@@ -139,6 +143,10 @@ export class HttpHost {
 
 	constructor(options: HttpHostOptions = {}) {
 		this.options = options;
+		const lanAddresses = options.lan ? getLanAddresses() : [];
+		if (options.lan && lanAddresses.length === 0)
+			throw new Error("No private IPv4 LAN address found; connect to a LAN before using --lan");
+		this.security = new LoopbackSecurity(lanAddresses);
 		const port = options.port ?? 3080;
 		if (!Number.isInteger(port) || port < 0 || port > 65535)
 			throw new Error("Port must be an integer from 0 to 65535");
@@ -199,9 +207,14 @@ export class HttpHost {
 		};
 		this.server.once("error", onError);
 		this.server.once("listening", onListening);
-		this.server.listen({ host: LOOPBACK_HOST, port: this.options.port ?? 3080 });
+		this.server.listen({ host: this.options.lan ? "0.0.0.0" : LOOPBACK_HOST, port: this.options.port ?? 3080 });
 		await listening.promise;
-		return { origin: this.security.origin, url: `${this.security.origin}/`, launchUrl: this.security.launchUrl };
+		return {
+			origin: this.security.origin,
+			url: `${this.security.origin}/`,
+			launchUrl: this.security.launchUrl,
+			lanLaunchUrls: this.security.lanLaunchUrls,
+		};
 	}
 
 	close(): Promise<void> {

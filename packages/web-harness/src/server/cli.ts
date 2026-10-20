@@ -29,29 +29,42 @@ export interface CliOptions {
 	cwd: string;
 	noOpen: boolean;
 	help: boolean;
+	lan: boolean;
 }
 
 export const CLI_HELP = `Hasilan Code
 
-Usage: hasilan-code [--no-open] [--port <0..65535>] [--cwd <directory>]
+Usage: hasilan-code [--lan] [--no-open] [--port <0..65535>] [--cwd <directory>]
 
   --port     Loopback HTTP port (default 3080; 0 chooses an OS-assigned port)
   --cwd      Initial workspace directory (default current working directory)
   --no-open  Show launch instructions only (default; never opens a browser automatically)
+  --lan      Share on private IPv4 LAN addresses and print authenticated links and terminal QR codes
   --help     Show this help
   --version  Show the Hasilan Code and bundled Pi versions
   setup      Install Chromium; --build-pty explicitly builds the terminal addon
 
 Source checkout: npm run web -- [options]
 
-The server binds only to 127.0.0.1. Shell and browser tools run with your user
-permissions; workspace path checks are not a sandbox.
+The server binds to 127.0.0.1 by default; --lan binds to 0.0.0.0 and permits only
+local network clients. Shell and browser tools run with your user permissions;
+workspace path checks are not a sandbox. LAN HTTP traffic is not encrypted.
 `;
 
 export function parseCliArgs(argv: string[]): CliOptions {
-	const options: CliOptions = { port: 3080, cwd: process.env.INIT_CWD ?? process.cwd(), noOpen: true, help: false };
+	const options: CliOptions = {
+		port: 3080,
+		cwd: process.env.INIT_CWD ?? process.cwd(),
+		noOpen: true,
+		help: false,
+		lan: false,
+	};
 	for (let index = 0; index < argv.length; index++) {
 		const argument = argv[index];
+		if (argument === "--lan") {
+			options.lan = true;
+			continue;
+		}
 		if (argument === "--no-open") {
 			options.noOpen = true;
 			continue;

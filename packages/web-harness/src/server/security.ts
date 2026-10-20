@@ -1,5 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { isLanAddress } from "./network.ts";
 
 export const LOOPBACK_HOST = "127.0.0.1";
 
@@ -34,11 +35,21 @@ export class LoopbackSecurity {
 	private readonly launchToken = randomBytes(32).toString("base64url");
 	private readonly cookieToken = randomBytes(32).toString("base64url");
 	private port: number | undefined;
+	private readonly allowedHosts = new Set<string>();
+	private readonly lanAddresses: readonly string[];
+
+	constructor(lanAddresses: readonly string[] = []) {
+		if (lanAddresses.some((address) => !isLanAddress(address)))
+			throw new Error("LAN addresses must be private IPv4 addresses");
+		this.lanAddresses = lanAddresses;
+	}
 
 	setPort(port: number): void {
 		if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid listening port");
 		if (this.port !== undefined) throw new Error("Listening port is already assigned");
 		this.port = port;
+		this.allowedHosts.add(`${LOOPBACK_HOST}:${port}`);
+		for (const address of this.lanAddresses) this.allowedHosts.add(`${address}:${port}`);
 	}
 
 	get origin(): string {
@@ -50,15 +61,27 @@ export class LoopbackSecurity {
 		return `${this.origin}/?token=${this.launchToken}`;
 	}
 
+	get lanLaunchUrls(): string[] {
+		if (this.port === undefined) throw new Error("Host has not started listening");
+		return this.lanAddresses.map((address) => `http://${address}:${this.port}/?token=${this.launchToken}`);
+	}
+
 	private get cookieName(): string {
 		if (this.port === undefined) throw new Error("Host has not started listening");
 		return `pi_web_harness_${this.port}`;
 	}
 
+	private requestOrigin(request: IncomingMessage): string {
+		const host = singleHeader(request, "host");
+		if (!host || !this.allowedHosts.has(host)) throw new HttpError(403, "Host is not allowed");
+		const peer = request.socket.remoteAddress;
+		if (peer !== LOOPBACK_HOST && (!peer || !isLanAddress(peer)))
+			throw new HttpError(403, "Only local network clients are allowed");
+		return `http://${host}`;
+	}
+
 	checkHost(request: IncomingMessage): void {
-		if (singleHeader(request, "host") !== `${LOOPBACK_HOST}:${this.port}`) {
-			throw new HttpError(403, "Host is not allowed");
-		}
+		this.requestOrigin(request);
 	}
 
 	parseUrl(request: IncomingMessage): URL {
@@ -66,8 +89,9 @@ export class LoopbackSecurity {
 		if (!target.startsWith("/") || target.startsWith("//") || target.includes("\\")) {
 			throw new HttpError(400, "Invalid request target");
 		}
-		const url = new URL(target, this.origin);
-		if (url.origin !== this.origin) throw new HttpError(400, "Invalid request target");
+		const origin = this.requestOrigin(request);
+		const url = new URL(target, origin);
+		if (url.origin !== origin) throw new HttpError(400, "Invalid request target");
 		return url;
 	}
 
@@ -101,7 +125,8 @@ export class LoopbackSecurity {
 	}
 
 	requireOrigin(request: IncomingMessage): void {
-		if (singleHeader(request, "origin") !== this.origin) throw new HttpError(403, "Origin is not allowed");
+		if (singleHeader(request, "origin") !== this.requestOrigin(request))
+			throw new HttpError(403, "Origin is not allowed");
 	}
 
 	authorizeApi(request: IncomingMessage): void {

@@ -1,0 +1,17 @@
+.mobile-model-menu { padding: 12px 16px 16px; }
+.mobile-model-menu .model-menu-columns { display: flex; flex-direction: column; gap: 16px; margin: 0; height: min(calc(var(--sheet-viewport-height, 100dvh) * .65), 560px); min-height: 300px; }
+.mobile-model-menu .model-menu-models { flex: 1; }
+.mobile-model-menu .model-menu-thinking { flex: none; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--border-subtle); }
+.mobile-model-menu .thinking-picker-results { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; flex: none; overflow: visible; }
+.mobile-model-menu .model-picker-option { min-height: 44px; padding: 11px 10px; font-size: 14px; overflow-wrap: anywhere; }
+.mobile-model-menu .thinking-picker-results .model-picker-option { height: 100%; border: 1px solid var(--border); border-radius: 8px; text-align: center; }
+.mobile-model-menu .thinking-picker-results [aria-selected="true"] { border-color: var(--primary); background: var(--primary-container); }
+.mobile-model-menu .model-compact-search { flex: none; }
+.mobile-model-menu .model-compact-search input { min-height: 44px; font-size: 16px; }
+.mobile-model-menu .model-picker-results { scrollbar-width: thin; }
+
+@media (min-width: 600px) and (max-width: 900px) and (max-height: 500px) {
+	.mobile-model-menu .model-menu-columns { display: grid; grid-template-columns: minmax(0, 1fr) 200px; min-height: 0; }
+	.mobile-model-menu .model-menu-thinking { padding: 0 0 0 12px; border-top: 0; border-left: 1px solid var(--border-subtle); }
+	.mobile-model-menu .thinking-picker-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

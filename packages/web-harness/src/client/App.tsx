@@ -7,6 +7,7 @@ import { CanvasPane } from "./CanvasPane.tsx";
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
 import { GoalPanel } from "./GoalPanel.tsx";
 import { transitionItems } from "./item-transition.ts";
+import { nextClientId } from "./ids.ts";
 import { ModelMenu } from "./ModelMenu.tsx";
 import { PanelResize } from "./PanelResize.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
@@ -155,13 +156,21 @@ export function App() {
 		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setCanvasOpened(false); setMode("chat");
 	}
 	function newConversation() { if (commandPending.current) return; setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined); if (window.innerWidth < 900) setSidebarOpen(false); }
-	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: crypto.randomUUID() }); setRightTab("files"); setRightOpen(true); }
+	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: nextClientId() }); setRightTab("files"); setRightOpen(true); }
 	async function addWorkspace() {
 		if (addingWorkspace) return;
 		setAddingWorkspace(true); setError(undefined);
 		try {
-			const { workspace: added } = await command<{ workspace: Workspace | null }>("/api/workspaces/pick", {});
-			if (!added) return;
+			let added: Workspace;
+			if (window.location.hostname !== "127.0.0.1") {
+				const path = window.prompt("サーバー上の作業フォルダーの絶対パス", workspace?.path ?? "");
+				if (!path?.trim()) return;
+				added = await command<Workspace>("/api/workspaces", { path });
+			} else {
+				const picked = await command<{ workspace: Workspace | null }>("/api/workspaces/pick", {});
+				if (!picked.workspace) return;
+				added = picked.workspace;
+			}
 			setWorkspaces((previous) => previous.some((entry) => entry.workspaceId === added.workspaceId) ? previous : [...previous, added]);
 			selectWorkspace(added.workspaceId);
 			setHistoryQuery("");
@@ -226,7 +235,7 @@ export function App() {
 	function composeCanvasDesign(path: string): void {
 		if (commandPending.current) throw new Error("送信が完了してから設計を入力欄に追加してください。");
 		const text = `設計ファイル ${JSON.stringify(path)} を読み、内容に沿って進めてください。`;
-		setDraftInsertion({ id: crypto.randomUUID(), text: canvasTarget === "swarm" ? `/hyakki ${text}` : text });
+		setDraftInsertion({ id: nextClientId(), text: canvasTarget === "swarm" ? `/hyakki ${text}` : text });
 		setMode("chat");
 	}
 
@@ -307,7 +316,7 @@ export function App() {
 					<div className="panel-tabs" role="tablist" aria-label="詳細パネル">{(["files", "team", "tools", "terminal"] as const).map((tab) => <button key={tab} id={`detail-tab-${tab}`} role="tab" aria-controls="detail-panel" aria-selected={rightTab === tab} onClick={() => { if (rightTab !== tab) transitionItems(() => setRightTab(tab)); }}>{tab === "files" ? "ファイル" : tab === "team" ? "チーム" : tab === "tools" ? "ツール" : "端末"}</button>)}</div>
 					<div id="detail-panel" className={`right-panel-body ${rightTab === "files" ? "file-panel-body" : rightTab === "terminal" ? "terminal-panel-body" : ""}`} role="tabpanel" aria-labelledby={`detail-tab-${rightTab}`}>
 						{workspaceId && <FilePane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} onOpen={openFile} onClear={() => setFileTarget(undefined)} visible={rightOpen && rightTab === "files"} />}
-						{rightTab === "team" && <TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} onSelect={selectSession} onStop={(id) => { void stop(id); }} onMessage={messageAgent} onFile={openFile} />}
+						{rightTab === "team" && <TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen} onSelect={selectSession} onStop={(id) => { void stop(id); }} onMessage={messageAgent} onFile={openFile} />}
 						{rightTab === "tools" && <ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />}
 						<TerminalPane workspaceId={workspaceId} visible={rightOpen && rightTab === "terminal"} />
 					</div>

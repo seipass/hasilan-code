@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type SubmitEvent } from "react";
 import { Content } from "./Content.tsx";
 import { transitionItems } from "./item-transition.ts";
+import { MobileSheet, useMobileLayout } from "./MobileSheet.tsx";
 import { layoutTeamGraph, selectedTeamAgents, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "./team-graph.ts";
 import type { Run, RunStatus, SessionSummary, TeamAgent, TeamSnapshot } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
@@ -16,6 +17,7 @@ type TeamPaneProps = {
 	sessions: SessionSummary[];
 	selectedSessionId?: string;
 	onSelect: (sessionId: string) => void;
+	visible?: boolean;
 	onStop: (sessionId: string) => void;
 	onMessage: (agentId: string, message: string) => Promise<void>;
 	onFile: (path: string, line?: number) => void;
@@ -271,11 +273,14 @@ function RunDetail({ run, snapshot, focus, onFile, now }: {
 	</div>;
 }
 
-export function TeamPane({ snapshot, sessions, selectedSessionId, onSelect, onStop, onMessage, onFile }: TeamPaneProps) {
+export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true, onSelect, onStop, onMessage, onFile }: TeamPaneProps) {
+	const mobile = useMobileLayout();
+	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [focusedId, setFocusedId] = useState<string>();
 	const [now, setNow] = useState(() => Date.now());
 	const selected = snapshot?.agents.find((agent) => agent.sessionId === selectedSessionId);
-	useEffect(() => { setFocusedId(selected?.agentId); }, [selectedSessionId, selected?.agentId]);
+	useEffect(() => { setFocusedId(selected?.agentId); setDetailsOpen(false); }, [selectedSessionId, selected?.agentId]);
+	useEffect(() => { if (!mobile || !visible) setDetailsOpen(false); }, [mobile, visible]);
 	const agents = useMemo(() => selectedTeamAgents(snapshot, selectedSessionId), [snapshot, selectedSessionId]);
 	const roots = agents.filter((agent) => !agent.parentAgentId || !agents.some((parent) => parent.agentId === agent.parentAgentId));
 	const focused = agents.find((agent) => agent.agentId === focusedId) ?? selected ?? roots[0];
@@ -304,19 +309,24 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, onSelect, onSt
 	const previous = focused ? snapshot?.runs.filter((item) => item.agentId === focused.agentId && item.runId !== run?.runId) ?? [] : [];
 	function focusAgent(id: string) {
 		if (id !== focused?.agentId) transitionItems(() => setFocusedId(id));
+		if (mobile) setDetailsOpen(true);
 	}
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
 	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>子の担当 {workers.length}人 <span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> 完了 {counts.completed}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}<UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></header>;
-	return <section className="team-pane" aria-label="チームの進行状況">
-		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2></div> : <>
-			{snapshot && <TeamGraph key={selected?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} />}
-			{focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
-				<header className="team-focus-header"><div><span className="team-section-label">選択中の担当</span><h3>{label(focused)}</h3></div><button type="button" className="text-link" onClick={() => onSelect(focused.sessionId)}>会話を開く ↗</button></header>
+	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
+				<header className="team-focus-header"><div><span className="team-section-label">選択中の担当</span><h3>{label(focused)}</h3></div><button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></header>
 				<div className="team-relationship">{parent ? <>親: <button type="button" className="text-link" onClick={() => focusAgent(parent.agentId)}>{label(parent)}</button></> : "親AI · チームの起点"}{directChildren > 0 && <span> · 子 {directChildren}人</span>}{model && <span> · {model.name ?? model.id}</span>}</div>
 				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /> : <p className="team-inline-note">まだ作業はありません。</p>}
 				<div className="team-focus-actions">{focused.parentAgentId && <details><summary>{label(focused)}にメッセージを送る</summary><MessageForm key={focused.agentId} agent={focused} onMessage={onMessage} /></details>}{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
 				{previous.length > 0 && <details className="team-run-history"><summary>以前の作業 {previous.length}件</summary>{previous.map((item) => <div key={item.runId} className="team-history-item"><RunDetail run={item} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /></div>)}</details>}
-			</section>}
+			</section>;
+	return <section className="team-pane" aria-label="チームの進行状況">
+		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2></div> : <>
+			{snapshot && <TeamGraph key={selected?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} />}
+			{mobile ? <>
+				{focused && <button type="button" className="team-focus-trigger" aria-haspopup="dialog" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>{label(focused)}の詳細</button>}
+				<MobileSheet open={detailsOpen && visible} side="bottom" title="担当の詳細" onClose={() => setDetailsOpen(false)}>{details}</MobileSheet>
+			</> : details}
 		</>}
 	</section>;
 }
