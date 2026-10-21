@@ -14,6 +14,7 @@ import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
 import { parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
+import { selectedTeamAgents } from "./team-graph.ts";
 import { TerminalPane } from "./terminal/TerminalPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
@@ -86,7 +87,9 @@ export function App() {
 	const summaries = [...initialSessions.filter((entry) => !projections[entry.workspaceId]), ...Object.values(projections).flatMap((projection) => projection.sessions)];
 	const team = workspaceChannel.data?.teams;
 	const selectedAgent = team?.agents.find((agent) => agent.sessionId === sessionId);
-	const teamAgents = selectedAgent ? team?.agents.filter((agent) => agent.teamId === selectedAgent.teamId) ?? [] : [];
+	const teamAgents = selectedTeamAgents(team, sessionId);
+	const workspaceTeam = team?.teams.find((entry) => entry.scope === "workspace");
+	const showingWorkspaceTeam = !!workspaceTeam && teamAgents[0]?.teamId === workspaceTeam.teamId;
 	const workingAgents = teamAgents.filter((agent) => agent.parentAgentId && agent.currentRun?.status === "running").length;
 	const roots = summaries.filter((entry) => !entry.parentSessionId);
 	const history = roots.filter((entry) => `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
@@ -225,9 +228,22 @@ export function App() {
 		return result;
 	}
 	async function startSwarm(objective: string): Promise<void> {
-		const target = await inputSession();
-		await command(`/api/sessions/${encodeURIComponent(target)}/swarm`, { objective });
-		setSessionId(target);
+		if (!workspaceId) throw new Error("ワークスペースを選択してください。");
+		const manager = team?.agents.find((agent) => agent.agentId === workspaceTeam?.rootAgentId);
+		if (!manager && modelSetup) {
+			if (modelSetup === "authentication") setSettingsOpen(true); else setModelOpen(true);
+			throw new Error(modelSetup === "authentication" ? "プロバイダーの認証を設定してください。" : "送信するモデルを選択してください。");
+		}
+		const result = await command<{ sessionId: string }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/swarm`, {
+			objective,
+			...(!manager ? {
+				...(sessionId && !session?.parentSessionId ? { sessionId } : {}),
+				model: model && { provider: model.provider, id: model.id },
+				...(draftThinking ? { thinkingLevel: draftThinking } : {}),
+			} : {}),
+		});
+		draftSession.current = undefined;
+		setSessionId(result.sessionId);
 		setMode("chat");
 		setRightTab("team");
 		if (window.innerWidth >= 1100) setRightOpen(true);
@@ -250,11 +266,14 @@ export function App() {
 	async function messageAgent(agentId: string, message: string): Promise<void> {
 		const recipient = team?.agents.find((agent) => agent.agentId === agentId);
 		if (!recipient) throw new Error("送信先のエージェントが見つかりません。");
-		const selected = team?.agents.find((agent) => agent.sessionId === sessionId && agent.teamId === recipient.teamId);
 		const root = team?.teams.find((entry) => entry.teamId === recipient.teamId);
-		const target = selected?.sessionId ?? team?.agents.find((agent) => agent.agentId === root?.rootAgentId)?.sessionId;
+		const target = team?.agents.find((agent) => agent.agentId === root?.rootAgentId)?.sessionId;
 		if (!target) throw new Error("送信元の会話が見つかりません。");
 		await command(`/api/sessions/${encodeURIComponent(target)}/team-message`, { agentId, message });
+	}
+	async function changeResponsibility(agentId: string, responsibility: string): Promise<void> {
+		if (!workspaceId) throw new Error("ワークスペースを選択してください。");
+		await command(`/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}`, { responsibility }, "PATCH");
 	}
 	async function changeModel(selection: { provider: string; id: string }) {
 		const updated = sessionId ? await command<SessionDetail>(`/api/sessions/${encodeURIComponent(sessionId)}/model`, selection) : undefined;
@@ -303,7 +322,7 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}>設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{(session?.swarm || teamAgents.some((agent) => agent.parentAgentId)) && <button className="team-activity-button" aria-controls="detail-sidebar" aria-expanded={rightOpen && rightTab === "team"} onClick={() => { setRightTab("team"); setRightOpen((open) => rightTab !== "team" || !open); }}><span className={`status-dot ${workingAgents ? "status-running" : "status-idle"}`} aria-hidden="true" />{session?.swarm ? "百鬼夜行" : "チーム"}<span>{workingAgents ? `${workingAgents}人が作業中` : "状況を見る"}</span></button>}<button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{(workspaceTeam || session?.swarm || teamAgents.some((agent) => agent.parentAgentId)) && <button className="team-activity-button" aria-controls="detail-sidebar" aria-expanded={rightOpen && rightTab === "team"} onClick={() => { setRightTab("team"); setRightOpen((open) => rightTab !== "team" || !open); }}><span className={`status-dot ${workingAgents ? "status-running" : "status-idle"}`} aria-hidden="true" />{showingWorkspaceTeam || session?.swarm ? "百鬼夜行" : "チーム"}<span>{workingAgents ? `${workingAgents}人が作業中` : "状況を見る"}</span></button>}<button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
 			{(error || workspaceChannel.error || sessionChannel.error) && <div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div>}
 			<div className="main-layout"><main className="chat-column">{sessionId && sessionChannel.connection !== "connected" && <p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p>}
 				{canvasOpened && <div className="mode-page" hidden={mode !== "canvas"} inert={mode !== "canvas"}>
@@ -316,7 +335,7 @@ export function App() {
 					<div className="panel-tabs" role="tablist" aria-label="詳細パネル">{(["files", "team", "tools", "terminal"] as const).map((tab) => <button key={tab} id={`detail-tab-${tab}`} role="tab" aria-controls="detail-panel" aria-selected={rightTab === tab} onClick={() => { if (rightTab !== tab) transitionItems(() => setRightTab(tab)); }}>{tab === "files" ? "ファイル" : tab === "team" ? "チーム" : tab === "tools" ? "ツール" : "端末"}</button>)}</div>
 					<div id="detail-panel" className={`right-panel-body ${rightTab === "files" ? "file-panel-body" : rightTab === "terminal" ? "terminal-panel-body" : ""}`} role="tabpanel" aria-labelledby={`detail-tab-${rightTab}`}>
 						{workspaceId && <FilePane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} onOpen={openFile} onClear={() => setFileTarget(undefined)} visible={rightOpen && rightTab === "files"} />}
-						{rightTab === "team" && <TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen} onSelect={selectSession} onStop={(id) => { void stop(id); }} onMessage={messageAgent} onFile={openFile} />}
+						{rightTab === "team" && <TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen} onSelect={selectSession} onStop={(id) => { void stop(id); }} onMessage={messageAgent} onResponsibility={changeResponsibility} onFile={openFile} />}
 						{rightTab === "tools" && <ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />}
 						<TerminalPane workspaceId={workspaceId} visible={rightOpen && rightTab === "terminal"} />
 					</div>

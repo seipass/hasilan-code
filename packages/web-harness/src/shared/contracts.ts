@@ -55,6 +55,10 @@ export const teamMessageSchema = Type.Object(
 	},
 	{ additionalProperties: false },
 );
+export const responsibilitySchema = Type.Object(
+	{ responsibility: Type.String({ minLength: 1, maxLength: 16384 }) },
+	{ additionalProperties: false },
+);
 export const credentialSchema = Type.Object(
 	{ key: Type.String({ minLength: 1, maxLength: 16384 }) },
 	{ additionalProperties: false },

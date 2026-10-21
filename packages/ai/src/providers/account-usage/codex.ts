@@ -22,7 +22,7 @@ const rateSchema = Type.Object({
 const usageSchema = Type.Object({
 	plan_type: Type.Optional(Type.String()),
 	rate_limit: Type.Optional(rateSchema),
-	code_review_rate_limit: Type.Optional(rateSchema),
+	code_review_rate_limit: Type.Optional(Type.Union([rateSchema, Type.Null()])),
 	credits: Type.Optional(creditsSchema),
 });
 const claimsSchema = Type.Object({

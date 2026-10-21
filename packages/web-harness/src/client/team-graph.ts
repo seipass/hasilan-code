@@ -22,9 +22,13 @@ export function selectedTeamAgents(
 	snapshot: TeamSnapshot | undefined,
 	selectedSessionId: string | undefined,
 ): TeamAgent[] {
-	if (!snapshot || !selectedSessionId) return [];
+	if (!snapshot) return [];
 	const selected = snapshot.agents.find((agent) => agent.sessionId === selectedSessionId);
-	return selected ? snapshot.agents.filter((agent) => agent.teamId === selected.teamId) : [];
+	const workspaceTeamId = snapshot.teams.find((team) => team.scope === "workspace")?.teamId;
+	// Keep existing per-conversation teams inspectable when they contain actual delegated work.
+	const ownTeam = selected && snapshot.agents.some((agent) => agent.teamId === selected.teamId && agent.parentAgentId);
+	const teamId = ownTeam ? selected.teamId : (workspaceTeamId ?? selected?.teamId);
+	return teamId ? snapshot.agents.filter((agent) => agent.teamId === teamId) : [];
 }
 
 /** Each leaf owns a column; parents are centered above their children. */

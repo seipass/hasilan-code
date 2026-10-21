@@ -1,4 +1,5 @@
 import { type Static, Type } from "typebox";
+import { modelSchema, thinkingSchema } from "./contracts.ts";
 
 export const SWARM_OBJECTIVE_MAX_LENGTH = 65536;
 export const swarmStartSchema = Type.Object(
@@ -6,6 +7,17 @@ export const swarmStartSchema = Type.Object(
 	{ additionalProperties: false },
 );
 export type SwarmStart = Static<typeof swarmStartSchema>;
+
+export const workspaceSwarmStartSchema = Type.Object(
+	{
+		...swarmStartSchema.properties,
+		sessionId: Type.Optional(Type.String({ minLength: 1 })),
+		model: Type.Optional(modelSchema),
+		thinkingLevel: Type.Optional(thinkingSchema.properties.level),
+	},
+	{ additionalProperties: false },
+);
+export type WorkspaceSwarmStart = Static<typeof workspaceSwarmStartSchema>;
 
 export type SwarmStatus = "active" | "paused" | "blocked" | "complete";
 

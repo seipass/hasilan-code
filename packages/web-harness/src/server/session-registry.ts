@@ -158,7 +158,7 @@ interface LiveSession {
 	finalText?: string;
 	finalError?: string;
 	aborted: boolean;
-	/** Implementation grants retained while the swarm root uses a read-only orchestration loadout. */
+	/** Implementation grants retained while the manager uses a read-only orchestration loadout. */
 	delegatedTools?: string[];
 }
 export interface ExecutionOutcome {
@@ -278,9 +278,24 @@ function validateState(value: unknown): asserts value is HarnessState {
 		}
 	}
 	const memberSessions = new Set<string>();
-	for (const team of state.teams)
-		if (typeof team.teamId !== "string" || !ids.has(team.workspaceId) || !agents.has(team.rootAgentId))
+	const workspaceTeams = new Set<string>();
+	for (const team of state.teams) {
+		const root = state.agents.find((agent) => agent.agentId === team.rootAgentId);
+		if (
+			typeof team.teamId !== "string" ||
+			!ids.has(team.workspaceId) ||
+			!root ||
+			root.parentAgentId ||
+			root.teamId !== team.teamId ||
+			state.sessions.find((session) => session.sessionId === root.sessionId)?.workspaceId !== team.workspaceId ||
+			(team.scope !== undefined && team.scope !== "workspace")
+		)
 			throw new Error("Invalid team state");
+		if (team.scope === "workspace") {
+			if (workspaceTeams.has(team.workspaceId)) throw new Error("Multiple persistent teams for one workspace");
+			workspaceTeams.add(team.workspaceId);
+		}
+	}
 	for (const agent of state.agents) {
 		if (
 			typeof agent.agentId !== "string" ||
@@ -288,7 +303,11 @@ function validateState(value: unknown): asserts value is HarnessState {
 			!sessions.has(agent.sessionId) ||
 			memberSessions.has(agent.sessionId) ||
 			typeof agent.name !== "string" ||
-			typeof agent.role !== "string"
+			typeof agent.role !== "string" ||
+			(agent.responsibility !== undefined &&
+				(typeof agent.responsibility !== "string" ||
+					!agent.responsibility.trim() ||
+					agent.responsibility.length > 16384))
 		)
 			throw new Error("Invalid agent state");
 		memberSessions.add(agent.sessionId);
@@ -319,6 +338,37 @@ function validateState(value: unknown): asserts value is HarnessState {
 		if (["queued", "running", "waiting", "cancelling"].includes(run.status)) {
 			if (activeAgents.has(run.agentId)) throw new Error("Multiple unsettled runs for one agent");
 			activeAgents.add(run.agentId);
+		}
+	}
+	const runById = new Map(state.runs.map((run) => [run.runId, run]));
+	const agentById = new Map(state.agents.map((agent) => [agent.agentId, agent]));
+	const runOrder = new Map(state.runs.map((run, index) => [run.runId, index]));
+	for (const run of state.runs) {
+		if (
+			(run.requestedByAgentId !== undefined &&
+				(!agentById.has(run.requestedByAgentId) ||
+					agentById.get(run.requestedByAgentId)?.teamId !== agentById.get(run.agentId)?.teamId)) ||
+			(run.replyToAgentIds !== undefined &&
+				(!Array.isArray(run.replyToAgentIds) ||
+					run.replyToAgentIds.some(
+						(id) => !agentById.has(id) || agentById.get(id)?.teamId !== agentById.get(run.agentId)?.teamId,
+					))) ||
+			(run.swarmId !== undefined && (typeof run.swarmId !== "string" || !run.swarmId))
+		)
+			throw new Error("Invalid assignment ownership state");
+		for (const [id, forward] of [
+			[run.handoffToRunId, true],
+			[run.handoffFromRunId, false],
+		] as const) {
+			if (id === undefined) continue;
+			const other = runById.get(id);
+			if (
+				!other ||
+				(forward ? other.handoffFromRunId : other.handoffToRunId) !== run.runId ||
+				agentById.get(other.agentId)?.teamId !== agentById.get(run.agentId)?.teamId ||
+				(forward ? runOrder.get(id)! <= runOrder.get(run.runId)! : runOrder.get(id)! >= runOrder.get(run.runId)!)
+			)
+				throw new Error("Invalid assignment handoff state");
 		}
 	}
 	for (const session of state.sessions) {
@@ -697,9 +747,12 @@ export class SessionRegistry {
 					if (descriptor.model && !model)
 						throw new HarnessError("Configured model is unavailable; select a model in the composer");
 					// SDK `tools` is a registration allowlist, not merely the active loadout.
-					// Reserve the root coordination tool before a later swarm start; child grants stay exact.
-					const reserveTeam =
-						descriptor.tools && !descriptor.parentSessionId && !descriptor.tools.includes("team");
+					// Coordination can become active when a conversation joins a workspace team.
+					const reserved = descriptor.tools
+						? ["team", ...(!descriptor.parentSessionId ? ["goal"] : [])].filter(
+								(name) => !descriptor.tools!.includes(name),
+							)
+						: [];
 					const { session } = await createAgentSession({
 						cwd: descriptor.cwd,
 						agentDir: this.options.agentDir,
@@ -709,7 +762,7 @@ export class SessionRegistry {
 						settingsManager,
 						resourceLoader: loader,
 						customTools: this.options.customTools?.(descriptor),
-						tools: reserveTeam ? [...descriptor.tools!, "team"] : descriptor.tools,
+						tools: descriptor.tools ? [...descriptor.tools, ...reserved] : undefined,
 					});
 					if (descriptor.thinkingLevel) session.setThinkingLevel(descriptor.thinkingLevel);
 					await session.bindExtensions({});
@@ -719,10 +772,10 @@ export class SessionRegistry {
 						await this.mutate(() => undefined);
 						if (signal?.aborted) return prepared;
 						const context = prepared?.context ?? request.context;
-						const messages = appendRuntimeContext(live.manager, context.messages, descriptor);
+						const messages = appendRuntimeContext(live.manager, context.messages, descriptor, this.state);
 						return messages === context.messages ? prepared : { ...prepared, context: { ...context, messages } };
 					};
-					if (reserveTeam) session.setActiveToolsByName(descriptor.tools!);
+					if (reserved.length) session.setActiveToolsByName(descriptor.tools!);
 					const managedSession = session as unknown as {
 						queueManagedInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<unknown>;
 						hasQueuedInput(inputId: string): boolean;
@@ -731,10 +784,16 @@ export class SessionRegistry {
 					};
 					const configureExecution = () => {
 						const activeSwarm = descriptor.swarm?.status === "active";
+						const agent = this.state.agents.find((entry) => entry.sessionId === id);
+						const team = this.state.teams.find(
+							(entry) => entry.teamId === agent?.teamId && entry.scope === "workspace",
+						);
+						const manager = team?.rootAgentId === agent?.agentId && !!team;
+						const specialist = !!team && agent?.parentAgentId === team.rootAgentId;
 						settingsManager.applyOverrides({
 							retry: { enabled: descriptor.goal?.status === "active" || activeSwarm ? false : retryEnabled },
 						});
-						if (activeSwarm) {
+						if (activeSwarm || manager) {
 							live.delegatedTools ??= session.getActiveToolNames();
 							session.setActiveToolsByName(
 								[
@@ -742,6 +801,7 @@ export class SessionRegistry {
 										["read", "grep", "glob", "web_search"].includes(name),
 									),
 									"team",
+									...(descriptor.goal?.status === "active" ? ["goal"] : []),
 								].sort(),
 							);
 						} else {
@@ -752,6 +812,8 @@ export class SessionRegistry {
 							if (descriptor.goal?.status === "active" && !session.getActiveToolNames().includes("goal"))
 								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"].sort());
 						}
+						if (specialist && !session.getActiveToolNames().includes("team"))
+							session.setActiveToolsByName([...session.getActiveToolNames(), "team"].sort());
 					};
 					// Disable SDK retries for autonomous modes; normal sessions retain their settings.
 					const retryEnabled = settingsManager.getRetryEnabled();
@@ -810,7 +872,7 @@ export class SessionRegistry {
 									{
 										customType: "harness-swarm-continuation",
 										content:
-											"Continue orchestrating the unfinished objective. Handle queued user input and child results first. Delegate all implementation and verification; explicitly complete or block with the team tool.",
+											"Continue managing the unfinished objective. Handle queued user input and member results first. Reuse existing members for corrections and next assignments with team send; delegate all implementation and verification. Explicitly complete or block with the team tool.",
 										display: false,
 										details: { swarmId: descriptor.swarm.id },
 									},
@@ -992,9 +1054,16 @@ export class SessionRegistry {
 			this.descriptor(id).tools ?? ["read", "edit", "write", "bash", "browser", "web_search", "team"]
 		);
 	}
-	/** Children inherit implementation grants, never the swarm root's restricted execution loadout. */
+	/** Inherit implementation grants plus workspace coordination, never the manager's restricted loadout. */
 	delegationTools(id: string): string[] {
-		return this.live.get(id)?.delegatedTools ?? this.activeTools(id);
+		const tools = this.live.get(id)?.delegatedTools ?? this.activeTools(id);
+		const agent = this.state.agents.find((entry) => entry.sessionId === id);
+		const team = this.state.teams.find((entry) => entry.teamId === agent?.teamId && entry.scope === "workspace");
+		return team &&
+			(agent?.agentId === team.rootAgentId || agent?.parentAgentId === team.rootAgentId) &&
+			!tools.includes("team")
+			? [...tools, "team"]
+			: tools;
 	}
 	clearQueue(id: string): void {
 		this.live.get(id)?.adapter?.clearQueue();

@@ -12,6 +12,9 @@ export const RUN_LABELS: Record<RunStatus, string> = {
 	completed: "完了", failed: "失敗", cancelled: "中止", interrupted: "中断",
 };
 
+type AgentState = RunStatus | "idle" | "ready" | "coordinating" | "paused" | "blocked";
+const AGENT_LABELS: Record<AgentState, string> = { ...RUN_LABELS, idle: "作業なし", ready: "指示待ち", coordinating: "調整中", paused: "一時停止", blocked: "判断待ち" };
+
 type TeamPaneProps = {
 	snapshot?: TeamSnapshot;
 	sessions: SessionSummary[];
@@ -21,18 +24,26 @@ type TeamPaneProps = {
 	onStop: (sessionId: string) => void;
 	onMessage: (agentId: string, message: string) => Promise<void>;
 	onFile: (path: string, line?: number) => void;
+	onResponsibility: (agentId: string, responsibility: string) => Promise<void>;
 };
 
 function label(agent: TeamAgent): string {
 	return !agent.parentAgentId && agent.name === "Root" ? "親AI" : agent.name;
 }
 
-function status(agent: TeamAgent): RunStatus | "idle" {
-	return agent.currentRun?.status ?? agent.latestRun?.status ?? "idle";
+function status(agent: TeamAgent, swarm?: SessionSummary["swarm"], managerId?: string): AgentState {
+	if (agent.currentRun) return agent.currentRun.status;
+	if (swarm && !agent.parentAgentId) {
+		if (swarm.status === "active") return "coordinating";
+		if (swarm.status === "paused" || swarm.status === "blocked") return swarm.status;
+		return "completed";
+	}
+	if (managerId && agent.parentAgentId === managerId && (!agent.latestRun || agent.latestRun.status === "completed")) return "ready";
+	return agent.latestRun?.status ?? "idle";
 }
 
 function taskText(run: Run): string {
-	return run.task.replace(/^\[Team message inputId=[^\]\r\n]*\]\r?\n/, "");
+	return run.task.replace(/^\[Team (?:message inputId=|handoff from=)[^\]\r\n]*\]\r?\n/, "");
 }
 
 function elapsed(run: Run, now: number): string | undefined {
@@ -70,6 +81,23 @@ function MessageForm({ agent, onMessage }: { agent: TeamAgent; onMessage: TeamPa
 	</form>;
 }
 
+function ResponsibilityForm({ agent, onSave }: { agent: TeamAgent; onSave: TeamPaneProps["onResponsibility"] }) {
+	const [draft, setDraft] = useState(agent.responsibility ?? agent.role);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string>();
+	useEffect(() => { setDraft(agent.responsibility ?? agent.role); }, [agent.responsibility, agent.role]);
+	return <form className="team-message-form" onSubmit={(event) => {
+		event.preventDefault();
+		if (saving || agent.currentRun || !draft.trim()) return;
+		setSaving(true); setError(undefined);
+		void onSave(agent.agentId, draft.trim()).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))).finally(() => setSaving(false));
+	}}>
+		<label htmlFor={`team-responsibility-${agent.agentId}`}>作業をまたいで受け持つ範囲</label>
+		<textarea id={`team-responsibility-${agent.agentId}`} rows={3} maxLength={16384} value={draft} onChange={(event) => setDraft(event.target.value)} disabled={saving || !!agent.currentRun} />
+		<div className="team-message-actions"><button type="submit" disabled={saving || !!agent.currentRun || !draft.trim() || draft.trim() === agent.responsibility}>{saving ? "保存中…" : "担当範囲を保存"}</button>{error && <span role="alert" className="error">{error}</span>}</div>
+	</form>;
+}
+
 type GraphGesture = {
 	pointerId: number;
 	clientX: number;
@@ -79,13 +107,16 @@ type GraphGesture = {
 	moved: boolean;
 };
 
-function TeamGraph({ agents, snapshot, focusedId, focus, overview }: {
+function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm }: {
 	agents: TeamAgent[];
 	snapshot: TeamSnapshot;
 	focusedId: string;
 	focus: (id: string) => void;
 	overview: ReactNode;
+	swarm: SessionSummary["swarm"];
 }) {
+	const managed = snapshot.teams.some((team) => team.scope === "workspace" && team.teamId === agents[0]?.teamId) || !!swarm;
+	const managerId = managed ? agents.find((member) => !member.parentAgentId)?.agentId : undefined;
 	const graph = useMemo(() => layoutTeamGraph(agents, snapshot), [agents, snapshot]);
 	const waitingByAgent = useMemo(() => {
 		const waiting = new Map<string, string[]>();
@@ -233,12 +264,13 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview }: {
 					</svg>
 					{graph.nodes.map(({ agent, x, y }) => {
 						const run = agent.currentRun ?? agent.latestRun;
-						const state = status(agent);
-						const stateLabel = state === "idle" ? "作業なし" : RUN_LABELS[state];
+						const state = status(agent, swarm, managerId);
+						const stateLabel = AGENT_LABELS[state];
+						const role = !agent.parentAgentId ? managed ? "親AI / マネージャー" : "親AI / チームの起点" : managed ? agent.parentAgentId === managerId ? "担当者" : "補助エージェント" : "子の担当";
 						const waiting = waitingByAgent.get(agent.agentId) ?? [];
 						const task = run ? taskText(run) : "まだ作業はありません";
-						return <button key={agent.agentId} type="button" className={`team-graph-node status-${state} ${!agent.parentAgentId ? "is-root" : "is-child"} ${focusedId === agent.agentId ? "is-selected" : ""}`} style={{ left: x, top: y, width: TEAM_NODE_WIDTH, height: TEAM_NODE_HEIGHT }} aria-pressed={focusedId === agent.agentId} aria-label={`${label(agent)}、${!agent.parentAgentId ? "親AI" : "子の担当"}、${stateLabel}。${task}${waiting.length ? `。${waiting.join("、")}の結果待ち` : ""}`} title={`${label(agent)}\n${task}`} onFocus={(event) => { if (!gesture.current && event.currentTarget.matches(":focus-visible")) centerNode(x, y); }} onClick={() => focus(agent.agentId)}>
-							<span className="team-graph-node-role">{!agent.parentAgentId ? "親AI / チームの起点" : "子の担当"}<span>{focusedId === agent.agentId ? "選択中" : ""}</span></span>
+						return <button key={agent.agentId} type="button" className={`team-graph-node status-${state} ${!agent.parentAgentId ? "is-root" : "is-child"} ${focusedId === agent.agentId ? "is-selected" : ""}`} style={{ left: x, top: y, width: TEAM_NODE_WIDTH, height: TEAM_NODE_HEIGHT }} aria-pressed={focusedId === agent.agentId} aria-label={`${label(agent)}、${role}、${stateLabel}。${task}${waiting.length ? `。${waiting.join("、")}の結果待ち` : ""}`} title={`${label(agent)}\n${task}`} onFocus={(event) => { if (!gesture.current && event.currentTarget.matches(":focus-visible")) centerNode(x, y); }} onClick={() => focus(agent.agentId)}>
+							<span className="team-graph-node-role">{role}<span>{focusedId === agent.agentId ? "選択中" : ""}</span></span>
 							<span className="team-graph-node-name">{label(agent)}</span>
 							<span className="team-graph-node-task">{task}</span>
 							<span className="team-graph-node-footer"><span className={`team-map-state status-${state}`}>{stateLabel}</span>{waiting.length > 0 && <span className="team-graph-node-wait" title={`${waiting.join("、")}の結果待ち`}>{waiting.length}人の結果待ち</span>}</span>
@@ -261,10 +293,13 @@ function RunDetail({ run, snapshot, focus, onFile, now }: {
 		return { agent: snapshot.agents.find((entry) => entry.agentId === target?.agentId), state: target?.status };
 	});
 	const firstLine = run.result?.split(/\r?\n/).find((line) => line.trim())?.trim();
+	const transferred = run.handoffToRunId ? snapshot.runs.find((entry) => entry.runId === run.handoffToRunId) : undefined;
+	const owner = snapshot.agents.find((agent) => agent.agentId === transferred?.agentId);
 	return <div className="team-run-detail">
-		<div className="team-run-meta"><span className={`team-map-state status-${run.status}`}>{RUN_LABELS[run.status]}</span>{elapsed(run, now) && <span>{run.settledAt ? "所要" : "経過"} {elapsed(run, now)}</span>}</div>
-		<h4>担当していること</h4>
+		<div className="team-run-meta"><span className={`team-map-state status-${run.status}`}>{run.handoffToRunId ? "引き継ぎ済み" : run.status === "completed" ? "作業完了" : RUN_LABELS[run.status]}</span>{elapsed(run, now) && <span>{run.settledAt ? "所要" : "経過"} {elapsed(run, now)}</span>}</div>
+		<h4>{run.settledAt ? "作業内容" : "担当していること"}</h4>
 		<p className="team-run-task">{taskText(run)}</p>
+		{owner && <p className="team-dependency">引き継ぎ先: <button type="button" className="text-link" onClick={() => focus(owner.agentId)}>{label(owner)}</button></p>}
 		{run.status === "waiting" && <div className="team-dependency"><strong>結果を待っている相手</strong>{waiting?.length ? <ul>{waiting.map(({ agent, state }, index) => <li key={`${run.runId}-${index}`}>
 			{agent ? <button className="text-link" type="button" onClick={() => focus(agent.agentId)}>{label(agent)}</button> : "不明な担当"}<span> · {state ? RUN_LABELS[state] : "状態不明"}</span>
 		</li>)}</ul> : <p>子の結果を待っています。</p>}</div>}
@@ -273,18 +308,22 @@ function RunDetail({ run, snapshot, focus, onFile, now }: {
 	</div>;
 }
 
-export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true, onSelect, onStop, onMessage, onFile }: TeamPaneProps) {
+export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true, onSelect, onStop, onMessage, onResponsibility, onFile }: TeamPaneProps) {
 	const mobile = useMobileLayout();
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [focusedId, setFocusedId] = useState<string>();
 	const [now, setNow] = useState(() => Date.now());
-	const selected = snapshot?.agents.find((agent) => agent.sessionId === selectedSessionId);
+	const agents = useMemo(() => selectedTeamAgents(snapshot, selectedSessionId), [snapshot, selectedSessionId]);
+	const selected = agents.find((agent) => agent.sessionId === selectedSessionId);
 	useEffect(() => { setFocusedId(selected?.agentId); setDetailsOpen(false); }, [selectedSessionId, selected?.agentId]);
 	useEffect(() => { if (!mobile || !visible) setDetailsOpen(false); }, [mobile, visible]);
-	const agents = useMemo(() => selectedTeamAgents(snapshot, selectedSessionId), [snapshot, selectedSessionId]);
 	const roots = agents.filter((agent) => !agent.parentAgentId || !agents.some((parent) => parent.agentId === agent.parentAgentId));
+	const swarm = sessions.find((session) => session.sessionId === roots[0]?.sessionId)?.swarm;
+	const managed = !!swarm || snapshot?.teams.some((team) => team.scope === "workspace" && team.rootAgentId === roots[0]?.agentId);
 	const focused = agents.find((agent) => agent.agentId === focusedId) ?? selected ?? roots[0];
 	const workers = agents.filter((agent) => agent.parentAgentId);
+	const specialists = workers.filter((agent) => agent.parentAgentId === roots[0]?.agentId);
+	const helpers = workers.length - specialists.length;
 	const active = agents.some((agent) => !!agent.currentRun?.startedAt);
 	useEffect(() => {
 		if (!active) return;
@@ -292,16 +331,29 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 		const timer = window.setInterval(() => setNow(Date.now()), 30_000);
 		return () => window.clearInterval(timer);
 	}, [active]);
-	const counts = { running: 0, waiting: 0, queued: 0, completed: 0, cancelled: 0, problem: 0, stopping: 0 };
+	const counts = { running: 0, waiting: 0, queued: 0, completed: 0, ready: 0, cancelled: 0, problem: 0, stopping: 0 };
 	for (const agent of workers) {
-		const current = status(agent);
-		if (current === "running" || current === "waiting" || current === "queued" || current === "completed" || current === "cancelled") counts[current]++;
+		const current = status(agent, swarm, managed ? roots[0]?.agentId : undefined);
+		if (current === "running" || current === "waiting" || current === "queued" || current === "completed" || current === "ready" || current === "cancelled") counts[current]++;
 		else if (current === "failed" || current === "interrupted") counts.problem++;
 		else if (current === "cancelling") counts.stopping++;
 	}
-	const rootState = roots[0] ? status(roots[0]) : "idle";
+	const rootState = roots[0] ? status(roots[0], swarm, managed ? roots[0].agentId : undefined) : "idle";
 	const problems = counts.problem + (rootState === "failed" || rootState === "interrupted" ? 1 : 0);
-	const situation = problems ? "失敗・中断した作業があります" : counts.running ? "子の担当が作業中です" : counts.waiting || rootState === "waiting" ? "子の結果を待っています" : counts.queued ? "担当の開始待ちです" : counts.stopping || rootState === "cancelling" ? "停止処理中です" : rootState === "cancelled" ? "チームの作業を中止しました" : rootState === "completed" ? "作業を完了しました" : rootState === "running" ? "親AIが作業中です" : "現在進行中の作業はありません";
+	let situation: string;
+	if (swarm?.status === "complete" && !agents.some((agent) => agent.currentRun)) situation = "チームの作業を完了しました";
+	else if (swarm?.status === "paused") situation = "チームを一時停止しています";
+	else if (swarm?.status === "blocked") situation = "判断・追加情報を待っています";
+	else if (problems) situation = "失敗・中断した作業があります";
+	else if (counts.running) situation = managed ? "担当者が作業中です" : "子の担当が作業中です";
+	else if (counts.waiting || rootState === "waiting") situation = "担当の結果を待っています";
+	else if (counts.queued) situation = "担当の開始待ちです";
+	else if (counts.stopping || rootState === "cancelling") situation = "停止処理中です";
+	else if (swarm?.status === "active") situation = "マネージャーが次の作業を確認しています";
+	else if (rootState === "cancelled") situation = "チームの作業を中止しました";
+	else if (rootState === "completed") situation = "作業を完了しました";
+	else if (rootState === "running") situation = managed ? "マネージャーが対応中です" : "親AIが作業中です";
+	else situation = "現在進行中の作業はありません";
 	const run = focused?.currentRun ?? focused?.latestRun;
 	const parent = agents.find((agent) => agent.agentId === focused?.parentAgentId);
 	const directChildren = agents.filter((agent) => agent.parentAgentId === focused?.agentId).length;
@@ -312,17 +364,18 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 		if (mobile) setDetailsOpen(true);
 	}
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
-	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>子の担当 {workers.length}人 <span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> 完了 {counts.completed}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}<UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></header>;
+	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>{managed ? "担当者" : "子の担当"} {managed ? specialists.length : workers.length}人 {managed && helpers > 0 && <><span>·</span> 補助 {helpers}人 </>}<span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> {managed ? <>指示待ち {counts.ready}</> : <>完了 {counts.completed}</>}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}<UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
-				<header className="team-focus-header"><div><span className="team-section-label">選択中の担当</span><h3>{label(focused)}</h3></div><button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></header>
-				<div className="team-relationship">{parent ? <>親: <button type="button" className="text-link" onClick={() => focusAgent(parent.agentId)}>{label(parent)}</button></> : "親AI · チームの起点"}{directChildren > 0 && <span> · 子 {directChildren}人</span>}{model && <span> · {model.name ?? model.id}</span>}</div>
+				<header className="team-focus-header"><div><span className="team-section-label">{managed && !focused.parentAgentId ? "マネージャー" : parent?.parentAgentId ? "補助エージェント" : "選択中の担当"}</span><h3>{label(focused)}</h3>{managed && <span className={`team-member-state team-map-state status-${status(focused, swarm, roots[0]?.agentId)}`}>{AGENT_LABELS[status(focused, swarm, roots[0]?.agentId)]}</span>}</div><button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></header>
+				<div className="team-relationship">{parent ? <>親: <button type="button" className="text-link" onClick={() => focusAgent(parent.agentId)}>{label(parent)}</button></> : managed ? "親AI · マネージャー" : "親AI · チームの起点"}{directChildren > 0 && <span> · 子 {directChildren}人</span>}{model && <span> · {model.name ?? model.id}</span>}</div>
+				{focused.responsibility && <section className="team-responsibility"><h4>担当範囲</h4><p>{focused.responsibility}</p>{parent && !parent.parentAgentId && <details><summary>担当範囲を変更</summary><ResponsibilityForm key={focused.agentId} agent={focused} onSave={onResponsibility} /></details>}</section>}
 				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /> : <p className="team-inline-note">まだ作業はありません。</p>}
-				<div className="team-focus-actions">{focused.parentAgentId && <details><summary>{label(focused)}にメッセージを送る</summary><MessageForm key={focused.agentId} agent={focused} onMessage={onMessage} /></details>}{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
+				<div className="team-focus-actions">{focused.parentAgentId && <details><summary>{label(focused)}に{managed && !focused.currentRun ? "次の作業を依頼" : "メッセージを送る"}</summary><MessageForm key={focused.agentId} agent={focused} onMessage={onMessage} /></details>}{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
 				{previous.length > 0 && <details className="team-run-history"><summary>以前の作業 {previous.length}件</summary>{previous.map((item) => <div key={item.runId} className="team-history-item"><RunDetail run={item} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /></div>)}</details>}
 			</section>;
 	return <section className="team-pane" aria-label="チームの進行状況">
 		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2></div> : <>
-			{snapshot && <TeamGraph key={selected?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} />}
+			{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} swarm={swarm} />}
 			{mobile ? <>
 				{focused && <button type="button" className="team-focus-trigger" aria-haspopup="dialog" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>{label(focused)}の詳細</button>}
 				<MobileSheet open={detailsOpen && visible} side="bottom" title="担当の詳細" onClose={() => setDetailsOpen(false)}>{details}</MobileSheet>

@@ -9,6 +9,7 @@ import {
 	modelSchema,
 	pendingInputActionSchema,
 	promptSchema,
+	responsibilitySchema,
 	sessionCreateSchema,
 	teamMessageSchema,
 	terminalCreateSchema,
@@ -17,7 +18,7 @@ import {
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
 import { goalActionSchema } from "../shared/goals.ts";
-import { swarmStartSchema } from "../shared/swarm.ts";
+import { workspaceSwarmStartSchema } from "../shared/swarm.ts";
 import { readAccountUsage } from "./account-usage.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
@@ -168,8 +169,6 @@ async function main() {
 						if (method === "GET") return reply(await teams.goal(id, { op: "get" }));
 						if (method === "POST") return reply(await teams.goal(id, await readJson(request, goalActionSchema)));
 					}
-					if (parts[3] === "swarm" && parts.length === 4 && method === "POST")
-						return reply(await teams.startSwarm(id, await readJson(request, swarmStartSchema)), 202);
 					if (parts[3] === "prompt" && method === "POST")
 						return reply(await teams.prompt(id, await readJson(request, promptSchema)), 202);
 					if (parts[3] === "pending-inputs" && parts.length === 5 && method === "PATCH") {
@@ -236,6 +235,18 @@ async function main() {
 				if (parts[1] === "workspaces" && parts[2]) {
 					const id = parts[2];
 					const path = url.searchParams.get("path") ?? "";
+					if (parts[3] === "swarm" && parts.length === 4 && method === "POST")
+						return reply(
+							await teams.startWorkspaceSwarm(id, await readJson(request, workspaceSwarmStartSchema)),
+							202,
+						);
+					if (parts[3] === "agents" && parts[4] && parts.length === 5 && method === "PATCH") {
+						const { responsibility } = await readJson(request, responsibilitySchema);
+						const team = teams.snapshot(id).teams.find((entry) => entry.scope === "workspace");
+						const root = registry.state.agents.find((agent) => agent.agentId === team?.rootAgentId);
+						if (!root) throw new HttpError(404, "Workspace team not found");
+						return reply(await teams.describe(root.sessionId, parts[4], responsibility));
+					}
 					if (parts[3] === "canvas" && parts[4] === "compose" && parts.length === 5 && method === "POST") {
 						const document = await readJson(request, canvasSaveSchema, CANVAS_LIMITS.bytes);
 						if (!isCanvasDocument(document)) throw new HttpError(400, "設計データの ID・接続先が不正です。");

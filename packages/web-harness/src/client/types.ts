@@ -22,6 +22,11 @@ export interface Run {
 	agentId: string;
 	task: string;
 	inputKind?: "prompt" | "context";
+	requestedByAgentId?: string;
+	replyToAgentIds?: string[];
+	swarmId?: string;
+	handoffFromRunId?: string;
+	handoffToRunId?: string;
 	status: RunStatus;
 	result?: string;
 	error?: string;
@@ -96,11 +101,12 @@ export interface TeamAgent {
 	sessionId: string;
 	name: string;
 	role: string;
+	responsibility?: string;
 	currentRun?: Run;
 	latestRun?: Run;
 }
 export interface TeamSnapshot {
-	teams: { teamId: string; rootAgentId: string; workspaceId: string }[];
+	teams: { teamId: string; rootAgentId: string; workspaceId: string; scope?: "workspace" }[];
 	agents: TeamAgent[];
 	runs: Run[];
 }

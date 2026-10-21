@@ -104,8 +104,18 @@ async function fixture(limit = 2) {
 				fauxToolCall("team", {
 					action: "workflow",
 					tasks: [
-						{ name: "alpha", task: "Implement the first independent slice", tools: ["gate"] },
-						{ name: "beta", task: "Review the second independent slice", tools: ["gate"] },
+						{
+							name: "alpha",
+							responsibility: "Own implementation of the first subsystem",
+							task: "Implement the first independent slice",
+							tools: ["gate"],
+						},
+						{
+							name: "beta",
+							responsibility: "Own independent verification of the second subsystem",
+							task: "Review the second independent slice",
+							tools: ["gate"],
+						},
 					],
 					timeoutMs: 10000,
 				}),
@@ -158,10 +168,6 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		expect(f.held.has("beta")).toBe(false);
 		expect(f.registry.get(f.session.sessionId).currentRun?.status).toBe("waiting");
 		expect(f.registry.activeTools(f.session.sessionId)).toEqual(["team"]);
-		expect(f.registry.delegationTools(f.session.sessionId)).toEqual(["gate"]);
-		expect(
-			f.registry.state.sessions.filter((session) => session.parentSessionId).map((session) => session.tools),
-		).toEqual([["gate"], ["gate"]]);
 		expect(f.registry.state.runs.filter((run) => run.status === "running")).toHaveLength(1);
 		f.held.get("alpha")?.();
 		await expect.poll(() => f.held.has("beta"), { timeout: 10000 }).toBe(true);
@@ -185,7 +191,6 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		expect(f.registry.state.runs).toHaveLength(5);
 		expect(f.registry.state.runs.filter((run) => run.agentId === detail.latestRun?.agentId)).toHaveLength(3);
 		expect(detail.swarm?.status).toBe("complete");
-		expect(f.registry.activeTools(f.session.sessionId)).toEqual(["gate"]);
 	});
 
 	it("runs independent children concurrently within the existing permits and cancels the entire waiting subtree", async () => {
@@ -209,7 +214,6 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		await idle(f.registry, f.session.sessionId);
 		expect(f.faux.state.callCount).toBe(calls + 1);
 		expect(f.registry.get(f.session.sessionId).swarm?.status).toBe("paused");
-		expect(f.registry.activeTools(f.session.sessionId)).toEqual(["gate"]);
 	});
 
 	it("refuses an idle root with a busy child and integrates late results despite a historical paused Goal", async () => {
@@ -232,7 +236,14 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 				return fauxAssistantMessage(
 					fauxToolCall("team", {
 						action: "spawn",
-						tasks: [{ name: "alpha", task: "Independent work", tools: ["gate"] }],
+						tasks: [
+							{
+								name: "alpha",
+								responsibility: "Own implementation and verification",
+								task: "Independent work",
+								tools: ["gate"],
+							},
+						],
 					}),
 					{ stopReason: "toolUse" },
 				);
@@ -400,7 +411,14 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 				return fauxAssistantMessage(
 					fauxToolCall("team", {
 						action: "workflow",
-						tasks: [{ name: "failure", task: "Perform the actual implementation", tools: ["gate"] }],
+						tasks: [
+							{
+								name: "failure",
+								responsibility: "Own implementation and verification",
+								task: "Perform the actual implementation",
+								tools: ["gate"],
+							},
+						],
 					}),
 					{ stopReason: "toolUse" },
 				);
@@ -469,7 +487,7 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		expect(f.faux.state.callCount).toBe(4);
 	});
 
-	it("rejects implementation tools on the root while keeping normal chat grants intact", async () => {
+	it("rejects implementation tools on the manager", async () => {
 		const f = await fixture();
 		f.faux.setResponses([
 			fauxAssistantMessage(fauxToolCall("gate", { name: "forbidden-root-work" }), { stopReason: "toolUse" }),
@@ -483,7 +501,6 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 		await idle(f.registry, f.session.sessionId);
 		expect(f.held.size).toBe(0);
 		expect(f.registry.get(f.session.sessionId).swarm?.status).toBe("blocked");
-		expect(f.registry.activeTools(f.session.sessionId)).toEqual(["gate"]);
 	});
 
 	it("lets a user stop win before an autonomous continuation is admitted", async () => {
@@ -523,7 +540,14 @@ describe("Hyakki-Yako real SDK orchestration", () => {
 				return fauxAssistantMessage(
 					fauxToolCall("team", {
 						action: "spawn",
-						tasks: [{ name: "alpha", task: "Actual implementation", tools: ["gate"] }],
+						tasks: [
+							{
+								name: "alpha",
+								responsibility: "Own implementation and verification",
+								task: "Actual implementation",
+								tools: ["gate"],
+							},
+						],
 					}),
 					{ stopReason: "toolUse" },
 				);

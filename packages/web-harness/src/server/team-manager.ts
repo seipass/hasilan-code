@@ -10,7 +10,13 @@ import {
 import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal, GoalAction, GoalStatus } from "../shared/goals.ts";
 import { nextId } from "../shared/ids.ts";
-import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm, type SwarmStart, type SwarmStatus } from "../shared/swarm.ts";
+import {
+	SWARM_OBJECTIVE_MAX_LENGTH,
+	type Swarm,
+	type SwarmStart,
+	type SwarmStatus,
+	type WorkspaceSwarmStart,
+} from "../shared/swarm.ts";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
 import { loadTeamProfiles } from "./team-profiles.ts";
 import { validateWorkflow, type WorkflowTask } from "./team-workflow.ts";
@@ -28,6 +34,7 @@ export interface TeamRecord {
 	teamId: string;
 	rootAgentId: string;
 	workspaceId: string;
+	scope?: "workspace";
 }
 export interface AgentRecord {
 	agentId: string;
@@ -36,12 +43,18 @@ export interface AgentRecord {
 	sessionId: string;
 	name: string;
 	role: string;
+	responsibility?: string;
 }
 export interface RunRecord {
 	runId: string;
 	agentId: string;
 	task: string;
 	inputKind?: "prompt" | "context";
+	requestedByAgentId?: string;
+	replyToAgentIds?: string[];
+	swarmId?: string;
+	handoffFromRunId?: string;
+	handoffToRunId?: string;
 	status: RunStatus;
 	result?: string;
 	error?: string;
@@ -84,6 +97,7 @@ export interface TeamSnapshot {
 export interface SpawnTask {
 	name: string;
 	task: string;
+	responsibility?: string;
 	context?: string;
 	systemPrompt?: string;
 	profile?: string;
@@ -91,7 +105,14 @@ export interface SpawnTask {
 	tools?: string[];
 }
 export interface WaitResult {
-	runs: { agentId: string; runId: string; status: RunStatus; result?: string; error?: string }[];
+	runs: {
+		agentId: string;
+		ownerAgentId?: string;
+		runId: string;
+		status: RunStatus;
+		result?: string;
+		error?: string;
+	}[];
 	timedOut: boolean;
 }
 interface ScheduledEntry {
@@ -122,9 +143,22 @@ const terminalStatus: Record<RunStatus, boolean> = {
 	cancelled: true,
 	interrupted: true,
 };
+const MANAGER_RESPONSIBILITY = "目標・優先順位・担当範囲を調整し、成果の受け入れと最終判断を担当する。";
 const taskSchema = Type.Object({
-	name: Type.String({ minLength: 1 }),
+	name: Type.String({
+		minLength: 1,
+		description:
+			"Stable specialist name. A workspace manager's repeated name reuses its idle direct report across objectives.",
+	}),
 	task: Type.String({ minLength: 1 }),
+	responsibility: Type.Optional(
+		Type.String({
+			minLength: 1,
+			maxLength: 16384,
+			description:
+				"Continuing ownership, separate from this assignment. Required when creating a workspace specialist.",
+		}),
+	),
 	context: Type.Optional(Type.String()),
 	systemPrompt: Type.Optional(Type.String()),
 	profile: Type.Optional(Type.String({ minLength: 1 })),
@@ -144,6 +178,12 @@ const teamParameters = Type.Union([
 	Type.Object({ action: Type.Literal("profiles") }),
 	Type.Object({ action: Type.Literal("list") }),
 	Type.Object({ action: Type.Literal("send"), agentId: Type.String(), message: Type.String({ minLength: 1 }) }),
+	Type.Object({
+		action: Type.Literal("describe"),
+		agentId: Type.String(),
+		responsibility: Type.String({ minLength: 1, maxLength: 16384 }),
+	}),
+	Type.Object({ action: Type.Literal("handoff"), agentId: Type.String(), task: Type.String({ minLength: 1 }) }),
 	Type.Object({
 		action: Type.Literal("wait"),
 		agentIds: Type.Array(Type.String(), { minItems: 1 }),
@@ -215,6 +255,23 @@ export class TeamManager {
 					!this.registry.state.agents.some((agent) => agent.sessionId === session.sessionId)
 				)
 					this.addRoot(session.sessionId);
+			// Adopt the latest historical objective without deleting other conversations.
+			const adopted = new Set(
+				this.registry.state.teams.filter((team) => team.scope === "workspace").map((team) => team.workspaceId),
+			);
+			for (const session of this.registry.state.sessions
+				.filter((entry) => entry.swarm)
+				.sort((a, b) => b.swarm!.createdAt.localeCompare(a.swarm!.createdAt))) {
+				if (adopted.has(session.workspaceId)) continue;
+				const agent = this.agentForSession(session.sessionId);
+				this.registry.state.teams.find((team) => team.teamId === agent.teamId)!.scope = "workspace";
+				adopted.add(session.workspaceId);
+			}
+			for (const team of this.registry.state.teams.filter((entry) => entry.scope === "workspace")) {
+				this.agentById(team.rootAgentId).responsibility = MANAGER_RESPONSIBILITY;
+				for (const agent of this.registry.state.agents)
+					if (agent.parentAgentId === team.rootAgentId) agent.responsibility ??= agent.role;
+			}
 			await this.registry.persist();
 		});
 	}
@@ -265,6 +322,17 @@ export class TeamManager {
 		if (!run) throw new HarnessError("Run not found", 404);
 		return run;
 	}
+	private assignmentOwner(run: RunRecord): RunRecord {
+		while (run.handoffToRunId) run = this.runById(run.handoffToRunId);
+		return run;
+	}
+	private objectiveActive(run: RunRecord): boolean {
+		if (!run.swarmId) return true;
+		const agent = this.agentById(run.agentId);
+		const team = this.registry.state.teams.find((entry) => entry.teamId === agent.teamId)!;
+		const objective = this.registry.descriptor(this.agentById(team.rootAgentId).sessionId).swarm;
+		return objective?.id === run.swarmId && objective.status === "active";
+	}
 	private current(agent: AgentRecord): RunRecord | undefined {
 		return this.registry.state.runs.find((run) => run.agentId === agent.agentId && !terminalStatus[run.status]);
 	}
@@ -302,7 +370,7 @@ export class TeamManager {
 		}
 		return false;
 	}
-	private newRun(agent: AgentRecord, task: string, inputKind?: "context"): RunRecord {
+	private newRun(agent: AgentRecord, task: string, inputKind?: "context", requestedByAgentId?: string): RunRecord {
 		if (this.current(agent)) throw new HarnessError("Session is busy", 409);
 		const run: RunRecord = {
 			runId: nextId("r", this.registry.state.runs, "runId"),
@@ -310,7 +378,14 @@ export class TeamManager {
 			task,
 			status: "queued",
 			...(inputKind ? { inputKind } : {}),
+			...(requestedByAgentId ? { requestedByAgentId } : {}),
 		};
+		const team = this.registry.state.teams.find((entry) => entry.teamId === agent.teamId);
+		const objective =
+			team?.scope === "workspace"
+				? this.registry.descriptor(this.agentById(team.rootAgentId).sessionId).swarm
+				: undefined;
+		if (objective?.status === "active") run.swarmId = objective.id;
 		this.registry.state.runs.push(run);
 		let resolveDone: () => void = () => undefined;
 		const done = new Promise<void>((resolve) => {
@@ -532,6 +607,50 @@ export class TeamManager {
 			}, 0),
 		);
 	}
+	async startWorkspaceSwarm(
+		workspaceId: string,
+		input: WorkspaceSwarmStart,
+	): Promise<AdmissionResult & { swarm: Swarm; sessionId: string }> {
+		if (!input.objective.trim() || input.objective.trim().length > SWARM_OBJECTIVE_MAX_LENGTH)
+			throw new HarnessError(`Swarm objective must contain 1..${SWARM_OBJECTIVE_MAX_LENGTH} characters`);
+		const sessionId = await this.registry.mutate(async () => {
+			this.registry.getWorkspaceRoot(workspaceId);
+			const team = this.registry.state.teams.find(
+				(entry) => entry.workspaceId === workspaceId && entry.scope === "workspace",
+			);
+			if (team) return this.agentById(team.rootAgentId).sessionId;
+			const session = input.sessionId
+				? this.registry.descriptor(input.sessionId)
+				: await this.registry.createWithinMutation({
+						workspaceId,
+						model: input.model,
+						thinkingLevel: input.thinkingLevel,
+					});
+			if (session.workspaceId !== workspaceId || session.parentSessionId)
+				throw new HarnessError("A workspace manager must be a root conversation in this workspace", 409);
+			const root =
+				this.registry.state.agents.find((agent) => agent.sessionId === session.sessionId) ??
+				this.addRoot(session.sessionId);
+			if (
+				session.goal?.status === "active" ||
+				session.swarm?.status === "active" ||
+				this.registry.state.agents.some(
+					(agent) => (agent.agentId === root.agentId || this.ancestor(root.agentId, agent)) && this.current(agent),
+				)
+			)
+				throw new HarnessError(
+					"Start a workspace team only while the conversation and its subtree are idle and Goal is inactive",
+					409,
+				);
+			await this.registry.assertModelReady(root.sessionId);
+			this.registry.state.teams.find((entry) => entry.teamId === root.teamId)!.scope = "workspace";
+			root.responsibility = MANAGER_RESPONSIBILITY;
+			await this.registry.persist();
+			this.changed(root);
+			return root.sessionId;
+		});
+		return { ...(await this.startSwarm(sessionId, { objective: input.objective })), sessionId };
+	}
 	async startSwarm(sessionId: string, input: SwarmStart): Promise<AdmissionResult & { swarm: Swarm }> {
 		const objective = input.objective.trim();
 		if (!objective || objective.length > SWARM_OBJECTIVE_MAX_LENGTH)
@@ -555,6 +674,20 @@ export class TeamManager {
 			)
 				throw new HarnessError("Start a swarm only while its entire subtree is idle", 409);
 			await this.registry.assertModelReady(sessionId);
+			const team = this.registry.state.teams.find((entry) => entry.teamId === agent.teamId)!;
+			if (
+				this.registry.state.teams.some(
+					(entry) => entry.workspaceId === descriptor.workspaceId && entry.scope === "workspace" && entry !== team,
+				)
+			)
+				throw new HarnessError(
+					"This workspace already has a manager; start the objective through its workspace team",
+					409,
+				);
+			team.scope = "workspace";
+			agent.responsibility = MANAGER_RESPONSIBILITY;
+			for (const member of this.registry.state.agents)
+				if (member.parentAgentId === agent.agentId) member.responsibility ??= member.role;
 			const run = this.newRun(agent, objective);
 			descriptor.swarm = {
 				id: randomBytes(8).toString("hex"),
@@ -565,6 +698,7 @@ export class TeamManager {
 				status: "active",
 			};
 			this.runtime.get(run.runId)!.swarmId = descriptor.swarm.id;
+			run.swarmId = descriptor.swarm.id;
 			await this.registry.persist();
 			this.enqueue(agent.teamId, { runId: run.runId });
 			this.pump(agent.teamId);
@@ -666,10 +800,25 @@ export class TeamManager {
 			},
 		};
 	}
-	private async notifyParent(run: RunRecord): Promise<void> {
+	private async notifyCompletion(run: RunRecord): Promise<void> {
 		const child = this.agentById(run.agentId);
-		if (!child.parentAgentId || !["completed", "failed", "cancelled"].includes(run.status)) return;
-		const parent = this.agentById(child.parentAgentId);
+		if (!child.parentAgentId || run.handoffToRunId || !["completed", "failed", "cancelled"].includes(run.status))
+			return;
+		const recipients = new Set([run.requestedByAgentId ?? child.parentAgentId, ...(run.replyToAgentIds ?? [])]);
+		const deliveredTo = new Set<string>();
+		for (const id of recipients) {
+			const recipient = this.agentById(id);
+			const assignment = this.current(recipient) ?? this.latest(recipient);
+			const owner = assignment?.handoffToRunId
+				? this.agentById(this.assignmentOwner(assignment).agentId)
+				: recipient;
+			if (owner.agentId !== child.agentId && !deliveredTo.has(owner.agentId)) {
+				deliveredTo.add(owner.agentId);
+				await this.notifyRecipient(run, child, owner);
+			}
+		}
+	}
+	private async notifyRecipient(run: RunRecord, child: AgentRecord, parent: AgentRecord): Promise<void> {
 		if (!this.accepting || this.fenced.has(parent.agentId)) return;
 		const inputId = randomBytes(8).toString("hex");
 		const source: ContextInjection["source"] = {
@@ -689,9 +838,14 @@ export class TeamManager {
 		const current = this.current(parent);
 		const goal = this.registry.descriptor(parent.sessionId).goal;
 		const swarm = this.registry.descriptor(parent.sessionId).swarm;
-		const held = goal?.status !== "active" && (swarm ? swarm.status !== "active" : !current && !!goal);
+		const held =
+			!this.objectiveActive(run) ||
+			(goal?.status !== "active" && (swarm ? swarm.status !== "active" : !current && !!goal));
 		const continuation =
-			current ?? (held ? this.latest(parent) : this.newRun(parent, `Subagent results: ${child.name}`, "context"));
+			current ??
+			(held
+				? this.latest(parent)
+				: this.newRun(parent, `Team results: ${child.name}`, "context", this.latest(parent)?.requestedByAgentId));
 		const pending: PendingInput = {
 			inputId,
 			sessionId: parent.sessionId,
@@ -833,12 +987,14 @@ export class TeamManager {
 			this.autonomousRuns.delete(runId);
 			if (
 				status === "completed" &&
+				!run.handoffToRunId &&
+				this.objectiveActive(run) &&
 				stranded.length > 0 &&
 				(goal?.status === "active" || (swarm ? swarm.status === "active" : !goal)) &&
 				this.accepting &&
 				!this.fenced.has(agent.agentId)
 			) {
-				const continuation = this.newRun(agent, "Subagent results", "context");
+				const continuation = this.newRun(agent, "Team results", "context", run.requestedByAgentId);
 				for (const input of stranded) {
 					input.runId = continuation.runId;
 					input.status = "pending";
@@ -846,13 +1002,14 @@ export class TeamManager {
 				}
 				this.enqueue(agent.teamId, { runId: continuation.runId });
 			}
-			if (status !== "interrupted") await this.notifyParent(run);
+			if (status !== "interrupted") await this.notifyCompletion(run);
 			await this.registry.persist();
 			this.changed(agent);
 			for (const waiter of [...this.waiters])
 				if (
-					(waiter.mode === "any" && waiter.targets.some((id) => terminalStatus[this.runById(id).status])) ||
-					waiter.targets.every((id) => terminalStatus[this.runById(id).status])
+					(waiter.mode === "any" &&
+						waiter.targets.some((id) => terminalStatus[this.assignmentOwner(this.runById(id)).status])) ||
+					waiter.targets.every((id) => terminalStatus[this.assignmentOwner(this.runById(id)).status])
 				)
 					waiter.finish(false);
 			this.runtime.get(runId)?.resolveDone();
@@ -1008,6 +1165,7 @@ export class TeamManager {
 				throw new HarnessError(`Child tools must be a subset of profile ${profile.name}`, 400);
 			return {
 				...task,
+				responsibility: task.responsibility ?? profile.description,
 				systemPrompt: [profile.systemPrompt, task.systemPrompt].filter(Boolean).join("\n\n"),
 				model: task.model ?? profile.model,
 				tools: task.tools ?? profile.tools,
@@ -1032,39 +1190,93 @@ export class TeamManager {
 			if (depth >= this.limits().maxDepth) throw new HarnessError("Team maximum depth reached");
 			const descriptor = this.registry.descriptor(sessionId);
 			const tools = this.registry.delegationTools(sessionId);
-			for (const task of resolved) {
+			const team = this.registry.state.teams.find((entry) => entry.teamId === parent.teamId)!;
+			const continuingTeam = team.scope === "workspace" && parent.agentId === team.rootAgentId;
+			const names = new Set<string>();
+			const assignments = resolved.map((task) => {
+				if (!continuingTeam) return { task, agent: undefined };
+				const name = task.name.trim();
+				if (names.has(name)) throw new HarnessError(`Duplicate specialist name in one batch: ${name}`, 400);
+				names.add(name);
+				const matches = this.registry.state.agents.filter(
+					(agent) => agent.parentAgentId === parent.agentId && agent.name.trim() === name,
+				);
+				if (matches.length > 1)
+					throw new HarnessError(`Multiple members named ${name}; use team send with the intended agentId`, 409);
+				const agent = matches[0];
+				if (agent) {
+					this.assertOpen(agent);
+					if (this.current(agent))
+						throw new HarnessError(`${name} is busy; use team send with agentId ${agent.agentId}`, 409);
+					const member = this.registry.descriptor(agent.sessionId);
+					if (
+						(task.model &&
+							(task.model.provider !== member.model?.provider || task.model.id !== member.model?.id)) ||
+						(task.responsibility !== undefined && task.responsibility.trim() !== agent.responsibility) ||
+						(task.systemPrompt !== undefined && task.systemPrompt !== (member.systemPrompt ?? "")) ||
+						(task.tools &&
+							(task.tools.some((tool) => !member.tools?.includes(tool)) ||
+								member.tools?.some((tool) => !task.tools?.includes(tool))))
+					)
+						throw new HarnessError(
+							`Cannot replace ${name}'s model, tools, or instructions through reassignment; use team send or choose a distinct specialist`,
+							409,
+						);
+				}
+				return { task, agent };
+			});
+			for (const { task, agent } of assignments) {
 				if (!task.name.trim() || !task.task.trim()) throw new HarnessError("Agent name and task must not be empty");
 				if (task.tools?.some((tool) => !tools.includes(tool)))
 					throw new HarnessError("Child tools must be a subset of the parent's active tools");
+				if (
+					task.responsibility !== undefined &&
+					(!task.responsibility.trim() || task.responsibility.length > 16384)
+				)
+					throw new HarnessError("Responsibility must contain 1..16384 characters");
+				if (continuingTeam && !agent && !task.responsibility?.trim())
+					throw new HarnessError(
+						"A new workspace specialist needs a continuing responsibility separate from its current task",
+					);
 			}
-			const created: { agent: AgentRecord; run: RunRecord }[] = [];
-			for (const task of resolved) {
-				const child = await this.registry.createWithinMutation({
-					workspaceId: descriptor.workspaceId,
-					parentSessionId: sessionId,
-					role: task.name,
-					systemPrompt: task.systemPrompt,
-					model: task.model ?? descriptor.model,
-					tools: task.tools ?? tools,
-				});
-				const agent: AgentRecord = {
-					agentId: nextId("a", this.registry.state.agents, "agentId"),
-					teamId: parent.teamId,
-					parentAgentId: parent.agentId,
-					sessionId: child.sessionId,
-					name: task.name,
-					role: task.name,
-				};
-				this.registry.state.agents.push(agent);
-				const run = this.newRun(agent, task.context ? `${task.task}\n\nContext:\n${task.context}` : task.task);
-				created.push({ agent, run });
+			const admitted: { agent: AgentRecord; run: RunRecord }[] = [];
+			for (const assignment of assignments) {
+				const { task } = assignment;
+				let agent = assignment.agent;
+				if (!agent) {
+					const child = await this.registry.createWithinMutation({
+						workspaceId: descriptor.workspaceId,
+						parentSessionId: sessionId,
+						role: task.name,
+						systemPrompt: task.systemPrompt,
+						model: task.model ?? descriptor.model,
+						tools: task.tools ?? tools,
+					});
+					agent = {
+						agentId: nextId("a", this.registry.state.agents, "agentId"),
+						teamId: parent.teamId,
+						parentAgentId: parent.agentId,
+						sessionId: child.sessionId,
+						name: task.name,
+						role: task.name,
+						...(task.responsibility ? { responsibility: task.responsibility.trim() } : {}),
+					};
+					this.registry.state.agents.push(agent);
+				}
+				const run = this.newRun(
+					agent,
+					task.context ? `${task.task}\n\nContext:\n${task.context}` : task.task,
+					undefined,
+					parent.agentId,
+				);
+				admitted.push({ agent, run });
 			}
 			await this.registry.persist();
-			for (const { run } of created) this.enqueue(parent.teamId, { runId: run.runId });
+			for (const { run } of admitted) this.enqueue(parent.teamId, { runId: run.runId });
 			this.pump(parent.teamId);
 			this.changed(parent);
 			return {
-				agents: created.map(({ agent, run }) => ({
+				agents: admitted.map(({ agent, run }) => ({
 					agentId: agent.agentId,
 					sessionId: agent.sessionId,
 					runId: run.runId,
@@ -1085,9 +1297,23 @@ export class TeamManager {
 		// Reject invalid profiles and tool grants before admitting any workflow child.
 		const resolved = await this.resolveTasks(sessionId, tasks);
 		const allowed = this.registry.delegationTools(sessionId);
-		for (const task of resolved)
+		const caller = this.agentForSession(sessionId);
+		const team = this.registry.state.teams.find((entry) => entry.teamId === caller.teamId)!;
+		for (const task of resolved) {
 			if (task.tools?.some((tool) => !allowed.includes(tool)))
 				throw new HarnessError("Child tools must be a subset of the parent's active tools", 400);
+			if (
+				team.scope === "workspace" &&
+				team.rootAgentId === caller.agentId &&
+				!this.registry.state.agents.some(
+					(agent) => agent.parentAgentId === caller.agentId && agent.name.trim() === task.name.trim(),
+				) &&
+				!task.responsibility?.trim()
+			)
+				throw new HarnessError(
+					"A new workspace specialist needs a continuing responsibility separate from its current task",
+				);
+		}
 		const records = new Map(
 			tasks.map((task) => [
 				task.name,
@@ -1172,8 +1398,13 @@ export class TeamManager {
 			const inputId = randomBytes(8).toString("hex");
 			const text = `[Team message inputId=${inputId} from=${caller.agentId}]\n${message}`;
 			const current = this.current(recipient);
-			if (current) return this.acceptInput(recipient, current, text, "followUp", caller.agentId, inputId);
-			const run = this.newRun(recipient, text);
+			if (current) {
+				current.replyToAgentIds ??= [];
+				if (caller.agentId !== recipient.agentId && !current.replyToAgentIds.includes(caller.agentId))
+					current.replyToAgentIds.push(caller.agentId);
+				return this.acceptInput(recipient, current, text, "followUp", caller.agentId, inputId);
+			}
+			const run = this.newRun(recipient, text, undefined, caller.agentId);
 			this.registry.state.pendingInput.push({
 				inputId,
 				sessionId: recipient.sessionId,
@@ -1189,6 +1420,73 @@ export class TeamManager {
 			this.pump(recipient.teamId);
 			this.changed(recipient);
 			return { inputId, runId: run.runId, disposition: run.status === "running" ? "started" : "queued" };
+		});
+	}
+	async describe(sessionId: string, agentId: string, responsibility: string): Promise<AgentRecord> {
+		if (!responsibility.trim() || responsibility.length > 16384)
+			throw new HarnessError("Responsibility must contain 1..16384 characters");
+		return this.registry.mutate(async () => {
+			const caller = this.agentForSession(sessionId);
+			const member = this.agentById(agentId);
+			this.assertOpen(caller);
+			this.assertOpen(member);
+			this.assertTarget(caller, member);
+			const team = this.registry.state.teams.find((entry) => entry.teamId === caller.teamId)!;
+			if (
+				team.scope !== "workspace" ||
+				team.rootAgentId !== caller.agentId ||
+				member.parentAgentId !== caller.agentId
+			)
+				throw new HarnessError("Only the workspace manager can change a specialist's responsibility", 403);
+			if (this.current(member))
+				throw new HarnessError("Change responsibility only while the specialist is idle", 409);
+			member.responsibility = responsibility.trim();
+			await this.registry.persist();
+			this.changed(member);
+			return structuredClone(member);
+		});
+	}
+	async handoff(sessionId: string, agentId: string, task: string): Promise<AdmissionResult> {
+		if (!task.trim())
+			throw new HarnessError("Handoff requires the deliverable, relevant context, and acceptance criteria");
+		return this.registry.mutate(async () => {
+			const caller = this.agentForSession(sessionId);
+			const target = this.agentById(agentId);
+			this.assertOpen(caller);
+			this.assertOpen(target);
+			this.assertTarget(caller, target);
+			const team = this.registry.state.teams.find((entry) => entry.teamId === caller.teamId)!;
+			const source = this.current(caller);
+			if (
+				team.scope !== "workspace" ||
+				caller.parentAgentId !== team.rootAgentId ||
+				target.parentAgentId !== team.rootAgentId ||
+				caller === target
+			)
+				throw new HarnessError("Ownership can transfer only between distinct workspace specialists", 403);
+			if (!source || source.status !== "running" || source.handoffToRunId)
+				throw new HarnessError("Handoff requires a running assignment that still belongs to you", 409);
+			if (this.current(target))
+				throw new HarnessError("Handoff target is busy; use send to coordinate readiness first", 409);
+			const run = this.newRun(
+				target,
+				`[Team handoff from=${caller.agentId} run=${source.runId}]\n${task.trim()}`,
+				undefined,
+				source.requestedByAgentId ?? caller.parentAgentId,
+			);
+			if (source.replyToAgentIds) run.replyToAgentIds = [...source.replyToAgentIds];
+			run.handoffFromRunId = source.runId;
+			source.handoffToRunId = run.runId;
+			for (const waiter of this.waiters)
+				this.runById(waiter.callerRunId).waitingOnRunIds = waiter.targets.map(
+					(id) => this.assignmentOwner(this.runById(id)).runId,
+				);
+			await this.registry.persist();
+			this.enqueue(target.teamId, { runId: run.runId });
+			this.pump(target.teamId);
+			this.changed(caller);
+			this.changed(target);
+			return { runId: run.runId, disposition: run.status === "running" ? "started" : "queued" };
 		});
 	}
 	async wait(
@@ -1237,11 +1535,12 @@ export class TeamManager {
 				visited.add(id);
 				return (this.runById(id).waitingOnRunIds ?? []).some((next) => reaches(next, goal, visited));
 			};
-			if (pinned.some((run) => reaches(run.runId, callerRun.runId))) throw new HarnessError("Wait dependency cycle");
-			if (pinned.some((run) => terminalStatus[run.status]) && mode === "any") return;
-			if (pinned.every((run) => terminalStatus[run.status])) return;
+			if (pinned.some((run) => reaches(this.assignmentOwner(run).runId, callerRun.runId)))
+				throw new HarnessError("Wait dependency cycle");
+			if (pinned.some((run) => terminalStatus[this.assignmentOwner(run).status]) && mode === "any") return;
+			if (pinned.every((run) => terminalStatus[this.assignmentOwner(run).status])) return;
 			callerRun.status = "waiting";
-			callerRun.waitingOnRunIds = pinned.map((run) => run.runId);
+			callerRun.waitingOnRunIds = pinned.map((run) => this.assignmentOwner(run).runId);
 			this.permits.delete(callerRun.runId);
 			completion = new Promise<boolean>((resolve, reject) => {
 				let finished = false;
@@ -1323,13 +1622,17 @@ export class TeamManager {
 			removeAbortListener();
 		}
 		return {
-			runs: pinned.map((run) => ({
-				agentId: run.agentId,
-				runId: run.runId,
-				status: run.status,
-				result: run.result,
-				error: run.error,
-			})),
+			runs: pinned.map((run) => {
+				const owner = this.assignmentOwner(run);
+				return {
+					agentId: run.agentId,
+					...(owner === run ? {} : { ownerAgentId: owner.agentId }),
+					runId: owner.runId,
+					status: owner.status,
+					result: owner.result,
+					error: owner.error,
+				};
+			}),
 			timedOut,
 		};
 	}
@@ -1485,7 +1788,7 @@ export class TeamManager {
 					this.permits.delete(run.runId);
 					runtime?.resolveDone();
 					this.runtime.delete(run.runId);
-					await this.notifyParent(run);
+					await this.notifyCompletion(run);
 				} else {
 					run.status = "cancelling";
 					runtime?.controller.abort();
@@ -1501,8 +1804,9 @@ export class TeamManager {
 			await this.registry.persist();
 			for (const waiter of [...this.waiters])
 				if (
-					(waiter.mode === "any" && waiter.targets.some((id) => terminalStatus[this.runById(id).status])) ||
-					waiter.targets.every((id) => terminalStatus[this.runById(id).status])
+					(waiter.mode === "any" &&
+						waiter.targets.some((id) => terminalStatus[this.assignmentOwner(this.runById(id)).status])) ||
+					waiter.targets.every((id) => terminalStatus[this.assignmentOwner(this.runById(id)).status])
 				)
 					waiter.finish(false);
 			for (const agent of affected) this.changed(agent);
@@ -1545,9 +1849,9 @@ export class TeamManager {
 			name: "team",
 			label: "Agent team",
 			description:
-				"Spawn agents with optional named profiles, inspect available profiles, message children, wait on pinned runs, stop a child subtree, or run a dependency workflow. A workflow starts independent tasks together, passes successful prerequisites' results to dependents, and skips dependents of failures. Other agents can run while you wait. Cannot wait on or stop yourself or ancestors. An active Hyakki-Yako root must explicitly finish with action swarm, op complete or block, and a concrete reason; complete requires successful delegated work and an idle child subtree.",
+				"Manage workspace specialists and bounded helpers. Spawn/workflow reuse a manager's existing idle specialist by name across objectives. New specialists require a continuing responsibility separate from task; profiles supply their description. Send consults or assigns work to an existing member and returns results to requesters, including queued senders. Handoff transfers a specialist's current assignment to an idle peer, preserving the original requester; waits follow the new owner. Describe deliberately changes an idle specialist's responsibility as manager. Workflow passes successful prerequisite results and skips dependents of failure. Cannot wait on or stop self or ancestors. An active Hyakki-Yako manager must explicitly complete or block with evidence; complete requires successful delegated work and an idle subtree.",
 			promptSnippet:
-				"For independent subtasks, spawn them together; for ordered review/build steps, use workflow with dependsOn. Use profiles to discover configured specialties. Read child results, integrate them, and report failures. Send instructions during active runs and wait for completion.",
+				"Manage a durable workspace roster, not task-shaped agents. New specialists need a responsibility describing continuing ownership, separate from task. Inspect list before creating anyone; send work or questions directly to existing members. Specialists choose their own execution and may spawn bounded helpers. Use handoff to transfer your current assignment to an idle specialist, including context, deliverable, and acceptance; after transfer, finish your turn without duplicating their work. Wait follows ownership transfers. Use describe as manager to deliberately change an idle specialist's responsibility. Only the workspace manager owns priorities and final acceptance; it never implements.",
 			executionMode: "sequential",
 			parameters: teamParameters,
 			execute: async (_callId, params: Static<typeof teamParameters>, signal) => {
@@ -1578,6 +1882,7 @@ export class TeamManager {
 										(run, index) =>
 											index > initial &&
 											run.status === "completed" &&
+											!run.handoffToRunId &&
 											descendants.some((child) => child.agentId === run.agentId),
 									)
 								)
@@ -1618,6 +1923,12 @@ export class TeamManager {
 					}
 					case "send":
 						result = await this.send(sessionId, params.agentId, params.message);
+						break;
+					case "describe":
+						result = await this.describe(sessionId, params.agentId, params.responsibility);
+						break;
+					case "handoff":
+						result = await this.handoff(sessionId, params.agentId, params.task);
 						break;
 					case "wait":
 						result = await this.wait(sessionId, params.agentIds, params.timeoutMs, signal, params.mode);

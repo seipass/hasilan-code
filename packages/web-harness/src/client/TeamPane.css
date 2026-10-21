@@ -145,6 +145,12 @@
 .team-graph-node-footer { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-width: 0; }
 .team-graph-node-wait { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warning); font-size: 10px; }
 .team-pane .team-map-state.status-queued { color: var(--on-secondary-container); background: var(--secondary-container); }
+.team-pane .team-map-state.status-ready { color: var(--on-surface-secondary); background: var(--surface-hover); }
+.team-member-state { display: inline-block; margin-top: 8px; }
+.team-graph-node.status-coordinating { --node-color: var(--secondary); }
+.team-graph-node.status-paused, .team-graph-node.status-blocked { --node-color: var(--warning); }
+.team-pane .team-map-state.status-coordinating { color: var(--on-secondary-container); background: var(--secondary-container); }
+.team-pane .team-map-state.status-paused, .team-pane .team-map-state.status-blocked { color: var(--on-warning-container); background: var(--warning-container); }
 
 .team-graph-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 0 8px 8px; color: var(--on-surface-muted); font-size: 10px; }
 .team-graph-legend > span { display: inline-flex; align-items: center; gap: 6px; }
@@ -155,6 +161,9 @@
 .team-pane .team-focus-header > div { min-width: 0; }
 .team-pane .team-focus-header > .text-link { margin-top: 4px; }
 
+.team-responsibility { margin-block: 12px; padding-block: 10px; border-block: 1px solid var(--border-subtle); }
+.team-responsibility h4 { margin: 0 0 6px; font-size: 11px; color: var(--on-surface-muted); }
+.team-responsibility p { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
 @container (max-width: 540px) {
 	.team-graph-top > .team-overview { flex-basis: 100%; max-width: none; }
 	.team-graph-controls { flex-basis: 100%; }
