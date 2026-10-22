@@ -4,9 +4,9 @@ import type { Goal, GoalAction } from "../shared/goals.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { ChatPane } from "./ChatPane.tsx";
 import { CanvasPane } from "./CanvasPane.tsx";
-import { FilePane, type FileTarget } from "./files/FilePane.tsx";
+import { DetailPane, type DetailView } from "./DetailPane.tsx";
+import type { FileTarget } from "./files/FilePane.tsx";
 import { GoalPanel } from "./GoalPanel.tsx";
-import { transitionItems } from "./item-transition.ts";
 import { nextClientId } from "./ids.ts";
 import { ModelMenu } from "./ModelMenu.tsx";
 import { PanelResize } from "./PanelResize.tsx";
@@ -15,7 +15,6 @@ import { useChannel } from "./subscriptions.ts";
 import { parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { selectedTeamAgents } from "./team-graph.ts";
-import { TerminalPane } from "./terminal/TerminalPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 import "./WorkspaceModes.css";
@@ -60,7 +59,7 @@ export function App() {
 	const [expandedWorkspaces, setExpandedWorkspaces] = useState<Record<string, boolean>>({});
 	const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 900);
 	const [historyQuery, setHistoryQuery] = useState("");
-	const [rightTab, setRightTab] = useState<"files" | "team" | "tools" | "terminal">("team");
+	const [rightTab, setRightTab] = useState<DetailView>("tabs");
 	const [rightOpen, setRightOpen] = useState(false);
 	const [rightWidth, setRightWidth] = useState(660);
 	const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -159,7 +158,7 @@ export function App() {
 		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setCanvasOpened(false); setMode("chat");
 	}
 	function newConversation() { if (commandPending.current) return; setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined); if (window.innerWidth < 900) setSidebarOpen(false); }
-	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: nextClientId() }); setRightTab("files"); setRightOpen(true); }
+	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: nextClientId() }); setRightTab("tabs"); setRightOpen(true); }
 	async function addWorkspace() {
 		if (addingWorkspace) return;
 		setAddingWorkspace(true); setError(undefined);
@@ -332,12 +331,10 @@ export function App() {
 				{modelOpen && <ModelMenu key={modelMenuKey} catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setModelClosing(false); setSettingsOpen(true); }} onClosingChange={setModelClosing} onClose={() => { setModelOpen(false); setModelClosing(false); }} disabled={!!session?.currentRun} />}
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : -actualRightWidth : undefined }}>
-					<div className="panel-tabs" role="tablist" aria-label="詳細パネル">{(["files", "team", "tools", "terminal"] as const).map((tab) => <button key={tab} id={`detail-tab-${tab}`} role="tab" aria-controls="detail-panel" aria-selected={rightTab === tab} onClick={() => { if (rightTab !== tab) transitionItems(() => setRightTab(tab)); }}>{tab === "files" ? "ファイル" : tab === "team" ? "チーム" : tab === "tools" ? "ツール" : "端末"}</button>)}</div>
-					<div id="detail-panel" className={`right-panel-body ${rightTab === "files" ? "file-panel-body" : rightTab === "terminal" ? "terminal-panel-body" : ""}`} role="tabpanel" aria-labelledby={`detail-tab-${rightTab}`}>
-						{workspaceId && <FilePane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} onOpen={openFile} onClear={() => setFileTarget(undefined)} visible={rightOpen && rightTab === "files"} />}
-						{rightTab === "team" && <TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen} onSelect={selectSession} onStop={(id) => { void stop(id); }} onMessage={messageAgent} onResponsibility={changeResponsibility} onFile={openFile} />}
-						{rightTab === "tools" && <ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />}
-						<TerminalPane workspaceId={workspaceId} visible={rightOpen && rightTab === "terminal"} />
+					<div className="right-panel-body detail-panel-body">
+						{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
+							team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onMessage={messageAgent} onResponsibility={changeResponsibility} onFile={openFile} />}
+							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}
 					</div>
 				</aside>
 			</div>

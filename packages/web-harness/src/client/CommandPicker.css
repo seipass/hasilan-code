@@ -1,27 +1,23 @@
 .chat-pane.has-surface:has(.command-picker), .chat-pane.is-empty:has(.command-picker) { overflow: visible; z-index: 6; }
 .command-picker-anchor { position: relative; }
-.command-picker { position: absolute; z-index: 5; inset-inline: 0; bottom: calc(100% + 8px); display: flex; flex-direction: column; max-height: min(50dvh, var(--command-picker-available-height, 390px)); padding: 12px 6px 0; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-raised); box-shadow: 0 15px 55px #05060a80; }
+.command-picker { position: absolute; z-index: 5; inset-inline: 0; bottom: calc(100% + 8px); display: flex; flex-direction: column; max-height: min(50dvh, var(--command-picker-available-height, 390px)); padding: 8px 6px 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised); box-shadow: 0 15px 55px #05060a80; }
 .command-picker { transform-origin: bottom center; animation: surface-enter var(--motion-base) var(--motion-ease); }
-.command-picker-heading { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 9px 12px; color: var(--on-surface-secondary); font-size: 12px; font-weight: 600; }
+.command-picker-heading { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 9px 6px; color: var(--on-surface-secondary); font-size: 12px; font-weight: 600; }
 .command-picker-label { font-size: 10px; color: var(--on-surface-muted); font-weight: 400; }
 .command-picker-options { display: grid; gap: 4px; min-height: 0; max-height: min(38dvh, 300px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
-.command-picker-option { --command-color: var(--primary-hover); display: flex; align-items: center; gap: 12px; width: 100%; min-height: 68px; border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; text-align: left; background: transparent; transition: background 100ms ease, border-color 100ms ease; }
+.command-picker-option { --command-color: var(--primary-hover); display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; text-align: left; background: transparent; transition: background 100ms ease, border-color 100ms ease; }
 .command-picker-option.command-canvas { --command-color: #67c6b3; }
 .command-picker-option.command-goal { --command-color: #e1b76c; }
 .command-picker-option.command-chat { --command-color: #80b4ff; }
 .command-picker-option[aria-selected="true"], .command-picker-option:hover { border-color: color-mix(in srgb, var(--command-color) 30%, transparent); background: color-mix(in srgb, var(--command-color) 9%, var(--surface-raised)); }
-.command-picker-icon { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border: 1px solid color-mix(in srgb, var(--command-color) 22%, transparent); border-radius: 11px; background: color-mix(in srgb, var(--command-color) 10%, transparent); color: var(--command-color); }
-.command-picker-icon svg { width: 21px; height: 21px; }
-.command-picker-copy { flex: 1; min-width: 0; display: grid; gap: 5px; }
-.command-picker-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px; color: var(--on-surface); font-weight: 600; font-size: 13px; line-height: 1.4; }
-.command-picker-title code { color: var(--on-surface-muted); font-size: 10px; font-weight: 400; }
+.command-picker-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.command-picker-title { color: var(--on-surface); font-weight: 600; font-size: 12px; line-height: 1.4; }
 .command-picker-description { color: var(--on-surface-muted); font-size: 11px; line-height: 1.5; }
-.command-picker-category { flex: none; padding: 3px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--on-surface-muted); font-size: 10px; }
 .command-picker-enter { flex: none; width: 16px; color: var(--command-color); opacity: 0; transform: translateX(-4px); transition: opacity var(--motion-quick) ease, transform var(--motion-quick) var(--motion-ease); }
 .command-picker-option[aria-selected="true"] .command-picker-enter { opacity: 1; transform: translateX(0); }
-.command-picker-footer { display: flex; flex: none; justify-content: space-between; gap: 12px; padding: 10px 9px; color: var(--on-surface-muted); font-size: 10px; }
+.command-picker-footer { display: flex; flex: none; justify-content: space-between; gap: 12px; padding: 6px 9px; color: var(--on-surface-muted); font-size: 10px; }
 .command-picker-footer kbd { display: inline-block; min-width: 16px; margin-right: 3px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 4px; text-align: center; font: inherit; }
 .command-picker-empty { display: grid; gap: 7px; padding: 24px 12px; font-size: 12px; }
 .command-picker-empty span { color: var(--on-surface-muted); }
-@media (max-width: 600px) { .command-picker-option { gap: 9px; padding: 9px 7px; } .command-picker-category { display: none; } .command-picker-footer { font-size: 9px; padding-inline: 4px; } }
+@media (max-width: 600px) { .command-picker-option { padding-inline: 7px; } .command-picker-footer { font-size: 9px; padding-inline: 4px; } }
 @media (prefers-reduced-motion: reduce) { .command-picker-option { transition: none; } }

@@ -9,6 +9,7 @@ import {
 } from "../shared/canvas.ts";
 import { nextId } from "../shared/ids.ts";
 import { api, command, errorMessage } from "./api.ts";
+import { CARD_HEIGHT, CARD_WIDTH, nextCanvasPosition } from "./canvas-layout.ts";
 import "./CanvasPane.css";
 
 export interface CanvasPaneProps {
@@ -18,8 +19,6 @@ export interface CanvasPaneProps {
 	onDirtyChange?: (dirty: boolean) => void;
 }
 
-const CARD_WIDTH = 240;
-const CARD_HEIGHT = 176;
 const MIN_ZOOM = 0.01;
 const MAX_ZOOM = 2;
 
@@ -55,6 +54,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 	const inlineTitle = useRef<HTMLInputElement>(null);
 	const viewport = useRef<HTMLDivElement>(null);
 	const gesture = useRef<Gesture | undefined>(undefined);
+	const lastTouchedNode = useRef<string | undefined>(undefined);
 	const busyRef = useRef(true);
 	const mounted = useRef(false);
 	const dirtyCallback = useRef(onDirtyChange);
@@ -142,6 +142,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 
 	function editOnBoard(item: CanvasNode) {
 		if (!ready || busyRef.current) return;
+		lastTouchedNode.current = item.id;
 		setConnectingFrom(undefined);
 		setConnectionPointer(undefined);
 		setSelection({ kind: "node", id: item.id });
@@ -155,6 +156,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 
 	function startConnection(item: CanvasNode) {
 		if (!ready || busyRef.current) return;
+		lastTouchedNode.current = item.id;
 		setEditingNode(undefined);
 		setSelection({ kind: "node", id: item.id });
 		setConnectingFrom(item.id);
@@ -208,21 +210,16 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		}
 	}
 
-	function addNode() {
+	function addNode(position?: { x: number; y: number }, source?: string) {
 		if (!ready || busyRef.current) return;
 		const bounds = viewport.current?.getBoundingClientRect();
 		const centerX = ((bounds?.width ?? 600) / 2 - view.x) / view.zoom - CARD_WIDTH / 2;
 		const centerY = ((bounds?.height ?? 400) / 2 - view.y) / view.zoom - CARD_HEIGHT / 2;
-		let x = centerX;
-		let y = centerY;
-		for (let index = 0; index <= design.nodes.length; index++) {
-			x = Math.round(Math.max(-CANVAS_LIMITS.coordinate, Math.min(CANVAS_LIMITS.coordinate, centerX + (index % 3) * (CARD_WIDTH + 64))));
-			y = Math.round(Math.max(-CANVAS_LIMITS.coordinate, Math.min(CANVAS_LIMITS.coordinate, centerY + Math.floor(index / 3) * (CARD_HEIGHT + 48))));
-			if (!design.nodes.some((item) => Math.abs(item.x - x) < CARD_WIDTH + 24 && Math.abs(item.y - y) < CARD_HEIGHT + 24)) break;
-		}
+		const { x, y } = position ?? nextCanvasPosition(design.nodes, nodesById.get(lastTouchedNode.current ?? ""), { x: centerX, y: centerY });
 		const newNode: CanvasNode = { id: nextId("n", design.nodes, "id"), title: `ノード ${design.nodes.length + 1}`, description: "", x, y };
-		edit((current) => ({ ...current, nodes: [...current.nodes, newNode] }));
-		setView((current) => ({ ...current, x: (bounds?.width ?? 600) / 2 - (x + CARD_WIDTH / 2) * current.zoom, y: (bounds?.height ?? 400) / 2 - (y + CARD_HEIGHT / 2) * current.zoom }));
+		edit((current) => ({ ...current, nodes: [...current.nodes, newNode], edges: source ? [...current.edges, { id: nextId("e", current.edges, "id"), source, target: newNode.id, label: "" }] : current.edges }));
+		if (!position && (!bounds || x * view.zoom + view.x < 0 || y * view.zoom + view.y < 0 || (x + CARD_WIDTH) * view.zoom + view.x > bounds.width || (y + CARD_HEIGHT) * view.zoom + view.y > bounds.height))
+			setView((current) => ({ ...current, x: (bounds?.width ?? 600) / 2 - (x + CARD_WIDTH / 2) * current.zoom, y: (bounds?.height ?? 400) / 2 - (y + CARD_HEIGHT / 2) * current.zoom }));
 		editOnBoard(newNode);
 	}
 
@@ -240,7 +237,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		if (event.button !== 0 || busyRef.current || !ready) return;
 		if (event.target instanceof Element && event.target.closest("button, input, textarea, select, a")) return;
 		event.stopPropagation();
-		if (item && (connectingFrom || editingNode === item.id)) return;
+		if (connectingFrom || item && editingNode === item.id) return;
 		setEditingNode(undefined);
 		event.currentTarget.focus();
 		event.currentTarget.setPointerCapture(event.pointerId);
@@ -327,7 +324,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 					<output aria-label="拡大率">{Math.round(view.zoom * 100)}%</output>
 					<button type="button" aria-label="拡大" onClick={() => zoomTo(view.zoom * 1.2)} disabled={view.zoom >= MAX_ZOOM}>＋</button>
 					<button type="button" onClick={fitDesign}>全体表示</button>
-					<button className="canvas-add" type="button" onClick={addNode} disabled={disabled}>＋ ノード</button>
+					<button className="canvas-add" type="button" onClick={() => addNode()} disabled={disabled}>＋ ノード</button>
 					{selection && <details className="canvas-properties canvas-selection"><summary>選択項目</summary><div>
 						{node && <>
 							<label>ノード名<input value={node.title} maxLength={CANVAS_LIMITS.title} disabled={disabled} onChange={(event) => patchNode({ title: event.target.value })} /></label>
@@ -351,7 +348,11 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 					</div></details>
 				</div>
 				{error && <p className="error canvas-message" role="alert">{error}</p>}
-				<div ref={viewport} className={`canvas-viewport${connectionSource ? " is-connecting" : ""}`} tabIndex={0} role="group" aria-label="設計図。Tab でノードを選択、Enter で編集、矢印キーで移動。空白をドラッグして表示を移動、ホイールで拡大縮小。" onPointerDown={(event) => beginGesture(event)} onPointerMove={moveGesture} onPointerUp={() => { gesture.current = undefined; }} onPointerCancel={() => { gesture.current = undefined; }} onLostPointerCapture={() => { gesture.current = undefined; }}>
+				<div ref={viewport} className={`canvas-viewport${connectionSource ? " is-connecting" : ""}`} tabIndex={0} role="group" aria-label="設計図。Tab でノードを選択、Enter で編集、矢印キーで移動。空白をドラッグして表示を移動、ホイールで拡大縮小。接続中に空白をクリックすると新しいノードへ接続。" onClick={(event) => {
+					if (!connectingFrom || disabled || event.target instanceof Element && event.target.closest(".canvas-node, .canvas-edge-hit")) return;
+					const bounds = event.currentTarget.getBoundingClientRect();
+					addNode({ x: Math.round(Math.max(-CANVAS_LIMITS.coordinate, Math.min(CANVAS_LIMITS.coordinate, (event.clientX - bounds.left - view.x) / view.zoom - CARD_WIDTH / 2))), y: Math.round(Math.max(-CANVAS_LIMITS.coordinate, Math.min(CANVAS_LIMITS.coordinate, (event.clientY - bounds.top - view.y) / view.zoom - CARD_HEIGHT / 2))) }, connectingFrom);
+				}} onPointerDown={(event) => beginGesture(event)} onPointerMove={moveGesture} onPointerUp={() => { gesture.current = undefined; }} onPointerCancel={() => { gesture.current = undefined; }} onLostPointerCapture={() => { gesture.current = undefined; }}>
 					<div className="canvas-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}>
 						<svg className="canvas-connections" aria-hidden="true">
 							<defs><marker id={`${id}-arrow`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" /></marker></defs>
@@ -383,7 +384,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 							editOnBoard(item);
 						}} onFocus={(event) => {
 							if (event.target === event.currentTarget) setSelection({ kind: "node", id: item.id });
-						}} onPointerDown={(event) => beginGesture(event, item)} onKeyDown={(event) => {
+						}} onPointerDownCapture={() => { lastTouchedNode.current = item.id; }} onFocusCapture={() => { lastTouchedNode.current = item.id; }} onPointerDown={(event) => beginGesture(event, item)} onKeyDown={(event) => {
 							if (disabled || event.target !== event.currentTarget) return;
 							const step = event.shiftKey ? 40 : 10;
 							if (event.key === "Enter") { event.preventDefault(); if (connectingFrom) connectNodes(connectingFrom, item.id); else editOnBoard(item); }
@@ -404,7 +405,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 							<button className="canvas-connect-handle" type="button" disabled={disabled} aria-label={`${item.title || "無題のノード"}から接続を開始`} aria-pressed={connectingFrom === item.id} onClick={() => connectingFrom === item.id ? cancelConnection() : startConnection(item)}>接続 <span aria-hidden="true">＋</span></button>
 						</div>)}
 					</div>
-					{ready && design.nodes.length === 0 && <div className="canvas-empty"><h3>ノードを追加して始める</h3><p>ノードを並べて、線でつなぎます。</p><button className="canvas-add" type="button" disabled={disabled} onClick={addNode}>＋ ノードを追加</button></div>}
+					{ready && design.nodes.length === 0 && <div className="canvas-empty"><h3>ノードを追加して始める</h3><p>ノードを並べて、線でつなぎます。</p><button className="canvas-add" type="button" disabled={disabled} onClick={() => addNode()}>＋ ノードを追加</button></div>}
 				</div>
 			</div>
 		</div>

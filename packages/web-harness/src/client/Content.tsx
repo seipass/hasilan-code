@@ -7,6 +7,7 @@ export function record(value: unknown): value is Record<string, unknown> {
 
 export function Markdown({ text, onFile }: { text: string; onFile: (path: string, line?: number) => void }) {
 	return <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={{
+		table: ({ children }) => <div className="markdown-table-scroll" tabIndex={0} role="region" aria-label="表"><table>{children}</table></div>,
 		a: ({ href, children }) => {
 			if (!href) return <span>{children}</span>;
 			if (/^https?:\/\//i.test(href)) return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
