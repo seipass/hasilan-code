@@ -10,6 +10,7 @@ import { GoalPanel } from "./GoalPanel.tsx";
 import { nextClientId } from "./ids.ts";
 import { ModelMenu } from "./ModelMenu.tsx";
 import { PanelResize } from "./PanelResize.tsx";
+import { SessionImportDialog } from "./SessionImportDialog.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
 import { parseComposerCommand } from "./slash-command.ts";
@@ -52,6 +53,7 @@ export function App() {
 	const [draftModel, setDraftModel] = useState<Model | undefined>(savedSelection.model);
 	const [draftThinking, setDraftThinking] = useState<ThinkingLevel | undefined>(savedSelection.thinkingLevel);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [importOpen, setImportOpen] = useState(false);
 	const [modelOpen, setModelOpen] = useState(false);
 	const [modelClosing, setModelClosing] = useState(false);
 	const [modelMenuKey, setModelMenuKey] = useState(0);
@@ -300,6 +302,7 @@ export function App() {
 		<aside ref={sidebarRef} id="conversation-history" className="sidebar" aria-label="会話の履歴" aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
 			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={newConversation}><img className="brand-symbol" src="/icon.svg" alt="" /></button></div>
 			<button className="new-conversation" onClick={newConversation}><span aria-hidden="true">＋</span>新しい会話</button>
+			<button type="button" className="session-import-trigger" onClick={() => setImportOpen(true)}>セッションを引き継ぐ</button>
 			<label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>
 			<div className="history-heading"><span>会話</span><button className="icon-button workspace-add-button" aria-label="ワークスペースを追加" title="フォルダーを選択してワークスペースを追加" disabled={addingWorkspace} onClick={() => { void addWorkspace(); }}>{addingWorkspace ? "…" : "+"}</button></div>
 			<nav className="history-navigation" aria-label="ワークスペースと会話">
@@ -339,5 +342,13 @@ export function App() {
 				</aside>
 			</div>
 		</div>{settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} />}
+		{importOpen && <SessionImportDialog workspaces={workspaces} workspaceId={workspaceId} model={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onClose={() => setImportOpen(false)} beforeImport={(destination) => !canvasDirty || destination === workspaceId || window.confirm("Canvasの未保存の変更を破棄して、引き継いだ会話へ移動しますか？")} onImported={(imported, folder) => {
+			setWorkspaces((previous) => previous.some((entry) => entry.workspaceId === folder.workspaceId) ? previous : [...previous, folder]);
+			setInitialSessions((previous) => [...previous.filter((entry) => entry.sessionId !== imported.sessionId), imported]);
+			setExpandedWorkspaces((previous) => ({ ...previous, [folder.workspaceId]: true }));
+			draftSession.current = undefined; setDraftInsertion(undefined); setWorkspaceId(folder.workspaceId); setSessionId(imported.sessionId); setMode("chat"); setHistoryQuery(""); setFileTarget(undefined); setError(undefined); setModelOpen(false); setImportOpen(false);
+			if (folder.workspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
+			if (window.innerWidth < 900) setSidebarOpen(false);
+		}} />}
 	</div>;
 }

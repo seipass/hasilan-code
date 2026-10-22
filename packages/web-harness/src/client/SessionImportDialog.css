@@ -1,0 +1,53 @@
+.session-import-dialog { width: min(100% - 32px, 980px); height: min(88dvh, 800px); max-height: 100dvh; padding: 0; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-panel); color: var(--on-surface); }
+.session-import-dialog[open] { display: flex; flex-direction: column; }
+.session-import-dialog::backdrop { background: #05060ab3; }
+.session-import-heading { display: flex; flex: none; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 20px 12px; }
+.session-import-heading h2 { margin: 0; }
+.session-import-heading > div { min-width: 0; }
+.session-import-heading > button { flex: none; white-space: nowrap; }
+.session-import-heading p { margin: 6px 0 0; color: var(--on-surface-muted); font-size: 12px; }
+.session-import-source { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 0 20px 12px; font-size: 12px; }
+.session-import-source button { min-height: 36px; }
+.session-import-paths { flex: none; margin: 0; padding: 0 20px 12px; color: var(--on-surface-muted); font-size: 11px; overflow-wrap: anywhere; }
+.session-import-warnings { flex: none; max-height: 100px; overflow: auto; margin: 0 20px 12px; color: var(--warning); font-size: 12px; }
+.session-import-body { display: grid; flex: 1; grid-template-columns: minmax(220px, 36%) minmax(0, 1fr); min-height: 0; border-block: 1px solid var(--border); }
+.session-import-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--border); }
+.session-import-list > label { padding: 12px; }
+.session-import-list input { width: 100%; font-size: 12px; }
+.session-import-candidates { flex: 1; overflow: auto; min-height: 0; padding: 0 6px 6px; }
+.session-import-candidates > button { display: grid; gap: 5px; width: 100%; margin-bottom: 4px; padding: 12px; border: 1px solid transparent; text-align: left; background: transparent; }
+.session-import-candidates > [aria-selected="true"] { border-color: var(--primary); background: var(--primary-container); }
+.session-import-candidates strong { font-weight: 600; font-size: 12px; overflow-wrap: anywhere; }
+.session-import-candidates span, .session-import-candidates time { color: var(--on-surface-muted); font-size: 11px; overflow-wrap: anywhere; }
+.session-import-candidates > p { margin: 12px; color: var(--on-surface-muted); font-size: 12px; }
+.session-import-preview { padding: 16px 20px; min-width: 0; min-height: 0; overflow: auto; }
+.session-import-preview h3 { margin-top: 0; overflow-wrap: anywhere; }
+.session-import-empty { color: var(--on-surface-muted); font-size: 13px; }
+.session-import-message { margin-top: 16px; }
+.session-import-message > span { color: var(--on-surface-muted); font-size: 11px; }
+.session-import-message pre { max-height: 240px; margin: 6px 0 0; padding: 12px; font-family: inherit; font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.session-import-warning { color: var(--warning); font-size: 12px; }
+.session-import-error { flex: none; margin: 0; padding: 8px 20px; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
+.session-import-preview .session-import-error { padding-inline: 0; }
+.session-import-actions { display: flex; flex: none; align-items: end; gap: 16px; padding: 14px 20px 8px; }
+.session-import-actions label { flex: 1; min-width: 0; font-size: 12px; }
+.session-import-actions select { width: 100%; }
+.session-import-actions > button { flex: none; border-color: var(--primary); background: var(--primary-container); font-size: 12px; }
+.session-import-note { flex: none; margin: 0; padding: 0 20px 14px; color: var(--on-surface-muted); font-size: 11px; }
+.session-import-trigger { margin: 4px 12px 0; border: 0; padding: 8px; background: transparent; text-align: left; color: var(--on-surface-muted); font-size: 12px; }
+@media (max-width: 600px) {
+	.session-import-dialog { width: 100%; max-width: none; height: 100dvh; margin: 0; border-radius: 0; }
+	.session-import-dialog input, .session-import-dialog select { min-height: 44px; font-size: 16px; }
+	.session-import-heading { padding: 16px 12px 12px; }
+	.session-import-source { grid-template-columns: minmax(0, 1fr) auto; padding-inline: 12px; }
+	.session-import-source label:first-child { grid-column: 1 / -1; }
+	.session-import-paths { padding-inline: 12px; }
+	.session-import-body { display: flex; flex-direction: column; }
+	.session-import-list { flex: 1; border-right: 0; }
+	.session-import-body:has(.session-import-message) .session-import-list { flex: 0 0 35%; border-bottom: 1px solid var(--border); }
+	.session-import-preview { flex: 1; padding: 12px; }
+	.session-import-preview:has(.session-import-empty) { display: none; }
+	.session-import-actions { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px; }
+	.session-import-actions button { min-height: 44px; }
+	.session-import-note { padding-inline: 12px; }
+}

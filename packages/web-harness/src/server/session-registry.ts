@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentMessage, ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { clampThinkingLevel, getSupportedThinkingLevels } from "@hasilan-code/pi-ai";
@@ -21,6 +21,12 @@ import {
 import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal } from "../shared/goals.ts";
 import { nextId } from "../shared/ids.ts";
+import {
+	type ImportedFrom,
+	type ImportedTranscript,
+	SESSION_IMPORT_MESSAGE_API,
+	SESSION_IMPORT_SOURCES,
+} from "../shared/session-import.ts";
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
 import { createHarnessSettings } from "./config.ts";
@@ -50,6 +56,8 @@ export interface SessionDescriptor {
 	parentSessionId?: string;
 	role?: string;
 	systemPrompt?: string;
+	title?: string;
+	importedFrom?: ImportedFrom;
 	model?: ModelSelection;
 	thinkingLevel?: ThinkingLevel;
 	tools?: string[];
@@ -213,6 +221,15 @@ function validateState(value: unknown): asserts value is HarnessState {
 	if (teams.size !== state.teams.length || agents.size !== state.agents.length)
 		throw new Error("Duplicate team or agent state");
 	for (const session of state.sessions) {
+		if (session.title !== undefined && typeof session.title !== "string") throw new Error("Invalid session title");
+		if (
+			session.importedFrom &&
+			(!SESSION_IMPORT_SOURCES.some((source) => source.id === session.importedFrom?.source) ||
+				typeof session.importedFrom.sourceSessionId !== "string" ||
+				typeof session.importedFrom.revision !== "string" ||
+				typeof session.importedFrom.importedAt !== "string")
+		)
+			throw new Error("Invalid imported session provenance");
 		if (session.parentSessionId && !sessions.has(session.parentSessionId))
 			throw new Error("Invalid parent session state");
 		if (session.tools && (!Array.isArray(session.tools) || session.tools.some((tool) => typeof tool !== "string")))
@@ -540,6 +557,99 @@ export class SessionRegistry {
 	}): Promise<SessionDescriptor> {
 		return this.mutate(() => this.createWithinMutation(options));
 	}
+	importSession(
+		workspaceId: string,
+		source: ImportedTranscript,
+		revision: string,
+		model?: ModelSelection,
+		thinkingLevel?: ThinkingLevel,
+	): Promise<SessionDescriptor> {
+		return this.mutate(async () => {
+			if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
+			const cwd = this.getWorkspaceRoot(workspaceId);
+			const existing = this.state.sessions.find(
+				(entry) =>
+					entry.workspaceId === workspaceId &&
+					entry.importedFrom?.source === source.source &&
+					entry.importedFrom.sourceSessionId === source.sourceSessionId &&
+					entry.importedFrom.revision === revision,
+			);
+			if (existing) return structuredClone(existing);
+			if (!source.messages.length) throw new HarnessError("取り込める会話メッセージがありません。");
+			if (model && this.options.modelRuntime && !this.options.modelRuntime.getModel(model.provider, model.id))
+				throw new HarnessError("Model not found; select a model in the composer");
+			const descriptor: SessionDescriptor = {
+				sessionId: randomUUID(),
+				workspaceId,
+				cwd,
+				title: source.title,
+				materialized: true,
+				availability: "ready",
+				model: model ? { ...model } : undefined,
+				thinkingLevel,
+				importedFrom: {
+					source: source.source,
+					sourceSessionId: source.sourceSessionId,
+					revision,
+					importedAt: new Date().toISOString(),
+				},
+			};
+			const selected = model && this.options.modelRuntime?.getModel(model.provider, model.id);
+			if (selected && thinkingLevel) descriptor.thinkingLevel = clampThinkingLevel(selected, thinkingLevel);
+			const memory = SessionManager.inMemory(cwd, { id: descriptor.sessionId });
+			memory.appendSessionInfo(source.title);
+			memory.appendCustomEntry("harness-session-import", { ...descriptor.importedFrom, warnings: source.warnings });
+			for (const message of source.messages) {
+				const timestamp = message.timestamp ?? Date.now();
+				if (message.role === "user") memory.appendMessage({ role: "user", content: message.text, timestamp });
+				else if (message.role === "assistant")
+					memory.appendMessage({
+						role: "assistant",
+						content: [{ type: "text", text: message.text }],
+						api: SESSION_IMPORT_MESSAGE_API,
+						provider: `imported-${source.source}`,
+						model: "imported",
+						stopReason: "stop",
+						timestamp,
+						usage: {
+							input: 0,
+							output: 0,
+							cacheRead: 0,
+							cacheWrite: 0,
+							totalTokens: 0,
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+						},
+					});
+				else memory.appendCustomMessageEntry("harness-imported-context", message.text, true);
+			}
+			const path = this.newManager(descriptor).getSessionFile();
+			if (!path) throw new Error("Could not prepare imported session file");
+			descriptor.path = path;
+			let written = false;
+			try {
+				const importedFile = await open(path, "wx", 0o600);
+				written = true;
+				try {
+					await importedFile.writeFile(
+						`${[memory.getHeader(), ...memory.getEntries()].map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+					);
+				} finally {
+					await importedFile.close();
+				}
+				const manager = SessionManager.open(path);
+				this.state.sessions.push(descriptor);
+				this.addLive(descriptor, manager);
+				await this.persist();
+			} catch (error) {
+				this.state.sessions = this.state.sessions.filter((entry) => entry !== descriptor);
+				this.live.delete(descriptor.sessionId);
+				if (written) await unlink(path);
+				throw error;
+			}
+			this.changed(descriptor.sessionId);
+			return structuredClone(descriptor);
+		});
+	}
 	/** TeamManager calls this only while holding the shared mutation gate. */
 	async createWithinMutation(options: {
 		workspaceId: string;
@@ -613,7 +723,7 @@ export class SessionRegistry {
 			contextUsage,
 			usage: this.live.get(id)?.usage.snapshot(),
 			thinkingLevel: this.live.get(id)?.adapter?.getThinkingLevel?.() ?? descriptor.thinkingLevel,
-			title: runs[0]?.task,
+			title: descriptor.title ?? runs[0]?.task,
 			currentRun,
 			latestRun: runs.at(-1),
 			pendingInput: this.state.pendingInput
@@ -633,7 +743,7 @@ export class SessionRegistry {
 				return structuredClone({
 					...descriptor,
 					usage: this.live.get(descriptor.sessionId)?.usage.snapshot(),
-					title: runs[0]?.task,
+					title: descriptor.title ?? runs[0]?.task,
 					currentRun,
 					latestRun: runs.at(-1),
 					pendingInput: this.state.pendingInput

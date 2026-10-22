@@ -1,5 +1,6 @@
 import type { Usage } from "@hasilan-code/pi-ai";
 import type { SessionManager } from "@hasilan-code/pi-coding-agent";
+import { SESSION_IMPORT_MESSAGE_API } from "../shared/session-import.ts";
 import { aggregateUsage, type ModelUsage } from "../shared/usage.ts";
 
 /** Billing covers all entries, including compacted history, without recounting stream deltas. */
@@ -25,6 +26,7 @@ export class SessionUsage {
 			let failures = 0;
 			if (entry.type === "message" && entry.message.role === "assistant") {
 				const message = entry.message;
+				if (message.api === SESSION_IMPORT_MESSAGE_API) continue;
 				usage = message.usage;
 				provider = message.provider;
 				model = message.responseModel ?? message.model;

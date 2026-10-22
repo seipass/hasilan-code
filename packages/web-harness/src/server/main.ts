@@ -29,6 +29,8 @@ import { EventHub } from "./events.ts";
 import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
+import { handleSessionImport } from "./session-import/routes.ts";
+import { SessionImportService } from "./session-import/service.ts";
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
 import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./settings.ts";
 import { TeamManager } from "./team-manager.ts";
@@ -87,6 +89,7 @@ async function main() {
 		registry.getWorkspaceRoot(id);
 	});
 	const terminals = new TerminalManager({ getWorkspaceRoot: (id) => files.getWorkspaceRoot(id) });
+	const sessionImports = new SessionImportService();
 	events = new EventHub((channel, id) =>
 		channel === "session" ? registry.get(id) : { sessions: registry.list(id), teams: teams.snapshot(id) },
 	);
@@ -117,6 +120,10 @@ async function main() {
 			try {
 				if (shuttingDown) throw new HttpError(503, "Host shutting down");
 				const method = request.method;
+				if (
+					await handleSessionImport(request, response, url, sessionImports, registry, (id) => teams.ensureRoot(id))
+				)
+					return true;
 				const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
 				const reply = (data: unknown, status = 200) => {
 					sendJson(response, status, data);
