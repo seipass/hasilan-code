@@ -1,16 +1,14 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage } from "../api.ts";
 import { MobileSheet, useMobileLayout } from "../MobileSheet.tsx";
-import { FilePreview, type FileTab } from "./FilePreview.tsx";
 import "./FilePane.css";
 
 interface FileEntry { name: string; path: string; kind: "file" | "directory" | "symlink"; size: number }
 export interface FileTarget { path: string; line?: number; requestId: string }
 interface FilePaneProps {
-	workspaceId: string; file?: FileTab; refreshToken: number; requestId?: string; visible: boolean;
-	id: string; labelledBy: string;
+	workspaceId: string; activePath?: string; refreshToken: number; visible: boolean; treeVisible: boolean;
+	children: ReactNode;
 	onOpen: (path: string, line?: number) => void;
-	onChange: (path: string, patch: Partial<FileTab>) => void;
 }
 const MIN_PREVIEW_WIDTH = 300;
 const MIN_TREE_WIDTH = 180;
@@ -47,7 +45,7 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen 
 	</ul>;
 }
 
-export function FilePane({ workspaceId, file, refreshToken, requestId, visible, id, labelledBy, onOpen, onChange }: FilePaneProps) {
+export function FilePane({ workspaceId, activePath, refreshToken, visible, treeVisible, children, onOpen }: FilePaneProps) {
 	const mobile = useMobileLayout();
 	const [treeOpen, setTreeOpen] = useState(false);
 	const [treeWidth, setTreeWidth] = useState(240);
@@ -66,7 +64,7 @@ export function FilePane({ workspaceId, file, refreshToken, requestId, visible, 
 	const minTreeWidth = Math.floor(treeMinimum * minimumScale);
 	const maxTreeWidth = Math.max(minTreeWidth, Math.min(MAX_TREE_WIDTH, contentWidth - minPreviewWidth));
 	const displayedTreeWidth = Math.max(minTreeWidth, Math.min(maxTreeWidth, treeWidth));
-	useEffect(() => { if (!mobile || !visible) setTreeOpen(false); }, [mobile, visible]);
+	useEffect(() => { if (!mobile || !visible || !treeVisible) setTreeOpen(false); }, [mobile, visible, treeVisible]);
 	useEffect(() => {
 		const element = pane.current;
 		if (!element) return;
@@ -76,12 +74,12 @@ export function FilePane({ workspaceId, file, refreshToken, requestId, visible, 
 		return () => observer.disconnect();
 	}, []);
 	function resizeTree(width: number) { setTreeWidth(Math.max(minTreeWidth, Math.min(maxTreeWidth, width))); }
-	const tree = <nav className="files-tree" id={treeId} aria-label="作業フォルダーのファイル"><Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${requestId ?? ""}`} activePath={file?.path} visible={visible && (!mobile || treeOpen || !file)} onOpen={(path) => { onOpen(path); setTreeOpen(false); }} /></nav>;
-	return <section className="files-pane" ref={pane} hidden={!visible} id={file ? undefined : id} role={file ? undefined : "tabpanel"} aria-labelledby={file ? undefined : labelledBy} aria-label="ファイル閲覧">
-		{mobile && file && <button type="button" className="files-tree-toggle" aria-haspopup="dialog" aria-expanded={treeOpen} aria-controls={treeId} onClick={() => setTreeOpen(true)}>ファイル一覧を開く</button>}
-		<div className="files-layout" style={{ gridTemplateColumns: mobile || !file ? "minmax(0, 1fr)" : `minmax(0, 1fr) ${splitWidth}px minmax(0, ${displayedTreeWidth}px)` }}>
-			{file && <div className="files-preview"><FilePreview workspaceId={workspaceId} file={file} visible={visible} refreshKey={`${refreshToken}:${requestId ?? ""}`} id={id} labelledBy={labelledBy} onOpen={onOpen} onChange={onChange} /></div>}
-			{!mobile && file && <div className="files-splitter" role="separator" tabIndex={0} aria-label="ファイルツリーの幅" aria-orientation="vertical" aria-controls={treeId} aria-valuemin={minTreeWidth} aria-valuemax={maxTreeWidth} aria-valuenow={displayedTreeWidth} aria-valuetext={`${displayedTreeWidth} ピクセル`} data-resizing={resizing} onPointerDown={(event) => {
+	const tree = <nav className="files-tree" id={treeId} aria-label="作業フォルダーのファイル" hidden={!treeVisible}><Directory workspaceId={workspaceId} path="" refreshKey={String(refreshToken)} activePath={activePath} visible={visible && treeVisible && (!mobile || treeOpen)} onOpen={(path) => { onOpen(path); setTreeOpen(false); }} /></nav>;
+	return <section className="files-pane" ref={pane} aria-label="作業ビューア">
+		{mobile && treeVisible && <button type="button" className="files-tree-toggle" aria-haspopup="dialog" aria-expanded={treeOpen} aria-controls={treeId} onClick={() => setTreeOpen(true)}>ファイル一覧を開く</button>}
+		<div className="files-layout" style={{ gridTemplateColumns: mobile || !treeVisible ? "minmax(0, 1fr)" : `minmax(0, 1fr) ${splitWidth}px minmax(0, ${displayedTreeWidth}px)` }}>
+			<div className="files-preview">{children}</div>
+			{!mobile && treeVisible && <div className="files-splitter" role="separator" tabIndex={0} aria-label="ファイルツリーの幅" aria-orientation="vertical" aria-controls={treeId} aria-valuemin={minTreeWidth} aria-valuemax={maxTreeWidth} aria-valuenow={displayedTreeWidth} aria-valuetext={`${displayedTreeWidth} ピクセル`} data-resizing={resizing} onPointerDown={(event) => {
 				if (event.button !== 0) return;
 				event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId);
 				drag.current = { pointerId: event.pointerId, startX: event.clientX, width: displayedTreeWidth }; setResizing(true);
@@ -93,7 +91,7 @@ export function FilePane({ workspaceId, file, refreshToken, requestId, visible, 
 				event.preventDefault(); const step = event.shiftKey ? 48 : 16;
 				resizeTree(event.key === "Home" ? minTreeWidth : event.key === "End" ? maxTreeWidth : displayedTreeWidth + (event.key === "ArrowLeft" ? step : -step));
 			}} />}
-			{mobile && file ? <MobileSheet open={treeOpen && visible} side="right" title="ファイル一覧" onClose={() => setTreeOpen(false)}>{tree}</MobileSheet> : tree}
+			{mobile ? <MobileSheet open={treeOpen && visible && treeVisible} side="right" title="ファイル一覧" onClose={() => setTreeOpen(false)}>{tree}</MobileSheet> : tree}
 		</div>
 	</section>;
 }

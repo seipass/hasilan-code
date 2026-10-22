@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
 import { MobileSheet, useMobileLayout } from "./MobileSheet.tsx";
 import { ModelPicker } from "./ModelPicker.tsx";
@@ -29,7 +29,6 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 	const [error, setError] = useState<string>();
 	const [closing, setClosing] = useState(false);
 	const menu = useRef<HTMLDivElement>(null);
-	const titleId = useId();
 	useLayoutEffect(() => {
 		if (mobile) return;
 		const anchor = document.querySelector<HTMLButtonElement>(".model-trigger");
@@ -95,7 +94,6 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 	const content = <>
 		<div className="model-menu-columns">
 			<section className="model-menu-models" aria-label="モデル選択">
-				<h3>モデル</h3>
 				<ModelPicker catalog={available} value={value} onChange={(selection) => { void choose(selection); }} disabled={busy || disabled} autoFocus={!mobile} compact />
 				{available && available.models.length === 0 && <button type="button" className="model-settings-link" onClick={onSettings}>設定でモデルを接続</button>}
 			</section>
@@ -118,12 +116,11 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 		{error && <p className="composer-error" role="alert">{error}</p>}
 	</>;
 	if (mobile) return <MobileSheet open side="bottom" title="モデル・Thinking" busy={busy} onClosing={() => onClosingChange(true)} onClose={requestClose}><div className="mobile-model-menu" aria-busy={busy}>{content}</div></MobileSheet>;
-	return <div ref={menu} className="composer-popover model-popover" data-closing={closing} inert={closing} role="dialog" aria-labelledby={titleId} aria-busy={busy} onAnimationEnd={(event) => { if (closing && event.target === event.currentTarget) onClose(); }} onKeyDown={(event) => {
+	return <div ref={menu} className="composer-popover model-popover" data-closing={closing} inert={closing} role="dialog" aria-label="モデル・Thinking" aria-busy={busy} onAnimationEnd={(event) => { if (closing && event.target === event.currentTarget) onClose(); }} onKeyDown={(event) => {
 		if (event.key !== "Escape") return;
 		event.preventDefault(); event.stopPropagation();
 		if (!busy) { requestClose(); document.querySelector<HTMLButtonElement>(".model-trigger")?.focus(); }
 	}}>
-		<header><strong id={titleId}>モデル・Thinking</strong><button className="icon-button" type="button" disabled={busy || closing} aria-label="モデル選択を閉じる" onClick={() => { requestClose(); document.querySelector<HTMLButtonElement>(".model-trigger")?.focus(); }}>×</button></header>
 		{content}
 	</div>;
 }

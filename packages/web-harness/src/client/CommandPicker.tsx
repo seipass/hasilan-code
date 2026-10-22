@@ -29,7 +29,6 @@ export function CommandPicker({ id, commands, activeIndex, onActive, onChoose }:
 		};
 	}, []);
 	return <div ref={panel} className="command-picker">
-		<div className="command-picker-heading"><span>何を始めますか？</span><span className="command-picker-label">コマンド</span></div>
 		<div id={id} role="listbox" aria-label="スラッシュコマンド" className="command-picker-options">
 			{commands.map((entry, index) => {
 				return <button id={`${id}-${index}`} key={entry.command} type="button" role="option" aria-selected={index === activeIndex} tabIndex={-1} className={`command-picker-option command-${entry.command.slice(1)}`} onPointerMove={() => onActive(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => onChoose(entry.command)}>
@@ -39,6 +38,5 @@ export function CommandPicker({ id, commands, activeIndex, onActive, onChoose }:
 			})}
 			{commands.length === 0 && <div className="command-picker-empty"><strong>コマンドが見つかりません</strong><span>入力を消して / から選び直してください。</span></div>}
 		</div>
-		<div className="command-picker-footer"><span><kbd>↑</kbd><kbd>↓</kbd> 選択 <kbd>Enter</kbd> 入力</span><span><kbd>Esc</kbd> 閉じる</span></div>
 	</div>;
 }
