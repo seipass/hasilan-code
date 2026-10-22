@@ -536,12 +536,13 @@ button, .workspace-accordion > summary, .panel-resize::after {
 .new-conversation:hover:not(:disabled), .send-button:hover:not(:disabled), .stop-button:hover:not(:disabled) { transform: translateY(-2px); }
 .new-conversation:active:not(:disabled), .send-button:active:not(:disabled), .stop-button:active:not(:disabled) { transform: translateY(0) scale(.96); }
 .session-button:hover:not(.selected) { transform: translateX(3px); }
-.workspace-accordion > summary::before { transition: transform var(--motion-base) var(--motion-ease); }
+.workspace-accordion > summary::before, .tool-card > summary::after { transition: transform var(--motion-base) var(--motion-ease); }
 @supports (interpolate-size: allow-keywords) {
-	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details)::details-content { interpolate-size: allow-keywords; height: 0; overflow: clip; opacity: 0; transition: height 260ms var(--motion-ease), opacity 180ms ease, content-visibility 260ms allow-discrete; }
-	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details)[open]::details-content { height: auto; opacity: 1; }
+	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)::details-content { interpolate-size: allow-keywords; height: 0; overflow: clip; opacity: 0; transition: height 260ms var(--motion-ease), opacity 180ms ease, content-visibility 260ms allow-discrete; }
+	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)[open]::details-content { height: auto; opacity: 1; }
 }
 .status-dot { transition: color var(--motion-base) ease, background-color var(--motion-base) ease; }
+.team-map-state { transition: color var(--motion-base) ease, background-color var(--motion-base) ease; }
 .composer { transition: border-color var(--motion-base) ease, box-shadow var(--motion-base) ease; }
 .composer:focus-within { box-shadow: 0 0 0 3px #6c6ff61c, 0 10px 30px #05060a66; }
 .composer-popover { transform-origin: bottom left; animation: surface-enter var(--motion-enter) var(--motion-ease) both; }
@@ -584,5 +585,5 @@ button, .workspace-accordion > summary, .panel-resize::after {
 		transition-delay: 0s !important;
 		scroll-behavior: auto !important;
 	}
-	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details)::details-content { transition: none !important; }
+	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)::details-content { transition: none !important; }
 }

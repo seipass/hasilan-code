@@ -1,7 +1,7 @@
 .account-usage-panel { display: grid; gap: 14px; }
 .account-usage-toolbar, .account-usage-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .account-usage-toolbar h3, .account-usage-card h4 { margin: 0; }
-.account-usage-card { min-width: 0; }
+.account-usage-card { min-width: 0; animation: message-enter var(--motion-enter) var(--motion-ease); }
 .account-usage-plan { color: var(--muted); overflow-wrap: anywhere; }
 .account-usage-account { color: var(--muted); overflow-wrap: anywhere; }
 .account-usage-card dl { margin: 16px 0; }

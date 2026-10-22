@@ -1,4 +1,6 @@
 .mobile-sheet {
+	--sheet-offset-x: 0px;
+	--sheet-offset-y: 24px;
 	position: fixed;
 	inset: auto 0 var(--sheet-bottom, 0px);
 	width: 100%;
@@ -12,13 +14,25 @@
 	background: var(--surface-raised);
 	color: var(--on-surface);
 	box-shadow: 0 -8px 32px #0004;
+	opacity: 0;
+	transform: translate(var(--sheet-offset-x), var(--sheet-offset-y));
+	pointer-events: none;
+	transition: opacity 170ms ease, transform 170ms var(--motion-exit), display 170ms allow-discrete, overlay 170ms allow-discrete;
 }
-.mobile-sheet[open] { display: flex; flex-direction: column; }
-.mobile-sheet::backdrop { background: #05060a99; }
-.mobile-sheet.is-right { inset: auto 0 var(--sheet-bottom, 0px) auto; width: min(360px, 90vw); height: var(--sheet-viewport-height, 100dvh); max-height: var(--sheet-viewport-height, 100dvh); border-radius: 16px 0 0 16px; }
+.mobile-sheet[open] { display: flex; flex-direction: column; opacity: 1; transform: translate(0, 0); pointer-events: auto; transition-duration: var(--motion-base), var(--motion-enter), var(--motion-enter), var(--motion-enter); }
+.mobile-sheet::backdrop { background: #05060a99; opacity: 0; transition: opacity 170ms ease, display 170ms allow-discrete, overlay 170ms allow-discrete; }
+.mobile-sheet[open]::backdrop { opacity: 1; transition-duration: var(--motion-base); }
+.mobile-sheet.is-right { --sheet-offset-x: 32px; --sheet-offset-y: 0px; inset: auto 0 var(--sheet-bottom, 0px) auto; width: min(360px, 90vw); height: var(--sheet-viewport-height, 100dvh); max-height: var(--sheet-viewport-height, 100dvh); border-radius: 16px 0 0 16px; }
+@starting-style {
+	.mobile-sheet[open] { opacity: 0; transform: translate(var(--sheet-offset-x), var(--sheet-offset-y)); }
+	.mobile-sheet[open]::backdrop { opacity: 0; }
+}
 .mobile-sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); }
 .mobile-sheet-heading h2 { margin: 0; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
 .mobile-sheet-heading button { min-width: 64px; min-height: 44px; flex: none; }
 .mobile-sheet-content { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .mobile-sheet-content > .team-focus { padding: 16px; border: 0; border-radius: 0; }
 .mobile-sheet-content > .files-tree { min-height: 100%; }
+@media (prefers-reduced-motion: reduce) {
+	.mobile-sheet, .mobile-sheet::backdrop { transition: none !important; transform: none !important; }
+}

@@ -14,11 +14,12 @@ export function useMobileLayout(): boolean {
 	return mobile;
 }
 
-export function MobileSheet({ open, side, title, busy = false, onClose, children }: {
+export function MobileSheet({ open, side, title, busy = false, onClosing, onClose, children }: {
 	open: boolean;
 	side: "bottom" | "right";
 	title: string;
 	onClose: () => void;
+	onClosing?: () => void;
 	busy?: boolean;
 	children: ReactNode;
 }) {
@@ -27,7 +28,7 @@ export function MobileSheet({ open, side, title, busy = false, onClose, children
 	useEffect(() => {
 		const element = dialog.current;
 		if (!element) return;
-		if (open && !element.open) element.showModal();
+		if (open && !element.open) { element.inert = false; element.showModal(); }
 		else if (!open && element.open) element.close();
 		const viewport = window.visualViewport;
 		const resize = () => {
@@ -47,16 +48,27 @@ export function MobileSheet({ open, side, title, busy = false, onClose, children
 			if (element.open) element.close();
 		};
 	}, [open]);
-	return <dialog ref={dialog} className={`mobile-sheet is-${side}`} aria-labelledby={titleId} aria-busy={busy}
-		onCancel={(event) => { event.preventDefault(); onClose(); }}
-		onClose={(event) => { if (!event.currentTarget.open) onClose(); }}
+	const requestClose = () => {
+		if (busy || !dialog.current?.open) return;
+		dialog.current.inert = true;
+		dialog.current.close();
+		onClosing?.();
+	};
+	return <dialog ref={dialog} className={`mobile-sheet is-${side}`} aria-labelledby={titleId} aria-busy={busy} inert={!open}
+		onCancel={(event) => { event.preventDefault(); requestClose(); }}
+		onClose={async (event) => {
+			const element = event.currentTarget;
+			// Keep conditionally mounted sheets alive through their native exit transition.
+			await Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
+			if (!element.open && element.isConnected) onClose();
+		}}
 		onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
 		onClick={(event) => {
 			if (event.target !== event.currentTarget) return;
 			const bounds = event.currentTarget.getBoundingClientRect();
-			if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
+			if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) requestClose();
 		}}>
-		<header className="mobile-sheet-heading"><h2 id={titleId}>{title}</h2><button type="button" disabled={busy} onClick={onClose} aria-label={`${title}を閉じる`}>閉じる</button></header>
+		<header className="mobile-sheet-heading"><h2 id={titleId}>{title}</h2><button type="button" disabled={busy} onClick={requestClose} aria-label={`${title}を閉じる`}>閉じる</button></header>
 		<div className="mobile-sheet-content">{children}</div>
 	</dialog>;
 }

@@ -117,7 +117,7 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 		{disabled && <p className="fine-print">実行が終わるとモデルを変更できます。</p>}
 		{error && <p className="composer-error" role="alert">{error}</p>}
 	</>;
-	if (mobile) return <MobileSheet open side="bottom" title="モデル・Thinking" busy={busy} onClose={requestClose}><div className="mobile-model-menu" aria-busy={busy}>{content}</div></MobileSheet>;
+	if (mobile) return <MobileSheet open side="bottom" title="モデル・Thinking" busy={busy} onClosing={() => onClosingChange(true)} onClose={requestClose}><div className="mobile-model-menu" aria-busy={busy}>{content}</div></MobileSheet>;
 	return <div ref={menu} className="composer-popover model-popover" data-closing={closing} inert={closing} role="dialog" aria-labelledby={titleId} aria-busy={busy} onAnimationEnd={(event) => { if (closing && event.target === event.currentTarget) onClose(); }} onKeyDown={(event) => {
 		if (event.key !== "Escape") return;
 		event.preventDefault(); event.stopPropagation();

@@ -1,6 +1,7 @@
 .chat-pane.has-surface:has(.command-picker), .chat-pane.is-empty:has(.command-picker) { overflow: visible; z-index: 6; }
 .command-picker-anchor { position: relative; }
 .command-picker { position: absolute; z-index: 5; inset-inline: 0; bottom: calc(100% + 8px); display: flex; flex-direction: column; max-height: min(50dvh, var(--command-picker-available-height, 390px)); padding: 12px 6px 0; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-raised); box-shadow: 0 15px 55px #05060a80; }
+.command-picker { transform-origin: bottom center; animation: surface-enter var(--motion-base) var(--motion-ease); }
 .command-picker-heading { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 9px 12px; color: var(--on-surface-secondary); font-size: 12px; font-weight: 600; }
 .command-picker-label { font-size: 10px; color: var(--on-surface-muted); font-weight: 400; }
 .command-picker-options { display: grid; gap: 4px; min-height: 0; max-height: min(38dvh, 300px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
@@ -16,8 +17,8 @@
 .command-picker-title code { color: var(--on-surface-muted); font-size: 10px; font-weight: 400; }
 .command-picker-description { color: var(--on-surface-muted); font-size: 11px; line-height: 1.5; }
 .command-picker-category { flex: none; padding: 3px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--on-surface-muted); font-size: 10px; }
-.command-picker-enter { flex: none; width: 16px; color: var(--command-color); opacity: 0; }
-.command-picker-option[aria-selected="true"] .command-picker-enter { opacity: 1; }
+.command-picker-enter { flex: none; width: 16px; color: var(--command-color); opacity: 0; transform: translateX(-4px); transition: opacity var(--motion-quick) ease, transform var(--motion-quick) var(--motion-ease); }
+.command-picker-option[aria-selected="true"] .command-picker-enter { opacity: 1; transform: translateX(0); }
 .command-picker-footer { display: flex; flex: none; justify-content: space-between; gap: 12px; padding: 10px 9px; color: var(--on-surface-muted); font-size: 10px; }
 .command-picker-footer kbd { display: inline-block; min-width: 16px; margin-right: 3px; padding: 1px 3px; border: 1px solid var(--border); border-radius: 4px; text-align: center; font: inherit; }
 .command-picker-empty { display: grid; gap: 7px; padding: 24px 12px; font-size: 12px; }

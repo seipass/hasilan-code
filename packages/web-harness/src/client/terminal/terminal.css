@@ -33,6 +33,7 @@
 	flex-shrink: 0;
 	border: 1px solid transparent;
 	border-radius: 5px;
+	transition: border-color var(--motion-quick) ease, background-color var(--motion-quick) ease;
 }
 .terminal-tab-item:has([aria-selected="true"]) {
 	border-color: var(--border);
@@ -42,6 +43,7 @@
 .terminal-tab-item[data-drop-edge="before"] { box-shadow: -3px 0 0 var(--primary); }
 .terminal-tab-item[data-drop-edge="after"] { box-shadow: 3px 0 0 var(--primary); }
 .terminal-tab-item[data-drop-edge] { background: var(--primary-container); }
+.terminal-tab-item[data-dragging], .terminal-tab-item[data-drop-edge] { transition: none; }
 .terminal-tab[draggable="true"] { cursor: grab; }
 .terminal-tab-item[data-dragging="true"] .terminal-tab { cursor: grabbing; }
 .terminal-pane .terminal-tab,
@@ -78,7 +80,7 @@
 	flex-shrink: 0;
 	white-space: nowrap;
 }
-.terminal-status { font-size: 11px; color: var(--on-surface-muted); }
+.terminal-status { font-size: 11px; color: var(--on-surface-muted); transition: color var(--motion-base) ease; }
 .terminal-status[data-connection="disconnected"] { color: var(--danger); }
 .terminal-pane .terminal-status-controls button {
 	min-height: 26px;
@@ -103,6 +105,7 @@
 	font-size: 12px;
 	color: var(--danger);
 	white-space: pre-wrap;
+	animation: status-enter var(--motion-base) var(--motion-ease);
 }
 .terminal-error button { margin-left: 8px; }
 .terminal-empty { margin: auto; padding: 12px; font-size: 12px; color: var(--on-surface-muted); }

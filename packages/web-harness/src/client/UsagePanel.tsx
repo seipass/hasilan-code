@@ -79,10 +79,10 @@ export function UsagePanel({ title, groups, trigger }: {
 	</>;
 	if (trigger !== undefined) return <div className="usage-panel usage-popover" ref={root}>
 		<button type="button" className="usage-popover-trigger" aria-haspopup="dialog" aria-expanded={open} aria-controls={popoverId} onClick={() => setOpen((value) => !value)}>{trigger}</button>
-		{open && <div className="usage-popover-content" id={popoverId} role="dialog" aria-label={title} style={position}>
+		<div className="usage-popover-content" id={popoverId} role="dialog" aria-label={title} style={position} hidden={!open} inert={!open}>
 			<header className="usage-popover-header"><strong>{title}</strong><button type="button" aria-label={`${title}を閉じる`} onClick={() => { setOpen(false); root.current?.querySelector<HTMLButtonElement>(".usage-popover-trigger")?.focus(); }}>閉じる</button></header>
 			<div className="usage-panel-body">{body}</div>
-		</div>}
+		</div>
 	</div>;
 	return <details className="usage-panel">
 		<summary><span>{title}</span><span>キャッシュ {percent === null ? "—" : `${percent.toFixed(1)}%`} · {!unpriced && (total.responses || total.auxiliary) ? money.format(total.cost) : "未計測"}</span></summary>

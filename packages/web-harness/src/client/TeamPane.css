@@ -103,7 +103,7 @@
 .team-graph-viewport.is-dragging { cursor: grabbing; }
 .team-graph-canvas { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
 .team-graph-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.team-graph-edge { fill: none; stroke: var(--on-surface-muted); stroke-width: 1.6; }
+.team-graph-edge { fill: none; stroke: var(--on-surface-muted); stroke-width: 1.6; transition: stroke var(--motion-base) ease; }
 .team-graph-edge.is-waiting { stroke: var(--warning); stroke-width: 1.8; stroke-dasharray: 5 4; }
 
 .team-graph-node {
@@ -121,6 +121,7 @@
 	color: var(--on-surface);
 	text-align: left;
 	cursor: pointer;
+	transition: border-color var(--motion-base) ease, background-color var(--motion-base) ease, box-shadow var(--motion-base) var(--motion-ease);
 }
 
 .team-graph-node.is-root { border-radius: 14px; background: var(--surface-raised); border-top-width: 4px; }
