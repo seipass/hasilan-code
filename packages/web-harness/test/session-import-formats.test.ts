@@ -410,7 +410,7 @@ describe("independent session import parsers", () => {
 		);
 		expect(result.messages[0].text).toBe("current summary");
 	});
-	it("warns for omitted media, rejects corrupt middle rows and tolerates only a torn final row", () => {
+	it("preserves media bodies, rejects corrupt middle rows and tolerates only a torn final row", () => {
 		const warnings: string[] = [];
 		expect(jsonLines('{"type":"ok"}\n{"type":', warnings)).toHaveLength(1);
 		expect(warnings).toHaveLength(1);
@@ -426,7 +426,9 @@ describe("independent session import parsers", () => {
 			"c",
 			[],
 		);
-		expect(result.warnings.join("\n")).toContain("添付ファイル");
+		expect(result.messages[0].content).toContainEqual(
+			expect.objectContaining({ type: "attachment", data: "synthetic" }),
+		);
 		expect(result.messages[0].text).not.toContain("synthetic");
 	});
 });

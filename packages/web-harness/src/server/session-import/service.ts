@@ -27,9 +27,8 @@ import {
 	timestamp,
 } from "./common.ts";
 import { parseClaude, parseCodex, parseDeepSeek, parseOhMyPi } from "./jsonl-formats.ts";
-import { activeGrokUpdates, parseGrok, parseOpenCode } from "./other-formats.ts";
+import { parseGrok, parseOpenCode } from "./other-formats.ts";
 
-const MAX_BYTES = 64 * 1024 * 1024;
 const HEADER_BYTES = 256 * 1024;
 const MAX_CANDIDATES = 500;
 const decompress = promisify(zstdDecompress);
@@ -92,18 +91,16 @@ function within(root: string, path: string): boolean {
 	return child === "" || (!isAbsolute(child) && child !== ".." && !child.startsWith(`..${sep}`));
 }
 
-/** Reject replaced symlinks and bound both compressed input and decompressed output. */
+/** Header reads are bounded for discovery; importing never truncates a transcript. */
 async function readTranscript(path: string, head = false): Promise<string> {
 	if ((await realpath(path)) !== path || (await lstat(path)).isSymbolicLink())
 		throw new HarnessError("履歴の保存先が変更されました。再読み込みしてください。", 409);
 	const file = await open(path, "r");
 	try {
 		const info = await file.stat();
-		if (!info.isFile() || info.size > MAX_BYTES)
-			throw new HarnessError("履歴が64 MiBを超えています。必要な会話を書き出して指定してください。", 413);
+		if (!info.isFile()) throw new HarnessError("履歴にはファイルを指定してください。");
 		if (/\.(zst|zstd)$/.test(path)) {
 			const source = await file.readFile();
-			if (source.length > MAX_BYTES) throw new HarnessError("圧縮履歴が64 MiBを超えています。", 413);
 			const chunks: Buffer[] = [];
 			let offset = 0;
 			let length = 0;
@@ -112,7 +109,6 @@ async function readTranscript(path: string, head = false): Promise<string> {
 				// Node's declarations omit the info-result overload, so validate its runtime shape here.
 				const raw: unknown = await decompress(source.subarray(offset), {
 					info: true,
-					maxOutputLength: Math.max(1, MAX_BYTES - length),
 				});
 				const decoded = record(raw);
 				const consumed = record(decoded.engine).bytesWritten;
@@ -126,7 +122,6 @@ async function readTranscript(path: string, head = false): Promise<string> {
 				length += decoded.buffer.length;
 				offset += Number(consumed);
 				chunks.push(decoded.buffer);
-				if (length > MAX_BYTES) throw new HarnessError("展開後の履歴が64 MiBを超えています。", 413);
 				if (head && (length >= HEADER_BYTES || chunks.length >= 8)) break;
 			}
 			return Buffer.concat(chunks)
@@ -140,7 +135,6 @@ async function readTranscript(path: string, head = false): Promise<string> {
 			for await (const raw of stream) {
 				const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as Uint8Array);
 				length += chunk.length;
-				if (!head && length > MAX_BYTES) throw new HarnessError("展開後の履歴が64 MiBを超えています。", 413);
 				chunks.push(chunk);
 				if (head && length >= HEADER_BYTES) break;
 			}
@@ -166,10 +160,12 @@ export function readSessionDatabase(path: string, source: "codex" | "opencode", 
 			execArgv: ["--disable-warning=ExperimentalWarning"],
 			stdio: ["ignore", "ignore", "ignore", "ipc"],
 		});
-		const timer = setTimeout(() => {
-			child.kill();
-			reject(new HarnessError("セッション一覧のデータベース読み込みがタイムアウトしました。", 408));
-		}, 15000);
+		const timer = sessionId
+			? undefined
+			: setTimeout(() => {
+					child.kill();
+					reject(new HarnessError("セッション一覧のデータベース読み込みがタイムアウトしました。", 408));
+				}, 15000);
 		child.once("message", (raw: unknown) => {
 			received = true;
 			const reply = record(raw);
@@ -465,11 +461,15 @@ export class SessionImportService {
 			cwd: data.cwd,
 			updatedAt: candidate.updatedAt,
 			revision,
-			messageCount: data.messages.length,
+			messageCount: data.records?.reduce((count, entry) => count + entry.messages.length, 0) ?? data.messages.length,
 			messages: data.messages
 				.filter((message) => message.role !== "context")
 				.slice(-12)
-				.map((message) => ({ ...message, text: message.text.slice(0, 4000) })),
+				.map((message) => ({
+					role: message.role,
+					timestamp: message.timestamp,
+					text: message.text.slice(0, 4000),
+				})),
 			warnings: data.warnings,
 		};
 	}
@@ -477,11 +477,8 @@ export class SessionImportService {
 		const candidate = this.candidate(id);
 		const warnings: string[] = [];
 		const digest = createHash("sha256");
-		let totalBytes = 0;
 		const read = async (path: string): Promise<string> => {
 			const text = await readTranscript(path);
-			totalBytes += Buffer.byteLength(text);
-			if (totalBytes > MAX_BYTES) throw new HarnessError("継承元を含む履歴が64 MiBを超えています。", 413);
 			digest.update(path).update("\0").update(text);
 			return text;
 		};
@@ -505,7 +502,7 @@ export class SessionImportService {
 			const summary = record(JSON.parse((await optional("summary.json")) || "{}"));
 			const updates = jsonLines(await optional("updates.jsonl"), warnings);
 			const checkpoints = new Map<string, JsonRecord>();
-			for (const entry of activeGrokUpdates(updates)) {
+			for (const entry of updates) {
 				const update = record(record(entry.params).update ?? entry.update);
 				if (update.sessionUpdate !== "compaction_checkpoint") continue;
 				const path = string(update.checkpoint_file);
@@ -519,6 +516,9 @@ export class SessionImportService {
 					checkpoints.set(path, record(JSON.parse(await read(resolve(root, path)))));
 				} catch (error) {
 					if (!missing(error)) throw error;
+					warnings.push(
+						`Grok Build の以前のチェックポイント ${path} は本体が見つかりません。参照記録を保持します。`,
+					);
 				}
 			}
 			data = parseGrok(
@@ -542,7 +542,7 @@ export class SessionImportService {
 					if (!parentId || !/^[a-zA-Z0-9-]+$/.test(parentId) || !Number.isSafeInteger(base.end_ordinal_exclusive))
 						throw new HarnessError("Codex の継承元の指定が不正です。");
 					const parent = candidate.files.find((file) => basename(file.path).includes(parentId));
-					if (!parent || seen.has(parent.path) || seen.size > 16)
+					if (!parent || seen.has(parent.path))
 						throw new HarnessError(
 							"Codex の継承元が見つかりません。親セッションを含む保存フォルダーを指定してください。",
 						);
@@ -566,9 +566,9 @@ export class SessionImportService {
 			else data = parseDeepSeek(entries, candidate.sourceSessionId, warnings);
 		}
 		if (!data.messages.length) throw new HarnessError("取り込める会話メッセージがありません。");
+		if (candidate.source === "deepseek-harness")
+			data.attachmentRoot = join(dirname(this.paths("deepseek-harness")[0]), "attachments", "v1");
 		data.warnings = [...new Set([...data.warnings, ...warnings])];
-		if (data.messages.length > 50000 || Buffer.byteLength(JSON.stringify(data.messages)) > MAX_BYTES)
-			throw new HarnessError("取り込む会話が大きすぎます。必要な範囲を書き出して指定してください。", 413);
 		const revision = digest.digest("hex");
 		if (expectedRevision && revision !== expectedRevision)
 			throw new HarnessError(

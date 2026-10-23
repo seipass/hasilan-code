@@ -1,12 +1,13 @@
 import type { ImportedTranscript, SessionImportMessage } from "../../shared/session-import.ts";
-import { addMessage, contentText, type JsonRecord, record, string, transcript } from "./common.ts";
+import { addMessage, contentText, type JsonRecord, messageOrigins, record, string, transcript } from "./common.ts";
+import { preserveTranscript } from "./fidelity.ts";
 
 function openCodeText(message: JsonRecord, warnings: string[]): string {
-	if (message.type === "user") {
-		if (Array.isArray(message.files) && message.files.length)
-			warnings.push("添付ファイルの本体は取り込まれません。必要なファイルは引き継ぎ後に追加してください。");
-		return string(message.text) ?? "";
+	if (typeof message.text === "string" || message.type === "user") {
+		return string(message.text) ?? (Array.isArray(message.files) && message.files.length ? "[添付ファイル]" : "");
 	}
+	if (message.type === "shell")
+		return `[端末実行]\n${string(message.command) ?? ""}\n${typeof message.output === "string" ? message.output : JSON.stringify(message.output ?? "")}`;
 	const parts = message.parts ?? message.content;
 	if (!Array.isArray(parts)) return contentText(parts, warnings);
 	return parts
@@ -48,6 +49,9 @@ export function parseOpenCode(value: unknown, fallbackId: string, warnings: stri
 					messages,
 					message.role === "user" || message.role === "assistant" ? message.role : "context",
 					contentText(message.content, warnings),
+					undefined,
+					compact,
+					message.content,
 				);
 			}
 		} else {
@@ -56,13 +60,14 @@ export function parseOpenCode(value: unknown, fallbackId: string, warnings: stri
 				"context",
 				`[会話の要約]\n${string(compact.summary) ?? ""}`,
 				record(compact.time).created,
+				compact,
 			);
 			const keep = rows.findIndex((row) => row.id === metadata.keepID);
 			if (string(metadata.keepID) && keep < 0)
 				throw new Error("OpenCode の要約後に残すメッセージが見つかりません。");
 			if (keep >= 0 && keep < compactIndex) {
 				for (const row of rows.slice(keep, compactIndex))
-					addMessage(messages, "context", openCodeText(row, warnings), record(row.time).created);
+					addMessage(messages, "context", openCodeText(row, warnings), record(row.time).created, row);
 			} else addMessage(messages, "context", string(metadata.recent) ?? string(compact.recent) ?? "");
 		}
 		rows = rows.slice(compactIndex + 1);
@@ -70,27 +75,42 @@ export function parseOpenCode(value: unknown, fallbackId: string, warnings: stri
 	for (const row of rows) {
 		const legacy = record(row.info);
 		const role = row.type ?? legacy.role;
-		if (role !== "user" && role !== "assistant") continue;
+		if (role !== "user" && role !== "assistant" && !["synthetic", "system", "skill", "shell"].includes(String(role)))
+			continue;
 		if (legacy.summary === true) messages.length = 0;
 		const time = record(row.time ?? legacy.time).created;
-		addMessage(messages, role, openCodeText(row.type ? row : { ...legacy, parts: row.parts }, warnings), time);
+		addMessage(
+			messages,
+			role === "user" || role === "assistant" ? role : "context",
+			openCodeText(row.type ? row : { ...legacy, parts: row.parts }, warnings),
+			time,
+			row,
+		);
 	}
-	return transcript(
-		"opencode",
-		string(info.id) ?? fallbackId,
-		record(info.location).directory ?? info.directory,
-		info.title,
-		messages,
-		warnings,
+	return preserveTranscript(
+		transcript(
+			"opencode",
+			string(info.id) ?? fallbackId,
+			record(info.location).directory ?? info.directory,
+			info.title,
+			messages,
+			warnings,
+		),
+		[info, ...data.messages.map(record)],
 	);
 }
 
-function grokConversation(items: JsonRecord[], messages: SessionImportMessage[], warnings: string[]): void {
+function grokConversation(
+	items: JsonRecord[],
+	messages: SessionImportMessage[],
+	warnings: string[],
+	origin?: JsonRecord,
+): void {
 	for (const item of items) {
 		const role = item.type ?? item.role;
 		if (role === "system") continue;
 		if (role === "user" || role === "assistant") {
-			addMessage(messages, role, contentText(item.content, warnings));
+			addMessage(messages, role, contentText(item.content, warnings), undefined, origin ?? item, item.content);
 			if (Array.isArray(item.tool_calls))
 				for (const raw of item.tool_calls) {
 					const tool = record(raw);
@@ -99,6 +119,9 @@ function grokConversation(items: JsonRecord[], messages: SessionImportMessage[],
 						messages,
 						"context",
 						`[ツール呼び出し: ${string(tool.name) ?? string(fn.name) ?? "tool"}]\n${String(tool.arguments ?? fn.arguments ?? "")}`,
+						undefined,
+						origin ?? item,
+						{ ...fn, ...tool, type: "toolCall" },
 					);
 				}
 		} else if (role === "tool_result" || role === "tool")
@@ -106,6 +129,9 @@ function grokConversation(items: JsonRecord[], messages: SessionImportMessage[],
 				messages,
 				"context",
 				`[ツール結果: ${string(item.tool_call_id) ?? "tool"}]\n${contentText(item.content, warnings)}`,
+				undefined,
+				origin ?? item,
+				{ ...item, type: "toolResult" },
 			);
 	}
 }
@@ -169,6 +195,7 @@ export function parseGrok(
 	const filtered = activeGrokUpdates(updates);
 	const messages: SessionImportMessage[] = [];
 	const toolMessages = new Map<string, SessionImportMessage>();
+	const toolStates = new Map<string, JsonRecord>();
 	let lastChunk = "";
 	let lastPrompt: unknown;
 	for (const entry of filtered) {
@@ -193,16 +220,23 @@ export function parseGrok(
 				);
 			messages.length = 0;
 			toolMessages.clear();
+			toolStates.clear();
 			lastChunk = "";
-			grokConversation(checkpoint.compacted_history.map(record), messages, warnings);
-			addMessage(messages, "context", string(record(update.auto_continue).prompt_text) ?? "");
+			grokConversation(checkpoint.compacted_history.map(record), messages, warnings, checkpoint);
+			addMessage(messages, "context", string(record(update.auto_continue).prompt_text) ?? "", undefined, entry);
 		} else if (kind === "user_message_chunk" || kind === "agent_message_chunk") {
 			const text = contentText([update.content], warnings);
 			const role = kind === "user_message_chunk" ? "user" : "assistant";
 			const newPrompt = role === "user" && meta.promptIndex !== undefined && meta.promptIndex !== lastPrompt;
 			const last = messages.at(-1);
-			if (last && lastChunk === kind && !newPrompt && meta.interjection !== true) last.text += text;
-			else addMessage(messages, role, text, entry.timestamp);
+			if (last && lastChunk === kind && !newPrompt && meta.interjection !== true) {
+				last.text += text;
+				const origin = messageOrigins.get(last);
+				if (origin) {
+					origin.related ??= [];
+					origin.related.push(entry);
+				}
+			} else addMessage(messages, role, text, entry.timestamp, entry);
 			lastChunk = kind;
 			if (role === "user" && meta.promptIndex !== undefined) lastPrompt = meta.promptIndex;
 		} else if (kind === "tool_call" || kind === "tool_call_update") {
@@ -213,7 +247,18 @@ export function parseGrok(
 				message = { role: "context", text: `[ツール記録: ${string(update.title) ?? toolId}]` };
 				toolMessages.set(toolId, message);
 				messages.push(message);
+				const state: JsonRecord = {};
+				toolStates.set(toolId, state);
+				messageOrigins.set(message, {
+					entry,
+					content: { type: "tool", id: toolId, name: string(update.title) ?? toolId, state },
+				});
 			}
+			const state = toolStates.get(toolId)!;
+			if (update.rawInput !== undefined) state.input = update.rawInput;
+			if (update.status !== undefined) state.status = update.status;
+			if (update.rawOutput !== undefined) state.output = update.rawOutput;
+			if (Array.isArray(update.content)) state.content = update.content.map((raw) => record(raw).content ?? raw);
 			if (update.rawInput !== undefined) message.text += `\n入力: ${JSON.stringify(update.rawInput)}`;
 			if (Array.isArray(update.content))
 				for (const raw of update.content) {
@@ -229,12 +274,27 @@ export function parseGrok(
 		grokConversation(cached, messages, warnings);
 		warnings.push("Grok Build の表示キャッシュから復元しました。最新の実行記録が含まれない場合があります。");
 	}
-	return transcript(
-		"grok-build",
-		string(info.id) ?? fallbackId,
-		info.cwd,
-		summary.generated_title ?? summary.session_summary,
-		messages,
-		warnings,
+	const records = [summary];
+	const archivedCheckpoints = new Set<JsonRecord>();
+	for (const entry of updates) {
+		records.push(entry);
+		const update = record(record(entry.params).update ?? entry.update);
+		const checkpoint = checkpoints.get(String(update.checkpoint_file));
+		if (update.sessionUpdate === "compaction_checkpoint" && checkpoint && !archivedCheckpoints.has(checkpoint)) {
+			records.push(checkpoint);
+			archivedCheckpoints.add(checkpoint);
+		}
+	}
+	if (!updates.length) records.push(...cached);
+	return preserveTranscript(
+		transcript(
+			"grok-build",
+			string(info.id) ?? fallbackId,
+			info.cwd,
+			summary.generated_title ?? summary.session_summary,
+			messages,
+			warnings,
+		),
+		records,
 	);
 }

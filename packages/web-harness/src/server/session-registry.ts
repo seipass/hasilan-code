@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentMessage, ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { clampThinkingLevel, getSupportedThinkingLevels } from "@hasilan-code/pi-ai";
@@ -32,7 +32,7 @@ import {
 	type ImportedFrom,
 	type ImportedTranscript,
 	SESSION_IMPORT_CONTEXT_TYPE,
-	SESSION_IMPORT_MESSAGE_API,
+	SESSION_IMPORT_RECORD_TYPE,
 	SESSION_IMPORT_SOURCES,
 } from "../shared/session-import.ts";
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
@@ -40,6 +40,8 @@ import type { ModelUsage } from "../shared/usage.ts";
 import { createHarnessSettings } from "./config.ts";
 import { appendRuntimeContext } from "./runtime-context.ts";
 import { sameWorkspace } from "./session-import/common.ts";
+import { importedRecord, storeImport } from "./session-import/persistence.ts";
+import { type ImportAsset, projectImport } from "./session-import/projection.ts";
 import { SessionUsage } from "./session-usage.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
 
@@ -154,6 +156,7 @@ interface LiveSession {
 	loading?: Promise<ExecutionAdapter>;
 	unsubscribe?: () => void;
 	projection: SessionSnapshot;
+	importAssets: Map<string, ImportAsset>;
 	liveMessageId?: string;
 	runId?: string;
 	finalText?: string;
@@ -480,41 +483,55 @@ export class SessionRegistry {
 		});
 	}
 	private addLive(descriptor: SessionDescriptor, manager: SessionManager): void {
-		const messages = manager
-			.buildSessionContext()
-			.messages.filter((message) => message.role !== "custom" || message.display)
-			.map(
-				(message): ProjectedMessage => ({
-					messageId: randomUUID(),
-					role: message.role,
-					content: structuredClone("content" in message ? message.content : message),
-					partial: false,
-					...(message.role === "custom" && message.customType === SESSION_IMPORT_CONTEXT_TYPE
-						? { importedContext: true }
-						: {}),
-					...(message.role === "custom" &&
-					message.customType === CONTEXT_INJECTION_CUSTOM_TYPE &&
-					isContextInjection(message.details)
-						? { contextInjection: structuredClone(message.details) }
-						: {}),
-				}),
-			);
-		const toolCalls: ProjectedTool[] = [];
-		for (const message of manager.buildSessionContext().messages) {
+		const imported = projectImport(manager, descriptor.sessionId);
+		const entries = manager.getEntries();
+		const boundary = imported.boundary ? entries.findIndex((entry) => entry.id === imported.boundary) : -1;
+		const ownEntries = new Set(entries.slice(boundary + 1).map((entry) => entry.id));
+		const context = manager
+			.buildSessionProjection()
+			.entries.filter((entry) => boundary < 0 || !imported.messages.length || ownEntries.has(entry.sourceEntry.id))
+			.flatMap((entry) => entry.messages);
+		const messages = [
+			...imported.messages,
+			...context
+				.filter((message) => message.role !== "custom" || message.display)
+				.map(
+					(message): ProjectedMessage => ({
+						messageId: randomUUID(),
+						role: message.role,
+						content: structuredClone("content" in message ? message.content : message),
+						partial: false,
+						...(message.role === "custom" && message.customType === SESSION_IMPORT_CONTEXT_TYPE
+							? { importedContext: true }
+							: {}),
+						...(message.role === "custom" &&
+						message.customType === CONTEXT_INJECTION_CUSTOM_TYPE &&
+						isContextInjection(message.details)
+							? { contextInjection: structuredClone(message.details) }
+							: {}),
+					}),
+				),
+		];
+		const toolCalls: ProjectedTool[] = [...imported.toolCalls];
+		const nativeCalls = new Map<string, ProjectedTool>();
+		for (const message of context) {
 			if (message.role === "assistant")
 				for (const part of message.content) {
-					if (part.type === "toolCall")
-						toolCalls.push({
+					if (part.type === "toolCall") {
+						const tool: ProjectedTool = {
 							key: `${descriptor.sessionId}/history/${part.id}`,
 							sessionId: descriptor.sessionId,
 							callId: part.id,
 							name: part.name,
 							input: structuredClone(part.arguments),
 							status: "cancelled",
-						});
+						};
+						toolCalls.push(tool);
+						nativeCalls.set(part.id, tool);
+					}
 				}
 			if (message.role === "toolResult") {
-				const tool = toolCalls.find((entry) => entry.callId === message.toolCallId);
+				const tool = nativeCalls.get(message.toolCallId);
 				if (tool) {
 					tool.result = structuredClone(message);
 					tool.status = message.isError ? "error" : "success";
@@ -525,6 +542,7 @@ export class SessionRegistry {
 			manager,
 			usage: new SessionUsage(manager),
 			projection: { ...descriptor, messages, toolCalls, activity: {}, pendingInput: [] },
+			importAssets: imported.assets,
 			aborted: false,
 		});
 	}
@@ -571,7 +589,8 @@ export class SessionRegistry {
 					entry.workspaceId === workspaceId &&
 					entry.importedFrom?.source === source.source &&
 					entry.importedFrom.sourceSessionId === source.sourceSessionId &&
-					entry.importedFrom.revision === revision,
+					entry.importedFrom.revision === revision &&
+					entry.importedFrom.fidelityVersion === 1,
 			);
 			if (existing) return structuredClone(existing);
 			if (!source.messages.length) throw new HarnessError("取り込める会話メッセージがありません。");
@@ -591,6 +610,7 @@ export class SessionRegistry {
 					sourceSessionId: source.sourceSessionId,
 					revision,
 					importedAt: new Date().toISOString(),
+					fidelityVersion: 1,
 				},
 			};
 			const selected = model && this.options.modelRuntime?.getModel(model.provider, model.id);
@@ -602,40 +622,18 @@ export class SessionRegistry {
 				cwd: source.cwd,
 				warnings: source.warnings,
 			});
-			for (const message of source.messages) {
-				const timestamp = message.timestamp ?? Date.now();
-				if (message.role === "user") memory.appendMessage({ role: "user", content: message.text, timestamp });
-				else if (message.role === "assistant")
-					memory.appendMessage({
-						role: "assistant",
-						content: [{ type: "text", text: message.text }],
-						api: SESSION_IMPORT_MESSAGE_API,
-						provider: `imported-${source.source}`,
-						model: "imported",
-						stopReason: "stop",
-						timestamp,
-						usage: {
-							input: 0,
-							output: 0,
-							cacheRead: 0,
-							cacheWrite: 0,
-							totalTokens: 0,
-							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-						},
-					});
-				else memory.appendCustomMessageEntry(SESSION_IMPORT_CONTEXT_TYPE, message.text, true);
-			}
+			const assets = join(this.options.agentDir, "web-harness", "import-assets", descriptor.sessionId);
 			const path = this.newManager(descriptor).getSessionFile();
 			if (!path) throw new Error("Could not prepare imported session file");
 			descriptor.path = path;
 			let written = false;
 			try {
+				await storeImport(memory, source, assets);
 				const importedFile = await open(path, "wx", 0o600);
 				written = true;
 				try {
-					await importedFile.writeFile(
-						`${[memory.getHeader(), ...memory.getEntries()].map((entry) => JSON.stringify(entry)).join("\n")}\n`,
-					);
+					for (const entry of [memory.getHeader(), ...memory.getEntries()])
+						await importedFile.writeFile(`${JSON.stringify(entry)}\n`);
 				} finally {
 					await importedFile.close();
 				}
@@ -647,11 +645,38 @@ export class SessionRegistry {
 				this.state.sessions = this.state.sessions.filter((entry) => entry !== descriptor);
 				this.live.delete(descriptor.sessionId);
 				if (written) await unlink(path);
+				await rm(assets, { recursive: true, force: true });
 				throw error;
 			}
 			this.changed(descriptor.sessionId);
 			return structuredClone(descriptor);
 		});
+	}
+	importRecord(sessionId: string, recordId: string): Record<string, unknown> {
+		this.descriptor(sessionId);
+		const entry = this.live.get(sessionId)?.manager.getEntry(recordId);
+		if (entry?.type !== "custom" || entry.customType !== SESSION_IMPORT_RECORD_TYPE || !importedRecord(entry.data))
+			throw new HarnessError("元の記録が見つかりません。", 404);
+		return entry.data.raw;
+	}
+	importRecords(sessionId: string): Iterable<Record<string, unknown>> {
+		this.descriptor(sessionId);
+		const entries = this.live.get(sessionId)?.manager.getEntries() ?? [];
+		return (function* () {
+			for (const entry of entries)
+				if (
+					entry.type === "custom" &&
+					entry.customType === SESSION_IMPORT_RECORD_TYPE &&
+					importedRecord(entry.data)
+				)
+					yield entry.data.raw;
+		})();
+	}
+	importAsset(sessionId: string, assetId: string): ImportAsset & { path: string } {
+		this.descriptor(sessionId);
+		const asset = /^[a-f0-9]{64}$/.test(assetId) && this.live.get(sessionId)?.importAssets.get(assetId);
+		if (!asset) throw new HarnessError("添付ファイルが見つかりません。", 404);
+		return { ...asset, path: join(this.options.agentDir, "web-harness", "import-assets", sessionId, assetId) };
 	}
 	/** TeamManager calls this only while holding the shared mutation gate. */
 	async createWithinMutation(options: {

@@ -65,7 +65,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const details = result && record(result.details) ? result.details : result;
 	const teamProfiles = result && Array.isArray(result.details) ? result.details : undefined;
 	const structured = result && record(result.structuredContent) ? result.structuredContent : undefined;
-	const status = { running: "Running", success: "Success", error: "Error", cancelled: "Cancelled" }[tool.status];
+	const status = { running: "Running", success: "Success", error: "Error", cancelled: "Cancelled", incomplete: "未完了" }[tool.status];
 	const input = record(tool.input) ? tool.input : undefined;
 	const visual = toolVisuals[tool.name as keyof typeof toolVisuals];
 	const summary = toolContext(tool.name, input);
@@ -103,6 +103,11 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			<span className={`badge status-${tool.status}`}>{status}</span>
 		</summary>
 		<div className="tool-body">
+			{tool.sourceStatus && <p className="muted">元の状態: {tool.sourceStatus}</p>}
+			{(tool.importedOrigin?.url || typeof result?.sourceRecord === "string") && <div className="imported-record-links">
+				{tool.importedOrigin?.url && <a href={tool.importedOrigin.url} target="_blank" rel="noopener noreferrer">元の呼び出し記録</a>}
+				{typeof result?.sourceRecord === "string" && <a href={result.sourceRecord} target="_blank" rel="noopener noreferrer">元の結果記録</a>}
+			</div>}
 			{filePaths.size > 0 && <div className="file-links">{[...filePaths].map((path) => <button key={path} className="text-link" onClick={() => onFile(path)}>{path}</button>)}</div>}
 			{tool.name === "read" && <div className="tool-meta">
 				{typeof details?.tag === "string" && <span>Revision {details.tag}</span>}

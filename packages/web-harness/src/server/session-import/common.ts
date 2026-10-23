@@ -3,6 +3,11 @@ import { isAbsolute } from "node:path";
 import type { ImportedTranscript, SessionImportMessage, SessionImportSource } from "../../shared/session-import.ts";
 
 export type JsonRecord = Record<string, unknown>;
+/** Parser-local associations disappear once the completed transcript is released. */
+export const messageOrigins = new WeakMap<
+	SessionImportMessage,
+	{ entry: JsonRecord; content?: unknown; related?: JsonRecord[] }
+>();
 export function record(value: unknown): JsonRecord {
 	return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
 }
@@ -71,7 +76,7 @@ export function jsonLines(text: string, warnings: string[], partial = false): Js
 	return result;
 }
 
-/** Foreign tool records remain plain text: their IDs, signatures and execution state are not portable. */
+/** Plain-text preview and portable fallback; structured blocks are retained separately. */
 export function contentText(value: unknown, warnings: string[]): string {
 	if (typeof value === "string") return value;
 	if (!Array.isArray(value)) {
@@ -88,13 +93,27 @@ export function contentText(value: unknown, warnings: string[]): string {
 				return `[ツール呼び出し: ${string(part.name) ?? "tool"}]\n${typeof part.arguments === "string" ? part.arguments : JSON.stringify(part.input ?? part.arguments ?? {})}`;
 			if (["tool_result", "toolResult", "function_call_output"].includes(String(part.type)))
 				return `[ツール結果: ${string(part.tool_use_id) ?? string(part.toolCallId) ?? string(part.call_id) ?? "tool"}]\n${contentText(part.content ?? part.output, warnings)}`;
-			if (["image", "image_url", "input_image", "file", "document", "audio", "video"].includes(String(part.type))) {
-				warnings.push(
-					"画像・音声・添付ファイルの本体は取り込まれません。必要なファイルは引き継ぎ後に追加してください。",
-				);
+			if (
+				[
+					"image",
+					"image_url",
+					"input_image",
+					"input_file",
+					"file",
+					"document",
+					"audio",
+					"input_audio",
+					"video",
+					"resource",
+					"resource_link",
+				].includes(String(part.type))
+			) {
 				return `[添付: ${string(part.filename) ?? string(part.name) ?? String(part.type)}]`;
 			}
-			if (string(part.type)) warnings.push(`内容形式 ${String(part.type)} のブロックは取り込めませんでした。`);
+			if (string(part.type)) {
+				warnings.push(`内容形式 ${String(part.type)} は原記録に保持します。`);
+				return `[元の内容: ${String(part.type)}]`;
+			}
 			return "";
 		})
 		.filter(Boolean)
@@ -105,9 +124,14 @@ export function addMessage(
 	role: SessionImportMessage["role"],
 	text: string,
 	time?: unknown,
+	entry?: JsonRecord,
+	content?: unknown,
 ): void {
-	if (text.trim())
-		messages.push({ role, text, ...(timestamp(time) === undefined ? {} : { timestamp: timestamp(time) }) });
+	if (text.trim()) {
+		const message = { role, text, ...(timestamp(time) === undefined ? {} : { timestamp: timestamp(time) }) };
+		messages.push(message);
+		if (entry) messageOrigins.set(message, { entry, content });
+	}
 }
 export function transcript(
 	source: SessionImportSource,

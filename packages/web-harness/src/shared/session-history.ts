@@ -1,4 +1,5 @@
 import type { ContextInjection } from "./context-injection.ts";
+import type { ImportedMessageOrigin } from "./session-import.ts";
 
 export const HISTORY_PAGE_SIZE = 50;
 
@@ -10,6 +11,7 @@ export interface HistoryMessage {
 	runId?: string;
 	contextInjection?: ContextInjection;
 	importedContext?: boolean;
+	importedOrigin?: ImportedMessageOrigin;
 }
 export interface HistoryTool {
 	key: string;
@@ -19,7 +21,9 @@ export interface HistoryTool {
 	name: string;
 	input: unknown;
 	result?: unknown;
-	status: "running" | "success" | "error" | "cancelled";
+	status: "running" | "success" | "error" | "cancelled" | "incomplete";
+	sourceStatus?: string;
+	importedOrigin?: ImportedMessageOrigin;
 }
 export interface HistoryPosition {
 	start: number;

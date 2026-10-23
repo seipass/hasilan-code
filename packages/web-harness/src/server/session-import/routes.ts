@@ -1,4 +1,8 @@
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import {
 	SESSION_IMPORT_SOURCES,
 	sessionDiscoverySchema,
@@ -26,7 +30,44 @@ export async function handleSessionImport(
 		return workspace;
 	};
 	try {
-		if (url.pathname === "/api/session-imports/sources" && request.method === "GET") {
+		const archive = /^\/api\/session-imports\/([^/]+)\/records$/.exec(url.pathname);
+		const saved = /^\/api\/session-imports\/([^/]+)\/(records|assets)\/([^/]+)$/.exec(url.pathname);
+		if (archive && request.method === "GET") {
+			const records = registry.importRecords(decodeURIComponent(archive[1]));
+			response.writeHead(200, {
+				"Content-Type": "application/x-ndjson; charset=utf-8",
+				"Content-Disposition": 'attachment; filename="imported-records.jsonl"',
+				"Cache-Control": "no-store",
+			});
+			await pipeline(
+				Readable.from(
+					(function* () {
+						for (const entry of records) yield `${JSON.stringify(entry)}\n`;
+					})(),
+				),
+				response,
+			);
+		} else if (saved && request.method === "GET") {
+			const sessionId = decodeURIComponent(saved[1]);
+			const id = decodeURIComponent(saved[3]);
+			if (saved[2] === "records") sendJson(response, 200, registry.importRecord(sessionId, id));
+			else {
+				const asset = registry.importAsset(sessionId, id);
+				const info = await stat(asset.path);
+				const inline =
+					/^(image\/(png|jpeg|gif|webp)|audio\/(mpeg|mp3|wav|ogg|webm|mp4)|video\/(mp4|webm|ogg))$/.test(
+						asset.mimeType,
+					);
+				response.writeHead(200, {
+					"Content-Type": inline ? asset.mimeType : "application/octet-stream",
+					"Content-Length": info.size,
+					"Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(asset.name).replace(/'/g, "%27")}`,
+					"X-Content-Type-Options": "nosniff",
+					"Cache-Control": "private, max-age=31536000, immutable",
+				});
+				await pipeline(createReadStream(asset.path), response);
+			}
+		} else if (url.pathname === "/api/session-imports/sources" && request.method === "GET") {
 			sendJson(
 				response,
 				200,

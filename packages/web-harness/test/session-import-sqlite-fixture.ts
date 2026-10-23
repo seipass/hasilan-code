@@ -10,14 +10,14 @@ try {
 			.prepare("INSERT INTO threads VALUES (?, ?, ?, ?, ?)")
 			.run("codex-example", cwd, "Original request", "Renamed Codex session", 1790812800);
 	} else {
-		const table = mode === "modern" ? "session_v2" : "session";
+		const table = mode.startsWith("modern") ? "session_v2" : "session";
 		database.exec(
 			`CREATE TABLE ${table} (id TEXT PRIMARY KEY, directory TEXT, title TEXT, time_updated INTEGER, revert TEXT)`,
 		);
 		database
 			.prepare(`INSERT INTO ${table} VALUES (?, ?, ?, ?, ?)`)
 			.run("oc-synthetic", cwd, "SQLite example", 1790812800000, null);
-		if (mode === "modern") {
+		if (mode.startsWith("modern")) {
 			database.exec(
 				"CREATE TABLE session_message (id TEXT PRIMARY KEY, session_id TEXT, type TEXT, seq INTEGER, data TEXT)",
 			);
@@ -30,6 +30,19 @@ try {
 					1,
 					JSON.stringify({ text: "SQLite user", files: [], agents: [], time: { created: 1790812800000 } }),
 				);
+			if (mode.endsWith("large")) {
+				database.exec("BEGIN");
+				const insert = database.prepare("INSERT INTO session_message VALUES (?, ?, ?, ?, ?)");
+				for (let index = 0; index < 49999; index++)
+					insert.run(
+						`more-${index}`,
+						"oc-synthetic",
+						"user",
+						index + 3,
+						JSON.stringify({ text: "x".repeat(1400) }),
+					);
+				database.exec("COMMIT");
+			}
 			database
 				.prepare("INSERT INTO session_message VALUES (?, ?, ?, ?, ?)")
 				.run(
@@ -55,6 +68,21 @@ try {
 			database
 				.prepare("INSERT INTO part VALUES (?, ?, ?, ?)")
 				.run("p2", "oc-synthetic", "a", JSON.stringify({ type: "text", text: "SQLite answer" }));
+			if (mode.endsWith("large")) {
+				database.exec("BEGIN");
+				const message = database.prepare("INSERT INTO message VALUES (?, ?, ?, ?)");
+				const part = database.prepare("INSERT INTO part VALUES (?, ?, ?, ?)");
+				for (let index = 0; index < 49999; index++) {
+					message.run(`more-${index}`, "oc-synthetic", index + 3, JSON.stringify({ role: "user" }));
+					part.run(
+						`part-${index}`,
+						"oc-synthetic",
+						`more-${index}`,
+						JSON.stringify({ type: "text", text: "x".repeat(1400) }),
+					);
+				}
+				database.exec("COMMIT");
+			}
 		}
 	}
 } finally {

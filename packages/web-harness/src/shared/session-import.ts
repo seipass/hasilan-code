@@ -12,6 +12,43 @@ export const SESSION_IMPORT_SOURCES = [
 export type SessionImportSource = (typeof SESSION_IMPORT_SOURCES)[number]["id"];
 export const SESSION_IMPORT_MESSAGE_API = "session-import";
 export const SESSION_IMPORT_CONTEXT_TYPE = "harness-imported-context";
+export const SESSION_IMPORT_RECORD_TYPE = "harness-imported-record";
+export const SESSION_IMPORT_BOUNDARY_TYPE = "harness-imported-boundary";
+export type ImportContent =
+	| { type: "text"; text: string }
+	| { type: "thinking"; thinking: string; summary?: string; thinkingSignature?: string; redacted?: boolean }
+	| { type: "toolCall"; id: string; name: string; arguments: unknown; status?: string }
+	| { type: "toolResult"; id: string; name?: string; content: ImportContent[]; isError: boolean; status?: string }
+	| {
+			type: "attachment";
+			kind: string;
+			name: string;
+			mimeType: string;
+			data?: string;
+			text?: string;
+			path?: string;
+			url?: string;
+			referenceId?: string;
+			assetId?: string;
+			unavailable?: string;
+	  }
+	| { type: "sourceBlock"; label: string; value: unknown };
+export interface ImportedMessageOrigin {
+	recordId: string;
+	id?: string;
+	parentId?: string | null;
+	channel?: string;
+	model?: string;
+	stopReason?: string;
+	usage?: unknown;
+	active: boolean;
+	url?: string;
+}
+export interface ImportedRecord {
+	id: string;
+	raw: Record<string, unknown>;
+	messages: SessionImportMessage[];
+}
 const sourceSchema = Type.Union([
 	Type.Literal("codex"),
 	Type.Literal("claude-code"),
@@ -48,6 +85,8 @@ export interface SessionImportMessage {
 	role: "user" | "assistant" | "context";
 	text: string;
 	timestamp?: number;
+	content?: ImportContent[];
+	origin?: ImportedMessageOrigin;
 }
 export interface ImportedTranscript {
 	source: SessionImportSource;
@@ -56,12 +95,16 @@ export interface ImportedTranscript {
 	cwd?: string;
 	messages: SessionImportMessage[];
 	warnings: string[];
+	/** Full source history, including records excluded from the current model context. */
+	records?: ImportedRecord[];
+	attachmentRoot?: string;
 }
 export interface ImportedFrom {
 	source: SessionImportSource;
 	sourceSessionId: string;
 	revision: string;
 	importedAt: string;
+	fidelityVersion?: 1;
 }
 export interface SessionImportCandidate {
 	candidateId: string;

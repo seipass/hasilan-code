@@ -9,8 +9,15 @@ import {
 	string,
 	transcript,
 } from "./common.ts";
+import { preserveTranscript } from "./fidelity.ts";
 
-function responseMessage(item: JsonRecord, messages: SessionImportMessage[], warnings: string[], time?: unknown): void {
+function responseMessage(
+	item: JsonRecord,
+	messages: SessionImportMessage[],
+	warnings: string[],
+	time?: unknown,
+	entry = item,
+): void {
 	if (item.type === "message") {
 		const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "context";
 		const text = contentText(item.content, warnings);
@@ -20,6 +27,7 @@ function responseMessage(item: JsonRecord, messages: SessionImportMessage[], war
 			role === "user" && !request ? "context" : role,
 			role === "context" ? `[元の ${String(item.role)} メッセージ]\n${text}` : (request ?? text),
 			time,
+			entry,
 		);
 	} else if (["function_call", "custom_tool_call", "local_shell_call"].includes(String(item.type))) {
 		addMessage(
@@ -27,6 +35,7 @@ function responseMessage(item: JsonRecord, messages: SessionImportMessage[], war
 			"context",
 			`[ツール呼び出し: ${string(item.name) ?? String(item.type)}]\n${typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.input ?? item.action ?? item.arguments ?? {})}`,
 			time,
+			entry,
 		);
 	} else if (
 		["function_call_output", "custom_tool_call_output", "local_shell_call_output"].includes(String(item.type))
@@ -36,13 +45,14 @@ function responseMessage(item: JsonRecord, messages: SessionImportMessage[], war
 			"context",
 			`[ツール結果: ${string(item.call_id) ?? "tool"}]\n${contentText(item.output, warnings) || JSON.stringify(item.output ?? "")}`,
 			time,
+			entry,
 		);
-	} else if (item.type === "reasoning" && Array.isArray(item.summary)) {
-		const summary = item.summary
+	} else if (item.type === "reasoning") {
+		const summary = (Array.isArray(item.summary) ? item.summary : [])
 			.map((part) => string(record(part).text) ?? "")
 			.filter(Boolean)
 			.join("\n");
-		addMessage(messages, "context", summary ? `[推論の要約]\n${summary}` : "", time);
+		addMessage(messages, "context", summary ? `[推論の要約]\n${summary}` : "[暗号化された推論]", time, entry);
 	}
 }
 
@@ -83,31 +93,34 @@ export function parseCodex(entries: JsonRecord[], fallbackId: string, warnings: 
 	}
 	for (const entry of active) {
 		const item = record(entry.payload);
-		if (entry.type === "response_item") responseMessage(item, messages, warnings, entry.timestamp);
+		if (entry.type === "response_item") responseMessage(item, messages, warnings, entry.timestamp, entry);
 		else if (entry.type === "compacted") {
 			if (Array.isArray(item.replacement_history)) {
 				messages.length = 0;
 				for (const replacement of item.replacement_history)
-					responseMessage(record(replacement), messages, warnings, entry.timestamp);
+					responseMessage(record(replacement), messages, warnings, entry.timestamp, entry);
 			} else {
 				const users = messages.filter((message) => message.role === "user");
 				messages.splice(0, messages.length, ...users);
-				addMessage(messages, "context", `[会話の要約]\n${string(item.message) ?? ""}`, entry.timestamp);
+				addMessage(messages, "context", `[会話の要約]\n${string(item.message) ?? ""}`, entry.timestamp, entry);
 			}
 		} else if (entry.type === "event_msg") {
 			if (item.type === "user_message") {
 				const text = string(item.message) ?? "";
 				const request = codexUserText(text);
-				addMessage(fallback, request ? "user" : "context", request ?? text, entry.timestamp);
+				addMessage(fallback, request ? "user" : "context", request ?? text, entry.timestamp, entry);
 			} else if (item.type === "agent_message")
-				addMessage(fallback, "assistant", string(item.message) ?? "", entry.timestamp);
+				addMessage(fallback, "assistant", string(item.message) ?? "", entry.timestamp, entry);
 		}
 	}
 	if (!messages.length && fallback.length) {
 		messages.push(...fallback);
 		warnings.push("イベントの表示履歴から復元しました。ツールの詳細が含まれない場合があります。");
 	}
-	return transcript("codex", string(meta.id) ?? fallbackId, meta.cwd, meta.title, messages, warnings);
+	return preserveTranscript(
+		transcript("codex", string(meta.id) ?? fallbackId, meta.cwd, meta.title, messages, warnings),
+		entries,
+	);
 }
 
 export function parseClaude(entries: JsonRecord[], fallbackId: string, warnings: string[]): ImportedTranscript {
@@ -148,19 +161,23 @@ export function parseClaude(entries: JsonRecord[], fallbackId: string, warnings:
 			toolResult || entry.isMeta ? "context" : entry.type,
 			contentText(content, warnings),
 			entry.timestamp,
+			entry,
 		);
 	}
 	const meta = main[leaf];
 	const title =
 		entries.findLast((entry) => entry.type === "custom-title")?.customTitle ??
 		entries.findLast((entry) => entry.type === "summary")?.summary;
-	return transcript(
-		"claude-code",
-		string(meta.sessionId) ?? fallbackId,
-		meta.cwd ?? main.find((entry) => string(entry.cwd))?.cwd,
-		title,
-		messages,
-		warnings,
+	return preserveTranscript(
+		transcript(
+			"claude-code",
+			string(meta.sessionId) ?? fallbackId,
+			meta.cwd ?? main.find((entry) => string(entry.cwd))?.cwd,
+			title,
+			messages,
+			warnings,
+		),
+		entries,
 	);
 }
 
@@ -193,7 +210,8 @@ export function parseOhMyPi(entries: JsonRecord[], fallbackId: string, warnings:
 		branch = branch.slice(firstKept).filter((entry) => entry !== summary);
 	}
 	const messages: SessionImportMessage[] = [];
-	if (summary) addMessage(messages, "context", `[会話の要約]\n${string(summary.summary) ?? ""}`, summary.timestamp);
+	if (summary)
+		addMessage(messages, "context", `[会話の要約]\n${string(summary.summary) ?? ""}`, summary.timestamp, summary);
 	for (const entry of branch) {
 		if (entry.type === "message") {
 			const message = record(entry.message);
@@ -203,17 +221,20 @@ export function parseOhMyPi(entries: JsonRecord[], fallbackId: string, warnings:
 			else if (message.role === "bashExecution")
 				text = `[端末実行]\n${string(message.command) ?? ""}\n${string(message.output) ?? ""}`;
 			else if (message.role === "system") continue;
-			addMessage(messages, role, text, message.timestamp ?? entry.timestamp);
+			addMessage(messages, role, text, message.timestamp ?? entry.timestamp, entry);
 		} else if (entry.type === "custom_message")
-			addMessage(messages, "context", contentText(entry.content, warnings), entry.timestamp);
+			addMessage(messages, "context", contentText(entry.content, warnings), entry.timestamp, entry);
 		else if (entry.type === "branch_summary")
-			addMessage(messages, "context", `[分岐の要約]\n${string(entry.summary) ?? ""}`, entry.timestamp);
+			addMessage(messages, "context", `[分岐の要約]\n${string(entry.summary) ?? ""}`, entry.timestamp, entry);
 	}
 	const title =
 		entries.findLast((entry) => entry.type === "title")?.title ??
 		entries.findLast((entry) => entry.type === "title_change")?.title ??
 		header.title;
-	return transcript("oh-my-pi", string(header.id) ?? fallbackId, header.cwd, title, messages, warnings);
+	return preserveTranscript(
+		transcript("oh-my-pi", string(header.id) ?? fallbackId, header.cwd, title, messages, warnings),
+		entries,
+	);
 }
 
 const DEEPSEEK_LOG_EVENTS = new Set([
@@ -324,7 +345,11 @@ export function parseDeepSeek(entries: JsonRecord[], fallbackId: string, warning
 				? `[ツール結果: ${string(message.name) ?? string(message.toolName) ?? "tool"}]\n${text}`
 				: text,
 			entry.time,
+			entry,
 		);
 	}
-	return transcript("deepseek-harness", string(header.id) ?? fallbackId, cwd, title, messages, warnings);
+	return preserveTranscript(
+		transcript("deepseek-harness", string(header.id) ?? fallbackId, cwd, title, messages, warnings),
+		entries,
+	);
 }

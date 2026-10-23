@@ -5,3 +5,11 @@
 .virtual-conversation .history-spacer { transition-property: none !important; }
 .history-control { height: 40px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--on-surface-muted); font-size: 11px; }
 .history-control button { background: transparent; border: 0; padding: 6px 8px; color: var(--on-surface-secondary); font-size: 11px; }
+.imported-origin { color: var(--on-surface-muted); font-size: 10px; margin: 8px 0 2px; }
+.imported-origin summary { cursor: pointer; }
+.imported-origin dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; }
+.imported-origin dd { margin: 0; overflow-wrap: anywhere; }
+.imported-origin pre { white-space: pre-wrap; }
+.imported-record-links { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.imported-attachment { margin: 8px 0; }
+.imported-attachment audio, .imported-attachment video { max-width: 100%; }

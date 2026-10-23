@@ -268,7 +268,8 @@ An independent public-API alternative, verified against Node 24.19.0 source,
 is repeated `zstdDecompressSync(remaining, {info: true, maxOutputLength})`:
 consume its `buffer`, advance the compressed offset by `engine.bytesWritten`,
 and repeat until exhausted. Validate a positive safe byte count no greater
-than the remaining input and cap total decoded output. `info` also works with
+than the remaining input. Discovery reads only a header prefix; importing does
+not impose a decoded-byte or message-count cutoff. `info` also works with
 the asynchronous convenience method. Keep `rejectGarbageAfterEnd` false: true
 rejects data after the first compressed stream. Sources:
 [Node Zstd options](https://github.com/nodejs/node/blob/v24.19.0/doc/api/zlib.md#class-zstdoptions),
@@ -283,11 +284,20 @@ corruption must not be silently treated as recoverable tail data. Source:
 
 ## Import boundary
 
-Implementation recommendation: retain source ID, title, cwd, and a revision;
-project selected conversation text into a new local session. Render tool
-records and source instructions as inert quoted context. Omit unsupported
-media with an explicit preview warning. Revalidate the revision on import and
-never mutate source files. Query SQLite read-only in a consistent transaction;
-detect modern tables before legacy fallback. Synthetic tests should cover
-discarded branches, compaction replacement, unknown versions, torn tails,
-missing checkpoints, and duplicate cached representations.
+The implementation retains every decoded source record independently from
+the selected execution context. Native IDs, branch parents, provider replay
+state, signatures, channels, model attributes and usage remain in those
+records. A normalized archive renders all stored branches and pre-compaction
+messages, while only the producer's selected context continues into the SDK.
+Tool calls and results retain their correlation IDs and state. Available
+inline/local attachment bodies are copied; unavailable external bodies and
+opaque encrypted reasoning are identified rather than claimed as recovered.
+Authenticated endpoints expose individual records, streaming JSONL archive
+exports and attachment bodies. Importing never executes historical tools.
+
+Revalidate the revision on import and never mutate source files. Query SQLite
+read-only in a consistent transaction; detect modern tables before legacy
+fallback. Wait for the child-process IPC send to finish before disconnecting
+large database snapshots. Tests cover archives versus context, discarded
+branches, compaction, tools, reasoning, media, authentication, persistence and
+sessions larger than the former 64 MiB / 50,000-message restrictions.

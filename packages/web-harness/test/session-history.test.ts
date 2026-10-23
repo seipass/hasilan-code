@@ -63,13 +63,13 @@ describe("session history pages and streaming", () => {
 				collected.unshift(...page.messages);
 			}
 			expect(collected.map((message) => message.content)).toEqual(
-				Array.from({ length: 125 }, (_, index) => `Message ${index}`),
+				Array.from({ length: 125 }, (_, index) => [{ type: "text", text: `Message ${index}` }]),
 			);
 			expect(new Set(collected.map((message) => message.messageId)).size).toBe(125);
 			expect(registry.get(imported.sessionId).messages).toHaveLength(125);
 			expect(() => registry.page(imported.sessionId, "obsolete-cursor")).toThrow("履歴が更新されました");
 			page.messages[0].content = "Do not mutate storage";
-			expect(registry.get(imported.sessionId).messages[0].content).toBe("Message 0");
+			expect(registry.get(imported.sessionId).messages[0].content).toEqual([{ type: "text", text: "Message 0" }]);
 		} finally {
 			await registry.close();
 			await rm(root, { recursive: true, force: true });
