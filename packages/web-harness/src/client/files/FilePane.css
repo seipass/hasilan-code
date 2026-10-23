@@ -87,7 +87,7 @@
 .files-tree-children { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 260ms var(--motion-ease), opacity 180ms ease; }
 .files-tree-children[data-open="true"] { grid-template-rows: 1fr; opacity: 1; }
 .files-tree-children > div { min-height: 0; overflow: hidden; }
-.files-tree-entry { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; text-align: left; padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; font-size: 13px; }
+.files-tree-entry { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; text-align: left; padding: 5px 8px; border: 0; border-radius: 5px; background: transparent; font-size: 13px; }
 .files-tree-entry[aria-current="true"] { background: var(--secondary-container); color: var(--on-secondary-container); }
 .files-tree-marker { width: 12px; flex-shrink: 0; color: var(--on-surface-muted); text-align: center; }
 .files-tree-marker { transition: transform 180ms var(--motion-ease); }
