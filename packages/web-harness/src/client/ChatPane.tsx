@@ -1,14 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { errorMessage } from "./api.ts";
 import { CommandPicker } from "./CommandPicker.tsx";
-import { Content, record } from "./Content.tsx";
+import { Conversation } from "./Conversation.tsx";
 import { COMPOSER_COMMANDS } from "./slash-command.ts";
-import { RUN_LABELS } from "./TeamPane.tsx";
-import { ToolCard } from "./ToolInspector.tsx";
 import type { PendingInputAction, SessionDetail } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 
-export function ChatPane({ session, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings }: {
+export function ChatPane({ session, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError }: {
 	session?: SessionDetail;
 	workspacePath?: string;
 	contextWindow?: number;
@@ -27,6 +25,9 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 	onParent: (sessionId: string) => void;
 	onModelSelect: () => void;
 	onProviderSettings: () => void;
+	onLoadOlder?: () => Promise<void>;
+	historyLoading?: boolean;
+	historyError?: string;
 }) {
 	const [text, setText] = useState(() => { try { return localStorage.getItem(`pi-web-draft:${draftKey}`) ?? ""; } catch { return ""; } });
 	const [mode, setMode] = useState<"steer" | "followUp">("followUp");
@@ -38,11 +39,9 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 	const pickerId = useId();
 	const [editingInput, setEditingInput] = useState<{ inputId: string; text: string }>();
 	const [mutatingInputId, setMutatingInputId] = useState<string>();
-	const [nearBottom, setNearBottom] = useState(true);
-	const scroller = useRef<HTMLDivElement>(null);
+	const [followRequest, setFollowRequest] = useState(0);
 	const input = useRef<HTMLTextAreaElement>(null);
 	const inputMotion = useRef<Animation | undefined>(undefined);
-	const atBottom = useRef(true);
 	const submitting = useRef(false);
 	const insertedDraft = useRef<string | undefined>(undefined);
 	const slashInput = text.trimStart().startsWith("/");
@@ -75,9 +74,6 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 	useEffect(() => {
 		try { if (text) localStorage.setItem(`pi-web-draft:${draftKey}`, text); else localStorage.removeItem(`pi-web-draft:${draftKey}`); } catch { /* Drafting remains available without browser storage. */ }
 	}, [draftKey, text]);
-	useEffect(() => {
-		if (atBottom.current && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
-	}, [session?.messages, session?.toolCalls]);
 	useLayoutEffect(() => {
 		const element = input.current;
 		if (!element) return;
@@ -105,7 +101,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 			setText((current) => current === submitted ? "" : current);
 			if (result.notice) setNotice(result.notice);
 			else if (busy && result.disposition) setNotice(result.disposition === "queued" ? "追加の指示を予約しました。" : "追加の指示を送信しました。");
-			atBottom.current = true; setNearBottom(true);
+			setFollowRequest((value) => value + 1);
 		} catch (reason) { setError(errorMessage(reason)); }
 		finally { submitting.current = false; setSending(false); }
 	}
@@ -134,29 +130,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 	return <section className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}`} aria-label="会話">
 		{session?.parentSessionId && <div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div>}
 		{session?.availability === "missing" && <div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div>}
-		{!surface && !empty && <div className="conversation" ref={scroller} onScroll={() => { const element = scroller.current; if (element) { const following = element.scrollHeight - element.scrollTop - element.clientHeight < 80; atBottom.current = following; setNearBottom(following); } }}>
-			<div className="conversation-content">{latestRunFallback && <article className="message role-user"><div className="message-content"><Content value={latestRunFallback.task} onFile={onFile} /></div></article>}{session?.messages.filter((message) => message.contextInjection || message.role !== "toolResult").map((message) => {
-				const injection = message.contextInjection;
-				if (injection) return <details key={message.messageId} className="message context-entry">
-					<summary><span className="context-entry-label">コンテキスト</span><span className="context-entry-agent">{injection.source.agentName}</span><span className={`badge status-${injection.source.status}`}>{RUN_LABELS[injection.source.status]}</span></summary>
-					<div className="context-entry-body">
-						<div className="message-content"><Content value={injection.content} onFile={onFile} /></div>
-						<dl className="context-entry-source">
-							<dt>通知元</dt><dd>サブエージェントの完了通知</dd>
-							<dt>エージェント ID</dt><dd><code>{injection.source.agentId}</code></dd>
-							<dt>実行 ID</dt><dd><code>{injection.source.runId}</code></dd>
-							<dt>コンテキスト ID</dt><dd><code>{injection.injectionId}</code></dd>
-						</dl>
-					</div>
-				</details>;
-				if (message.importedContext) return <details key={message.messageId} className="message context-entry"><summary><span className="context-entry-label">参照履歴</span></summary><div className="context-entry-body"><div className="message-content"><Content value={message.content} onFile={onFile} /></div></div></details>;
-				const parts = Array.isArray(message.content) ? message.content : [];
-				const calls = parts.filter((part: unknown) => record(part) && part.type === "toolCall");
-				const content = calls.length ? parts.filter((part: unknown) => !record(part) || part.type !== "toolCall") : message.content;
-				return <article key={message.messageId} className={`message role-${message.role} ${message.partial ? "partial" : ""}`}>{message.role !== "assistant" && message.role !== "user" && <div className="message-label">{message.role}</div>}<div className="message-content"><Content value={content} onFile={onFile} />{calls.map((part: unknown, index) => { const tool = record(part) ? session.toolCalls.find((entry) => entry.callId === part.id) : undefined; return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>; })}{message.partial && <span className="streaming-dot" aria-label="応答中" />}</div></article>;
-			})}{latestError && <div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div>}</div>
-		</div>}
-		{!surface && !empty && !nearBottom && <button className="back-to-bottom" onClick={() => { if (scroller.current) scroller.current.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }); atBottom.current = true; setNearBottom(true); }}>最新のメッセージへ ↓</button>}
+		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} />}
 		<div className="composer-area">
 			{pendingInputs.length > 0 && <div className="pending-input-list" role="list" aria-label="予約中の追加指示">
 				{pendingInputs.map((pendingInput) => {

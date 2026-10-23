@@ -1,6 +1,6 @@
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
-import type { ContextInjection } from "../shared/context-injection.ts";
 import type { Goal } from "../shared/goals.ts";
+import type { HistoryMessage, HistoryPosition, HistoryTool } from "../shared/session-history.ts";
 import type { Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
 
@@ -70,26 +70,10 @@ export interface SessionSummary {
 	swarm?: Swarm;
 	usage?: ModelUsage[];
 }
-export interface ChatMessage {
-	messageId: string;
-	role: string;
-	content: unknown;
-	partial: boolean;
-	runId?: string;
-	contextInjection?: ContextInjection;
-	importedContext?: boolean;
-}
-export interface ToolCall {
-	key: string;
-	sessionId: string;
-	runId?: string;
-	callId: string;
-	name: string;
-	input: unknown;
-	result?: unknown;
-	status: "running" | "success" | "error" | "cancelled";
-}
+export type ChatMessage = HistoryMessage;
+export type ToolCall = HistoryTool;
 export interface SessionDetail extends SessionSummary {
+	history?: HistoryPosition;
 	contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
 	messages: ChatMessage[];
 	toolCalls: ToolCall[];

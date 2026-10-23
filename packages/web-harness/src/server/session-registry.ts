@@ -22,6 +22,13 @@ import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal } from "../shared/goals.ts";
 import { nextId } from "../shared/ids.ts";
 import {
+	HistoryCursorError,
+	type HistoryMessage,
+	type HistoryPosition,
+	type HistoryTool,
+	historyPage,
+} from "../shared/session-history.ts";
+import {
 	type ImportedFrom,
 	type ImportedTranscript,
 	SESSION_IMPORT_CONTEXT_TYPE,
@@ -67,25 +74,8 @@ export interface SessionDescriptor {
 	swarm?: Swarm;
 	availability: "ready" | "missing";
 }
-export interface ProjectedMessage {
-	messageId: string;
-	role: string;
-	content: unknown;
-	partial: boolean;
-	runId?: string;
-	contextInjection?: ContextInjection;
-	importedContext?: boolean;
-}
-export interface ProjectedTool {
-	key: string;
-	sessionId: string;
-	runId?: string;
-	callId: string;
-	name: string;
-	input: unknown;
-	result?: unknown;
-	status: "running" | "success" | "error" | "cancelled";
-}
+export type ProjectedMessage = HistoryMessage;
+export type ProjectedTool = HistoryTool;
 export interface ContextUsageSnapshot {
 	tokens: number | null;
 	contextWindow: number;
@@ -169,6 +159,7 @@ interface LiveSession {
 	finalText?: string;
 	finalError?: string;
 	aborted: boolean;
+	idleContextUsage?: { model: string; value: ContextUsageSnapshot };
 	/** Implementation grants retained while the manager uses a read-only orchestration loadout. */
 	delegatedTools?: string[];
 }
@@ -703,6 +694,18 @@ export class SessionRegistry {
 		return descriptor;
 	}
 	get(id: string): SessionSnapshot {
+		return structuredClone(this.projection(id));
+	}
+	page(id: string, before?: string): SessionSnapshot & { history: HistoryPosition } {
+		try {
+			return structuredClone(historyPage(this.projection(id), before));
+		} catch (error) {
+			if (error instanceof HistoryCursorError) throw new HarnessError(error.message, 409);
+			throw error;
+		}
+	}
+	/** Transport reads immutable message/tool references; callers must not mutate this view. */
+	projection(id: string): SessionSnapshot {
 		const descriptor = this.descriptor(id);
 		const projection = this.live.get(id)?.projection ?? {
 			...descriptor,
@@ -717,19 +720,22 @@ export class SessionRegistry {
 		const live = this.live.get(id);
 		let contextUsage = live?.adapter?.getContextUsage?.();
 		if (live && !live.adapter && descriptor.materialized && descriptor.model) {
+			const modelKey = `${descriptor.model.provider}/${descriptor.model.id}`;
 			const contextWindow = this.options.modelRuntime?.getModel(
 				descriptor.model.provider,
 				descriptor.model.id,
 			)?.contextWindow;
 			if (contextWindow && contextWindow > 0) {
-				const tokens = estimateProjectedContextTokens(
-					live.manager.buildSessionProjection(),
-					live.manager.getBranch(),
-				).tokens;
-				contextUsage = { tokens, contextWindow, percent: (tokens / contextWindow) * 100 };
+				const tokens =
+					live.idleContextUsage?.model === modelKey
+						? live.idleContextUsage.value.tokens
+						: estimateProjectedContextTokens(live.manager.buildSessionProjection(), live.manager.getBranch())
+								.tokens;
+				contextUsage = { tokens, contextWindow, percent: tokens === null ? null : (tokens / contextWindow) * 100 };
+				live.idleContextUsage = { model: modelKey, value: contextUsage };
 			}
 		}
-		return structuredClone({
+		return {
 			...projection,
 			...descriptor,
 			contextUsage,
@@ -741,7 +747,7 @@ export class SessionRegistry {
 			pendingInput: this.state.pendingInput
 				.filter((input) => input.sessionId === id)
 				.map((input) => this.projectPendingInput(input, currentRun)),
-		});
+		};
 	}
 	list(workspaceId?: string): Omit<SessionSnapshot, "messages" | "toolCalls" | "activity">[] {
 		return this.state.sessions
@@ -1081,12 +1087,16 @@ export class SessionRegistry {
 				status: "running",
 			});
 		} else if (event.type === "tool_execution_update" || event.type === "tool_execution_end") {
-			const tool = projection.toolCalls.findLast(
+			const index = projection.toolCalls.findLastIndex(
 				(entry) => entry.callId === event.toolCallId && entry.runId === live.runId,
 			);
-			if (tool) {
-				tool.result = structuredClone(event.type === "tool_execution_end" ? event.result : event.partialResult);
-				if (event.type === "tool_execution_end") tool.status = event.isError ? "error" : "success";
+			if (index !== -1) {
+				const tool = projection.toolCalls[index];
+				projection.toolCalls[index] = {
+					...tool,
+					result: structuredClone(event.type === "tool_execution_end" ? event.result : event.partialResult),
+					status: event.type === "tool_execution_end" ? (event.isError ? "error" : "success") : tool.status,
+				};
 			}
 		} else if (event.type === "queue_update")
 			projection.activity.queue = { steering: [...event.steering], followUp: [...event.followUp] };
@@ -1098,8 +1108,9 @@ export class SessionRegistry {
 			projection.activity.compaction = structuredClone(event);
 		else if (event.type === "agent_settled") {
 			live.aborted = event.aborted;
-			for (const tool of projection.toolCalls)
-				if (tool.runId === live.runId && tool.status === "running") tool.status = "cancelled";
+			projection.toolCalls = projection.toolCalls.map((tool) =>
+				tool.runId === live.runId && tool.status === "running" ? { ...tool, status: "cancelled" } : tool,
+			);
 		}
 		for (const listener of this.executionListeners) listener(id, event);
 		this.changed(id);

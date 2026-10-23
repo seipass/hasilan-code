@@ -91,7 +91,7 @@ async function main() {
 	const terminals = new TerminalManager({ getWorkspaceRoot: (id) => files.getWorkspaceRoot(id) });
 	const sessionImports = new SessionImportService();
 	events = new EventHub((channel, id) =>
-		channel === "session" ? registry.get(id) : { sessions: registry.list(id), teams: teams.snapshot(id) },
+		channel === "session" ? registry.projection(id) : { sessions: registry.list(id), teams: teams.snapshot(id) },
 	);
 	const hub = events;
 	registry.subscribe((event) => {
@@ -166,12 +166,17 @@ async function main() {
 					if (method === "POST") {
 						const session = await registry.create(await readJson(request, sessionCreateSchema));
 						await teams.ensureRoot(session.sessionId);
-						return reply(registry.get(session.sessionId), 201);
+						return reply(registry.page(session.sessionId), 201);
 					}
 				}
 				if (parts[1] === "sessions" && parts[2]) {
 					const id = parts[2];
-					if (parts.length === 3 && method === "GET") return reply(registry.get(id));
+					if (parts.length === 3 && method === "GET") return reply(registry.page(id));
+					if (parts[3] === "history" && parts.length === 4 && method === "GET") {
+						const before = url.searchParams.get("before");
+						if (!before || before.length > 128) throw new HttpError(400, "before cursor is required");
+						return reply(registry.page(id, before));
+					}
 					if (parts[3] === "goal" && parts.length === 4) {
 						if (method === "GET") return reply(await teams.goal(id, { op: "get" }));
 						if (method === "POST") return reply(await teams.goal(id, await readJson(request, goalActionSchema)));
@@ -180,7 +185,7 @@ async function main() {
 						return reply(await teams.prompt(id, await readJson(request, promptSchema)), 202);
 					if (parts[3] === "pending-inputs" && parts.length === 5 && method === "PATCH") {
 						await teams.updatePendingInput(id, parts[4], await readJson(request, pendingInputActionSchema));
-						return reply(registry.get(id));
+						return reply(registry.page(id));
 					}
 					if (parts[3] === "abort" && method === "POST") return reply(await teams.stop(id));
 					if (parts[3] === "team-message" && parts.length === 4 && method === "POST") {
@@ -189,12 +194,12 @@ async function main() {
 					}
 					if (parts[3] === "model" && (method === "POST" || method === "PATCH")) {
 						await registry.setModel(id, await readJson(request, modelSchema));
-						return reply(registry.get(id));
+						return reply(registry.page(id));
 					}
 					if (parts[3] === "thinking" && method === "PATCH") {
 						const { level } = await readJson(request, thinkingSchema);
 						await registry.setThinkingLevel(id, level);
-						return reply(registry.get(id));
+						return reply(registry.page(id));
 					}
 				}
 				if (url.pathname === "/api/settings") {

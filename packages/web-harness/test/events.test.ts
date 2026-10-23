@@ -23,6 +23,62 @@ class Socket extends EventEmitter {
 }
 
 describe("channel subscriptions", () => {
+	it("keeps each subscriber's history baseline when another subscribes during a pending update", async () => {
+		vi.useFakeTimers();
+		const source = {
+			sessionId: "s",
+			toolCalls: [],
+			messages: Array.from({ length: 100 }, (_, index) => ({
+				messageId: `m${index}`,
+				role: "user",
+				content: `Message ${index}`,
+				partial: false,
+			})),
+		};
+		const hub = new EventHub(() => source);
+		try {
+			const first = new Socket();
+			const second = new Socket();
+			hub.attach(first as unknown as WebSocket);
+			first.command({ type: "subscribe", subscriptionId: "one", channel: "session", id: "s" });
+			source.messages[99] = { ...source.messages[99], content: "Changed" };
+			hub.publish("session", "s");
+			hub.attach(second as unknown as WebSocket);
+			second.command({ type: "subscribe", subscriptionId: "two", channel: "session", id: "s" });
+			await vi.advanceTimersByTimeAsync(50);
+			expect(first.messages[1]).toMatchObject({
+				seq: 1,
+				event: { type: "session_patch", patch: { messages: [{ index: 99, message: { content: "Changed" } }] } },
+			});
+			expect(second.messages[1]).toMatchObject({
+				seq: 1,
+				event: { type: "session_patch", patch: { messages: [] } },
+			});
+			source.messages.shift();
+			hub.publish("session", "s");
+			await vi.advanceTimersByTimeAsync(50);
+			expect(first.messages[2]).toMatchObject({
+				seq: 2,
+				event: { type: "projection", data: { history: { start: 49, total: 99 } } },
+			});
+		} finally {
+			hub.close();
+			vi.useRealTimers();
+		}
+	});
+	it("does not build unobserved projections on every token", async () => {
+		vi.useFakeTimers();
+		const snapshot = vi.fn(() => ({}));
+		const hub = new EventHub(snapshot);
+		try {
+			for (let index = 0; index < 50; index++) hub.publish("session", "unselected");
+			await vi.advanceTimersByTimeAsync(50);
+			expect(snapshot).not.toHaveBeenCalled();
+		} finally {
+			hub.close();
+			vi.useRealTimers();
+		}
+	});
 	it("keeps session identities and monotonic sequences independent across selection changes", async () => {
 		vi.useFakeTimers();
 		try {

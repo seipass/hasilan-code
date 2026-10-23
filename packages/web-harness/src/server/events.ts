@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
+import {
+	type HistoryBaseline,
+	historyBaseline,
+	historyPage,
+	historyPatch,
+	isHistorySource,
+} from "../shared/session-history.ts";
 
 export type Channel = "workspace" | "session";
 interface Subscription {
@@ -14,6 +21,7 @@ export class EventHub {
 	private sequences = new Map<string, number>();
 	private clients = new Map<WebSocket, Map<string, Subscription>>();
 	private pending = new Map<string, NodeJS.Timeout>();
+	private histories = new WeakMap<Subscription, HistoryBaseline>();
 	private snapshot: (channel: Channel, id: string) => unknown;
 	constructor(snapshot: (channel: Channel, id: string) => unknown) {
 		this.snapshot = snapshot;
@@ -54,7 +62,10 @@ export class EventHub {
 					channel: command.channel,
 					id: command.id,
 				};
-				const data = structuredClone(this.snapshot(subscription.channel, subscription.id));
+				const source = this.snapshot(subscription.channel, subscription.id);
+				const paged = subscription.channel === "session" && isHistorySource(source);
+				const data = paged ? historyPage(source) : source;
+				if (paged) this.histories.set(subscription, historyBaseline(source));
 				const seq = this.sequences.get(`${subscription.channel}:${subscription.id}`) ?? 0;
 				subscriptions.set(subscription.subscriptionId, subscription);
 				this.send(socket, { type: "snapshot", ...subscription, epoch: this.epoch, seq, data });
@@ -82,12 +93,25 @@ export class EventHub {
 		const key = `${channel}:${id}`;
 		const seq = (this.sequences.get(key) ?? 0) + 1;
 		this.sequences.set(key, seq);
-		const payload = event ?? { type: "projection", data: structuredClone(this.snapshot(channel, id)) };
-		for (const [socket, subscriptions] of this.clients)
-			for (const subscription of subscriptions.values()) {
-				if (subscription.channel === channel && subscription.id === id)
-					this.send(socket, { type: "event", ...subscription, epoch: this.epoch, seq, event: payload });
+		const interested = [...this.clients].flatMap(([socket, subscriptions]) =>
+			[...subscriptions.values()]
+				.filter((subscription) => subscription.channel === channel && subscription.id === id)
+				.map((subscription) => ({ socket, subscription })),
+		);
+		if (!interested.length) return;
+		const source = event == null ? this.snapshot(channel, id) : undefined;
+		const paged = channel === "session" && isHistorySource(source);
+		const nextBaseline = paged ? historyBaseline(source) : undefined;
+		for (const { socket, subscription } of interested) {
+			let payload = event ?? { type: "projection", data: source };
+			if (paged && nextBaseline) {
+				const previous = this.histories.get(subscription);
+				const patch = previous && historyPatch(previous, source, nextBaseline);
+				payload = patch ? { type: "session_patch", patch } : { type: "projection", data: historyPage(source) };
+				this.histories.set(subscription, nextBaseline);
 			}
+			this.send(socket, { type: "event", ...subscription, epoch: this.epoch, seq, event: payload });
+		}
 	}
 	close() {
 		for (const timer of this.pending.values()) clearTimeout(timer);

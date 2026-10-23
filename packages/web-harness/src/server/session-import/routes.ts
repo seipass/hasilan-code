@@ -57,7 +57,7 @@ export async function handleSessionImport(
 			);
 			await ensureRoot(session.sessionId);
 			sendJson(response, 201, {
-				session: registry.get(session.sessionId),
+				session: registry.page(session.sessionId),
 				workspace: { workspaceId: workspace.id, path: workspace.path },
 			});
 		} else return false;

@@ -1,0 +1,7 @@
+.virtual-conversation { overflow-anchor: none; }
+.virtual-message { display: flow-root; min-width: 0; }
+.virtual-conversation .virtual-message .message:last-child { animation: none; }
+/* Reduced-motion's global duration must not start a height transition on geometry spacers. */
+.virtual-conversation .history-spacer { transition-property: none !important; }
+.history-control { height: 40px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--on-surface-muted); font-size: 11px; }
+.history-control button { background: transparent; border: 0; padding: 6px 8px; color: var(--on-surface-secondary); font-size: 11px; }
