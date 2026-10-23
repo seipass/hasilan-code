@@ -6,6 +6,7 @@
 .session-import-heading > div { min-width: 0; }
 .session-import-heading > button { flex: none; white-space: nowrap; }
 .session-import-heading p { margin: 6px 0 0; color: var(--on-surface-muted); font-size: 12px; }
+.session-import-heading code { display: block; margin-top: 4px; font-size: 12px; overflow-wrap: anywhere; }
 .session-import-source { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 0 20px 12px; font-size: 12px; }
 .session-import-source button { min-height: 36px; }
 .session-import-paths { flex: none; margin: 0; padding: 0 20px 12px; color: var(--on-surface-muted); font-size: 11px; overflow-wrap: anywhere; }
@@ -25,13 +26,12 @@
 .session-import-empty { color: var(--on-surface-muted); font-size: 13px; }
 .session-import-message { margin-top: 16px; }
 .session-import-message > span { color: var(--on-surface-muted); font-size: 11px; }
-.session-import-message pre { max-height: 240px; margin: 6px 0 0; padding: 12px; font-family: inherit; font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.session-import-message .message-content { font-size: 12px; line-height: 1.7; }
+.session-import-message pre { max-height: 240px; overflow: auto; }
 .session-import-warning { color: var(--warning); font-size: 12px; }
 .session-import-error { flex: none; margin: 0; padding: 8px 20px; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
 .session-import-preview .session-import-error { padding-inline: 0; }
-.session-import-actions { display: flex; flex: none; align-items: end; gap: 16px; padding: 14px 20px 8px; }
-.session-import-actions label { flex: 1; min-width: 0; font-size: 12px; }
-.session-import-actions select { width: 100%; }
+.session-import-actions { display: flex; flex: none; justify-content: flex-end; padding: 14px 20px 8px; }
 .session-import-actions > button { flex: none; border-color: var(--primary); background: var(--primary-container); font-size: 12px; }
 .session-import-note { flex: none; margin: 0; padding: 0 20px 14px; color: var(--on-surface-muted); font-size: 11px; }
 .session-import-trigger { margin: 4px 12px 0; border: 0; padding: 8px; background: transparent; text-align: left; color: var(--on-surface-muted); font-size: 12px; }

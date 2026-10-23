@@ -149,6 +149,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 						</dl>
 					</div>
 				</details>;
+				if (message.importedContext) return <details key={message.messageId} className="message context-entry"><summary><span className="context-entry-label">参照履歴</span></summary><div className="context-entry-body"><div className="message-content"><Content value={message.content} onFile={onFile} /></div></div></details>;
 				const parts = Array.isArray(message.content) ? message.content : [];
 				const calls = parts.filter((part: unknown) => record(part) && part.type === "toolCall");
 				const content = calls.length ? parts.filter((part: unknown) => !record(part) || part.type !== "toolCall") : message.content;

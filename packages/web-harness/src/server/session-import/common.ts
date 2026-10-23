@@ -1,3 +1,5 @@
+import { realpath } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import type { ImportedTranscript, SessionImportMessage, SessionImportSource } from "../../shared/session-import.ts";
 
 export type JsonRecord = Record<string, unknown>;
@@ -7,11 +9,45 @@ export function record(value: unknown): JsonRecord {
 export function string(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim() ? value : undefined;
 }
+export async function sameWorkspace(cwd: string | undefined, workspacePath: string): Promise<boolean> {
+	if (!cwd || !isAbsolute(cwd)) return false;
+	try {
+		const paths = await Promise.all([realpath(cwd), realpath(workspacePath)]);
+		const normalized = paths.map((path) =>
+			process.platform === "win32"
+				? path
+						.replace(/^\\\\\?\\UNC\\/i, "\\\\")
+						.replace(/^\\\\\?\\/, "")
+						.toLowerCase()
+				: path,
+		);
+		return normalized[0] === normalized[1];
+	} catch {
+		return false;
+	}
+}
 export function timestamp(value: unknown): number | undefined {
 	if (typeof value === "number" && Number.isFinite(value)) return value < 100000000000 ? value * 1000 : value;
 	if (typeof value !== "string") return undefined;
 	const parsed = Date.parse(value);
 	return Number.isFinite(parsed) ? parsed : undefined;
+}
+/** Codex writes harness setup in user-role records separately from the user's request. */
+export function codexUserText(text: string): string | undefined {
+	let request = text.trim();
+	if (request.startsWith("# AGENTS.md instructions for ")) {
+		const end = request.indexOf("</INSTRUCTIONS>");
+		if (end >= 0) request = request.slice(end + "</INSTRUCTIONS>".length).trim();
+	}
+	for (;;) {
+		const setup =
+			/^<(environment_context|recommended_plugins|turn_aborted|subagent_notification|in-app-browser-context)(?:\s[^>]*)?>[\s\S]*?<\/\1>\s*/.exec(
+				request,
+			);
+		if (!setup) break;
+		request = request.slice(setup[0].length).trim();
+	}
+	return string(request.replace(/^## My request:\s*/, ""));
 }
 export function jsonLines(text: string, warnings: string[], partial = false): JsonRecord[] {
 	const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);

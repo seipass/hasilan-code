@@ -24,6 +24,7 @@ import { nextId } from "../shared/ids.ts";
 import {
 	type ImportedFrom,
 	type ImportedTranscript,
+	SESSION_IMPORT_CONTEXT_TYPE,
 	SESSION_IMPORT_MESSAGE_API,
 	SESSION_IMPORT_SOURCES,
 } from "../shared/session-import.ts";
@@ -31,6 +32,7 @@ import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
 import { createHarnessSettings } from "./config.ts";
 import { appendRuntimeContext } from "./runtime-context.ts";
+import { sameWorkspace } from "./session-import/common.ts";
 import { SessionUsage } from "./session-usage.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
 
@@ -72,6 +74,7 @@ export interface ProjectedMessage {
 	partial: boolean;
 	runId?: string;
 	contextInjection?: ContextInjection;
+	importedContext?: boolean;
 }
 export interface ProjectedTool {
 	key: string;
@@ -495,6 +498,9 @@ export class SessionRegistry {
 					role: message.role,
 					content: structuredClone("content" in message ? message.content : message),
 					partial: false,
+					...(message.role === "custom" && message.customType === SESSION_IMPORT_CONTEXT_TYPE
+						? { importedContext: true }
+						: {}),
 					...(message.role === "custom" &&
 					message.customType === CONTEXT_INJECTION_CUSTOM_TYPE &&
 					isContextInjection(message.details)
@@ -567,6 +573,8 @@ export class SessionRegistry {
 		return this.mutate(async () => {
 			if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
 			const cwd = this.getWorkspaceRoot(workspaceId);
+			if (!(await sameWorkspace(source.cwd, cwd)))
+				throw new HarnessError("このセッションは現在のワークスペースの履歴ではありません。");
 			const existing = this.state.sessions.find(
 				(entry) =>
 					entry.workspaceId === workspaceId &&
@@ -598,7 +606,11 @@ export class SessionRegistry {
 			if (selected && thinkingLevel) descriptor.thinkingLevel = clampThinkingLevel(selected, thinkingLevel);
 			const memory = SessionManager.inMemory(cwd, { id: descriptor.sessionId });
 			memory.appendSessionInfo(source.title);
-			memory.appendCustomEntry("harness-session-import", { ...descriptor.importedFrom, warnings: source.warnings });
+			memory.appendCustomEntry("harness-session-import", {
+				...descriptor.importedFrom,
+				cwd: source.cwd,
+				warnings: source.warnings,
+			});
 			for (const message of source.messages) {
 				const timestamp = message.timestamp ?? Date.now();
 				if (message.role === "user") memory.appendMessage({ role: "user", content: message.text, timestamp });
@@ -620,7 +632,7 @@ export class SessionRegistry {
 							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 						},
 					});
-				else memory.appendCustomMessageEntry("harness-imported-context", message.text, true);
+				else memory.appendCustomMessageEntry(SESSION_IMPORT_CONTEXT_TYPE, message.text, true);
 			}
 			const path = this.newManager(descriptor).getSessionFile();
 			if (!path) throw new Error("Could not prepare imported session file");

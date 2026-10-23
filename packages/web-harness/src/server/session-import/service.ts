@@ -16,7 +16,16 @@ import type {
 	SessionImportSource,
 } from "../../shared/session-import.ts";
 import { HarnessError } from "../session-registry.ts";
-import { type JsonRecord, jsonLines, record, string, timestamp } from "./common.ts";
+import {
+	codexUserText,
+	contentText,
+	type JsonRecord,
+	jsonLines,
+	record,
+	sameWorkspace,
+	string,
+	timestamp,
+} from "./common.ts";
 import { parseClaude, parseCodex, parseDeepSeek, parseOhMyPi } from "./jsonl-formats.ts";
 import { activeGrokUpdates, parseGrok, parseOpenCode } from "./other-formats.ts";
 
@@ -146,7 +155,7 @@ async function readTranscript(path: string, head = false): Promise<string> {
 	}
 }
 
-export function readOpenCodeDatabase(path: string, sessionId?: string): Promise<unknown> {
+export function readSessionDatabase(path: string, source: "codex" | "opencode", sessionId?: string): Promise<unknown> {
 	return new Promise((resolveRead, reject) => {
 		let received = false;
 		const worker = new URL(
@@ -159,7 +168,7 @@ export function readOpenCodeDatabase(path: string, sessionId?: string): Promise<
 		});
 		const timer = setTimeout(() => {
 			child.kill();
-			reject(new HarnessError("OpenCode のデータベース読み込みがタイムアウトしました。", 408));
+			reject(new HarnessError("セッション一覧のデータベース読み込みがタイムアウトしました。", 408));
 		}, 15000);
 		child.once("message", (raw: unknown) => {
 			received = true;
@@ -174,9 +183,9 @@ export function readOpenCodeDatabase(path: string, sessionId?: string): Promise<
 		});
 		child.once("exit", (code) => {
 			clearTimeout(timer);
-			if (!received || code !== 0) reject(new HarnessError("OpenCode のデータベースを読み込めませんでした。"));
+			if (!received || code !== 0) reject(new HarnessError("セッションのデータベースを読み込めませんでした。"));
 		});
-		child.send({ path, op: sessionId ? "read" : "list", sessionId });
+		child.send({ path, source, op: sessionId ? "read" : "list", sessionId });
 	});
 }
 
@@ -189,7 +198,46 @@ export class SessionImportService {
 	paths(source: SessionImportSource): string[] {
 		return sessionImportPaths(source, this.options.home, this.options.env);
 	}
-	async discover(request: SessionDiscoveryRequest): Promise<SessionDiscovery> {
+	private async codexTitles(warnings: string[]): Promise<Map<string, string>> {
+		const root = dirname(this.paths("codex")[0]);
+		const titles = new Map<string, string>();
+		const customTitles = new Set<string>();
+		try {
+			const databases = (await readdir(root))
+				.filter((name) => /^state_\d+\.sqlite$/.test(name))
+				.sort((a, b) => Number(/\d+/.exec(b)?.[0]) - Number(/\d+/.exec(a)?.[0]));
+			if (databases[0]) {
+				const rows = await readSessionDatabase(join(root, databases[0]), "codex");
+				if (Array.isArray(rows))
+					for (const raw of rows) {
+						const row = record(raw);
+						const id = string(row.id);
+						const title = string(row.name) ?? string(row.title);
+						if (id && title) titles.set(id, title);
+						if (id && string(row.name)) customTitles.add(id);
+					}
+			}
+		} catch (error) {
+			if (!missing(error)) warnings.push("Codex の会話名データベースを読み込めませんでした。");
+		}
+		try {
+			for (const row of jsonLines(
+				await readTranscript(await realpath(join(root, "session_index.jsonl"))),
+				warnings,
+			)) {
+				const id = string(row.id);
+				const title = string(row.thread_name);
+				if (id && title && !customTitles.has(id)) titles.set(id, title);
+			}
+		} catch (error) {
+			if (!missing(error)) warnings.push("Codex の会話名インデックスを読み込めませんでした。");
+		}
+		return titles;
+	}
+	async discover(
+		request: Omit<SessionDiscoveryRequest, "workspaceId">,
+		workspacePath?: string,
+	): Promise<SessionDiscovery> {
 		const paths = request.path
 			? [
 					request.path.startsWith("~/") || request.path.startsWith("~\\")
@@ -201,6 +249,7 @@ export class SessionImportService {
 			throw new HarnessError("保存先にはサーバー上の絶対パスを指定してください。");
 		for (const [id, candidate] of this.candidates) if (candidate.expires < Date.now()) this.candidates.delete(id);
 		const warnings: string[] = [];
+		const codexTitles = request.source === "codex" ? await this.codexTitles(warnings) : undefined;
 		const files: CandidateFile[] = [];
 		let visited = 0;
 		const scan = async (path: string, depth: number): Promise<void> => {
@@ -278,10 +327,9 @@ export class SessionImportService {
 			} else if (!file.path.endsWith(".zst")) grouped.set(key, file);
 		}
 		const sorted = [...grouped.values()].sort((a, b) => b.modified - a.modified);
-		if (sorted.length > MAX_CANDIDATES)
-			warnings.push("最新500ファイルを表示しています。古い会話は保存先を絞って再検索してください。");
 		const summaries: SessionImportCandidate[] = [];
-		for (const file of sorted.slice(0, MAX_CANDIDATES)) {
+		for (const file of sorted) {
+			if (summaries.length > MAX_CANDIDATES) break;
 			try {
 				let database = false;
 				if (request.source === "opencode") {
@@ -295,12 +343,12 @@ export class SessionImportService {
 					}
 				}
 				if (database) {
-					const rows = await readOpenCodeDatabase(file.path);
+					const rows = await readSessionDatabase(file.path, "opencode");
 					if (!Array.isArray(rows)) throw new Error("Invalid OpenCode session index");
-					if (rows.length > MAX_CANDIDATES)
-						warnings.push("OpenCode の最新500件を表示しています。古い会話はJSONに書き出して指定してください。");
-					for (const raw of rows.slice(0, MAX_CANDIDATES)) {
+					for (const raw of rows) {
 						const row = record(raw);
+						if (workspacePath && !(await sameWorkspace(string(row.directory), workspacePath))) continue;
+						if (summaries.length > MAX_CANDIDATES) break;
 						this.remember(
 							summaries,
 							request.source,
@@ -339,6 +387,7 @@ export class SessionImportService {
 					externalId = meta.id ?? meta.sessionId ?? record(meta.params).sessionId;
 					cwd = meta.cwd;
 					title =
+						codexTitles?.get(String(externalId)) ??
 						rows.findLast((entry) => entry.type === "title")?.title ??
 						meta.title ??
 						rows.findLast((entry) => entry.type === "custom-title")?.customTitle;
@@ -346,27 +395,25 @@ export class SessionImportService {
 						for (const row of rows) {
 							const message = record(row.message ?? row.payload ?? row.data);
 							if (row.type === "user" || row.type === "user/message" || message.role === "user") {
-								const content = message.content;
-								title =
-									typeof content === "string"
-										? content
-										: Array.isArray(content)
-											? string(record(content[0]).text)
-											: undefined;
+								const text = contentText(message.content, []);
+								title = request.source === "codex" ? codexUserText(text) : string(text);
 								if (title) break;
 							}
 						}
 				}
 				if (!string(externalId) && request.source === "grok-build") externalId = basename(dirname(file.path));
 				if (!string(externalId)) continue;
+				if (workspacePath && !(await sameWorkspace(string(cwd), workspacePath))) continue;
 				this.remember(summaries, request.source, file, sorted, String(externalId), title, cwd);
 			} catch (error) {
 				warnings.push(`${basename(file.path)}: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
 		while (this.candidates.size > 4000) this.candidates.delete(this.candidates.keys().next().value!);
+		if (summaries.length > MAX_CANDIDATES)
+			warnings.push("このワークスペースの最新500件を表示しています。古い会話は保存先を絞って再検索してください。");
 		return {
-			candidates: summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+			candidates: summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, MAX_CANDIDATES),
 			paths,
 			warnings: [...new Set(warnings)].slice(0, 30),
 		};
@@ -418,7 +465,10 @@ export class SessionImportService {
 			updatedAt: candidate.updatedAt,
 			revision,
 			messageCount: data.messages.length,
-			messages: data.messages.slice(-12).map((message) => ({ ...message, text: message.text.slice(0, 4000) })),
+			messages: data.messages
+				.filter((message) => message.role !== "context")
+				.slice(-12)
+				.map((message) => ({ ...message, text: message.text.slice(0, 4000) })),
 			warnings: data.warnings,
 		};
 	}
@@ -438,7 +488,7 @@ export class SessionImportService {
 		if (candidate.database) {
 			if ((await realpath(candidate.path)) !== candidate.path)
 				throw new HarnessError("保存先が変更されました。再読み込みしてください。", 409);
-			const snapshot = await readOpenCodeDatabase(candidate.path, candidate.sourceSessionId);
+			const snapshot = await readSessionDatabase(candidate.path, "opencode", candidate.sourceSessionId);
 			digest.update(JSON.stringify(snapshot));
 			data = parseOpenCode(snapshot, candidate.sourceSessionId, warnings);
 		} else if (candidate.source === "grok-build") {
@@ -507,12 +557,15 @@ export class SessionImportService {
 					];
 				}
 				data = parseCodex(entries, candidate.sourceSessionId, warnings);
+				data.title = (await this.codexTitles(warnings)).get(data.sourceSessionId) ?? data.title;
+				digest.update(data.title);
 			} else if (candidate.source === "claude-code")
 				data = parseClaude(entries, candidate.sourceSessionId, warnings);
 			else if (candidate.source === "oh-my-pi") data = parseOhMyPi(entries, candidate.sourceSessionId, warnings);
 			else data = parseDeepSeek(entries, candidate.sourceSessionId, warnings);
 		}
 		if (!data.messages.length) throw new HarnessError("取り込める会話メッセージがありません。");
+		data.warnings = [...new Set([...data.warnings, ...warnings])];
 		if (data.messages.length > 50000 || Buffer.byteLength(JSON.stringify(data.messages)) > MAX_BYTES)
 			throw new HarnessError("取り込む会話が大きすぎます。必要な範囲を書き出して指定してください。", 413);
 		const revision = digest.digest("hex");

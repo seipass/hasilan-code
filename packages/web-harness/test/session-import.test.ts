@@ -10,11 +10,7 @@ import type { AgentSessionEvent, SessionManager } from "@hasilan-code/pi-coding-
 import { afterEach, describe, expect, it } from "vitest";
 import { createHttpHost } from "../src/server/http-host.ts";
 import { handleSessionImport } from "../src/server/session-import/routes.ts";
-import {
-	readOpenCodeDatabase,
-	SessionImportService,
-	sessionImportPaths,
-} from "../src/server/session-import/service.ts";
+import { readSessionDatabase, SessionImportService, sessionImportPaths } from "../src/server/session-import/service.ts";
 import { type ExecutionAdapter, SessionRegistry } from "../src/server/session-registry.ts";
 import { WorkspaceFiles } from "../src/server/workspace-files.ts";
 import type { SessionDiscovery, SessionImportPreview, SessionImportSource } from "../src/shared/session-import.ts";
@@ -148,6 +144,126 @@ async function sources(home: string, cwd: string): Promise<Record<SessionImportS
 }
 
 describe("session import discovery and persistence", () => {
+	it("shows the saved Codex thread name and keeps injected setup out of user messages", async () => {
+		const { home, cwd, service } = await fixture();
+		await jsonl(join(home, ".codex/sessions/rollout-named-thread.jsonl"), [
+			{ type: "session_meta", payload: { id: "named-thread", cwd } },
+			{
+				type: "response_item",
+				payload: {
+					type: "message",
+					role: "user",
+					content: "# AGENTS.md instructions for project\n<INSTRUCTIONS>Project rules</INSTRUCTIONS>",
+				},
+			},
+			{
+				type: "response_item",
+				payload: {
+					type: "message",
+					role: "user",
+					content: "<environment_context><cwd>project</cwd></environment_context>",
+				},
+			},
+			{ type: "response_item", payload: { type: "message", role: "user", content: "Understand this project" } },
+		]);
+		await jsonl(join(home, ".codex/session_index.jsonl"), [
+			{ id: "named-thread", thread_name: "Old name", updated_at: "2026-10-21T00:00:00Z" },
+			{ id: "named-thread", thread_name: "Project architecture", updated_at: "2026-10-22T00:00:00Z" },
+		]);
+		const discovery = await service.discover({ source: "codex" });
+		expect(discovery.candidates[0].title).toBe("Project architecture");
+		const preview = await service.preview(discovery.candidates[0].candidateId);
+		expect(preview.title).toBe("Project architecture");
+		expect(preview.messageCount).toBe(3);
+		expect(preview.messages.filter((message) => message.role === "user").map((message) => message.text)).toEqual([
+			"Understand this project",
+		]);
+		const registry = new SessionRegistry({ agentDir: join(home, "target"), workspaceFiles: new WorkspaceFiles() });
+		await registry.initialize();
+		const workspace = await registry.addWorkspace(cwd);
+		const { data, revision } = await service.read(preview.candidateId);
+		const imported = await registry.importSession(workspace.id, data, revision);
+		expect(registry.get(imported.sessionId).messages.map((message) => message.importedContext ?? false)).toEqual([
+			true,
+			true,
+			false,
+		]);
+		await registry.close();
+	});
+	it("uses Codex database names when there is no JSONL title index without changing the database", async () => {
+		const { home, cwd, service } = await fixture();
+		await sources(home, cwd);
+		const path = join(home, ".codex/state_5.sqlite");
+		await executeFile(process.execPath, [
+			"--disable-warning=ExperimentalWarning",
+			fileURLToPath(new URL("./session-import-sqlite-fixture.ts", import.meta.url)),
+			path,
+			"codex",
+			cwd,
+		]);
+		const before = await readFile(path);
+		const discovery = await service.discover({ source: "codex" }, cwd);
+		expect(discovery.candidates[0].title).toBe("Renamed Codex session");
+		expect((await service.preview(discovery.candidates[0].candidateId)).title).toBe("Renamed Codex session");
+		expect(await readFile(path)).toEqual(before);
+	});
+	it("refuses to put another workspace's session into the current workspace for every harness", async () => {
+		const { home, cwd, service } = await fixture();
+		const paths = await sources(home, cwd);
+		const other = join(home, "other-project");
+		await mkdir(other);
+		const registry = new SessionRegistry({ agentDir: join(home, "target"), workspaceFiles: new WorkspaceFiles() });
+		await registry.initialize();
+		const workspace = await registry.addWorkspace(other);
+		const original = await registry.addWorkspace(cwd);
+		const host = createHttpHost({
+			port: 0,
+			handleApi: (request, response, url) =>
+				handleSessionImport(request, response, url, service, registry, async () => {}),
+		});
+		const launch = await host.listen();
+		try {
+			const login = await fetch(launch.launchUrl, { redirect: "manual" });
+			const cookie = login.headers.get("set-cookie")!.split(";")[0];
+			for (const source of Object.keys(paths)) {
+				const discovery = await service.discover({ source: source as SessionImportSource });
+				const preview = await service.preview(discovery.candidates[0].candidateId);
+				const originalScope = await service.discover({ source: source as SessionImportSource }, original.path);
+				expect(originalScope.candidates, source).toHaveLength(1);
+				const scoped = await fetch(`${launch.origin}/api/session-imports/discover`, {
+					method: "POST",
+					headers: { Cookie: cookie, Origin: launch.origin, "Content-Type": "application/json" },
+					body: JSON.stringify({ source, workspaceId: workspace.id }),
+				});
+				expect(scoped.status, source).toBe(200);
+				expect(((await scoped.json()) as SessionDiscovery).candidates, source).toEqual([]);
+				const foreignPreview = await fetch(`${launch.origin}/api/session-imports/preview`, {
+					method: "POST",
+					headers: { Cookie: cookie, Origin: launch.origin, "Content-Type": "application/json" },
+					body: JSON.stringify({ candidateId: preview.candidateId, workspaceId: workspace.id }),
+				});
+				expect(foreignPreview.status, source).toBe(400);
+				const response = await fetch(`${launch.origin}/api/session-imports`, {
+					method: "POST",
+					headers: { Cookie: cookie, Origin: launch.origin, "Content-Type": "application/json" },
+					body: JSON.stringify({
+						candidateId: preview.candidateId,
+						revision: preview.revision,
+						workspaceId: workspace.id,
+					}),
+				});
+				expect(response.status, source).toBe(400);
+				const { data, revision } = await service.read(preview.candidateId);
+				await expect(registry.importSession(workspace.id, data, revision), source).rejects.toThrow(
+					"現在のワークスペース",
+				);
+				expect(registry.list()).toEqual([]);
+			}
+		} finally {
+			await host.close();
+			await registry.close();
+		}
+	});
 	it("discovers and previews all six local formats including SQLite and compressed JSONL without modifying source bytes", async () => {
 		const { home, cwd, service } = await fixture();
 		const paths = await sources(home, cwd);
@@ -178,9 +294,9 @@ describe("session import discovery and persistence", () => {
 				cwd,
 			]);
 			const bytes = await readFile(path);
-			const index = await readOpenCodeDatabase(path);
+			const index = await readSessionDatabase(path, "opencode");
 			expect(index).toHaveLength(1);
-			const snapshot = await readOpenCodeDatabase(path, "oc-synthetic");
+			const snapshot = await readSessionDatabase(path, "opencode", "oc-synthetic");
 			expect(JSON.stringify(snapshot)).toContain("SQLite user");
 			expect(JSON.stringify(snapshot)).toContain("SQLite answer");
 			expect(await readFile(path)).toEqual(bytes);
@@ -398,10 +514,13 @@ describe("session import discovery and persistence", () => {
 				});
 			expect((await post("/api/session-imports/discover", { source: "unknown" })).status).toBe(400);
 			const discovery = (await (
-				await post("/api/session-imports/discover", { source: "oh-my-pi" })
+				await post("/api/session-imports/discover", { source: "oh-my-pi", workspaceId: workspace.id })
 			).json()) as SessionDiscovery;
 			const preview = (await (
-				await post("/api/session-imports/preview", { candidateId: discovery.candidates[0].candidateId })
+				await post("/api/session-imports/preview", {
+					candidateId: discovery.candidates[0].candidateId,
+					workspaceId: workspace.id,
+				})
 			).json()) as SessionImportPreview;
 			expect(
 				(

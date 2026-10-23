@@ -11,6 +11,7 @@ export const SESSION_IMPORT_SOURCES = [
 ] as const;
 export type SessionImportSource = (typeof SESSION_IMPORT_SOURCES)[number]["id"];
 export const SESSION_IMPORT_MESSAGE_API = "session-import";
+export const SESSION_IMPORT_CONTEXT_TYPE = "harness-imported-context";
 const sourceSchema = Type.Union([
 	Type.Literal("codex"),
 	Type.Literal("claude-code"),
@@ -20,18 +21,22 @@ const sourceSchema = Type.Union([
 	Type.Literal("deepseek-harness"),
 ]);
 export const sessionDiscoverySchema = Type.Object(
-	{ source: sourceSchema, path: Type.Optional(Type.String({ minLength: 1, maxLength: 4096 })) },
+	{
+		source: sourceSchema,
+		workspaceId: Type.String({ minLength: 1 }),
+		path: Type.Optional(Type.String({ minLength: 1, maxLength: 4096 })),
+	},
 	{ additionalProperties: false },
 );
 export const sessionPreviewSchema = Type.Object(
-	{ candidateId: Type.String({ minLength: 1, maxLength: 128 }) },
+	{ candidateId: Type.String({ minLength: 1, maxLength: 128 }), workspaceId: Type.String({ minLength: 1 }) },
 	{ additionalProperties: false },
 );
 export const sessionImportSchema = Type.Object(
 	{
 		candidateId: Type.String({ minLength: 1, maxLength: 128 }),
 		revision: Type.String({ minLength: 1, maxLength: 128 }),
-		workspaceId: Type.Optional(Type.String({ minLength: 1 })),
+		workspaceId: Type.String({ minLength: 1 }),
 		model: Type.Optional(modelSchema),
 		thinkingLevel: Type.Optional(thinkingSchema.properties.level),
 	},

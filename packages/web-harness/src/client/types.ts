@@ -77,6 +77,7 @@ export interface ChatMessage {
 	partial: boolean;
 	runId?: string;
 	contextInjection?: ContextInjection;
+	importedContext?: boolean;
 }
 export interface ToolCall {
 	key: string;

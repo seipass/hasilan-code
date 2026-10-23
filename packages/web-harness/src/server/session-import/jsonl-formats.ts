@@ -1,11 +1,26 @@
 import type { ImportedTranscript, SessionImportMessage } from "../../shared/session-import.ts";
-import { activeBranch, addMessage, contentText, type JsonRecord, record, string, transcript } from "./common.ts";
+import {
+	activeBranch,
+	addMessage,
+	codexUserText,
+	contentText,
+	type JsonRecord,
+	record,
+	string,
+	transcript,
+} from "./common.ts";
 
 function responseMessage(item: JsonRecord, messages: SessionImportMessage[], warnings: string[], time?: unknown): void {
 	if (item.type === "message") {
 		const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "context";
 		const text = contentText(item.content, warnings);
-		addMessage(messages, role, role === "context" ? `[元の ${String(item.role)} メッセージ]\n${text}` : text, time);
+		const request = role === "user" ? codexUserText(text) : undefined;
+		addMessage(
+			messages,
+			role === "user" && !request ? "context" : role,
+			role === "context" ? `[元の ${String(item.role)} メッセージ]\n${text}` : (request ?? text),
+			time,
+		);
 	} else if (["function_call", "custom_tool_call", "local_shell_call"].includes(String(item.type))) {
 		addMessage(
 			messages,
@@ -80,8 +95,11 @@ export function parseCodex(entries: JsonRecord[], fallbackId: string, warnings: 
 				addMessage(messages, "context", `[会話の要約]\n${string(item.message) ?? ""}`, entry.timestamp);
 			}
 		} else if (entry.type === "event_msg") {
-			if (item.type === "user_message") addMessage(fallback, "user", string(item.message) ?? "", entry.timestamp);
-			else if (item.type === "agent_message")
+			if (item.type === "user_message") {
+				const text = string(item.message) ?? "";
+				const request = codexUserText(text);
+				addMessage(fallback, request ? "user" : "context", request ?? text, entry.timestamp);
+			} else if (item.type === "agent_message")
 				addMessage(fallback, "assistant", string(item.message) ?? "", entry.timestamp);
 		}
 	}
