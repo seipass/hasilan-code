@@ -123,7 +123,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .history-heading { padding: 0 5px 9px 9px; font-size: 11px; color: var(--on-surface-muted); display: flex; justify-content: space-between; align-items: center; }
 .workspace-add-button { width: 26px; height: 26px; font-size: 20px; }
 .workspace-accordion { min-width: 0; margin-bottom: 6px; }
-.workspace-accordion > summary { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px; cursor: pointer; border-radius: 7px; font-size: 12px; color: var(--on-surface-secondary); list-style: none; }
+.workspace-accordion > summary { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 9px; cursor: pointer; border-radius: 7px; font-size: 12px; color: var(--on-surface-secondary); list-style: none; }
 .workspace-accordion > summary::-webkit-details-marker { display: none; }
 .workspace-accordion > summary::before { content: "›"; flex-shrink: 0; font-size: 17px; line-height: 1; }
 .workspace-accordion[open] > summary::before { transform: rotate(90deg); }
