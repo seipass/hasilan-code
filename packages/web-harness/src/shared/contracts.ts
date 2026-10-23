@@ -38,6 +38,10 @@ export const promptSchema = Type.Object(
 	},
 	{ additionalProperties: false },
 );
+export const sessionRenameSchema = Type.Object(
+	{ title: Type.String({ minLength: 1, maxLength: 200 }) },
+	{ additionalProperties: false },
+);
 
 export const pendingInputActionSchema = Type.Union([
 	Type.Object(

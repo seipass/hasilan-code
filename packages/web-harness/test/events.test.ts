@@ -23,6 +23,33 @@ class Socket extends EventEmitter {
 }
 
 describe("channel subscriptions", () => {
+	it("cancels pending updates and notifies subscribers when a session is deleted", async () => {
+		vi.useFakeTimers();
+		let deleted = false;
+		const hub = new EventHub(() => {
+			if (deleted) throw new Error("Session not found");
+			return { text: "Before deletion" };
+		});
+		try {
+			const socket = new Socket();
+			hub.attach(socket as unknown as WebSocket);
+			socket.command({ type: "subscribe", subscriptionId: "s", channel: "session", id: "deleted" });
+			hub.publish("session", "deleted");
+			deleted = true;
+			hub.removeSession("deleted");
+			await vi.advanceTimersByTimeAsync(100);
+			expect(socket.messages).toHaveLength(2);
+			expect(socket.messages[1]).toMatchObject({
+				type: "event",
+				id: "deleted",
+				seq: 1,
+				event: { type: "session_deleted" },
+			});
+		} finally {
+			hub.close();
+			vi.useRealTimers();
+		}
+	});
 	it("keeps each subscriber's history baseline when another subscribes during a pending update", async () => {
 		vi.useFakeTimers();
 		const source = {

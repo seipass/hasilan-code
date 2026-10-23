@@ -107,13 +107,14 @@ type GraphGesture = {
 	moved: boolean;
 };
 
-function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm }: {
+function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visible }: {
 	agents: TeamAgent[];
 	snapshot: TeamSnapshot;
 	focusedId: string;
 	focus: (id: string) => void;
 	overview: ReactNode;
 	swarm: SessionSummary["swarm"];
+	visible: boolean;
 }) {
 	const managed = snapshot.teams.some((team) => team.scope === "workspace" && team.teamId === agents[0]?.teamId) || !!swarm;
 	const managerId = managed ? agents.find((member) => !member.parentAgentId)?.agentId : undefined;
@@ -139,19 +140,24 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm }: {
 	const focused = graph.nodes.find((node) => node.agent.agentId === focusedId);
 	const fitGraph = useCallback((target = graph) => {
 		const element = viewport.current;
-		if (!element || !element.clientWidth || !element.clientHeight) return;
+		if (!element || !element.clientWidth || !element.clientHeight) return false;
 		const nextZoom = Math.min(1, (element.clientWidth - 12) / target.width, (element.clientHeight - 12) / target.height);
 		setView({
 			zoom: nextZoom,
 			x: element.clientWidth / 2 - (target.x + target.width / 2) * nextZoom,
 			y: element.clientHeight / 2 - (target.y + target.height / 2) * nextZoom,
 		});
+		return true;
 	}, [graph]);
 	useEffect(() => {
-		if (initialized.current) return;
-		fitGraph();
-		initialized.current = true;
-	}, [fitGraph]);
+		const element = viewport.current;
+		if (!visible || !element || initialized.current) return;
+		const fit = () => { if (!initialized.current && fitGraph()) initialized.current = true; };
+		fit();
+		const observer = new ResizeObserver(fit);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [fitGraph, visible]);
 	useEffect(() => {
 		const element = viewport.current;
 		if (!element) return;
@@ -375,7 +381,7 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 			</section>;
 	return <section className="team-pane" aria-label="チームの進行状況">
 		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2></div> : <>
-			{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} swarm={swarm} />}
+			{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} swarm={swarm} visible={visible} />}
 			{mobile ? <>
 				{focused && <button type="button" className="team-focus-trigger" aria-haspopup="dialog" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>{label(focused)}の詳細</button>}
 				<MobileSheet open={detailsOpen && visible} side="bottom" title="担当の詳細" onClose={() => setDetailsOpen(false)}>{details}</MobileSheet>

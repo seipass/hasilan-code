@@ -75,7 +75,7 @@ export function SessionImportDialog({ workspace, model, thinkingLevel, onClose, 
 		const bounds = event.currentTarget.getBoundingClientRect();
 		if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
 	}}>
-		<header className="session-import-heading"><div><h2 id={titleId}>セッションを引き継ぐ</h2><p>このワークスペースの履歴</p><code>{workspace.path}</code></div><button type="button" disabled={busy} onClick={onClose} aria-label="セッション引き継ぎを閉じる">閉じる</button></header>
+		<header className="session-import-heading"><div><h2 id={titleId}>セッションを引き継ぐ</h2><code>{workspace.path}</code></div><button type="button" disabled={busy} onClick={onClose} aria-label="セッション引き継ぎを閉じる">閉じる</button></header>
 		<form className="session-import-source" onSubmit={(event) => { event.preventDefault(); setRequestPath(path.trim()); setAttempt((value) => value + 1); }}>
 			<label>ハーネス<select value={source} disabled={busy} onChange={(event) => { setSource(event.target.value as SessionImportSource); setPath(""); setRequestPath(""); setQuery(""); }}>{SESSION_IMPORT_SOURCES.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label>
 			<label>履歴ファイル<input value={path} disabled={busy} onChange={(event) => setPath(event.target.value)} placeholder="自動検出 · フォルダーまたは履歴ファイルの絶対パス" /></label>
@@ -101,6 +101,5 @@ export function SessionImportDialog({ workspace, model, thinkingLevel, onClose, 
 			</section>
 		</div>
 		<footer className="session-import-actions"><button type="button" disabled={busy || !preview || previewLoading} onClick={() => { void importSession(); }}>{busy ? "引き継ぎ中…" : "このセッションを引き継ぐ"}</button></footer>
-		<p className="session-import-note">ツールの実行記録は参照用の履歴として引き継ぎます。続きの実行には現在選択中のモデルを使います。</p>
 	</dialog>;
 }

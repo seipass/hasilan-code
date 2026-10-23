@@ -5,7 +5,6 @@
 .session-import-heading h2 { margin: 0; }
 .session-import-heading > div { min-width: 0; }
 .session-import-heading > button { flex: none; white-space: nowrap; }
-.session-import-heading p { margin: 6px 0 0; color: var(--on-surface-muted); font-size: 12px; }
 .session-import-heading code { display: block; margin-top: 4px; font-size: 12px; overflow-wrap: anywhere; }
 .session-import-source { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 0 20px 12px; font-size: 12px; }
 .session-import-source button { min-height: 36px; }
@@ -31,10 +30,8 @@
 .session-import-warning { color: var(--warning); font-size: 12px; }
 .session-import-error { flex: none; margin: 0; padding: 8px 20px; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
 .session-import-preview .session-import-error { padding-inline: 0; }
-.session-import-actions { display: flex; flex: none; justify-content: flex-end; padding: 14px 20px 8px; }
+.session-import-actions { display: flex; flex: none; justify-content: flex-end; padding: 14px 20px; }
 .session-import-actions > button { flex: none; border-color: var(--primary); background: var(--primary-container); font-size: 12px; }
-.session-import-note { flex: none; margin: 0; padding: 0 20px 14px; color: var(--on-surface-muted); font-size: 11px; }
-.session-import-trigger { margin: 4px 12px 0; border: 0; padding: 8px; background: transparent; text-align: left; color: var(--on-surface-muted); font-size: 12px; }
 @media (max-width: 600px) {
 	.session-import-dialog { width: 100%; max-width: none; height: 100dvh; margin: 0; border-radius: 0; }
 	.session-import-dialog input, .session-import-dialog select { min-height: 44px; font-size: 16px; }
@@ -49,5 +46,4 @@
 	.session-import-preview:has(.session-import-empty) { display: none; }
 	.session-import-actions { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px; }
 	.session-import-actions button { min-height: 44px; }
-	.session-import-note { padding-inline: 12px; }
 }

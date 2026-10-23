@@ -1,0 +1,10 @@
+.session-context-menu { position: fixed; z-index: 18; display: grid; min-width: 170px; max-width: calc(100vw - 16px); padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: 0 8px 28px #0006; user-select: none; }
+.session-context-menu button { border: 0; padding: 9px 12px; background: transparent; font-size: 12px; text-align: left; }
+.session-context-menu button:focus-visible { outline-offset: -2px; }
+.session-action-dialog { width: min(440px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 22px; border: 1px solid var(--border-strong); border-radius: 14px; color: var(--on-surface); background: var(--surface-raised); }
+.session-action-dialog::backdrop { background: #05060ab3; }
+.session-action-dialog form { display: grid; gap: 18px; }
+.session-action-dialog h2, .session-action-dialog p { margin: 0; }
+.session-action-dialog label, .session-action-dialog p { font-size: 13px; overflow-wrap: anywhere; }
+.session-action-dialog input { width: 100%; }
+.session-action-buttons { display: flex; justify-content: flex-end; gap: 8px; }

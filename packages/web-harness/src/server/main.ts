@@ -11,6 +11,7 @@ import {
 	promptSchema,
 	responsibilitySchema,
 	sessionCreateSchema,
+	sessionRenameSchema,
 	teamMessageSchema,
 	terminalCreateSchema,
 	thinkingSchema,
@@ -91,11 +92,18 @@ async function main() {
 	const terminals = new TerminalManager({ getWorkspaceRoot: (id) => files.getWorkspaceRoot(id) });
 	const sessionImports = new SessionImportService();
 	events = new EventHub((channel, id) =>
-		channel === "session" ? registry.projection(id) : { sessions: registry.list(id), teams: teams.snapshot(id) },
+		channel === "session"
+			? registry.state.sessions.some((session) => session.sessionId === id)
+				? registry.projection(id)
+				: undefined
+			: { sessions: registry.list(id), teams: teams.snapshot(id) },
 	);
 	const hub = events;
 	registry.subscribe((event) => {
-		if (event.sessionId) hub.publish("session", event.sessionId);
+		if (event.sessionId) {
+			if (event.type === "session_deleted") hub.removeSession(event.sessionId);
+			else hub.publish("session", event.sessionId);
+		}
 		hub.publish("workspace", event.workspaceId);
 	});
 	teams.subscribe((event) => hub.publish("workspace", event.workspaceId));
@@ -172,6 +180,17 @@ async function main() {
 				if (parts[1] === "sessions" && parts[2]) {
 					const id = parts[2];
 					if (parts.length === 3 && method === "GET") return reply(registry.page(id));
+					if (parts.length === 3 && method === "PATCH") {
+						const { title } = await readJson(request, sessionRenameSchema);
+						await registry.renameSession(id, title);
+						return reply(registry.page(id));
+					}
+					if (parts.length === 3 && method === "DELETE") {
+						const deletedSessionIds = await registry.deleteSession(id);
+						await Promise.allSettled(deletedSessionIds.map((sessionId) => browser.closeSession(sessionId)));
+						for (const sessionId of deletedSessionIds) artifacts.deleteSession(sessionId);
+						return reply({ deletedSessionIds });
+					}
 					if (parts[3] === "history" && parts.length === 4 && method === "GET") {
 						const before = url.searchParams.get("before");
 						if (!before || before.length > 128) throw new HttpError(400, "before cursor is required");

@@ -26,6 +26,7 @@ export function useChannel<T>(
 	channel: "workspace" | "session",
 	id: string | undefined,
 	onFilesChanged?: (paths: string[]) => void,
+	onDeleted?: () => void,
 ) {
 	const [data, setData] = useState<{ id: string; value: T }>();
 	const [connection, setConnection] = useState<"connecting" | "connected" | "disconnected">("disconnected");
@@ -82,6 +83,8 @@ export function useChannel<T>(
 	}, [channel, id]);
 	const filesCallback = useRef(onFilesChanged);
 	filesCallback.current = onFilesChanged;
+	const deletedCallback = useRef(onDeleted);
+	deletedCallback.current = onDeleted;
 	useEffect(() => {
 		current.current = undefined;
 		setData(undefined);
@@ -170,6 +173,13 @@ export function useChannel<T>(
 					return;
 				}
 				seq = envelope.seq;
+				if (envelope.event?.type === "session_deleted") {
+					current.current = undefined;
+					setData(undefined);
+					setConnection("disconnected");
+					deletedCallback.current?.();
+					return;
+				}
 				if (envelope.event?.type === "projection" && envelope.event.data !== undefined) update(envelope.event.data);
 				if (
 					envelope.event?.type === "session_patch" &&

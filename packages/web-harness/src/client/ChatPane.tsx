@@ -163,7 +163,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 				})}
 			</div>}
 			{!surface && empty && <div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath}>{workspacePath}</code>}</div>}
-			{notice && <div className="composer-notice" role="status">{notice}</div>}
+			{notice && <div className="composer-notice" role="status"><span>{notice}</span><button type="button" aria-label="通知を閉じる" title="通知を閉じる" onClick={() => setNotice(undefined)}>×</button></div>}
 			{goalControl}
 			<form className="composer command-picker-anchor" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
 				{pickerOpen && <CommandPicker id={pickerId} commands={suggestions} activeIndex={activeCommand} onActive={setCommandIndex} onChoose={chooseCommand} />}

@@ -113,6 +113,15 @@ export class EventHub {
 			this.send(socket, { type: "event", ...subscription, epoch: this.epoch, seq, event: payload });
 		}
 	}
+	removeSession(id: string): void {
+		const key = `session:${id}`;
+		clearTimeout(this.pending.get(key));
+		this.pending.delete(key);
+		this.broadcast("session", id, { type: "session_deleted" });
+		for (const subscriptions of this.clients.values())
+			for (const [subscriptionId, subscription] of subscriptions)
+				if (subscription.channel === "session" && subscription.id === id) subscriptions.delete(subscriptionId);
+	}
 	close() {
 		for (const timer of this.pending.values()) clearTimeout(timer);
 		this.pending.clear();

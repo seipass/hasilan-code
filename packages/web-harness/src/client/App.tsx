@@ -10,6 +10,7 @@ import { GoalPanel } from "./GoalPanel.tsx";
 import { nextClientId } from "./ids.ts";
 import { ModelMenu } from "./ModelMenu.tsx";
 import { PanelResize } from "./PanelResize.tsx";
+import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
 import { SessionImportDialog } from "./SessionImportDialog.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
@@ -54,6 +55,8 @@ export function App() {
 	const [draftThinking, setDraftThinking] = useState<ThinkingLevel | undefined>(savedSelection.thinkingLevel);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [importOpen, setImportOpen] = useState(false);
+	const [sessionAction, setSessionAction] = useState<SessionActionTarget>();
+	const closeSessionAction = useCallback(() => setSessionAction(undefined), []);
 	const [modelOpen, setModelOpen] = useState(false);
 	const [modelClosing, setModelClosing] = useState(false);
 	const [modelMenuKey, setModelMenuKey] = useState(0);
@@ -76,7 +79,7 @@ export function App() {
 	const rightPanelRef = useRef<HTMLElement>(null);
 	const rightPanelToggle = useRef<HTMLButtonElement>(null);
 	const workspaceChannel = useChannel<WorkspaceProjection>("workspace", workspaceId, () => setFilesVersion((value) => value + 1));
-	const sessionChannel = useChannel<SessionDetail>("session", sessionId);
+	const sessionChannel = useChannel<SessionDetail>("session", sessionId, undefined, () => newConversation());
 	const session = sessionChannel.data;
 	const model = session?.model ?? draftModel;
 	const selectedModel = catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id) ?? model;
@@ -159,7 +162,27 @@ export function App() {
 		if (id === workspaceId) return;
 		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setCanvasOpened(false); setMode("chat");
 	}
-	function newConversation() { if (commandPending.current) return; setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined); if (window.innerWidth < 900) setSidebarOpen(false); }
+	function newConversation(targetWorkspaceId = workspaceId) {
+		if (commandPending.current) return;
+		if (targetWorkspaceId !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
+		if (targetWorkspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
+		setWorkspaceId(targetWorkspaceId);
+		if (targetWorkspaceId) setExpandedWorkspaces((previous) => ({ ...previous, [targetWorkspaceId]: true }));
+		setHistoryQuery(""); setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined);
+		if (window.innerWidth < 900) setSidebarOpen(false);
+	}
+	async function renameSession(id: string, title: string) {
+		await command(`/api/sessions/${encodeURIComponent(id)}`, { title }, "PATCH");
+		setInitialSessions((previous) => previous.map((entry) => entry.sessionId === id ? { ...entry, title } : entry));
+		setProjections((previous) => Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, { ...value, sessions: value.sessions.map((entry) => entry.sessionId === id ? { ...entry, title } : entry) }])));
+	}
+	async function deleteSession(id: string) {
+		const { deletedSessionIds } = await api<{ deletedSessionIds: string[] }>(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+		const deleted = new Set(deletedSessionIds);
+		setInitialSessions((previous) => previous.filter((entry) => !deleted.has(entry.sessionId)));
+		setProjections((previous) => Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, { ...value, sessions: value.sessions.filter((entry) => !deleted.has(entry.sessionId)) }])));
+		if (sessionId && deleted.has(sessionId)) newConversation();
+	}
 	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: nextClientId() }); setRightTab("tabs"); setRightOpen(true); }
 	async function addWorkspace() {
 		if (addingWorkspace) return;
@@ -300,9 +323,9 @@ export function App() {
 		<button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><span aria-hidden="true">{sidebarOpen ? "‹" : "☰"}</span></button>
 		<button className="navigation-scrim" aria-label="履歴を閉じる" aria-hidden={!sidebarOpen} inert={!sidebarOpen} onClick={() => setSidebarOpen(false)} />
 		<aside ref={sidebarRef} id="conversation-history" className="sidebar" aria-label="会話の履歴" aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
-			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={newConversation}><img className="brand-symbol" src="/icon.svg" alt="" /></button></div>
-			<button className="new-conversation" onClick={newConversation}><span aria-hidden="true">＋</span>新しい会話</button>
-			<button type="button" className="session-import-trigger" disabled={!workspace} onClick={() => setImportOpen(true)}>セッションを引き継ぐ</button>
+			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={() => newConversation()}><img className="brand-symbol" src="/icon.svg" alt="" /></button></div>
+			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><span aria-hidden="true">＋</span>新しい会話</button>
+			<button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" title="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></div>
 			<label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>
 			<div className="history-heading"><span>会話</span><button className="icon-button workspace-add-button" aria-label="ワークスペースを追加" title="フォルダーを選択してワークスペースを追加" disabled={addingWorkspace} onClick={() => { void addWorkspace(); }}>{addingWorkspace ? "…" : "+"}</button></div>
 			<nav className="history-navigation" aria-label="ワークスペースと会話">
@@ -313,11 +336,11 @@ export function App() {
 						<summary title={entry.path} onClick={(event) => {
 							event.preventDefault();
 							if (!historyQuery.trim()) setExpandedWorkspaces((previous) => ({ ...previous, [entry.workspaceId]: !open }));
-						}}><span className="workspace-name">{entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}</span></summary>
+						}}><span className="workspace-name">{entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}</span><button type="button" className="workspace-new-conversation" aria-label={`${entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}で新しい会話`} title="このワークスペースで新しい会話" onClick={(event) => { event.preventDefault(); event.stopPropagation(); newConversation(entry.workspaceId); }}>+</button></summary>
 						<ul className="session-list">{conversations.map((summary) => {
 							const title = (summary.title ?? "新しい会話").replace(/\s+/g, " ").slice(0, 90);
 							const status = summary.availability === "missing" ? "missing" : summary.currentRun?.status ?? (summary.latestRun?.status === "failed" || summary.latestRun?.status === "interrupted" ? summary.latestRun.status : "idle");
-							return <li key={summary.sessionId}><button className={`session-button ${summary.sessionId === sessionId ? "selected" : ""}`} aria-current={summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} title={title}><span className="session-title">{title}</span>{status !== "idle" && <span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} title={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} />}</button></li>;
+							return <li key={summary.sessionId}><button className={`session-button ${summary.sessionId === sessionId ? "selected" : ""}`} aria-current={summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); const bounds = event.currentTarget.getBoundingClientRect(); setSessionAction({ session: summary, opener: event.currentTarget, x: event.clientX || bounds.left, y: event.clientY || bounds.bottom }); }} title={title}><span className="session-title">{title}</span>{status !== "idle" && <span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} title={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} />}</button></li>;
 						})}</ul>{conversations.length === 0 && <p className="history-empty">{historyQuery ? "一致する会話がありません" : "会話はありません。"}</p>}
 					</details>;
 				})}
@@ -342,6 +365,7 @@ export function App() {
 				</aside>
 			</div>
 		</div>{settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} />}
+		{sessionAction && <SessionActions key={sessionAction.session.sessionId} target={sessionAction} onClose={closeSessionAction} onRename={renameSession} onDelete={deleteSession} />}
 		{importOpen && workspace && <SessionImportDialog key={workspace.workspaceId} workspace={workspace} model={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onFile={openFile} onClose={() => setImportOpen(false)} onImported={(imported, folder) => {
 			setWorkspaces((previous) => previous.some((entry) => entry.workspaceId === folder.workspaceId) ? previous : [...previous, folder]);
 			setInitialSessions((previous) => [...previous.filter((entry) => entry.sessionId !== imported.sessionId), imported]);

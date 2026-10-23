@@ -138,7 +138,7 @@ export interface RegistryOptions {
 	adapterFactory?: (descriptor: SessionDescriptor, manager: SessionManager) => Promise<ExecutionAdapter>;
 }
 export interface RegistryEvent {
-	type: "session_changed" | "workspace_changed";
+	type: "session_changed" | "workspace_changed" | "session_deleted";
 	workspaceId: string;
 	sessionId?: string;
 }
@@ -717,6 +717,88 @@ export class SessionRegistry {
 		const descriptor = this.state.sessions.find((entry) => entry.sessionId === id);
 		if (!descriptor) throw new HarnessError("Session not found", 404);
 		return descriptor;
+	}
+	async renameSession(id: string, title: string): Promise<void> {
+		await this.mutate(async () => {
+			if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
+			const name = title.trim();
+			if (!name || name.length > 200) throw new HarnessError("会話名は1〜200文字で入力してください。");
+			const descriptor = this.descriptor(id);
+			const previous = descriptor.title;
+			descriptor.title = name;
+			try {
+				await this.persist();
+			} catch (error) {
+				descriptor.title = previous;
+				throw error;
+			}
+			this.changed(id);
+		});
+	}
+	/** Remove the app's conversation tree, retaining the underlying SDK history files. */
+	async deleteSession(id: string): Promise<string[]> {
+		return this.mutate(async () => {
+			if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
+			const descriptor = this.descriptor(id);
+			const root = this.state.agents.find((agent) => agent.sessionId === id);
+			if (descriptor.parentSessionId || root?.parentAgentId)
+				throw new HarnessError("子の会話は親の会話と一緒に削除してください。", 409);
+			const ids = new Set([id]);
+			if (root) for (const agent of this.state.agents) if (agent.teamId === root.teamId) ids.add(agent.sessionId);
+			let changed = true;
+			while (changed) {
+				changed = false;
+				for (const session of this.state.sessions)
+					if (session.parentSessionId && ids.has(session.parentSessionId) && !ids.has(session.sessionId)) {
+						ids.add(session.sessionId);
+						changed = true;
+					}
+			}
+			const agents = new Set(
+				this.state.agents.filter((agent) => ids.has(agent.sessionId)).map((agent) => agent.agentId),
+			);
+			if (
+				this.state.runs.some(
+					(run) =>
+						agents.has(run.agentId) && !["completed", "failed", "cancelled", "interrupted"].includes(run.status),
+				) ||
+				this.state.sessions.some(
+					(session) =>
+						ids.has(session.sessionId) &&
+						(session.goal?.status === "active" ||
+							session.swarm?.status === "active" ||
+							this.live.get(session.sessionId)?.runId),
+				)
+			)
+				throw new HarnessError("会話とチームの実行を停止してから削除してください。", 409);
+			const previous = {
+				sessions: this.state.sessions,
+				teams: this.state.teams,
+				agents: this.state.agents,
+				runs: this.state.runs,
+				pendingInput: this.state.pendingInput,
+			};
+			this.state.sessions = previous.sessions.filter((session) => !ids.has(session.sessionId));
+			this.state.teams = previous.teams.filter((team) => !agents.has(team.rootAgentId));
+			this.state.agents = previous.agents.filter((agent) => !agents.has(agent.agentId));
+			this.state.runs = previous.runs.filter((run) => !agents.has(run.agentId));
+			this.state.pendingInput = previous.pendingInput.filter((input) => !ids.has(input.sessionId));
+			try {
+				await this.persist();
+			} catch (error) {
+				Object.assign(this.state, previous);
+				throw error;
+			}
+			for (const sessionId of ids) {
+				const live = this.live.get(sessionId);
+				live?.unsubscribe?.();
+				live?.adapter?.dispose();
+				this.live.delete(sessionId);
+				this.emit({ type: "session_deleted", sessionId, workspaceId: descriptor.workspaceId });
+			}
+			this.emit({ type: "workspace_changed", workspaceId: descriptor.workspaceId });
+			return [...ids];
+		});
 	}
 	get(id: string): SessionSnapshot {
 		return structuredClone(this.projection(id));
