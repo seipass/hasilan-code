@@ -144,6 +144,21 @@ async function sources(home: string, cwd: string): Promise<Record<SessionImportS
 }
 
 describe("session import discovery and persistence", () => {
+	it("lists user conversations without Codex's internal subagent sessions", async () => {
+		const { home, cwd, service } = await fixture();
+		for (const [id, source] of [
+			["parent", "cli"],
+			["child", { subagent: { thread_spawn: { parent_thread_id: "parent", agent_path: "/root/research" } } }],
+		] as const) {
+			await jsonl(join(home, `.codex/sessions/rollout-${id}.jsonl`), [
+				{ type: "session_meta", payload: { id, cwd, source } },
+				{ type: "response_item", payload: { type: "message", role: "user", content: `${id} request` } },
+			]);
+		}
+		expect(
+			(await service.discover({ source: "codex" }, cwd)).candidates.map((entry) => entry.sourceSessionId),
+		).toEqual(["parent"]);
+	});
 	it("shows the saved Codex thread name and keeps injected setup out of user messages", async () => {
 		const { home, cwd, service } = await fixture();
 		await jsonl(join(home, ".codex/sessions/rollout-named-thread.jsonl"), [

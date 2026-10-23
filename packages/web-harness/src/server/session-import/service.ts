@@ -376,9 +376,10 @@ export class SessionImportService {
 					cwd = record(meta.location).directory ?? meta.directory ?? meta.cwd;
 				} else {
 					const rows = jsonLines(head, [], true);
-					if (request.source === "codex")
+					if (request.source === "codex") {
 						meta = record(rows.find((entry) => entry.type === "session_meta")?.payload);
-					else if (request.source === "oh-my-pi" || request.source === "deepseek-harness")
+						if (record(meta.source).subagent) continue;
+					} else if (request.source === "oh-my-pi" || request.source === "deepseek-harness")
 						meta = record(rows.find((entry) => entry.type === "session"));
 					else if (request.source === "claude-code")
 						meta = record(rows.find((entry) => entry.type === "user" && !entry.isSidechain));
