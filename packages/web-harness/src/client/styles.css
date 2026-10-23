@@ -196,7 +196,6 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .model-popover > header, .model-popover > p { flex: none; }
 .model-popover > p { max-height: 80px; overflow: auto; }
 .composer-notice { margin: 0 6px 6px; padding: 4px 8px; border-radius: 8px; background: var(--surface-hover); color: var(--on-surface-secondary); font-size: 12px; line-height: 18px; }
-.run-progress { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--on-surface-muted); padding: 0 5px 10px; }
 .pending-input-list { display: flex; flex-direction: column; gap: 5px; max-height: min(150px, 25dvh); overflow-y: auto; margin: 0 0 8px; padding-right: 3px; }
 .pending-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 8px 9px; border: 1px solid var(--border-subtle); border-radius: 11px; background: var(--surface-raised); }
 .pending-input-row.unavailable { opacity: .72; }
@@ -208,10 +207,10 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .pending-input-actions button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--on-surface-muted); font-size: 15px; line-height: 1; }
 .pending-input-actions button:hover:not(:disabled) { background: var(--surface-hover); color: var(--on-surface-secondary); }
 .pending-input-actions button:disabled { opacity: .4; cursor: not-allowed; }
-.activity-dot, .streaming-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--secondary); animation: pulse 1.5s ease-in-out infinite; }
+.streaming-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--secondary); animation: pulse 1.5s ease-in-out infinite; }
 .streaming-dot { margin-top: 12px; }
 @keyframes pulse { 50% { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .activity-dot, .streaming-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .streaming-dot { animation: none; } }
 .child-banner { font-size: 12px; padding: 10px 25px; color: var(--muted); background: var(--secondary-container); }
 .conversation { flex: 1; min-height: 0; overflow: auto; scroll-behavior: auto; padding: 24px 28px 8px; }
 .conversation-content { width: min(100%, 744px); margin: auto; }
@@ -556,7 +555,7 @@ button, .workspace-accordion > summary, .panel-resize::after {
 	pointer-events: none;
 }
 .message:last-child:not(.partial) { animation: message-enter var(--motion-base) var(--motion-ease) both; }
-.run-progress, .composer-notice, .connection-warning, .global-error, .composer-error, .run-error, .back-to-bottom { animation: status-enter var(--motion-base) var(--motion-ease) both; }
+.composer-notice, .connection-warning, .global-error, .composer-error, .run-error, .back-to-bottom { animation: status-enter var(--motion-base) var(--motion-ease) both; }
 .settings-content:not([hidden]), .model-picker-results { animation: message-enter var(--motion-base) var(--motion-ease) both; }
 .tool-card, .agent-card {
 	transition: border-color var(--motion-base) ease, background-color var(--motion-base) ease, box-shadow var(--motion-base) ease;

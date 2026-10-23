@@ -156,7 +156,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 			})}{latestError && <div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div>}</div>
 		</div>}
 		{!surface && !empty && !nearBottom && <button className="back-to-bottom" onClick={() => { if (scroller.current) scroller.current.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" }); atBottom.current = true; setNearBottom(true); }}>最新のメッセージへ ↓</button>}
-		<div className="composer-area">{session?.currentRun && <div className="run-progress" role="status"><span className="activity-dot" /><span>{RUN_LABELS[session.currentRun.status]}</span></div>}
+		<div className="composer-area">
 			{pendingInputs.length > 0 && <div className="pending-input-list" role="list" aria-label="予約中の追加指示">
 				{pendingInputs.map((pendingInput) => {
 					const editing = editingInput?.inputId === pendingInput.inputId;
