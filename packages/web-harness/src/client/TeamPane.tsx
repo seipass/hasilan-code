@@ -362,9 +362,6 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	else situation = "現在進行中の作業はありません";
 	const run = focused?.currentRun ?? focused?.latestRun;
 	const parent = agents.find((agent) => agent.agentId === focused?.parentAgentId);
-	const directChildren = agents.filter((agent) => agent.parentAgentId === focused?.agentId).length;
-	const model = sessions.find((session) => session.sessionId === focused?.sessionId)?.model;
-	const previous = focused ? snapshot?.runs.filter((item) => item.agentId === focused.agentId && item.runId !== run?.runId) ?? [] : [];
 	function focusAgent(id: string) {
 		if (id !== focused?.agentId) transitionItems(() => setFocusedId(id));
 		if (mobile) setDetailsOpen(true);
@@ -372,12 +369,10 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
 	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>{managed ? "担当者" : "子の担当"} {managed ? specialists.length : workers.length}人 {managed && helpers > 0 && <><span>·</span> 補助 {helpers}人 </>}<span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> {managed ? <>指示待ち {counts.ready}</> : <>完了 {counts.completed}</>}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}<UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
-				<header className="team-focus-header"><div><span className="team-section-label">{managed && !focused.parentAgentId ? "マネージャー" : parent?.parentAgentId ? "補助エージェント" : "選択中の担当"}</span><h3>{label(focused)}</h3>{managed && <span className={`team-member-state team-map-state status-${status(focused, swarm, roots[0]?.agentId)}`}>{AGENT_LABELS[status(focused, swarm, roots[0]?.agentId)]}</span>}</div><button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></header>
-				<div className="team-relationship">{parent ? <>親: <button type="button" className="text-link" onClick={() => focusAgent(parent.agentId)}>{label(parent)}</button></> : managed ? "親AI · マネージャー" : "親AI · チームの起点"}{directChildren > 0 && <span> · 子 {directChildren}人</span>}{model && <span> · {model.name ?? model.id}</span>}</div>
+				<header className="team-focus-header"><div><h3>{label(focused)}</h3>{managed && <span className={`team-member-state team-map-state status-${status(focused, swarm, roots[0]?.agentId)}`}>{AGENT_LABELS[status(focused, swarm, roots[0]?.agentId)]}</span>}</div><button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></header>
 				{focused.responsibility && <section className="team-responsibility"><h4>担当範囲</h4><p>{focused.responsibility}</p>{parent && !parent.parentAgentId && <details><summary>担当範囲を変更</summary><ResponsibilityForm key={focused.agentId} agent={focused} onSave={onResponsibility} /></details>}</section>}
 				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /> : <p className="team-inline-note">まだ作業はありません。</p>}
 				<div className="team-focus-actions">{focused.parentAgentId && <details><summary>{label(focused)}に{managed && !focused.currentRun ? "次の作業を依頼" : "メッセージを送る"}</summary><MessageForm key={focused.agentId} agent={focused} onMessage={onMessage} /></details>}{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
-				{previous.length > 0 && <details className="team-run-history"><summary>以前の作業 {previous.length}件</summary>{previous.map((item) => <div key={item.runId} className="team-history-item"><RunDetail run={item} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /></div>)}</details>}
 			</section>;
 	return <section className="team-pane" aria-label="チームの進行状況">
 		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2></div> : <>

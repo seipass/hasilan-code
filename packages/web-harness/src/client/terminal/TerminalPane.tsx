@@ -61,7 +61,11 @@ export function TerminalView({ summary, pane, visible, selected, focusRequest, o
 		const element = container.current;
 		if (!element) return;
 		const colors = getComputedStyle(document.documentElement);
-		const emulator = new Terminal({ cols: summary.cols, rows: summary.rows, ...(summary.windowsPty ? { windowsPty: summary.windowsPty } : {}), theme: { background: colors.getPropertyValue("--surface-sunken").trim(), foreground: colors.getPropertyValue("--on-surface").trim(), cursor: colors.getPropertyValue("--primary").trim(), selectionBackground: colors.getPropertyValue("--primary-container").trim() }, fontFamily: '"UDEV Gothic", ui-monospace, monospace', fontSize: 13, scrollback: 2000, cursorBlink: true, disableStdin: true, logLevel: "off", linkHandler: {
+		const emulator = new Terminal({ cols: summary.cols, rows: summary.rows, ...(summary.windowsPty ? { windowsPty: summary.windowsPty } : {}), theme: {
+			background: colors.getPropertyValue("--surface-sunken").trim(), foreground: colors.getPropertyValue("--on-surface").trim(), cursor: colors.getPropertyValue("--primary").trim(), selectionBackground: "#cba6f740",
+			black: "#45475a", red: "#f38ba8", green: "#a6e3a1", yellow: "#f9e2af", blue: "#89b4fa", magenta: "#f5c2e7", cyan: "#94e2d5", white: "#bac2de",
+			brightBlack: "#585b70", brightRed: "#f38ba8", brightGreen: "#a6e3a1", brightYellow: "#f9e2af", brightBlue: "#89b4fa", brightMagenta: "#f5c2e7", brightCyan: "#94e2d5", brightWhite: "#cdd6f4",
+		}, fontFamily: '"UDEV Gothic", ui-monospace, monospace', fontSize: 13, scrollback: 2000, cursorBlink: true, disableStdin: true, logLevel: "off", linkHandler: {
 			activate: (event, text) => {
 				if (!event.isTrusted) return;
 				try { const target = new URL(text); if (target.protocol === "https:" || target.protocol === "http:") window.open(target.href, "_blank", "noopener,noreferrer"); } catch { /* Non-URL OSC links are not navigable. */ }

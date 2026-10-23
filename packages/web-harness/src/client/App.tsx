@@ -167,7 +167,7 @@ export function App() {
 		if (targetWorkspaceId !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
 		if (targetWorkspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
 		setWorkspaceId(targetWorkspaceId);
-		if (targetWorkspaceId) setExpandedWorkspaces((previous) => ({ ...previous, [targetWorkspaceId]: true }));
+		setExpandedWorkspaces((previous) => Object.fromEntries(workspaces.map((entry) => [entry.workspaceId, previous[entry.workspaceId] ?? entry.workspaceId === workspaceId])));
 		setHistoryQuery(""); setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined);
 		if (window.innerWidth < 900) setSidebarOpen(false);
 	}
@@ -314,7 +314,7 @@ export function App() {
 		draftSession.current = undefined;
 	}
 	const modelControl = <div className="model-control">
-		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} title="モデル・Thinkingを選択" onClick={() => { if (modelClosing) { setModelClosing(false); setModelMenuKey((value) => value + 1); } else setModelOpen((value) => !value); }}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span className="model-trigger-thinking">Thinking: {session?.thinkingLevel ?? draftThinking ?? "自動"}</span><span aria-hidden="true">⌄</span></button>
+		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} title="モデル・Thinkingを選択" onClick={() => { if (modelClosing) { setModelClosing(false); setModelMenuKey((value) => value + 1); } else setModelOpen((value) => !value); }}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span className="model-trigger-thinking">{session?.thinkingLevel ?? draftThinking ?? "自動"}</span><span aria-hidden="true">⌄</span></button>
 	</div>;
 	const rightMaximum = Math.max(480, viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 260 : 0) - 320);
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);

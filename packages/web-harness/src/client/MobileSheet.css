@@ -20,7 +20,7 @@
 	transition: opacity 170ms ease, transform 170ms var(--motion-exit), display 170ms allow-discrete, overlay 170ms allow-discrete;
 }
 .mobile-sheet[open] { display: flex; flex-direction: column; opacity: 1; transform: translate(0, 0); pointer-events: auto; transition-duration: var(--motion-base), var(--motion-enter), var(--motion-enter), var(--motion-enter); }
-.mobile-sheet::backdrop { background: #05060a99; opacity: 0; transition: opacity 170ms ease, display 170ms allow-discrete, overlay 170ms allow-discrete; }
+.mobile-sheet::backdrop { background: #11111b99; opacity: 0; transition: opacity 170ms ease, display 170ms allow-discrete, overlay 170ms allow-discrete; }
 .mobile-sheet[open]::backdrop { opacity: 1; transition-duration: var(--motion-base); }
 .mobile-sheet.is-right { --sheet-offset-x: 32px; --sheet-offset-y: 0px; inset: auto 0 var(--sheet-bottom, 0px) auto; width: min(360px, 90vw); height: var(--sheet-viewport-height, 100dvh); max-height: var(--sheet-viewport-height, 100dvh); border-radius: 16px 0 0 16px; }
 @starting-style {

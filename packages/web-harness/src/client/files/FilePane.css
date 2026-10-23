@@ -101,13 +101,13 @@
 .files-markdown th, .files-markdown td { padding: 7px 12px; border: 1px solid var(--border-subtle); }
 .files-markdown th { background: var(--surface-raised); }
 .files-markdown hr { border: 0; border-top: 1px solid var(--border-subtle); }
-.files-highlight .hljs-keyword, .files-highlight .hljs-selector-tag, .files-highlight .hljs-literal { color: #c4a7e7; }
-.files-highlight .hljs-string, .files-highlight .hljs-regexp, .files-highlight .hljs-addition { color: #a8d5a2; }
-.files-highlight .hljs-number, .files-highlight .hljs-symbol, .files-highlight .hljs-bullet { color: #e8b988; }
-.files-highlight .hljs-title, .files-highlight .hljs-section, .files-highlight .hljs-selector-class, .files-highlight .hljs-selector-id { color: #91cafa; }
-.files-highlight .hljs-comment, .files-highlight .hljs-quote { color: #9ba5a3; font-style: italic; }
-.files-highlight .hljs-attr, .files-highlight .hljs-attribute, .files-highlight .hljs-type, .files-highlight .hljs-built_in { color: #8bd5ca; }
-.files-highlight .hljs-meta, .files-highlight .hljs-deletion { color: #eea0a0; }
+.files-highlight .hljs-keyword, .files-highlight .hljs-selector-tag, .files-highlight .hljs-literal { color: #cba6f7; }
+.files-highlight .hljs-string, .files-highlight .hljs-regexp, .files-highlight .hljs-addition { color: #a6e3a1; }
+.files-highlight .hljs-number, .files-highlight .hljs-symbol, .files-highlight .hljs-bullet { color: #fab387; }
+.files-highlight .hljs-title, .files-highlight .hljs-section, .files-highlight .hljs-selector-class, .files-highlight .hljs-selector-id { color: #89b4fa; }
+.files-highlight .hljs-comment, .files-highlight .hljs-quote { color: #7f849c; font-style: italic; }
+.files-highlight .hljs-attr, .files-highlight .hljs-attribute, .files-highlight .hljs-type, .files-highlight .hljs-built_in { color: #94e2d5; }
+.files-highlight .hljs-meta, .files-highlight .hljs-deletion { color: #f38ba8; }
 .files-highlight .hljs-emphasis { font-style: italic; }
 .files-highlight .hljs-strong { font-weight: 700; }
 @media (prefers-reduced-motion: reduce) {

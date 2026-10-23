@@ -43,13 +43,6 @@ const Message = memo(function Message({ message, tools, onFile, expansions }: Me
 	const calls = parts.filter((part) => record(part) && part.type === "toolCall");
 	const content = calls.length ? parts.filter((part) => !record(part) || part.type !== "toolCall") : message.content;
 	return <div ref={element} className="virtual-message" data-message-id={message.messageId}>
-		{message.importedOrigin && <details className="imported-origin"><summary>{message.importedOrigin.active ? "引き継ぎ元の文脈" : "保存履歴"}{message.importedOrigin.channel ? ` · ${message.importedOrigin.channel}` : ""}</summary><dl>
-			{message.importedOrigin.id && <><dt>元のID</dt><dd><code>{message.importedOrigin.id}</code></dd></>}
-			{message.importedOrigin.parentId !== undefined && <><dt>親のID</dt><dd><code>{message.importedOrigin.parentId ?? "なし"}</code></dd></>}
-			{message.importedOrigin.model && <><dt>モデル</dt><dd>{message.importedOrigin.model}</dd></>}
-			{message.importedOrigin.stopReason && <><dt>終了理由</dt><dd>{message.importedOrigin.stopReason}</dd></>}
-			{message.importedOrigin.usage !== undefined && <><dt>使用量</dt><dd><pre>{JSON.stringify(message.importedOrigin.usage, null, 2)}</pre></dd></>}
-		</dl>{message.importedOrigin.url && <div className="imported-record-links"><a href={message.importedOrigin.url} target="_blank" rel="noopener noreferrer">元の記録を開く</a><a href={message.importedOrigin.url.replace(/\/records\/[^/]+$/, "/records")} download>全記録を保存</a></div>}</details>}
 		{injection ? <details className="message context-entry">
 			<summary><span className="context-entry-label">コンテキスト</span><span className="context-entry-agent">{injection.source.agentName}</span><span className={`badge status-${injection.source.status}`}>{RUN_LABELS[injection.source.status]}</span></summary>
 			<div className="context-entry-body"><div className="message-content"><Content value={injection.content} onFile={onFile} /></div>
