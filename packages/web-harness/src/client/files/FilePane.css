@@ -91,6 +91,11 @@
 .files-tree-entry[aria-current="true"] { background: var(--secondary-container); color: var(--on-secondary-container); }
 .files-tree-marker { width: 12px; flex-shrink: 0; color: var(--on-surface-muted); text-align: center; }
 .files-tree-marker { transition: transform 180ms var(--motion-ease); }
+.files-type-icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; color: var(--on-surface-muted); }
+.files-type-icon.is-code, .files-type-icon.is-video { color: var(--secondary); }
+.files-type-icon.is-document, .files-type-icon.is-image { color: var(--primary); }
+.files-type-icon.is-script, .files-type-icon.is-audio { color: var(--success); }
+.files-type-icon.is-config, .files-type-icon.is-archive { color: var(--warning); }
 .files-tree-entry[aria-expanded="true"] > .files-tree-marker { transform: rotate(90deg); }
 .files-tree-entry > span:last-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .files-tree-message { padding: 7px 8px; line-height: 1.65; overflow-wrap: anywhere; }

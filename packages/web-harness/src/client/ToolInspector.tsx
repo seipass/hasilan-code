@@ -97,7 +97,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const specialized = ["read", "write", "edit", "bash", "terminal", "browser", "web_search", "team"].includes(tool.name);
 	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
 		<summary>
-			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong>{visual && <span className="tool-name">{tool.name}</span>}</span>
+			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
 			{summary && <span className="tool-summary" title={summary}>{summary}</span>}
 			{resultNote && <span className="tool-result-note">{resultNote}</span>}
 			<span className={`badge status-${tool.status}`}>{status}</span>

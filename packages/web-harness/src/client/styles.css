@@ -170,7 +170,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .composer-identity { display: inline-flex; flex: none; align-items: center; gap: 7px; font-weight: 600; color: var(--on-surface-secondary); white-space: nowrap; }
 .composer-identity img { width: 20px; height: 20px; }
 .composer-workspace { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--on-surface-muted); font-size: 11px; }
-.composer { border: 1px solid var(--border); border-radius: 18px; background: var(--surface-raised); padding: 15px 15px 12px; box-shadow: 0 3px 13px #11111b40; }
+.composer { border: 1px solid var(--border); border-radius: 18px; background: var(--surface-hover); padding: 15px 15px 12px; box-shadow: 0 3px 13px #11111b40; }
 .composer textarea { display: block; resize: none; width: 100%; min-height: 70px; max-height: 220px; padding: 0 3px; border: 0; outline: none; box-shadow: none; font-size: 14px; line-height: 1.7; background: transparent; }
 .composer-input-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 .composer-input-row textarea { min-width: 0; }
@@ -329,7 +329,6 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-card[open] > summary::after { transform: rotate(90deg); }
 .tool-heading { display: flex; flex: 0 1 auto; flex-direction: column; min-width: 0; max-width: 45%; line-height: 1.3; }
 .tool-card > summary strong { color: var(--on-surface-secondary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tool-name { font: 10px/1.3 "UDEV Gothic", ui-monospace, monospace; color: var(--on-surface-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-card .tool-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: var(--on-surface-secondary); font-size: 11px; }
 .tool-result-note { flex: none; color: var(--tool-accent); font-size: 10px; white-space: nowrap; }
 .tool-card .badge { flex: none; margin-left: auto; background: transparent; padding: 0; }

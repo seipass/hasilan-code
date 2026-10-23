@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage } from "../api.ts";
 import { MobileSheet, useMobileLayout } from "../MobileSheet.tsx";
+import { FileIcon } from "./FileIcon.tsx";
 import "./FilePane.css";
 
 interface FileEntry { name: string; path: string; kind: "file" | "directory" | "symlink"; size: number }
@@ -39,7 +40,7 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen 
 			<button className="files-tree-entry" title={entry.path} aria-current={entry.path === activePath ? "true" : undefined} aria-expanded={entry.kind === "directory" ? open.includes(entry.path) : undefined} onClick={() => {
 				if (entry.kind === "directory") setOpen((previous) => previous.includes(entry.path) ? previous.filter((value) => value !== entry.path) : [...previous, entry.path]);
 				else onOpen(entry.path);
-			}}><span className="files-tree-marker" aria-hidden="true">{entry.kind === "directory" ? "▸" : entry.kind === "symlink" ? "↗" : "·"}</span><span>{entry.name}</span></button>
+			}}>{entry.kind === "file" ? <FileIcon name={entry.name} /> : <span className="files-tree-marker" aria-hidden="true">{entry.kind === "directory" ? "▸" : "↗"}</span>}<span>{entry.name}</span></button>
 			{entry.kind === "directory" && <div className="files-tree-children" data-open={open.includes(entry.path)} aria-hidden={!open.includes(entry.path)} inert={!open.includes(entry.path)}><div><Directory workspaceId={workspaceId} path={entry.path} refreshKey={refreshKey} activePath={activePath} visible={visible && open.includes(entry.path)} onOpen={onOpen} /></div></div>}
 		</li>)}
 	</ul>;
