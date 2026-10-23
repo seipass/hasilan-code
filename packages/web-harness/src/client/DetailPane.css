@@ -18,7 +18,11 @@
 .detail-tab-add { position: relative; flex: none; }
 .detail-tab-new { touch-action: none; user-select: none; }
 .detail-tab-new[data-gesture] { color: var(--primary-hover); background: var(--primary-container); }
-.detail-gesture-hint { position: absolute; top: calc(100% + 8px); right: 0; z-index: 10; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: var(--on-surface); font-size: 12px; white-space: nowrap; pointer-events: none; }
+.detail-gesture-hints { pointer-events: none; }
+.detail-gesture-hint { position: absolute; z-index: 10; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: var(--on-surface-secondary); font-size: 12px; white-space: nowrap; }
+.detail-gesture-hint.is-down { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
+.detail-gesture-hint.is-right { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
+.detail-gesture-hint[data-active="true"] { border-color: var(--primary); background: var(--primary-container); color: var(--on-primary-container); }
 .detail-tab-strip button:focus-visible { outline-offset: -2px; }
 .detail-toolbar > .split-actions { margin-left: auto; }
 .detail-panel-actions { display: flex; align-items: center; flex: none; gap: 2px; padding: 0 6px; border-left: 1px solid var(--border-subtle); }

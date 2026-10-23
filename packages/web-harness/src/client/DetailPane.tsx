@@ -33,6 +33,7 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 	const [dragging, setDragging] = useState<string>();
 	const [dropTarget, setDropTarget] = useState<{ id: string; after: boolean }>();
 	const [tabGesture, setTabGesture] = useState<"file" | "terminal">();
+	const [showTabHints, setShowTabHints] = useState(false);
 	const tabPress = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | undefined>(undefined);
 	const suppressTabClick = useRef(false);
 	const dragged = useRef<string | undefined>(undefined);
@@ -168,6 +169,7 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 				</div>)}
 			</div></div><div className="detail-tab-add"><button type="button" className="detail-tab-new" aria-label="新しいタブを開く" title="クリックで新しいタブ・下へスライドで端末・右へスライドでファイル" data-gesture={tabGesture} onPointerDown={(event) => {
 				if (event.button !== 0) return;
+				setShowTabHints(false);
 				tabPress.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
 				suppressTabClick.current = false;
 				event.currentTarget.setPointerCapture(event.pointerId);
@@ -175,6 +177,7 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 				const press = tabPress.current;
 				if (!press || press.pointerId !== event.pointerId) return;
 				const x = event.clientX - press.x; const y = event.clientY - press.y;
+				if (Math.hypot(x, y) >= 3) setShowTabHints(true);
 				press.moved ||= Math.hypot(x, y) >= 18;
 				setTabGesture(Math.max(x, y) < 18 ? undefined : x > Math.abs(y) ? "file" : y > Math.abs(x) ? "terminal" : undefined);
 			}} onPointerUp={(event) => {
@@ -182,10 +185,10 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 				if (!press || press.pointerId !== event.pointerId) return;
 				const x = event.clientX - press.x; const y = event.clientY - press.y;
 				suppressTabClick.current = press.moved || Math.hypot(x, y) >= 18;
-				tabPress.current = undefined; setTabGesture(undefined);
+				tabPress.current = undefined; setTabGesture(undefined); setShowTabHints(false);
 				if (x >= 18 && x > Math.abs(y)) chooseFile(undefined, layout.focused);
 				else if (y >= 18 && y > Math.abs(x)) void createTerminal(undefined, layout.focused);
-			}} onPointerCancel={() => { tabPress.current = undefined; suppressTabClick.current = true; setTabGesture(undefined); }} onLostPointerCapture={() => { tabPress.current = undefined; setTabGesture(undefined); }} onClick={(event) => { if (suppressTabClick.current && event.detail !== 0) { suppressTabClick.current = false; return; } addTab(); }}>＋</button>{tabGesture && <span className="detail-gesture-hint" role="status">{tabGesture === "terminal" ? "↓ 端末" : "→ ファイル"}</span>}</div>
+			}} onPointerCancel={() => { tabPress.current = undefined; suppressTabClick.current = true; setTabGesture(undefined); setShowTabHints(false); }} onLostPointerCapture={() => { tabPress.current = undefined; setTabGesture(undefined); setShowTabHints(false); }} onClick={(event) => { if (suppressTabClick.current && event.detail !== 0) { suppressTabClick.current = false; return; } addTab(); }}>＋</button>{showTabHints && <div className="detail-gesture-hints" role="status"><span className="detail-gesture-hint is-down" data-active={tabGesture === "terminal"}>↓ 端末</span><span className="detail-gesture-hint is-right" data-active={tabGesture === "file"}>→ ファイル</span></div>}</div>
 			<SplitActions label="作業タブ" mode={layout.mode} onChange={(mode) => { onViewChange("tabs"); dispatch({ type: "split", mode }); }} />
 			<div className="detail-panel-actions" role="group" aria-label="詳細パネル">
 				<button type="button" className="detail-panel-icon" aria-label="チーム" title="チーム" aria-pressed={view === "team"} aria-controls={`${id}-team`} onClick={() => onViewChange(view === "team" ? "tabs" : "team")}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 4v2" /></svg></button>
