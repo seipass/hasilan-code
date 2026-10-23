@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HistoryPosition } from "../shared/session-history.ts";
 import { Content, record } from "./Content.tsx";
+import { observeConversation } from "./conversation-resize.ts";
 import { RUN_LABELS } from "./TeamPane.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
 import type { ChatMessage, ToolCall } from "./types.ts";
@@ -131,22 +132,8 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	useLayoutEffect(() => {
 		const element = scroller.current;
 		if (!element) return;
-		let width = element.clientWidth;
-		const resize = new ResizeObserver((entries) => {
-			let changed = false;
-			if (element.clientWidth !== width) { width = element.clientWidth; heights.current.clear(); changed = true; }
-			for (const entry of entries) {
-				const row = entry.target as HTMLElement;
-				const id = row.dataset.messageId;
-				if (!id) continue;
-				const height = row.getBoundingClientRect().height;
-				if (height > 0 && heights.current.get(id) !== height) { heights.current.set(id, height); changed = true; }
-			}
-			if (changed) setMeasureVersion((version) => version + 1);
-			updateViewport();
-		});
+		const resize = observeConversation(element, heights.current, () => setMeasureVersion((version) => version + 1), updateViewport);
 		observer.current = resize;
-		resize.observe(element);
 		return () => { resize.disconnect(); observer.current = undefined; };
 	}, [updateViewport]);
 	useLayoutEffect(() => {
