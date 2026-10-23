@@ -171,7 +171,6 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .composer-identity img { width: 20px; height: 20px; }
 .composer-workspace { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--on-surface-muted); font-size: 11px; }
 .composer { border: 1px solid var(--border); border-radius: 18px; background: var(--surface-raised); padding: 15px 15px 12px; box-shadow: 0 3px 13px #11111b40; }
-.composer:focus-within { border-color: var(--border-strong); box-shadow: 0 3px 15px #cba6f714; }
 .composer textarea { display: block; resize: none; width: 100%; min-height: 70px; max-height: 220px; padding: 0 3px; border: 0; outline: none; box-shadow: none; font-size: 14px; line-height: 1.7; background: transparent; }
 .composer-input-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 .composer-input-row textarea { min-width: 0; }
@@ -552,7 +551,6 @@ button, .workspace-accordion > summary, .panel-resize::after {
 .status-dot { transition: color var(--motion-base) ease, background-color var(--motion-base) ease; }
 .team-map-state { transition: color var(--motion-base) ease, background-color var(--motion-base) ease; }
 .composer { transition: border-color var(--motion-base) ease, box-shadow var(--motion-base) ease; }
-.composer:focus-within { box-shadow: 0 0 0 3px #cba6f71c, 0 10px 30px #11111b66; }
 .composer-popover { transform-origin: bottom left; animation: surface-enter var(--motion-enter) var(--motion-ease) both; }
 .dialog-backdrop { animation: backdrop-enter var(--motion-base) ease-out both; }
 .settings-dialog { animation: surface-enter var(--motion-enter) var(--motion-ease) both; }

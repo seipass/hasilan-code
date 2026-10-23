@@ -77,6 +77,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 	useLayoutEffect(() => {
 		const element = input.current;
 		if (!element) return;
+		const initialized = element.style.height !== "";
 		const previousHeight = element.getBoundingClientRect().height;
 		inputMotion.current?.cancel();
 		element.style.overflowY = "hidden";
@@ -84,7 +85,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 		const overflow = element.scrollHeight > 220 ? "auto" : "hidden";
 		const height = Math.max(70, Math.min(element.scrollHeight, 220));
 		element.style.height = `${height}px`;
-		if (previousHeight !== height && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+		if (initialized && previousHeight !== height && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
 			const animation = element.animate([{ height: `${previousHeight}px` }, { height: `${height}px` }], { duration: 180, easing: "cubic-bezier(.2, .75, .25, 1)" });
 			inputMotion.current = animation;
 			animation.onfinish = () => { element.style.overflowY = overflow; inputMotion.current = undefined; };
