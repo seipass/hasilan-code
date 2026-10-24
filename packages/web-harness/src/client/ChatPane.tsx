@@ -83,7 +83,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 		element.style.overflowY = "hidden";
 		element.style.height = "auto";
 		const overflow = element.scrollHeight > 220 ? "auto" : "hidden";
-		const height = Math.max(70, Math.min(element.scrollHeight, 220));
+		const height = Math.max(48, Math.min(element.scrollHeight, 220));
 		element.style.height = `${height}px`;
 		if (initialized && previousHeight !== height && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
 			const animation = element.animate([{ height: `${previousHeight}px` }, { height: `${height}px` }], { duration: 180, easing: "cubic-bezier(.2, .75, .25, 1)" });
@@ -170,7 +170,7 @@ export function ChatPane({ session, workspacePath, contextWindow, connected, mod
 				{pickerOpen && <CommandPicker id={pickerId} commands={suggestions} activeIndex={activeCommand} onActive={setCommandIndex} onChoose={chooseCommand} />}
 				<label className="sr-only" htmlFor="message">メッセージ</label>
 				<div className="composer-input-row">
-					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen} aria-controls={pickerOpen ? pickerId : undefined} aria-activedescendant={pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={3} disabled={sending} onKeyDown={(event) => {
+					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen} aria-controls={pickerOpen ? pickerId : undefined} aria-activedescendant={pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={2} disabled={sending} onKeyDown={(event) => {
 						if (event.nativeEvent.isComposing) return;
 						if (pickerOpen && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setPickerDismissed(true); return; }
 						if (pickerOpen && suggestions.length && !event.ctrlKey && !event.metaKey && !event.altKey) {
