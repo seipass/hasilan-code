@@ -1,6 +1,8 @@
 .mobile-sheet {
 	--sheet-offset-x: 0px;
-	--sheet-offset-y: 24px;
+	--sheet-offset-y: 100%;
+	--sheet-duration: 180ms;
+	--sheet-ease: cubic-bezier(.4, 0, 1, 1);
 	position: fixed;
 	inset: auto 0 var(--sheet-bottom, 0px);
 	width: 100%;
@@ -14,17 +16,16 @@
 	background: var(--surface-raised);
 	color: var(--on-surface);
 	box-shadow: 0 -8px 32px #0004;
-	opacity: 0;
 	transform: translate(var(--sheet-offset-x), var(--sheet-offset-y));
 	pointer-events: none;
-	transition: opacity 170ms ease, transform 170ms var(--motion-exit), display 170ms allow-discrete, overlay 170ms allow-discrete;
+	transition: transform var(--sheet-duration) var(--sheet-ease), display var(--sheet-duration) allow-discrete, overlay var(--sheet-duration) allow-discrete;
 }
-.mobile-sheet[open] { display: flex; flex-direction: column; opacity: 1; transform: translate(0, 0); pointer-events: auto; transition-duration: var(--motion-base), var(--motion-enter), var(--motion-enter), var(--motion-enter); }
+.mobile-sheet[open] { --sheet-duration: 240ms; --sheet-ease: cubic-bezier(.22, 1, .36, 1); display: flex; flex-direction: column; transform: translate(0, 0); pointer-events: auto; }
 .mobile-sheet::backdrop { background: #11111b99; opacity: 0; transition: opacity 170ms ease, display 170ms allow-discrete, overlay 170ms allow-discrete; }
-.mobile-sheet[open]::backdrop { opacity: 1; transition-duration: var(--motion-base); }
-.mobile-sheet.is-right { --sheet-offset-x: 32px; --sheet-offset-y: 0px; inset: auto 0 var(--sheet-bottom, 0px) auto; width: min(360px, 90vw); height: var(--sheet-viewport-height, 100dvh); max-height: var(--sheet-viewport-height, 100dvh); border-radius: 16px 0 0 16px; }
+.mobile-sheet[open]::backdrop { opacity: 1; }
+.mobile-sheet.is-right { --sheet-offset-x: 100%; --sheet-offset-y: 0px; inset: auto 0 var(--sheet-bottom, 0px) auto; width: min(360px, 90vw); height: var(--sheet-viewport-height, 100dvh); max-height: var(--sheet-viewport-height, 100dvh); border-radius: 16px 0 0 16px; }
 @starting-style {
-	.mobile-sheet[open] { opacity: 0; transform: translate(var(--sheet-offset-x), var(--sheet-offset-y)); }
+	.mobile-sheet[open] { transform: translate(var(--sheet-offset-x), var(--sheet-offset-y)); }
 	.mobile-sheet[open]::backdrop { opacity: 0; }
 }
 .mobile-sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); }

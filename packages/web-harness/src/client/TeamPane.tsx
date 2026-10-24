@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Content } from "./Content.tsx";
+import { TeamGestures } from "./team-gestures.ts";
 import { transitionItems } from "./item-transition.ts";
 import { MobileSheet, useMobileLayout } from "./MobileSheet.tsx";
 import { layoutTeamGraph, selectedTeamAgents, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "./team-graph.ts";
@@ -53,15 +54,6 @@ function elapsed(run: Run, now: number): string | undefined {
 	return minutes < 1 ? "1分未満" : minutes < 60 ? `${minutes}分` : `${Math.floor(minutes / 60)}時間${minutes % 60}分`;
 }
 
-type GraphGesture = {
-	pointerId: number;
-	clientX: number;
-	clientY: number;
-	x: number;
-	y: number;
-	moved: boolean;
-};
-
 function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visible }: {
 	agents: TeamAgent[];
 	snapshot: TeamSnapshot;
@@ -88,7 +80,9 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 	const [dragging, setDragging] = useState(false);
 	const { zoom } = view;
 	const viewport = useRef<HTMLDivElement>(null);
-	const gesture = useRef<GraphGesture | undefined>(undefined);
+	const gesture = useRef(new TeamGestures());
+	const viewRef = useRef(view);
+	viewRef.current = view;
 	const suppressClick = useRef(false);
 	const initialized = useRef(false);
 	const markerId = useId();
@@ -149,33 +143,33 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 		}));
 	}
 	function beginGesture(event: ReactPointerEvent<HTMLDivElement>) {
-		if (event.button !== 0 || !event.isPrimary || gesture.current) return;
-		if (event.target instanceof Element && event.target.closest("button")) return;
-		event.preventDefault();
-		event.stopPropagation();
-		gesture.current = {
-			pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY,
-			x: view.x, y: view.y, moved: false,
-		};
-		event.currentTarget.focus({ preventScroll: true });
-		event.currentTarget.setPointerCapture(event.pointerId);
-		suppressClick.current = false;
+		if (event.button !== 0) return;
+		const touch = event.pointerType === "touch";
+		if (!touch && event.target instanceof Element && event.target.closest("button")) return;
+		if (!touch && gesture.current.pointers.size) return;
+		const bounds = event.currentTarget.getBoundingClientRect();
+		gesture.current.start(event.pointerId, { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewRef.current);
+		suppressClick.current = gesture.current.moved;
+		if (!touch || gesture.current.pointers.size > 1) {
+			event.preventDefault();
+			for (const pointerId of gesture.current.pointers.keys()) event.currentTarget.setPointerCapture(pointerId);
+		}
+		if (!touch) event.currentTarget.focus({ preventScroll: true });
 	}
 	function moveGesture(event: ReactPointerEvent<HTMLDivElement>) {
-		const current = gesture.current;
-		if (!current || current.pointerId !== event.pointerId) return;
-		const dx = event.clientX - current.clientX;
-		const dy = event.clientY - current.clientY;
-		if (!current.moved && Math.hypot(dx, dy) < 4) return;
-		current.moved = true;
+		const bounds = event.currentTarget.getBoundingClientRect();
+		const next = gesture.current.move(event.pointerId, { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+		if (!next) return;
+		event.preventDefault();
+		for (const pointerId of gesture.current.pointers.keys()) event.currentTarget.setPointerCapture(pointerId);
 		suppressClick.current = true;
 		setDragging(true);
-		setView((value) => ({ ...value, x: current.x + dx, y: current.y + dy }));
+		viewRef.current = next;
+		setView(next);
 	}
 	function endGesture(event: ReactPointerEvent<HTMLDivElement>) {
-		if (gesture.current?.pointerId !== event.pointerId) return;
-		gesture.current = undefined;
-		setDragging(false);
+		gesture.current.end(event.pointerId, viewRef.current);
+		if (!gesture.current.pointers.size) setDragging(false);
 	}
 	return <section className="team-graph" aria-label="エージェントの親子関係">
 		<div className="team-graph-top">
@@ -190,8 +184,8 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 				<div className="team-graph-legend" aria-label="関係図の凡例"><span><i className="team-graph-line" />親 → 子</span><span><i className="team-graph-line is-waiting" />結果を待つ相手 →</span><span><i className="team-graph-selection" />選択中</span></div>
 			</div>
 		</div>
-		<div ref={viewport} className={`team-graph-viewport${dragging ? " is-dragging" : ""}`} tabIndex={0} role="region" aria-label="チーム関係図。空白をドラッグして移動、ホイールで拡大縮小、Tab・Enterで担当を選択。"
-			onPointerDown={(event) => beginGesture(event)} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} onLostPointerCapture={endGesture}
+		<div ref={viewport} className={`team-graph-viewport${dragging ? " is-dragging" : ""}`} tabIndex={0} role="region" aria-label="チーム関係図。ドラッグして移動、2本指のピンチまたはホイールで拡大縮小、Tab・Enterで担当を選択。"
+			onPointerDownCapture={beginGesture} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} onLostPointerCapture={(event) => { if (event.target === event.currentTarget) endGesture(event); }}
 			onClickCapture={(event) => {
 				if (event.detail && suppressClick.current) { event.preventDefault(); event.stopPropagation(); }
 				suppressClick.current = false;
@@ -230,7 +224,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 						const role = !agent.parentAgentId ? managed ? "親AI / マネージャー" : "親AI / チームの起点" : managed ? agent.parentAgentId === managerId ? "担当者" : "補助エージェント" : "子の担当";
 						const waiting = waitingByAgent.get(agent.agentId) ?? [];
 						const task = run ? taskText(run) : "まだ作業はありません";
-						return <button key={agent.agentId} type="button" className={`team-graph-node status-${state} ${!agent.parentAgentId ? "is-root" : "is-child"} ${focusedId === agent.agentId ? "is-selected" : ""}`} style={{ left: x, top: y, width: TEAM_NODE_WIDTH, height: TEAM_NODE_HEIGHT }} aria-pressed={focusedId === agent.agentId} aria-label={`${label(agent)}、${role}、${stateLabel}。${task}${waiting.length ? `。${waiting.join("、")}の結果待ち` : ""}`} title={`${label(agent)}\n${task}`} onFocus={(event) => { if (!gesture.current && event.currentTarget.matches(":focus-visible")) centerNode(x, y); }} onClick={() => focus(agent.agentId)}>
+						return <button key={agent.agentId} type="button" className={`team-graph-node status-${state} ${!agent.parentAgentId ? "is-root" : "is-child"} ${focusedId === agent.agentId ? "is-selected" : ""}`} style={{ left: x, top: y, width: TEAM_NODE_WIDTH, height: TEAM_NODE_HEIGHT }} aria-pressed={focusedId === agent.agentId} aria-label={`${label(agent)}、${role}、${stateLabel}。${task}${waiting.length ? `。${waiting.join("、")}の結果待ち` : ""}`} title={`${label(agent)}\n${task}`} onFocus={(event) => { if (!gesture.current.pointers.size && event.currentTarget.matches(":focus-visible")) centerNode(x, y); }} onClick={() => focus(agent.agentId)}>
 							<span className="team-graph-node-role">{role}<span>{focusedId === agent.agentId ? "選択中" : ""}</span></span>
 							<span className="team-graph-node-name">{label(agent)}</span>
 							<span className="team-graph-node-task">{task}</span>
