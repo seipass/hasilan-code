@@ -1,5 +1,6 @@
 import type { Context, JsonValue } from "@hasilan-code/chord";
 import { apply, type Op } from "@hasilan-code/chord/delta";
+import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "@hasilan-code/chord/sqlite";
 import { StorageRequestError } from "../../errors.ts";
 import { idFromNumber, seqFromNumber } from "../../ids.ts";
 import type {
@@ -33,7 +34,6 @@ import type {
 	TaskRecord,
 } from "../../types.ts";
 import { nextCursor, type ScanStart, scanStart } from "../scan.ts";
-import type { SqliteDatabase, SqliteExecutor, SqliteValue } from "./database.ts";
 import { applySqliteMigrationsForSchema } from "./migrations.ts";
 import { createSqliteSchema, type SqliteSchema } from "./schema.ts";
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0] - 2026-10-21
+
+### Added
+
+- Added `AgentOptions.identity` and `Agent.identity` (a pi-ai `ClientIdentity`) to set the `User-Agent` and provider attribution of agent loop requests.
+
 ## [1.3.0] - 2026-10-15
 
 ## [1.2.0] - 2026-10-12
@@ -26,7 +32,7 @@
 
 ### Breaking Changes
 
-- Removed the experimental harness from `@earendil-works/pi-agent-core`: `AgentHarness`, sessions and session storage, the durable runtime, pico3, harness tools, compaction, skills, prompt templates, system prompt helpers, telemetry schemas, the search service types, and the `uuidv7` and pi-telemetry re-exports. The `./node`, `./harness/*`, and `./experimental/pico3` subpath exports are gone. The package now contains only `Agent`, the agent loop, the proxy stream, and their types. Use `@earendil-works/pi-durable` for durable sessions.
+- Removed the experimental harness from `@hasilan-code/pi-agent-core`: `AgentHarness`, sessions and session storage, the durable runtime, pico3, harness tools, compaction, skills, prompt templates, system prompt helpers, telemetry schemas, the search service types, and the `uuidv7` and pi-telemetry re-exports. The `./node`, `./harness/*`, and `./experimental/pico3` subpath exports are gone. The package now contains only `Agent`, the agent loop, the proxy stream, and their types. Use `@hasilan-code/pi-durable` for durable sessions.
 
 ## [0.99.2] - 2026-09-30
 
@@ -183,8 +189,8 @@
 ### Breaking Changes
 
 - Changed `SessionStorage` to use `getPathToRootOrCompaction()`, require session name and statistics methods, support cursor-based entry reads, and store retained compaction tails as self-contained checkpoints ([#6594](https://github.com/earendil-works/pi/pull/6594) by [@cristinaponcela](https://github.com/cristinaponcela)).
-- Moved the `uuidv7` export to `@earendil-works/pi-ai` ([#6834](https://github.com/earendil-works/pi/pull/6834) by [@xl0](https://github.com/xl0)).
-- Replaced the optional `Agent` `streamFn` fallback with a required `streamFunction` and made low-level loop stream functions required, preventing `@earendil-works/pi-ai/compat` and all built-in providers from entering selective-provider bundles ([#6851](https://github.com/earendil-works/pi/issues/6851)).
+- Moved the `uuidv7` export to `@hasilan-code/pi-ai` ([#6834](https://github.com/earendil-works/pi/pull/6834) by [@xl0](https://github.com/xl0)).
+- Replaced the optional `Agent` `streamFn` fallback with a required `streamFunction` and made low-level loop stream functions required, preventing `@hasilan-code/pi-ai/compat` and all built-in providers from entering selective-provider bundles ([#6851](https://github.com/earendil-works/pi/issues/6851)).
 
 ### Added
 
@@ -248,10 +254,10 @@
 
 ### Breaking Changes
 
-- `AgentHarnessOptions.models` is required and is the only auth path: the harness streams turns, compaction, and branch summarization through the provided `Models` instance (`models.streamSimple()`/`completeSimple()`), resolving auth through the providers. `AgentHarnessOptions.getApiKeyAndHeaders` is removed — apps that resolved keys per request now express that as provider auth (`ApiKeyAuth`/`OAuthAuth`) on the providers in the `Models` collection. Build one with `createModels()` + provider factories (or `builtinModels()` from `@earendil-works/pi-ai/providers/all`); tests use `fauxProvider()`.
+- `AgentHarnessOptions.models` is required and is the only auth path: the harness streams turns, compaction, and branch summarization through the provided `Models` instance (`models.streamSimple()`/`completeSimple()`), resolving auth through the providers. `AgentHarnessOptions.getApiKeyAndHeaders` is removed — apps that resolved keys per request now express that as provider auth (`ApiKeyAuth`/`OAuthAuth`) on the providers in the `Models` collection. Build one with `createModels()` + provider factories (or `builtinModels()` from `@hasilan-code/pi-ai/providers/all`); tests use `fauxProvider()`.
 - `compact()`, `generateSummary()`, and `generateBranchSummary()` take a `Models` parameter and no longer accept explicit `apiKey`/`headers`.
 - `StreamFn` is defined structurally (`(model, context, options?) => AssistantMessageEventStream | Promise<...>`); `Models.streamSimple` satisfies it.
-- Removed the `@earendil-works/pi-agent-core/base` selective-provider entrypoint; use the root package with an explicit `Models` instance instead.
+- Removed the `@hasilan-code/pi-agent-core/base` selective-provider entrypoint; use the root package with an explicit `Models` instance instead.
 
 ### Fixed
 
@@ -270,7 +276,7 @@
 
 ### Added
 
-- Added `@earendil-works/pi-agent-core/base` for bundlers that want to pair the agent core with selective `@earendil-works/pi-ai/base` provider registration ([#5348](https://github.com/earendil-works/pi/pull/5348) by [@FredKSchott](https://github.com/FredKSchott)).
+- Added `@hasilan-code/pi-agent-core/base` for bundlers that want to pair the agent core with selective `@hasilan-code/pi-ai/base` provider registration ([#5348](https://github.com/earendil-works/pi/pull/5348) by [@FredKSchott](https://github.com/FredKSchott)).
 
 ## [0.79.7] - 2026-06-18
 

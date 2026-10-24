@@ -1,5 +1,6 @@
 import * as bundledPiAgentCore from "@hasilan-code/pi-agent-core";
 import * as bundledPiAiCompat from "@hasilan-code/pi-ai/compat";
+import * as bundledPiAiModels from "@hasilan-code/pi-ai/models";
 import * as bundledPiAiOauth from "@hasilan-code/pi-ai/oauth";
 import * as bundledPiAiProviders from "@hasilan-code/pi-ai/providers/all";
 import * as bundledPiTui from "@hasilan-code/pi-tui";
@@ -25,6 +26,7 @@ export const VIRTUAL_MODULES: Record<string, unknown> = {
 	// global API keep working at runtime until compat is removed.
 	"@hasilan-code/pi-ai": bundledPiAiCompat,
 	"@hasilan-code/pi-ai/compat": bundledPiAiCompat,
+	"@hasilan-code/pi-ai/models": bundledPiAiModels,
 	"@hasilan-code/pi-ai/oauth": bundledPiAiOauth,
 	"@hasilan-code/pi-ai/providers/all": bundledPiAiProviders,
 	"@hasilan-code/pi-coding-agent": bundledPiCodingAgent,
@@ -32,6 +34,7 @@ export const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@mariozechner/pi-tui": bundledPiTui,
 	"@mariozechner/pi-ai": bundledPiAiCompat,
 	"@mariozechner/pi-ai/compat": bundledPiAiCompat,
+	"@mariozechner/pi-ai/models": bundledPiAiModels,
 	"@mariozechner/pi-ai/oauth": bundledPiAiOauth,
 	"@mariozechner/pi-ai/providers/all": bundledPiAiProviders,
 	"@mariozechner/pi-coding-agent": bundledPiCodingAgent,

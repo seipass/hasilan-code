@@ -54,7 +54,7 @@ async function capture(context: Context, selected = model, apiKey = "sk-test"): 
 	return payload;
 }
 
-test("retains the old prefix while restricting removed tools, then restores without duplicate declarations", async () => {
+test("retains the old prefix while restricting removed tools, then restores with an inline declaration", async () => {
 	const before = await capture(initial);
 	const after = await capture(restricted);
 	expect(after.tools).toEqual(before.tools);
@@ -77,7 +77,8 @@ test("retains the old prefix while restricting removed tools, then restores with
 	expect(restored.tools).toEqual(before.tools);
 	if (!Array.isArray(restored.input)) throw new Error("Expected response input items");
 	expect(restored.input.slice(0, after.input.length)).toEqual(after.input);
-	expect(restored.input.filter((item) => item.type === "additional_tools")).toHaveLength(1);
+	expect(restored.input.filter((item) => item.type === "additional_tools")).toHaveLength(3);
+	expect(restored.input.at(-2)).toMatchObject({ type: "additional_tools", tools: [{ name: "bash" }] });
 	expect(restored.tool_choice).toBeUndefined();
 });
 
@@ -92,7 +93,8 @@ test("disables all calls without discarding cached declarations", async () => {
 	expect(payload.tool_choice).toBe("none");
 });
 
-test("rebuilds declarations when a retained tool schema changes", async () => {
+test("updates a retained tool schema inline without discarding the cached prefix", async () => {
+	const before = await capture(restricted);
 	const payload = await capture({
 		messages: [
 			...restricted.messages,
@@ -105,11 +107,17 @@ test("rebuilds declarations when a retained tool schema changes", async () => {
 			},
 		],
 	});
-	expect(payload.tools?.find((tool) => tool.type === "function" && tool.name === "read")).toMatchObject({
-		parameters: { properties: { paths: { type: "array" } } },
+	expect(payload.tools).toBeUndefined();
+	if (!Array.isArray(before.input) || !Array.isArray(payload.input)) throw new Error("Expected response input items");
+	expect(payload.input.slice(0, before.input.length)).toEqual(before.input);
+	expect(payload.input.at(-2)).toMatchObject({
+		type: "additional_tools",
+		tools: [{ name: "read", parameters: { properties: { paths: { type: "array" } } } }],
 	});
-	expect(payload.tools?.some((tool) => tool.type === "function" && tool.name === "bash")).toBe(false);
-	expect(payload.tool_choice).toBeUndefined();
+	expect(payload.tool_choice).toMatchObject({
+		type: "allowed_tools",
+		tools: [{ name: "browser" }, { name: "read" }],
+	});
 });
 
 test.each([
@@ -118,6 +126,6 @@ test.each([
 	{ name: "incapable model", selected: { ...model, compat: {} }, key: "sk-test" },
 ])("does not enable retained-tool restrictions for $name", async ({ selected, key }) => {
 	const payload = await capture(restricted, selected, key);
-	expect(payload.tools?.some((tool) => tool.type === "function" && tool.name === "bash")).toBe(false);
+	expect(payload.tools?.some((tool) => tool.type === "function" && tool.name === "bash") ?? false).toBe(false);
 	expect(payload.tool_choice).toBeUndefined();
 });

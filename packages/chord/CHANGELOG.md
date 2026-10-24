@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0] - 2026-10-21
+
+### Breaking Changes
+
+- Custom `Context` implementations must provide `telemetry: TelemetrySpan`; use the no-op span `NOOP_TELEMETRY_CONTEXT` when disabled. `withTelemetry()` accepts spans, not adapters.
+
+### Added
+
+- `@hasilan-code/chord/telemetry-sqlite`: portable SQLite telemetry recording with bounded settled-span queues, ten-second metric aggregates, periodic flushes, and retention cleanup.
+- `Context.telemetry` is an explicit, non-optional telemetry parent (no-op by default). `withTelemetry(telemetry, context)` derives it without changing values or cancellation; `traceIn(context, options, fn)` starts a child span and passes its derived context to the callback.
+- `@hasilan-code/chord/sqlite`: portable SQLite interfaces, atomic migration runner, and schema-prefix validation, with Node (`/sqlite/node`) and Cloudflare Durable Object (`/sqlite/cloudflare`) drivers. Moved from Durable, which keeps its storage implementations and re-exports the moved public names.
+- `@hasilan-code/chord/output`: `Progress` takes an optional `ProgressClock` (`now`, `setTimer`) to pace commits on, by default `Date.now` and `setTimeout`.
+
 ## [1.3.0] - 2026-10-15
 
 ### Breaking Changes
@@ -24,7 +37,7 @@
 
 ### Added
 
-- `@earendil-works/chord/output`: `OutputBuffer`, which keeps a head or tail window of a stream at a cost proportional to each chunk, `Progress`, which paces commits of a changing value by their size, plus `boundOutput`, `sanitizeOutput`, `characterEnd`, `utf8ByteLength`, and the `OutputLimits`, `BoundedOutput`, `OutputSlice`, and `OutputSkip` types. Moved from `@earendil-works/pi-durable`, which now uses them from here.
+- `@hasilan-code/chord/output`: `OutputBuffer`, which keeps a head or tail window of a stream at a cost proportional to each chunk, `Progress`, which paces commits of a changing value by their size, plus `boundOutput`, `sanitizeOutput`, `characterEnd`, `utf8ByteLength`, and the `OutputLimits`, `BoundedOutput`, `OutputSlice`, and `OutputSkip` types. Moved from `@hasilan-code/pi-durable`, which now uses them from here.
 - Remote references to one object share one binding per host and key (type, normalized input identity, principal key, contract fingerprint): one hold, one stream per state member, calls over the same hold; every reference keeps its own status, observers and `release`. `HostOptions.linger` (`{ types: { [typeName]: ms }, cap }`, cap default 4) keeps a binding held and hydrated after its last reference is released, so a reference taken again meanwhile costs nothing on the link
 - Holds from clients carry an opaque `origin`: the id the accepting host gave the client connection, forwarded by relays and honored only from the parent link, so a host can tell client connections apart; a disconnect releases that client's holds at once
 - Flow control by units: the first unit of a new reference passes the window, so a `get` never waits behind other references' state; units for reloads and re-holds wait, built lazily from the current values; waiting ops are capped per link (`LinkOptions.pendingCap`, default four windows), beyond which the oldest streams become resets (a relay asks downstream with `resync`)
@@ -65,7 +78,7 @@
 - Replaced the facet and service runtime with a typed host runtime: contracts (`local`, `remote`, `method`, `opaque`) are runtime values described with TypeBox schemas, objects are served by hosts (`createHost`, `defineFacet`, `defineRegistry`) and reached through handles, and hosts exchange JSON frames over memory, Node IPC, or WebSocket links (`memoryLinkPair`, `ipcLink`, `webSocketLink`, `acceptWebSockets`), with hot reload of plugins. See `docs/tutorial.md` and `docs/guide.md`
 - Removed `defineService`, `createFacetHost`, `createRemoteServiceBinding`, `createStaticFacetLoader`, `combineFacetLoaders`, the remote-service endpoint, provider, error, and wire helpers, and their types. The old `defineFacet`, `Facet`, and `FacetLoader` are replaced by the new runtime's names of the same spelling
 - Removed the `./bundler` export and the facet bundle loaders of `./node`; `./node` now exports the child host manager (`createHostManager`, `forkDriver`, `childControl`, `processLock`) and the facet module loader `nodeLoader`
-- Removed `@earendil-works/pi-client`, `@earendil-works/pi-protocol`, and `@earendil-works/pi-server`, which served only the old runtime; they are no longer released
+- Removed `@hasilan-code/pi-client`, `@hasilan-code/pi-protocol`, and `@hasilan-code/pi-server`, which served only the old runtime; they are no longer released
 
 ### Changed
 
