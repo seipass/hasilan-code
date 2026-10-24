@@ -160,9 +160,12 @@
 .team-graph-line { width: 22px; height: 0; border-top: 2px solid var(--on-surface-muted); }
 .team-graph-line.is-waiting { border-top-color: var(--warning); border-top-style: dashed; }
 .team-graph-selection { width: 10px; height: 10px; border: 2px solid var(--primary); border-radius: 3px; background: var(--primary-container); }
-.team-pane .team-focus-header { align-items: start; flex-wrap: wrap; }
-.team-pane .team-focus-header > div { min-width: 0; }
-.team-pane .team-focus-header > .text-link { margin-top: 4px; }
+.team-focus > .team-run-detail { border-top: 0; padding-top: 0; }
+.team-task-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 16px; }
+.team-task-heading h4 { margin-top: 0; }
+.team-task-heading .text-link { flex: none; font-size: 12px; }
+.team-focus-actions { border-top: 0; }
+.team-focus-actions:empty { display: none; }
 
 .team-responsibility { margin-block: 12px; padding-block: 10px; border-block: 1px solid var(--border-subtle); }
 .team-responsibility h4 { margin: 0 0 6px; font-size: 11px; color: var(--on-surface-muted); }

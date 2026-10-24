@@ -257,6 +257,89 @@ async function running(adapters: Map<string, ControlledAdapter>, id: string) {
 }
 
 describe("team run boundaries", () => {
+	it("routes agent progress to a running parent as context instead of user input", async () => {
+		const f = await fixture();
+		await f.teams.prompt(f.session.sessionId, { text: "analyze", mode: "prompt" });
+		const parent = await running(f.adapters, f.session.sessionId);
+		const root = await f.teams.ensureRoot(f.session.sessionId);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "ProductUX", task: "review UX" }])).agents[0];
+		await running(f.adapters, child.sessionId);
+		await f.teams.send(child.sessionId, root.agentId, "Findings will follow");
+		expect(parent.inputs).toEqual([]);
+		expect(parent.contextInjections).toHaveLength(1);
+		expect(parent.contextInjections[0].source).toMatchObject({
+			type: "team_message",
+			agentId: child.agentId,
+			agentName: "ProductUX",
+		});
+		parent.consumeContext(parent.contextInjections[0]);
+		await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+		expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
+	});
+	it("resumes an idle recipient from agent context without adding a user prompt and restores its source", async () => {
+		const f = await fixture();
+		await f.teams.prompt(f.session.sessionId, { text: "coordinate", mode: "prompt" });
+		await running(f.adapters, f.session.sessionId);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "review", task: "initial" }])).agents[0];
+		const adapter = await running(f.adapters, child.sessionId);
+		adapter.finish("first result");
+		await expect.poll(() => f.registry.get(child.sessionId).currentRun).toBeUndefined();
+		await f.teams.send(f.session.sessionId, child.agentId, "Review the findings");
+		await expect.poll(() => adapter.contextInjections.length).toBe(1);
+		await expect.poll(() => f.registry.get(child.sessionId).pendingInput).toHaveLength(0);
+		expect(adapter.prompts).toEqual(["initial"]);
+		expect(adapter.inputs).toEqual([]);
+		expect(f.registry.get(child.sessionId).currentRun?.inputKind).toBe("context");
+		expect(f.registry.get(child.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
+		adapter.finish("reviewed");
+		await expect.poll(() => f.registry.get(child.sessionId).currentRun).toBeUndefined();
+		await f.registry.persist();
+		const restored = new SessionRegistry({ agentDir: f.root, workspaceFiles: new Directories() });
+		await restored.initialize();
+		try {
+			expect(
+				restored.get(child.sessionId).messages.find((message) => message.contextInjection)?.contextInjection,
+			).toEqual(adapter.contextInjections[0]);
+			expect(restored.get(child.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
+		} finally {
+			await restored.close();
+		}
+	});
+	it("retains an agent message when delivery races with the recipient settling", async () => {
+		const f = await fixture();
+		await f.teams.prompt(f.session.sessionId, { text: "coordinate", mode: "prompt" });
+		const parent = await running(f.adapters, f.session.sessionId);
+		const root = await f.teams.ensureRoot(f.session.sessionId);
+		const child = (await f.teams.spawn(f.session.sessionId, [{ name: "review", task: "inspect" }])).agents[0];
+		await running(f.adapters, child.sessionId);
+		const delivering = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<void>();
+		const inject = parent.injectContext.bind(parent);
+		parent.injectContext = async (injection, activeOnly) => {
+			if (activeOnly) {
+				delivering.resolve();
+				await release.promise;
+			}
+			return inject(injection, activeOnly);
+		};
+		const send = f.teams.send(child.sessionId, root.agentId, "late progress");
+		try {
+			await delivering.promise;
+			parent.finish("finished first turn");
+			await parent.waitForIdle();
+			release.resolve();
+			await send;
+			await expect.poll(() => parent.contextInjections.length).toBe(1);
+			await expect.poll(() => f.registry.get(f.session.sessionId).pendingInput).toHaveLength(0);
+			expect(parent.prompts).toEqual(["coordinate"]);
+			expect(parent.inputs).toEqual([]);
+			expect(f.registry.get(f.session.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(
+				1,
+			);
+		} finally {
+			release.resolve();
+		}
+	});
 	it("runs independent roots concurrently and preserves immutable old runs across resume", async () => {
 		const f = await fixture(1);
 		const second = await f.registry.create({ workspaceId: f.workspace.id });
@@ -807,19 +890,20 @@ describe("team run boundaries", () => {
 		expect(f.adapters.has(child.sessionId)).toBe(false);
 		const waiting = f.teams.wait(f.session.sessionId, [child.agentId], 10000);
 		const adapter = await running(f.adapters, child.sessionId);
-		await expect.poll(() => adapter.inputs.length).toBe(2);
-		expect(adapter.inputs[0]).toContain(`inputId=${first.inputId}`);
-		expect(adapter.inputs[1]).toContain(`inputId=${second.inputId}`);
-		adapter.consume(adapter.inputs[0]);
-		adapter.consume(adapter.inputs[1]);
+		await expect.poll(() => adapter.contextInjections.length).toBe(2);
+		expect(adapter.contextInjections.map((injection) => injection.injectionId)).toEqual([
+			first.inputId,
+			second.inputId,
+		]);
+		for (const injection of adapter.contextInjections) adapter.consumeContext(injection);
 		await expect.poll(() => f.registry.get(child.sessionId).pendingInput.length).toBe(0);
-		expect(adapter.contextInjections).toEqual([]);
+		expect(adapter.inputs).toEqual([]);
 		expect(
 			f.registry
 				.get(child.sessionId)
 				.messages.filter((message) => message.role === "user")
 				.map((message) => message.content),
-		).toEqual(["initial", ...adapter.inputs]);
+		).toEqual(["initial"]);
 		adapter.finish("child result");
 		expect((await waiting).runs[0].result).toBe("child result");
 	});
@@ -1250,11 +1334,11 @@ describe("pending input queue controls", () => {
 		await expect(f.teams.updatePendingInput(child.sessionId, sent.inputId, { type: "delete" })).rejects.toMatchObject(
 			{ statusCode: 403 },
 		);
-		await expect.poll(() => adapter.inputs.length).toBe(1);
-		expect(adapter.contextInjections).toEqual([]);
-		adapter.consume(adapter.inputs[0]);
+		await expect.poll(() => adapter.contextInjections.length).toBe(1);
+		expect(adapter.inputs).toEqual([]);
+		adapter.consumeContext(adapter.contextInjections[0]);
 		await expect.poll(() => f.registry.get(child.sessionId).pendingInput).toHaveLength(0);
-		expect(f.registry.get(child.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(2);
+		expect(f.registry.get(child.sessionId).messages.filter((message) => message.role === "user")).toHaveLength(1);
 		await f.teams.stop(f.session.sessionId);
 	});
 });

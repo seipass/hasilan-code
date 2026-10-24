@@ -287,12 +287,13 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 	</section>;
 }
 
-function RunDetail({ run, snapshot, focus, onFile, now }: {
+function RunDetail({ run, snapshot, focus, onFile, now, onOpen }: {
 	run: Run;
 	snapshot: TeamSnapshot;
 	focus: (id: string) => void;
 	onFile: TeamPaneProps["onFile"];
 	now: number;
+	onOpen: () => void;
 }) {
 	const waiting = run.waitingOnRunIds?.map((id) => {
 		const target = snapshot.runs.find((entry) => entry.runId === id);
@@ -303,7 +304,7 @@ function RunDetail({ run, snapshot, focus, onFile, now }: {
 	const owner = snapshot.agents.find((agent) => agent.agentId === transferred?.agentId);
 	return <div className="team-run-detail">
 		<div className="team-run-meta"><span className={`team-map-state status-${run.status}`}>{run.handoffToRunId ? "引き継ぎ済み" : run.status === "completed" ? "作業完了" : RUN_LABELS[run.status]}</span>{elapsed(run, now) && <span>{run.settledAt ? "所要" : "経過"} {elapsed(run, now)}</span>}</div>
-		<h4>{run.settledAt ? "作業内容" : "担当していること"}</h4>
+		<div className="team-task-heading"><h4>{run.settledAt ? "作業内容" : "担当していること"}</h4><button type="button" className="text-link" onClick={onOpen}>会話を開く ↗</button></div>
 		<p className="team-run-task">{taskText(run)}</p>
 		{owner && <p className="team-dependency">引き継ぎ先: <button type="button" className="text-link" onClick={() => focus(owner.agentId)}>{label(owner)}</button></p>}
 		{run.status === "waiting" && <div className="team-dependency"><strong>結果を待っている相手</strong>{waiting?.length ? <ul>{waiting.map(({ agent, state }, index) => <li key={`${run.runId}-${index}`}>
@@ -369,9 +370,8 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
 	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>{managed ? "担当者" : "子の担当"} {managed ? specialists.length : workers.length}人 {managed && helpers > 0 && <><span>·</span> 補助 {helpers}人 </>}<span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> {managed ? <>指示待ち {counts.ready}</> : <>完了 {counts.completed}</>}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}<UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
-				<header className="team-focus-header"><div><h3>{label(focused)}</h3>{managed && <span className={`team-member-state team-map-state status-${status(focused, swarm, roots[0]?.agentId)}`}>{AGENT_LABELS[status(focused, swarm, roots[0]?.agentId)]}</span>}</div><button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></header>
 				{focused.responsibility && <section className="team-responsibility"><h4>担当範囲</h4><p>{focused.responsibility}</p>{parent && !parent.parentAgentId && <details><summary>担当範囲を変更</summary><ResponsibilityForm key={focused.agentId} agent={focused} onSave={onResponsibility} /></details>}</section>}
-				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} /> : <p className="team-inline-note">まだ作業はありません。</p>}
+				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} onOpen={() => { setDetailsOpen(false); onSelect(focused.sessionId); }} /> : <p className="team-inline-note">まだ作業はありません。<button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></p>}
 				<div className="team-focus-actions">{focused.parentAgentId && <details><summary>{label(focused)}に{managed && !focused.currentRun ? "次の作業を依頼" : "メッセージを送る"}</summary><MessageForm key={focused.agentId} agent={focused} onMessage={onMessage} /></details>}{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
 			</section>;
 	return <section className="team-pane" aria-label="チームの進行状況">

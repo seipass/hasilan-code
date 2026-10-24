@@ -44,9 +44,9 @@ const Message = memo(function Message({ message, tools, onFile, expansions }: Me
 	const content = calls.length ? parts.filter((part) => !record(part) || part.type !== "toolCall") : message.content;
 	return <div ref={element} className="virtual-message" data-message-id={message.messageId}>
 		{injection ? <details className="message context-entry">
-			<summary><span className="context-entry-label">コンテキスト</span><span className="context-entry-agent">{injection.source.agentName}</span><span className={`badge status-${injection.source.status}`}>{RUN_LABELS[injection.source.status]}</span></summary>
+			<summary><span className="context-entry-label">コンテキスト</span><span className="context-entry-agent">{injection.source.agentName}</span>{injection.source.status && <span className={`badge status-${injection.source.status}`}>{RUN_LABELS[injection.source.status]}</span>}</summary>
 			<div className="context-entry-body"><div className="message-content"><Content value={injection.content} onFile={onFile} /></div>
-				<dl className="context-entry-source"><dt>通知元</dt><dd>サブエージェントの完了通知</dd><dt>エージェント ID</dt><dd><code>{injection.source.agentId}</code></dd><dt>実行 ID</dt><dd><code>{injection.source.runId}</code></dd><dt>コンテキスト ID</dt><dd><code>{injection.injectionId}</code></dd></dl>
+				<dl className="context-entry-source"><dt>通知元</dt><dd>{injection.source.type === "team_message" ? "エージェント間メッセージ" : "サブエージェントの完了通知"}</dd><dt>エージェント ID</dt><dd><code>{injection.source.agentId}</code></dd>{injection.source.runId && <><dt>実行 ID</dt><dd><code>{injection.source.runId}</code></dd></>}<dt>コンテキスト ID</dt><dd><code>{injection.injectionId}</code></dd></dl>
 			</div>
 		</details> : message.importedContext ? <details className="message context-entry"><summary><span className="context-entry-label">参照履歴</span></summary><div className="context-entry-body"><div className="message-content"><Content value={message.content} onFile={onFile} /></div></div></details> :
 			<article className={`message role-${message.role} ${message.partial ? "partial" : ""}`}>

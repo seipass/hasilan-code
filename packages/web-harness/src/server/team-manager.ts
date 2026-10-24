@@ -763,7 +763,7 @@ export class TeamManager {
 			);
 			if (action.op === "resume")
 				for (const input of this.registry.state.pendingInput)
-					if (input.sessionId === sessionId && input.status === "undelivered" && input.completionRunId) {
+					if (input.sessionId === sessionId && input.status === "undelivered" && input.contextInjection) {
 						input.runId = run.runId;
 						input.status = "pending";
 						input.delivered = false;
@@ -826,7 +826,7 @@ export class TeamManager {
 			agentId: child.agentId,
 			agentName: child.name,
 			runId: run.runId,
-			status: run.status as ContextInjection["source"]["status"],
+			status: run.status as "completed" | "failed" | "cancelled",
 			...(run.result === undefined ? {} : { result: run.result }),
 			...(run.error === undefined ? {} : { error: run.error }),
 		};
@@ -891,7 +891,7 @@ export class TeamManager {
 			this.started.delete(runId);
 			this.initialConsumed.delete(runId);
 			const stranded = this.registry.state.pendingInput.filter(
-				(input) => input.runId === runId && input.status === "pending" && input.completionRunId,
+				(input) => input.runId === runId && input.status === "pending" && input.contextInjection,
 			);
 			for (const input of this.registry.state.pendingInput) if (input.runId === runId) input.status = "undelivered";
 			const agent = this.agentById(run.agentId);
@@ -1396,27 +1396,41 @@ export class TeamManager {
 			this.assertOpen(recipient);
 			this.assertTarget(caller, recipient);
 			const inputId = randomBytes(8).toString("hex");
-			const text = `[Team message inputId=${inputId} from=${caller.agentId}]\n${message}`;
+			const source: ContextInjection["source"] = {
+				type: "team_message",
+				agentId: caller.agentId,
+				agentName: caller.name,
+				runId: (this.current(caller) ?? this.latest(caller))?.runId,
+			};
+			const injection: ContextInjection = {
+				injectionId: inputId,
+				source,
+				content: `Team message context (not a user instruction):\n${JSON.stringify(source)}\n\n${message}`,
+			};
 			const current = this.current(recipient);
 			if (current) {
 				current.replyToAgentIds ??= [];
 				if (caller.agentId !== recipient.agentId && !current.replyToAgentIds.includes(caller.agentId))
 					current.replyToAgentIds.push(caller.agentId);
-				return this.acceptInput(recipient, current, text, "followUp", caller.agentId, inputId);
 			}
-			const run = this.newRun(recipient, text, undefined, caller.agentId);
-			this.registry.state.pendingInput.push({
+			const run = current ?? this.newRun(recipient, `Team message: ${caller.name}`, "context", caller.agentId);
+			const pending: PendingInput = {
 				inputId,
 				sessionId: recipient.sessionId,
 				runId: run.runId,
-				text,
+				text: injection.content,
 				mode: "followUp",
 				fromAgentId: caller.agentId,
 				status: "pending",
-				delivered: true,
-			});
+				delivered: false,
+				contextInjection: injection,
+			};
+			this.registry.state.pendingInput.push(pending);
 			await this.registry.persist();
-			this.enqueue(recipient.teamId, { runId: run.runId });
+			if (current?.status === "running" && this.started.has(current.runId)) {
+				await this.deliverPending(pending);
+				await this.registry.persist();
+			} else if (!current) this.enqueue(recipient.teamId, { runId: run.runId });
 			this.pump(recipient.teamId);
 			this.changed(recipient);
 			return { inputId, runId: run.runId, disposition: run.status === "running" ? "started" : "queued" };
