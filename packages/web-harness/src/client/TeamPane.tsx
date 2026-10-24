@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type SubmitEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Content } from "./Content.tsx";
 import { transitionItems } from "./item-transition.ts";
 import { MobileSheet, useMobileLayout } from "./MobileSheet.tsx";
@@ -22,9 +22,7 @@ type TeamPaneProps = {
 	onSelect: (sessionId: string) => void;
 	visible?: boolean;
 	onStop: (sessionId: string) => void;
-	onMessage: (agentId: string, message: string) => Promise<void>;
 	onFile: (path: string, line?: number) => void;
-	onResponsibility: (agentId: string, responsibility: string) => Promise<void>;
 };
 
 function label(agent: TeamAgent): string {
@@ -53,49 +51,6 @@ function elapsed(run: Run, now: number): string | undefined {
 	if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
 	const minutes = Math.floor(Math.max(0, end - start) / 60_000);
 	return minutes < 1 ? "1分未満" : minutes < 60 ? `${minutes}分` : `${Math.floor(minutes / 60)}時間${minutes % 60}分`;
-}
-
-function MessageForm({ agent, onMessage }: { agent: TeamAgent; onMessage: TeamPaneProps["onMessage"] }) {
-	const [draft, setDraft] = useState("");
-	const [sending, setSending] = useState(false);
-	const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string }>();
-	async function submit(event: SubmitEvent<HTMLFormElement>) {
-		event.preventDefault();
-		if (sending || !draft.trim()) return;
-		setSending(true);
-		setNotice(undefined);
-		try {
-			await onMessage(agent.agentId, draft.trim());
-			setDraft("");
-			setNotice({ kind: "success", text: "送信しました" });
-		} catch (error) {
-			setNotice({ kind: "error", text: error instanceof Error ? error.message : String(error) });
-		} finally {
-			setSending(false);
-		}
-	}
-	return <form className="team-message-form" onSubmit={(event) => { void submit(event); }}>
-		<label htmlFor={`team-message-${agent.agentId}`}>依頼や補足</label>
-		<textarea id={`team-message-${agent.agentId}`} value={draft} onChange={(event) => { setDraft(event.target.value); setNotice(undefined); }} rows={3} placeholder={`${label(agent)}に伝える内容`} disabled={sending} />
-		<div className="team-message-actions"><button type="submit" disabled={sending || !draft.trim()}>{sending ? "送信中…" : `${label(agent)}に送信`}</button>{notice && <span role={notice.kind === "error" ? "alert" : "status"} className={notice.kind === "error" ? "error" : "team-message-success"}>{notice.text}</span>}</div>
-	</form>;
-}
-
-function ResponsibilityForm({ agent, onSave }: { agent: TeamAgent; onSave: TeamPaneProps["onResponsibility"] }) {
-	const [draft, setDraft] = useState(agent.responsibility ?? agent.role);
-	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState<string>();
-	useEffect(() => { setDraft(agent.responsibility ?? agent.role); }, [agent.responsibility, agent.role]);
-	return <form className="team-message-form" onSubmit={(event) => {
-		event.preventDefault();
-		if (saving || agent.currentRun || !draft.trim()) return;
-		setSaving(true); setError(undefined);
-		void onSave(agent.agentId, draft.trim()).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason))).finally(() => setSaving(false));
-	}}>
-		<label htmlFor={`team-responsibility-${agent.agentId}`}>作業をまたいで受け持つ範囲</label>
-		<textarea id={`team-responsibility-${agent.agentId}`} rows={3} maxLength={16384} value={draft} onChange={(event) => setDraft(event.target.value)} disabled={saving || !!agent.currentRun} />
-		<div className="team-message-actions"><button type="submit" disabled={saving || !!agent.currentRun || !draft.trim() || draft.trim() === agent.responsibility}>{saving ? "保存中…" : "担当範囲を保存"}</button>{error && <span role="alert" className="error">{error}</span>}</div>
-	</form>;
 }
 
 type GraphGesture = {
@@ -315,7 +270,7 @@ function RunDetail({ run, snapshot, focus, onFile, now, onOpen }: {
 	</div>;
 }
 
-export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true, onSelect, onStop, onMessage, onResponsibility, onFile }: TeamPaneProps) {
+export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true, onSelect, onStop, onFile }: TeamPaneProps) {
 	const mobile = useMobileLayout();
 	const [detailsOpen, setDetailsOpen] = useState(false);
 	const [focusedId, setFocusedId] = useState<string>();
@@ -362,7 +317,6 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	else if (rootState === "running") situation = managed ? "マネージャーが対応中です" : "親AIが作業中です";
 	else situation = "現在進行中の作業はありません";
 	const run = focused?.currentRun ?? focused?.latestRun;
-	const parent = agents.find((agent) => agent.agentId === focused?.parentAgentId);
 	function focusAgent(id: string) {
 		if (id !== focused?.agentId) transitionItems(() => setFocusedId(id));
 		if (mobile) setDetailsOpen(true);
@@ -370,9 +324,9 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
 	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>{managed ? "担当者" : "子の担当"} {managed ? specialists.length : workers.length}人 {managed && helpers > 0 && <><span>·</span> 補助 {helpers}人 </>}<span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> {managed ? <>指示待ち {counts.ready}</> : <>完了 {counts.completed}</>}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}<UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
-				{focused.responsibility && <section className="team-responsibility"><h4>担当範囲</h4><p>{focused.responsibility}</p>{parent && !parent.parentAgentId && <details><summary>担当範囲を変更</summary><ResponsibilityForm key={focused.agentId} agent={focused} onSave={onResponsibility} /></details>}</section>}
+				{focused.responsibility && <section className="team-responsibility"><h4>担当範囲</h4><p>{focused.responsibility}</p></section>}
 				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} onOpen={() => { setDetailsOpen(false); onSelect(focused.sessionId); }} /> : <p className="team-inline-note">まだ作業はありません。<button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></p>}
-				<div className="team-focus-actions">{focused.parentAgentId && <details><summary>{label(focused)}に{managed && !focused.currentRun ? "次の作業を依頼" : "メッセージを送る"}</summary><MessageForm key={focused.agentId} agent={focused} onMessage={onMessage} /></details>}{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
+				<div className="team-focus-actions">{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
 			</section>;
 	return <section className="team-pane" aria-label="チームの進行状況">
 		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2></div> : <>

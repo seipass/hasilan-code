@@ -287,18 +287,6 @@ export function App() {
 			"PATCH",
 		);
 	}
-	async function messageAgent(agentId: string, message: string): Promise<void> {
-		const recipient = team?.agents.find((agent) => agent.agentId === agentId);
-		if (!recipient) throw new Error("送信先のエージェントが見つかりません。");
-		const root = team?.teams.find((entry) => entry.teamId === recipient.teamId);
-		const target = team?.agents.find((agent) => agent.agentId === root?.rootAgentId)?.sessionId;
-		if (!target) throw new Error("送信元の会話が見つかりません。");
-		await command(`/api/sessions/${encodeURIComponent(target)}/team-message`, { agentId, message });
-	}
-	async function changeResponsibility(agentId: string, responsibility: string): Promise<void> {
-		if (!workspaceId) throw new Error("ワークスペースを選択してください。");
-		await command(`/api/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}`, { responsibility }, "PATCH");
-	}
 	async function changeModel(selection: { provider: string; id: string }) {
 		const updated = sessionId ? await command<SessionDetail>(`/api/sessions/${encodeURIComponent(sessionId)}/model`, selection) : undefined;
 		setDraftModel(selection);
@@ -359,7 +347,7 @@ export function App() {
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : -actualRightWidth : undefined }}>
 					<div className="right-panel-body detail-panel-body">
 						{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
-							team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onMessage={messageAgent} onResponsibility={changeResponsibility} onFile={openFile} />}
+							team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}
 					</div>
 				</aside>

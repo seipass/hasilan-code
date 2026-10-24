@@ -125,18 +125,18 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .workspace-accordion { min-width: 0; margin-bottom: 6px; }
 .workspace-accordion > summary { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 9px; cursor: pointer; border-radius: 7px; font-size: 12px; color: var(--on-surface-secondary); list-style: none; }
 .workspace-accordion > summary::-webkit-details-marker { display: none; }
-.workspace-accordion > summary::before { content: "›"; flex-shrink: 0; font-size: 17px; line-height: 1; }
+.workspace-accordion > summary::before { content: "›"; flex-shrink: 0; font-size: 17px; width: 10px; line-height: 1; }
 .workspace-accordion[open] > summary::before { transform: rotate(90deg); }
 .workspace-accordion[data-selected="true"] > summary { background: var(--surface-raised); color: var(--on-surface); }
 .workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-new-conversation { flex: none; width: 24px; height: 24px; margin: -4px -3px -4px auto; padding: 0; border: 0; background: transparent; color: var(--on-surface-muted); font-size: 19px; opacity: 0; }
 .workspace-accordion > summary:hover .workspace-new-conversation, .workspace-accordion > summary:focus-within .workspace-new-conversation { opacity: 1; }
 @media (hover: none) { .workspace-new-conversation { opacity: 1; } }
-.workspace-accordion .session-list { min-width: 0; margin: 4px 0 4px 12px; border-left: 1px solid var(--border-subtle); padding-left: 4px; }
+.workspace-accordion .session-list { min-width: 0; margin: 4px 0; padding-left: 0; }
 .history-navigation { scrollbar-gutter: stable; padding-inline-end: 4px; flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; }
 .session-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
 .session-list > li { min-width: 0; }
-.session-button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 11px; border: 0; background: transparent; font-size: 12px; }
+.session-button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 27px; border: 0; background: transparent; font-size: 12px; }
 .session-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-button.selected { background: var(--primary-container); color: var(--on-primary-container); }
 .history-empty { padding: 6px 10px; font-size: 12px; color: var(--on-surface-muted); }
@@ -294,7 +294,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .team-run-detail { border-top: 1px solid var(--border-subtle); padding-top: 14px; }
 .team-run-meta { display: flex; align-items: center; gap: 9px; color: var(--on-surface-muted); font-size: 11px; }
 .team-run-detail h4 { margin: 16px 0 4px; color: var(--on-surface-muted); font-size: 11px; }
-.team-run-task { margin: 0; max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.65; }
+.team-run-task { margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.65; }
 .team-inline-note { color: var(--on-surface-muted); font-size: 12px; line-height: 1.6; }
 .team-dependency, .team-run-error, .team-run-result { margin-top: 14px; padding: 11px; border-radius: 7px; font-size: 12px; overflow-wrap: anywhere; }
 .team-dependency { background: var(--warning-container); color: var(--on-warning-container); }

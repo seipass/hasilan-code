@@ -4,9 +4,6 @@
 .command-picker { transform-origin: bottom center; animation: surface-enter var(--motion-base) var(--motion-ease); }
 .command-picker-options { display: grid; gap: 4px; min-height: 0; max-height: min(38dvh, 300px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
 .command-picker-option { --command-color: var(--primary-hover); display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; text-align: left; background: transparent; transition: background 100ms ease, border-color 100ms ease; }
-.command-picker-option.command-canvas { --command-color: #94e2d5; }
-.command-picker-option.command-goal { --command-color: #f9e2af; }
-.command-picker-option.command-chat { --command-color: #89b4fa; }
 .command-picker-option[aria-selected="true"], .command-picker-option:hover { border-color: color-mix(in srgb, var(--command-color) 30%, transparent); background: color-mix(in srgb, var(--command-color) 9%, var(--surface-raised)); }
 .command-picker-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .command-picker-title { color: var(--on-surface); font-weight: 600; font-size: 12px; line-height: 1.4; }
