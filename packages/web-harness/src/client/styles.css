@@ -174,7 +174,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .composer textarea { display: block; resize: none; width: 100%; min-height: 48px; max-height: 220px; padding: 0 3px; border: 0; outline: none; box-shadow: none; font-size: 14px; line-height: 1.7; background: transparent; }
 .composer-input-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 .composer-input-row textarea { min-width: 0; }
-.composer textarea::placeholder { color: var(--on-surface-muted); }
+.composer textarea::placeholder { color: #7f849c; opacity: 1; }
 .composer-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 8px; }
 .composer-context { display: flex; flex: 1 1 auto; gap: 5px; min-width: 0; flex-wrap: wrap; }
 .model-control { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
