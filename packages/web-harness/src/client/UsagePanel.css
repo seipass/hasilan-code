@@ -6,8 +6,11 @@
 .usage-panel > summary > span:last-child { font-variant-numeric: tabular-nums; }
 .usage-panel-body { padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
 .usage-panel-body p { margin: 4px 0 8px; }
+.usage-data-slot { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.usage-data-slot > * { grid-area: 1 / 1; min-width: 0; }
 .usage-table-scroll { max-width: 100%; max-height: min(32vh, 280px); overflow: auto; overscroll-behavior: contain; }
 .usage-table-scroll table { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+.usage-table-scroll tbody { position: relative; }
 .usage-table-scroll th, .usage-table-scroll td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; }
 .usage-table-scroll th:nth-child(-n+2), .usage-table-scroll td:nth-child(-n+2) { text-align: left; }
 .usage-provider { color: var(--on-surface-muted); }

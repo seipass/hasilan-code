@@ -2,6 +2,8 @@ import type { AuthEvent } from "@hasilan-code/pi-ai";
 import { useEffect, useId, useRef, useState } from "react";
 import type { AuthLoginPrompt, AuthLoginView } from "../shared/auth-login.ts";
 import { ApiError, api, command, errorMessage } from "./api.ts";
+import { MotionItems, Presence } from "./Motion.tsx";
+import { MotionSwap } from "./MotionSwap.tsx";
 
 interface LoginAttempt {
 	loginId?: string;
@@ -195,13 +197,13 @@ export function OAuthLogin({ provider, label, onComplete, onActiveChange, disabl
 
 	const buttonLabel = provider === "openai" || provider === "openai-codex" ? "ChatGPTでログイン" : label;
 	return <section className="oauth-login" data-provider={provider} aria-label="アカウントでログイン" aria-busy={starting || submitting || cancelling || refreshing}>
-		{!active && view?.status !== "completed" && <button className="oauth-login-start" type="button" disabled={disabled || refreshing} onClick={() => { void start(); }}>{view || error ? `${buttonLabel}を再試行` : buttonLabel}</button>}
-		{(starting || (view && view.status !== "failed") || cancelling || refreshing) && <p className="oauth-login-status" role="status">{cancelling ? "ログインをキャンセル中…" : starting ? "ログインを開始中…" : refreshing ? "ログイン完了 · モデル一覧に反映中…" : view?.status === "pending" ? submitting ? "入力を送信中…" : view.prompt ? "ログインの操作を選択・入力してください。" : "ブラウザーまたはデバイスでのログイン完了を待っています…" : view?.status === "completed" ? "アカウントのログインが完了しました。" : view?.status === "cancelled" ? "ログインをキャンセルしました。接続方法を選び直せます。" : ""}</p>}
-		{view?.events.length ? <ol className="oauth-login-events" aria-label="ログインの手順">{view.events.map((event, index) => <li key={index}><LoginEvent event={event} /></li>)}</ol> : null}
-		{view?.status === "pending" && view.prompt && !attempt.current?.cancelled && <LoginPrompt key={view.prompt.id} prompt={view.prompt} disabled={disabled || submitting || cancelling} onSubmit={submitPrompt} />}
-		{view?.status === "failed" && <div className="error" role="alert"><p>ログインに失敗しました。</p>{view.error && <details><summary>エラーの詳細</summary><pre>{view.error}</pre></details>}</div>}
-		{error && <p className="error" role="alert">{error}</p>}
-		{active && <button className="oauth-login-cancel" type="button" disabled={cancelling} onClick={() => { void cancel(); }}>ログインをキャンセル</button>}
-		{refreshFailed && <button type="button" disabled={refreshing || disabled} onClick={() => { void complete(); }}>ログイン結果をもう一度反映</button>}
+		<Presence show={!active && view?.status !== "completed"}><button className="oauth-login-start" type="button" disabled={disabled || refreshing} onClick={() => { void start(); }}>{view || error ? `${buttonLabel}を再試行` : buttonLabel}</button></Presence>
+		<Presence show={!!(starting || (view && view.status !== "failed") || cancelling || refreshing)}><p key={`${starting}:${submitting}:${cancelling}:${refreshing}:${view?.status}`} className="oauth-login-status motion-label" role="status">{cancelling ? "ログインをキャンセル中…" : starting ? "ログインを開始中…" : refreshing ? "ログイン完了 · モデル一覧に反映中…" : view?.status === "pending" ? submitting ? "入力を送信中…" : view.prompt ? "ログインの操作を選択・入力してください。" : "ブラウザーまたはデバイスでのログイン完了を待っています…" : view?.status === "completed" ? "アカウントのログインが完了しました。" : view?.status === "cancelled" ? "ログインをキャンセルしました。接続方法を選び直せます。" : ""}</p></Presence>
+		<Presence show={!!view?.events.length}><ol className="oauth-login-events" aria-label="ログインの手順"><MotionItems items={view?.events ?? []} itemKey={(event) => String(view?.events.indexOf(event))}>{(event) => <li><LoginEvent event={event} /></li>}</MotionItems></ol></Presence>
+		<MotionSwap identity={view?.status === "pending" && !attempt.current?.cancelled ? view.prompt?.id ?? "none" : "none"} animateHeight>{view?.status === "pending" && !attempt.current?.cancelled && view.prompt ? <LoginPrompt key={view.prompt.id} prompt={view.prompt} disabled={disabled || submitting || cancelling} onSubmit={submitPrompt} /> : null}</MotionSwap>
+		<Presence show={view?.status === "failed"}><div className="error" role="alert"><p>ログインに失敗しました。</p>{view?.error && <details><summary>エラーの詳細</summary><pre>{view.error}</pre></details>}</div></Presence>
+		<Presence show={!!error}><p className="error" role="alert">{error}</p></Presence>
+		<Presence show={active}><button className="oauth-login-cancel" type="button" disabled={cancelling} onClick={() => { void cancel(); }}>ログインをキャンセル</button></Presence>
+		<Presence show={refreshFailed}><button type="button" disabled={refreshing || disabled} onClick={() => { void complete(); }}>ログイン結果をもう一度反映</button></Presence>
 	</section>;
 }

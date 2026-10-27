@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { Goal, GoalAction } from "../shared/goals.ts";
 import { errorMessage } from "./api.ts";
+import { Presence } from "./Motion.tsx";
 import "./GoalPanel.css";
 
 const STATUS_LABELS: Record<Goal["status"], string> = {
@@ -33,18 +34,18 @@ export function GoalPanel({ goal, busy, connected, unavailable, onAction }: {
 		finally { acting.current = false; setPending(false); }
 	}
 	return <details className="goal-panel">
-		<summary><span>Goal</span><span className={`goal-status goal-status-${goal.status}`} role="status">{STATUS_LABELS[goal.status]}</span></summary>
+		<summary><span>Goal</span><span key={goal.status} className={`goal-status goal-status-${goal.status} motion-label`} role="status">{STATUS_LABELS[goal.status]}</span></summary>
 		<div className="goal-panel-body">
 			<div className="goal-current">
 				<p className="goal-objective">{goal.objective}</p>
-				{goal.reason && <p className="goal-reason">{goal.reason}</p>}
+				<Presence show={!!goal.reason} collapse><p className="goal-reason">{goal.reason}</p></Presence>
 			</div>
-			{goal.status !== "complete" && goal.status !== "dropped" && <div className="goal-actions">
-				{goal.status === "active" && <button type="button" disabled={disabled} onClick={() => { void act({ op: "pause" }); }}>Goal を一時停止</button>}
-				{canResume && <button type="button" disabled={disabled || busy} onClick={() => { void act({ op: "resume" }); }}>Goal を再開</button>}
+			<Presence show={goal.status !== "complete" && goal.status !== "dropped"} collapse><div className="goal-actions">
+				<Presence show={goal.status === "active"}><button type="button" disabled={disabled} onClick={() => { void act({ op: "pause" }); }}>Goal を一時停止</button></Presence>
+				<Presence show={canResume}><button type="button" disabled={disabled || busy} onClick={() => { void act({ op: "resume" }); }}>Goal を再開</button></Presence>
 				<button type="button" disabled={disabled} onClick={() => { void act({ op: "drop" }); }}>Goal を終了</button>
-			</div>}
-			{error && <p className="error" role="alert">{error}</p>}
+			</div></Presence>
+			<Presence show={!!error}><p className="error" role="alert">{error}</p></Presence>
 		</div>
 	</details>;
 }

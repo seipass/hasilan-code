@@ -14,6 +14,7 @@ export { HttpError } from "./security.ts";
 export interface HttpHostOptions {
 	port?: number;
 	lan?: boolean;
+	development?: boolean;
 	staticDir?: string;
 	artifacts?: ArtifactStore;
 	handleApi?: (request: IncomingMessage, response: ServerResponse, url: URL) => boolean | Promise<boolean>;
@@ -143,10 +144,11 @@ export class HttpHost {
 
 	constructor(options: HttpHostOptions = {}) {
 		this.options = options;
+		if (options.development && options.lan) throw new Error("--dev cannot be combined with --lan");
 		const lanAddresses = options.lan ? getLanAddresses() : [];
 		if (options.lan && lanAddresses.length === 0)
 			throw new Error("No private IPv4 LAN address found; connect to a LAN before using --lan");
-		this.security = new LoopbackSecurity(lanAddresses);
+		this.security = new LoopbackSecurity(lanAddresses, options.development);
 		const port = options.port ?? 3080;
 		if (!Number.isInteger(port) || port < 0 || port > 65535)
 			throw new Error("Port must be an integer from 0 to 65535");

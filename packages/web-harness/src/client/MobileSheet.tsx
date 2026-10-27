@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useId, useRef, useState } from "react";
+import { animateSheet, cancelSheetMotion } from "./sheet-motion.ts";
 import "./MobileSheet.css";
 
 /** Matches the app's overlay-panel breakpoint. */
@@ -14,10 +15,14 @@ export function useMobileLayout(): boolean {
 	return mobile;
 }
 
-export function MobileSheet({ open, side, title, busy = false, onClosing, onClose, children }: {
+export function MobileSheet({ open, side, title, busy = false, onClosing, onClose, children, className = "", style, headingActions, motionAnchor }: {
 	open: boolean;
-	side: "bottom" | "right";
+	side: "bottom" | "right" | "top";
+	className?: string;
+	style?: CSSProperties;
 	title: string;
+	headingActions?: ReactNode;
+	motionAnchor?: RefObject<HTMLElement | null>;
 	onClose: () => void;
 	onClosing?: () => void;
 	busy?: boolean;
@@ -28,8 +33,8 @@ export function MobileSheet({ open, side, title, busy = false, onClosing, onClos
 	useEffect(() => {
 		const element = dialog.current;
 		if (!element) return;
-		if (open && !element.open) { element.inert = false; element.showModal(); }
-		else if (!open && element.open) element.close();
+		if (open && !element.open) { element.inert = false; element.showModal(); if (motionAnchor) animateSheet(element, motionAnchor.current, true); }
+		else if (!open && element.open) { if (motionAnchor) animateSheet(element, motionAnchor.current, false); element.close(); }
 		const viewport = window.visualViewport;
 		const resize = () => {
 			element.style.setProperty("--sheet-viewport-height", `${viewport?.height ?? window.innerHeight}px`);
@@ -45,16 +50,20 @@ export function MobileSheet({ open, side, title, busy = false, onClosing, onClos
 			viewport?.removeEventListener("resize", resize);
 			viewport?.removeEventListener("scroll", resize);
 			window.removeEventListener("resize", resize);
-			if (element.open) element.close();
 		};
-	}, [open]);
+	}, [open, motionAnchor]);
+	useEffect(() => {
+		const element = dialog.current;
+		return () => { if (element) { cancelSheetMotion(element); if (element.open) element.close(); } };
+	}, []);
 	const requestClose = () => {
 		if (busy || !dialog.current?.open) return;
 		dialog.current.inert = true;
+		if (motionAnchor) animateSheet(dialog.current, motionAnchor.current, false);
 		dialog.current.close();
 		onClosing?.();
 	};
-	return <dialog ref={dialog} className={`mobile-sheet is-${side}`} aria-labelledby={titleId} aria-busy={busy} inert={!open}
+	return <dialog ref={dialog} className={`mobile-sheet is-${side} ${className}`} style={style} aria-labelledby={titleId} aria-busy={busy} inert={!open}
 		onCancel={(event) => { event.preventDefault(); requestClose(); }}
 		onClose={async (event) => {
 			const element = event.currentTarget;
@@ -68,7 +77,7 @@ export function MobileSheet({ open, side, title, busy = false, onClosing, onClos
 			const bounds = event.currentTarget.getBoundingClientRect();
 			if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) requestClose();
 		}}>
-		<header className="mobile-sheet-heading"><h2 id={titleId}>{title}</h2><button type="button" disabled={busy} onClick={requestClose} aria-label={`${title}を閉じる`}>閉じる</button></header>
+		<header className="mobile-sheet-heading"><h2 id={titleId}>{title}</h2><div className="mobile-sheet-actions">{headingActions}<button type="button" disabled={busy} onClick={requestClose} aria-label={`${title}を閉じる`}>閉じる</button></div></header>
 		<div className="mobile-sheet-content">{children}</div>
 	</dialog>;
 }

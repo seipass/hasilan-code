@@ -1,14 +1,19 @@
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
+import { aggregateUsage } from "../shared/usage.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { ChatPane } from "./ChatPane.tsx";
 import { CanvasPane } from "./CanvasPane.tsx";
 import { DetailPane, type DetailView } from "./DetailPane.tsx";
 import type { FileTarget } from "./files/FilePane.tsx";
 import { GoalPanel } from "./GoalPanel.tsx";
+import { HomeBackdrop, useHomeBackground } from "./HomeAppearance.tsx";
 import { nextClientId } from "./ids.ts";
 import { ModelMenu } from "./ModelMenu.tsx";
+import { MotionItems, Presence } from "./Motion.tsx";
+import { MotionSwap } from "./MotionSwap.tsx";
 import { PanelResize } from "./PanelResize.tsx";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
 import { SessionImportDialog } from "./SessionImportDialog.tsx";
@@ -16,8 +21,8 @@ import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
 import { parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
-import { selectedTeamAgents } from "./team-graph.ts";
 import { ToolInspector } from "./ToolInspector.tsx";
+import { WidgetSpace } from "./widgets/WidgetSpace.tsx";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 import "./WorkspaceModes.css";
 
@@ -28,6 +33,7 @@ function WorkspaceFeed({ id, onUpdate, onFiles }: { id: string; onUpdate: (id: s
 }
 
 export function App() {
+	const { background, changeBackground } = useHomeBackground();
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [mode, setMode] = useState<"chat" | "canvas">("chat");
 	const [canvasTarget, setCanvasTarget] = useState<"chat" | "swarm">("chat");
@@ -58,8 +64,6 @@ export function App() {
 	const [sessionAction, setSessionAction] = useState<SessionActionTarget>();
 	const closeSessionAction = useCallback(() => setSessionAction(undefined), []);
 	const [modelOpen, setModelOpen] = useState(false);
-	const [modelClosing, setModelClosing] = useState(false);
-	const [modelMenuKey, setModelMenuKey] = useState(0);
 	const [addingWorkspace, setAddingWorkspace] = useState(false);
 	const [expandedWorkspaces, setExpandedWorkspaces] = useState<Record<string, boolean>>({});
 	const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 900);
@@ -91,10 +95,8 @@ export function App() {
 	const summaries = [...initialSessions.filter((entry) => !projections[entry.workspaceId]), ...Object.values(projections).flatMap((projection) => projection.sessions)];
 	const team = workspaceChannel.data?.teams;
 	const selectedAgent = team?.agents.find((agent) => agent.sessionId === sessionId);
-	const teamAgents = selectedTeamAgents(team, sessionId);
 	const workspaceTeam = team?.teams.find((entry) => entry.scope === "workspace");
-	const showingWorkspaceTeam = !!workspaceTeam && teamAgents[0]?.teamId === workspaceTeam.teamId;
-	const workingAgents = teamAgents.filter((agent) => agent.parentAgentId && agent.currentRun?.status === "running").length;
+	const widgetUsage = sessionId ? session?.usage ?? [] : aggregateUsage(summaries.filter((entry) => entry.workspaceId === workspaceId).map((entry) => entry.usage ?? []));
 	const roots = summaries.filter((entry) => !entry.parentSessionId);
 	const history = roots.filter((entry) => `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
 	const updateProjection = useCallback((id: string, data: WorkspaceProjection) => setProjections((previous) => ({ ...previous, [id]: data })), []);
@@ -211,11 +213,12 @@ export function App() {
 		if (!target) { const created = await command<SessionSummary>("/api/sessions", { workspaceId, model: { provider: model.provider, id: model.id }, ...(draftThinking ? { thinkingLevel: draftThinking } : {}) }); target = created.sessionId; draftSession.current = target; }
 		return target;
 	}
-	async function send(text: string, executionMode: "prompt" | "steer" | "followUp"): Promise<{ disposition?: "queued" | "started"; notice?: string }> {
+	async function send(text: string, executionMode: "prompt" | "steer" | "followUp", attachments: AttachmentUpload[]): Promise<{ disposition?: "queued" | "started"; notice?: string }> {
 		if (commandPending.current) throw new Error("送信処理中です。完了してから送信してください。");
 		commandPending.current = true;
 		try {
 			const parsed = parseComposerCommand(text);
+			if (attachments.length && parsed.kind !== "prompt") throw new Error("添付ファイルは通常のメッセージとして送信してください。");
 			if (parsed.kind === "canvas") {
 				if (!workspaceId) throw new Error("ワークスペースを選択してください。");
 				setCanvasOpened(true); setMode("canvas"); setModelOpen(false);
@@ -233,7 +236,7 @@ export function App() {
 				result = { notice: goal ? `Goal: ${goal.objective}` : "Goal は設定されていません。" };
 			} else {
 				const target = await inputSession();
-				result = await command<{ runId: string; disposition: "queued" | "started" }>(`/api/sessions/${encodeURIComponent(target)}/prompt`, { text: parsed.text, mode: executionMode });
+				result = await command<{ runId: string; disposition: "queued" | "started" }>(`/api/sessions/${encodeURIComponent(target)}/prompt`, { text: parsed.text, mode: executionMode, ...(attachments.length ? { attachments } : {}) });
 				setSessionId(target);
 			}
 			try { localStorage.removeItem(`pi-web-draft:${sessionId ?? `new:${workspaceId}`}`); } catch { /* Storage is optional. */ }
@@ -302,11 +305,12 @@ export function App() {
 		draftSession.current = undefined;
 	}
 	const modelControl = <div className="model-control">
-		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} title="モデル・Thinkingを選択" onClick={() => { if (modelClosing) { setModelClosing(false); setModelMenuKey((value) => value + 1); } else setModelOpen((value) => !value); }}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span className="model-trigger-thinking">{session?.thinkingLevel ?? draftThinking ?? "自動"}</span><span aria-hidden="true">⌄</span></button>
+		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} title="モデル・Thinkingを選択" onClick={() => setModelOpen((value) => !value)}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span className="model-trigger-thinking">{session?.thinkingLevel ?? draftThinking ?? "自動"}</span><span aria-hidden="true">⌄</span></button>
 	</div>;
 	const rightMaximum = Math.max(480, viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 260 : 0) - 320);
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);
-	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`}>
+	const homeBackgroundVisible = !!background && !sessionId && mode === "chat";
+	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`} data-home-background={homeBackgroundVisible || undefined}>
 		{workspaces.filter((entry) => entry.workspaceId !== workspaceId).map((entry) => <WorkspaceFeed key={entry.workspaceId} id={entry.workspaceId} onUpdate={updateProjection} onFiles={filesChanged} />)}
 		<button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><span aria-hidden="true">{sidebarOpen ? "‹" : "☰"}</span></button>
 		<button className="navigation-scrim" aria-label="履歴を閉じる" aria-hidden={!sidebarOpen} inert={!sidebarOpen} onClick={() => setSidebarOpen(false)} />
@@ -317,7 +321,7 @@ export function App() {
 			<label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>
 			<div className="history-heading"><span>会話</span><button className="icon-button workspace-add-button" aria-label="ワークスペースを追加" title="フォルダーを選択してワークスペースを追加" disabled={addingWorkspace} onClick={() => { void addWorkspace(); }}>{addingWorkspace ? "…" : "+"}</button></div>
 			<nav className="history-navigation" aria-label="ワークスペースと会話">
-				{workspaces.filter((entry) => !historyQuery.trim() || entry.path.toLowerCase().includes(historyQuery.toLowerCase()) || history.some((item) => item.workspaceId === entry.workspaceId)).map((entry) => {
+				<MotionItems items={workspaces.filter((entry) => !historyQuery.trim() || entry.path.toLowerCase().includes(historyQuery.toLowerCase()) || history.some((item) => item.workspaceId === entry.workspaceId))} itemKey={(entry) => entry.workspaceId}>{(entry) => {
 					const conversations = history.filter((item) => item.workspaceId === entry.workspaceId);
 					const open = !!historyQuery.trim() || (expandedWorkspaces[entry.workspaceId] ?? workspaceId === entry.workspaceId);
 					return <details className="workspace-accordion" key={entry.workspaceId} data-workspace-id={entry.workspaceId} data-selected={workspaceId === entry.workspaceId} open={open}>
@@ -325,42 +329,43 @@ export function App() {
 							event.preventDefault();
 							if (!historyQuery.trim()) setExpandedWorkspaces((previous) => ({ ...previous, [entry.workspaceId]: !open }));
 						}}><span className="workspace-name">{entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}</span><button type="button" className="workspace-new-conversation" aria-label={`${entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}で新しい会話`} title="このワークスペースで新しい会話" onClick={(event) => { event.preventDefault(); event.stopPropagation(); newConversation(entry.workspaceId); }}>+</button></summary>
-						<ul className="session-list">{conversations.map((summary) => {
+						<ul className="session-list"><MotionItems items={conversations} itemKey={(summary) => summary.sessionId}>{(summary) => {
 							const title = (summary.title ?? "新しい会話").replace(/\s+/g, " ").slice(0, 90);
 							const status = summary.availability === "missing" ? "missing" : summary.currentRun?.status ?? (summary.latestRun?.status === "failed" || summary.latestRun?.status === "interrupted" ? summary.latestRun.status : "idle");
 							return <li key={summary.sessionId}><button className={`session-button ${summary.sessionId === sessionId ? "selected" : ""}`} aria-current={summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); const bounds = event.currentTarget.getBoundingClientRect(); setSessionAction({ session: summary, opener: event.currentTarget, x: event.clientX || bounds.left, y: event.clientY || bounds.bottom }); }} title={title}><span className="session-title">{title}</span>{status !== "idle" && <span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} title={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} />}</button></li>;
-						})}</ul>{conversations.length === 0 && <p className="history-empty">{historyQuery ? "一致する会話がありません" : "会話はありません。"}</p>}
+						}}</MotionItems></ul><Presence show={conversations.length === 0}><p className="history-empty">{historyQuery ? "一致する会話がありません" : "会話はありません。"}</p></Presence>
 					</details>;
-				})}
+				}}</MotionItems>
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}>設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{(workspaceTeam || session?.swarm || teamAgents.some((agent) => agent.parentAgentId)) && <button className="team-activity-button" aria-controls="detail-sidebar" aria-expanded={rightOpen && rightTab === "team"} onClick={() => { setRightTab("team"); setRightOpen((open) => rightTab !== "team" || !open); }}><span className={`status-dot ${workingAgents ? "status-running" : "status-idle"}`} aria-hidden="true" />{showingWorkspaceTeam || session?.swarm ? "百鬼夜行" : "チーム"}<span>{workingAgents ? `${workingAgents}人が作業中` : "状況を見る"}</span></button>}<button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
-			{(error || workspaceChannel.error || sessionChannel.error) && <div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div>}
-			<div className="main-layout"><main className="chat-column">{sessionId && sessionChannel.connection !== "connected" && <p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p>}
-				{canvasOpened && <div className="mode-page" hidden={mode !== "canvas"} inert={mode !== "canvas"}>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className={`topbar-actions${rightOpen ? " has-widgets" : ""}`} style={{ width: rightOpen && viewport.width > 900 ? actualRightWidth : undefined }}><WidgetSpace visible={rightOpen} usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
+			<HomeBackdrop background={homeBackgroundVisible ? background : undefined} />
+			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div></Presence>
+			<div className="main-layout"><main className="chat-column"><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
+				{canvasOpened && <Presence show={mode === "canvas"} keepMounted><div className="mode-page" inert={mode !== "canvas"}>
 					{workspaceId && <CanvasPane key={workspaceId} workspaceId={workspaceId} destinationControl={<label className="canvas-destination"><span className="sr-only">入力欄に追加する設計の送信先</span><select aria-label="入力欄に追加する設計の送信先" value={canvasTarget} onChange={(event) => setCanvasTarget(event.target.value === "swarm" ? "swarm" : "chat")}><option value="chat">会話</option><option value="swarm">Hyakki-Yako</option></select></label>} onComposeDesign={composeCanvasDesign} onDirtyChange={setCanvasDirty} />}
-				</div>}
-				<ChatPane key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} goalControl={!session?.parentSessionId && session?.goal && <GoalPanel key={sessionId} goal={session.goal} busy={!!session.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} />
-				{modelOpen && <ModelMenu key={modelMenuKey} catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setModelClosing(false); setSettingsOpen(true); }} onClosingChange={setModelClosing} onClose={() => { setModelOpen(false); setModelClosing(false); }} disabled={!!session?.currentRun} />}
+				</div></Presence>}
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${mode === "canvas" ? " is-surface" : ""}`}><ChatPane loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} goalControl={!session?.parentSessionId && session?.goal && <GoalPanel key={sessionId} goal={session.goal} busy={!!session.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} /></MotionSwap>
+				<Presence show={modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : -actualRightWidth : undefined }}>
 					<div className="right-panel-body detail-panel-body">
-						{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
+						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
 							team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
-							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}
+							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>
 				</aside>
 			</div>
-		</div>{settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} />}
-		{sessionAction && <SessionActions key={sessionAction.session.sessionId} target={sessionAction} onClose={closeSessionAction} onRename={renameSession} onDelete={deleteSession} />}
-		{importOpen && workspace && <SessionImportDialog key={workspace.workspaceId} workspace={workspace} model={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onFile={openFile} onClose={() => setImportOpen(false)} onImported={(imported, folder) => {
+		</div>{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} />}
+		<Presence show={!!sessionAction}><div className="motion-contents">{sessionAction && <SessionActions key={sessionAction.session.sessionId} target={sessionAction} onClose={closeSessionAction} onRename={renameSession} onDelete={deleteSession} />}</div></Presence>
+		<Presence show={importOpen && !!workspace}><div className="motion-contents">{workspace && <SessionImportDialog key={workspace.workspaceId} workspace={workspace} model={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onFile={openFile} onClose={() => setImportOpen(false)} onImported={(imported, folder) => {
 			setWorkspaces((previous) => previous.some((entry) => entry.workspaceId === folder.workspaceId) ? previous : [...previous, folder]);
 			setInitialSessions((previous) => [...previous.filter((entry) => entry.sessionId !== imported.sessionId), imported]);
 			setExpandedWorkspaces((previous) => ({ ...previous, [folder.workspaceId]: true }));
 			draftSession.current = undefined; setDraftInsertion(undefined); setWorkspaceId(folder.workspaceId); setSessionId(imported.sessionId); setMode("chat"); setHistoryQuery(""); setFileTarget(undefined); setError(undefined); setModelOpen(false); setImportOpen(false);
 			if (folder.workspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
 			if (window.innerWidth < 900) setSidebarOpen(false);
-		}} />}
+		}} />}</div></Presence>
 	</div>;
 }

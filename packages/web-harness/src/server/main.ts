@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ModelRuntime, type ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { toString as qrCodeText } from "qrcode";
+import { ATTACHMENT_LIMITS } from "../shared/attachments.ts";
 import { CANVAS_LIMITS, canvasSaveSchema, isCanvasDocument, serializeCanvasDesign } from "../shared/canvas.ts";
 import {
 	credentialSchema,
@@ -30,6 +31,8 @@ import { EventHub } from "./events.ts";
 import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
+import { mediaView, serveMedia } from "./media.ts";
+import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
 import { handleSessionImport } from "./session-import/routes.ts";
 import { SessionImportService } from "./session-import/service.ts";
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
@@ -37,9 +40,11 @@ import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./s
 import { TeamManager } from "./team-manager.ts";
 import { TerminalManager } from "./terminal-manager.ts";
 import { BrowserManager } from "./tools/browser.ts";
+import { PythonDesktop } from "./tools/computer/backend.ts";
+import { ComputerManager } from "./tools/computer/index.ts";
 import { createHashlineTools } from "./tools/hashline/index.ts";
 import { SearchService } from "./tools/search.ts";
-import { serveVideo, videoView } from "./video.ts";
+import { WidgetData } from "./widget-data.ts";
 import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
 
 async function main() {
@@ -60,7 +65,9 @@ async function main() {
 	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
 	const artifacts = new ArtifactStore();
 	const browser = new BrowserManager(artifacts);
+	const computer = new ComputerManager(new PythonDesktop(agentDir), artifacts);
 	const search = new SearchService(settings);
+	const widgets = new WidgetData();
 	let events: EventHub | undefined;
 	const files = new WorkspaceFiles({ onChanged: (event) => events?.publish("workspace", event.workspaceId, event) });
 	let teams: TeamManager;
@@ -68,11 +75,13 @@ async function main() {
 		agentDir,
 		modelRuntime,
 		workspaceFiles: files,
+		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
 		// Pi validates each tool's declared schema before execution; erase only the registry's heterogeneous generic boundary.
 		customTools: (descriptor) =>
 			[
 				...createHashlineTools(files, descriptor.workspaceId),
 				browser.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
+				computer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				search.createTool(),
 				teams.createTool(descriptor.sessionId),
 				teams.createGoalTool(descriptor.sessionId),
@@ -81,7 +90,9 @@ async function main() {
 	teams = new TeamManager(registry, {
 		agentDir,
 		getLimits: () => settings.get().teams,
-		onStopSession: (id) => browser.closeSession(id),
+		onStopSession: async (id) => {
+			await Promise.all([browser.closeSession(id), computer.closeSession(id)]);
+		},
 	});
 	await registry.initialize();
 	await teams.initialize();
@@ -106,13 +117,29 @@ async function main() {
 		}
 		hub.publish("workspace", event.workspaceId);
 	});
-	teams.subscribe((event) => hub.publish("workspace", event.workspaceId));
+	teams.subscribe((event) => {
+		hub.publish("workspace", event.workspaceId);
+		void computer
+			.releaseIdle((sessionId) => {
+				const agent = registry.state.agents.find((entry) => entry.sessionId === sessionId);
+				return (
+					!!agent &&
+					registry.state.runs.some(
+						(run) =>
+							run.agentId === agent.agentId &&
+							!["completed", "failed", "cancelled", "interrupted"].includes(run.status),
+					)
+				);
+			})
+			.catch(() => undefined);
+	});
 	let shuttingDown = false;
 	const folderPickerAbort = new AbortController();
 	let selectingWorkspace = false;
 	const host = createHttpHost({
 		port: options.port,
 		lan: options.lan,
+		development: options.development,
 		staticDir: fileURLToPath(new URL("../client/", import.meta.url)),
 		artifacts,
 		acceptWebSocket: (url) =>
@@ -137,6 +164,10 @@ async function main() {
 					sendJson(response, status, data);
 					return true;
 				};
+				if (url.pathname.startsWith("/api/widgets/")) {
+					if (method !== "GET") throw new HttpError(405, "Method is not allowed");
+					return reply(await widgets.query(url));
+				}
 				if (url.pathname === "/api/account-usage" && method === "GET") {
 					const controller = new AbortController();
 					const abort = () => controller.abort();
@@ -188,6 +219,7 @@ async function main() {
 					if (parts.length === 3 && method === "DELETE") {
 						const deletedSessionIds = await registry.deleteSession(id);
 						await Promise.allSettled(deletedSessionIds.map((sessionId) => browser.closeSession(sessionId)));
+						await Promise.allSettled(deletedSessionIds.map((sessionId) => computer.closeSession(sessionId)));
 						for (const sessionId of deletedSessionIds) artifacts.deleteSession(sessionId);
 						return reply({ deletedSessionIds });
 					}
@@ -200,8 +232,18 @@ async function main() {
 						if (method === "GET") return reply(await teams.goal(id, { op: "get" }));
 						if (method === "POST") return reply(await teams.goal(id, await readJson(request, goalActionSchema)));
 					}
-					if (parts[3] === "prompt" && method === "POST")
-						return reply(await teams.prompt(id, await readJson(request, promptSchema)), 202);
+					if (parts[3] === "prompt" && method === "POST") {
+						const input = await readJson(request, promptSchema, ATTACHMENT_LIMITS.requestBytes);
+						const descriptor = registry.descriptor(id);
+						if (!input.text.trim() && !input.attachments?.length)
+							throw new HttpError(400, "メッセージか添付ファイルを追加してください。");
+						const attachments = await savePromptAttachments(
+							files,
+							descriptor.workspaceId,
+							input.attachments ?? [],
+						);
+						return reply(await teams.prompt(id, { text: input.text, mode: input.mode, attachments }), 202);
+					}
 					if (parts[3] === "pending-inputs" && parts.length === 5 && method === "PATCH") {
 						await teams.updatePendingInput(id, parts[4], await readJson(request, pendingInputActionSchema));
 						return reply(registry.page(id));
@@ -226,6 +268,7 @@ async function main() {
 						return reply({
 							...settings.get(),
 							browser: browser.status(),
+							computer: await computer.status(),
 						});
 					}
 					if (method === "PATCH") return reply(await settings.patch(await readJson(request, settingsPatchSchema)));
@@ -298,7 +341,7 @@ async function main() {
 					if (parts[3] === "files" && method === "GET") return reply(await files.list(id, path));
 					if (parts[3] === "file" && method === "GET")
 						return reply(
-							(await videoView(files, id, path)) ??
+							(await mediaView(files, id, path)) ??
 								fileView(
 									await files.read(id, path),
 									Number(url.searchParams.get("offset") ?? 1),
@@ -306,7 +349,7 @@ async function main() {
 								),
 						);
 					if (parts[3] === "file-content" && (method === "GET" || method === "HEAD")) {
-						if (await serveVideo(files, id, path, url.searchParams.get("revision"), request, response))
+						if (await serveMedia(files, id, path, url.searchParams.get("revision"), request, response))
 							return true;
 						const snapshot = await files.read(id, path);
 						if (snapshot.revision !== url.searchParams.get("revision"))
@@ -348,7 +391,9 @@ async function main() {
 	const launch = await host.listen();
 	console.log(`Hasilan Code: ${launch.url}`);
 	if (!(await openBrowser(launch.launchUrl, { noOpen: options.noOpen })))
-		console.log(`Open authenticated launch URL: ${launch.launchUrl}`);
+		console.log(
+			`${options.development ? "Open development URL" : "Open authenticated launch URL"}: ${launch.launchUrl}`,
+		);
 	for (const url of launch.lanLaunchUrls) {
 		console.log(`LAN authenticated launch URL: ${url}`);
 		if (process.stdout.isTTY)
@@ -364,7 +409,7 @@ async function main() {
 		folderPickerAbort.abort();
 		await authLogin.close();
 		await teams.close();
-		await Promise.all([browser.close(), terminals.shutdown()]);
+		await Promise.all([browser.close(), computer.close(), terminals.shutdown()]);
 		await registry.close();
 		hub.close();
 		artifacts.close();

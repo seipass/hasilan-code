@@ -1,7 +1,12 @@
 .account-usage-panel { display: grid; gap: 14px; }
 .account-usage-toolbar, .account-usage-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .account-usage-toolbar h3, .account-usage-card h4 { margin: 0; }
-.account-usage-card { min-width: 0; animation: message-enter var(--motion-enter) var(--motion-ease); }
+.account-usage-card { min-width: 0; animation: account-usage-enter 160ms ease; }
+.account-usage-loading { min-height: 236px; padding: 16px; border: 1px solid var(--border-subtle); border-radius: 12px; color: var(--on-surface-muted); }
+.account-usage-loading > div { display: grid; gap: 20px; margin-top: 24px; }
+.account-usage-loading i { display: block; height: 10px; width: 84%; border-radius: 5px; background: color-mix(in srgb, var(--on-surface) 9%, transparent); }
+.account-usage-loading i:nth-child(odd) { width: 48%; }
+@keyframes account-usage-enter { from { opacity: 0; } to { opacity: 1; } }
 .account-usage-plan { color: var(--muted); overflow-wrap: anywhere; }
 .account-usage-account { color: var(--muted); overflow-wrap: anywhere; }
 .account-usage-card dl { margin: 16px 0; }
@@ -15,4 +20,7 @@
 @media (max-width: 520px) {
 	.account-usage-metric { grid-template-columns: 1fr; gap: 6px; }
 	.account-usage-card > header { align-items: flex-start; flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.account-usage-card { animation: none; }
 }

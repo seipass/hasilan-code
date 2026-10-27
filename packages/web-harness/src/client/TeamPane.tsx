@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Content } from "./Content.tsx";
+import { useAnimatedView } from "./animated-view.ts";
 import { TeamGestures } from "./team-gestures.ts";
-import { transitionItems } from "./item-transition.ts";
 import { MobileSheet, useMobileLayout } from "./MobileSheet.tsx";
-import { layoutTeamGraph, selectedTeamAgents, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "./team-graph.ts";
+import { MotionItems, Presence } from "./Motion.tsx";
+import { MotionLabel, MotionSize, MotionSwap } from "./MotionSwap.tsx";
+import { layoutTeamGraph, selectedTeamAgents, teamEdgePath, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "./team-graph.ts";
 import type { Run, RunStatus, SessionSummary, TeamAgent, TeamSnapshot } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import "./TeamPane.css";
@@ -76,37 +78,35 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 		}
 		return waiting;
 	}, [graph]);
-	const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
+	const { view, setView, animateView, viewRef } = useAnimatedView({ x: 0, y: 0, zoom: 1 });
 	const [dragging, setDragging] = useState(false);
 	const { zoom } = view;
 	const viewport = useRef<HTMLDivElement>(null);
 	const gesture = useRef(new TeamGestures());
-	const viewRef = useRef(view);
-	viewRef.current = view;
 	const suppressClick = useRef(false);
 	const initialized = useRef(false);
 	const markerId = useId();
 	const focused = graph.nodes.find((node) => node.agent.agentId === focusedId);
-	const fitGraph = useCallback((target = graph) => {
+	const fitGraph = useCallback((target = graph, smooth = true) => {
 		const element = viewport.current;
 		if (!element || !element.clientWidth || !element.clientHeight) return false;
 		const nextZoom = Math.min(1, (element.clientWidth - 12) / target.width, (element.clientHeight - 12) / target.height);
-		setView({
+		(smooth ? animateView : setView)({
 			zoom: nextZoom,
 			x: element.clientWidth / 2 - (target.x + target.width / 2) * nextZoom,
 			y: element.clientHeight / 2 - (target.y + target.height / 2) * nextZoom,
 		});
 		return true;
-	}, [graph]);
+	}, [graph, animateView, setView]);
 	useEffect(() => {
 		const element = viewport.current;
 		if (!visible || !element || initialized.current) return;
-		const fit = () => { if (!initialized.current && fitGraph()) initialized.current = true; };
+		const fit = () => { if (!initialized.current && fitGraph(graph, false)) initialized.current = true; };
 		fit();
 		const observer = new ResizeObserver(fit);
 		observer.observe(element);
 		return () => observer.disconnect();
-	}, [fitGraph, visible]);
+	}, [fitGraph, graph, visible]);
 	useEffect(() => {
 		const element = viewport.current;
 		if (!element) return;
@@ -128,7 +128,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 		if (!element) return;
 		const x = element.clientWidth / 2;
 		const y = element.clientHeight / 2;
-		setView((current) => {
+		animateView((current) => {
 			const next = Math.max(0.01, Math.min(2, nextZoom));
 			return { zoom: next, x: x - (x - current.x) * next / current.zoom, y: y - (y - current.y) * next / current.zoom };
 		});
@@ -136,7 +136,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 	function centerNode(x: number, y: number) {
 		const element = viewport.current;
 		if (!element) return;
-		setView((current) => ({
+		animateView((current) => ({
 			...current,
 			x: element.clientWidth / 2 - (x + TEAM_NODE_WIDTH / 2) * current.zoom,
 			y: element.clientHeight / 2 - (y + TEAM_NODE_HEIGHT / 2) * current.zoom,
@@ -147,6 +147,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 		const touch = event.pointerType === "touch";
 		if (!touch && event.target instanceof Element && event.target.closest("button")) return;
 		if (!touch && gesture.current.pointers.size) return;
+		setView((current) => current);
 		const bounds = event.currentTarget.getBoundingClientRect();
 		gesture.current.start(event.pointerId, { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, viewRef.current);
 		suppressClick.current = gesture.current.moved;
@@ -200,24 +201,14 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 				else if (event.key === "ArrowDown") dy = -40;
 				else return;
 				event.preventDefault();
-				setView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
+				animateView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
 			}}>
 				<div className="team-graph-canvas" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${zoom})` }}>
 					<svg className="team-graph-edges" aria-hidden="true">
 						<defs><marker id={markerId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1 L 7 4 L 1 7" fill="none" stroke="context-stroke" strokeWidth="1.5" /></marker></defs>
-						{graph.edges.map((edge) => {
-							const waiting = edge.kind === "waiting";
-							const x1 = edge.from.x + (waiting ? TEAM_NODE_WIDTH : TEAM_NODE_WIDTH / 2);
-							const y1 = edge.from.y + (waiting ? TEAM_NODE_HEIGHT / 2 : TEAM_NODE_HEIGHT);
-							const x2 = edge.to.x + (waiting ? TEAM_NODE_WIDTH : TEAM_NODE_WIDTH / 2);
-							const y2 = edge.to.y + (waiting ? TEAM_NODE_HEIGHT / 2 : 0);
-							const bendX = Math.max(x1, x2) + 20;
-							const middleY = (y1 + y2) / 2;
-							const path = waiting ? `M ${x1} ${y1} C ${bendX} ${y1}, ${bendX} ${y2}, ${x2} ${y2}` : `M ${x1} ${y1} C ${x1} ${middleY}, ${x2} ${middleY}, ${x2} ${y2}`;
-							return <path key={`${edge.kind}-${edge.from.agent.agentId}-${edge.to.agent.agentId}`} className={`team-graph-edge is-${edge.kind}`} d={path} markerEnd={`url(#${markerId})`} />;
-						})}
+						<MotionItems items={graph.edges} itemKey={(edge) => edge.id} enabled={false}>{(edge) => <path key={edge.id} className={`team-graph-edge is-${edge.kind}`} d={teamEdgePath(edge)} markerEnd={`url(#${markerId})`} />}</MotionItems>
 					</svg>
-					{graph.nodes.map(({ agent, x, y }) => {
+					<MotionItems items={graph.nodes} itemKey={(node) => node.agent.agentId} enabled={false}>{({ agent, x, y }) => {
 						const run = agent.currentRun ?? agent.latestRun;
 						const state = status(agent, swarm, managerId);
 						const stateLabel = AGENT_LABELS[state];
@@ -225,12 +216,12 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 						const waiting = waitingByAgent.get(agent.agentId) ?? [];
 						const task = run ? taskText(run) : "まだ作業はありません";
 						return <button key={agent.agentId} type="button" className={`team-graph-node status-${state} ${!agent.parentAgentId ? "is-root" : "is-child"} ${focusedId === agent.agentId ? "is-selected" : ""}`} style={{ left: x, top: y, width: TEAM_NODE_WIDTH, height: TEAM_NODE_HEIGHT }} aria-pressed={focusedId === agent.agentId} aria-label={`${label(agent)}、${role}、${stateLabel}。${task}${waiting.length ? `。${waiting.join("、")}の結果待ち` : ""}`} title={`${label(agent)}\n${task}`} onFocus={(event) => { if (!gesture.current.pointers.size && event.currentTarget.matches(":focus-visible")) centerNode(x, y); }} onClick={() => focus(agent.agentId)}>
-							<span className="team-graph-node-role">{role}<span>{focusedId === agent.agentId ? "選択中" : ""}</span></span>
+							<span className="team-graph-node-role">{role}</span>
 							<span className="team-graph-node-name">{label(agent)}</span>
-							<span className="team-graph-node-task">{task}</span>
-							<span className="team-graph-node-footer"><span className={`team-map-state status-${state}`}>{stateLabel}</span>{waiting.length > 0 && <span className="team-graph-node-wait" title={`${waiting.join("、")}の結果待ち`}>{waiting.length}人の結果待ち</span>}</span>
+							<MotionSwap identity={task} className="team-node-task-swap" inline><span className="team-graph-node-task">{task}</span></MotionSwap>
+							<span className="team-graph-node-footer"><span className={`team-map-state status-${state}`}><MotionLabel value={stateLabel} /></span><Presence show={waiting.length > 0}><span className="team-graph-node-wait" title={`${waiting.join("、")}の結果待ち`}><MotionLabel value={`${waiting.length}人の結果待ち`} /></span></Presence></span>
 						</button>;
-					})}
+					}}</MotionItems>
 				</div>
 		</div>
 	</section>;
@@ -246,21 +237,21 @@ function RunDetail({ run, snapshot, focus, onFile, now, onOpen }: {
 }) {
 	const waiting = run.waitingOnRunIds?.map((id) => {
 		const target = snapshot.runs.find((entry) => entry.runId === id);
-		return { agent: snapshot.agents.find((entry) => entry.agentId === target?.agentId), state: target?.status };
+		return { id, agent: snapshot.agents.find((entry) => entry.agentId === target?.agentId), state: target?.status };
 	});
 	const firstLine = run.result?.split(/\r?\n/).find((line) => line.trim())?.trim();
 	const transferred = run.handoffToRunId ? snapshot.runs.find((entry) => entry.runId === run.handoffToRunId) : undefined;
 	const owner = snapshot.agents.find((agent) => agent.agentId === transferred?.agentId);
 	return <div className="team-run-detail">
-		<div className="team-run-meta"><span className={`team-map-state status-${run.status}`}>{run.handoffToRunId ? "引き継ぎ済み" : run.status === "completed" ? "作業完了" : RUN_LABELS[run.status]}</span>{elapsed(run, now) && <span>{run.settledAt ? "所要" : "経過"} {elapsed(run, now)}</span>}</div>
+		<div className="team-run-meta"><span className={`team-map-state status-${run.status}`}><MotionLabel value={run.handoffToRunId ? "引き継ぎ済み" : run.status === "completed" ? "作業完了" : RUN_LABELS[run.status]} /></span>{elapsed(run, now) && <span><MotionLabel value={`${run.settledAt ? "所要" : "経過"} ${elapsed(run, now)}`} /></span>}</div>
 		<div className="team-task-heading"><h4>{run.settledAt ? "作業内容" : "担当していること"}</h4><button type="button" className="text-link" onClick={onOpen}>会話を開く ↗</button></div>
-		<p className="team-run-task">{taskText(run)}</p>
-		{owner && <p className="team-dependency">引き継ぎ先: <button type="button" className="text-link" onClick={() => focus(owner.agentId)}>{label(owner)}</button></p>}
-		{run.status === "waiting" && <div className="team-dependency"><strong>結果を待っている相手</strong>{waiting?.length ? <ul>{waiting.map(({ agent, state }, index) => <li key={`${run.runId}-${index}`}>
-			{agent ? <button className="text-link" type="button" onClick={() => focus(agent.agentId)}>{label(agent)}</button> : "不明な担当"}<span> · {state ? RUN_LABELS[state] : "状態不明"}</span>
-		</li>)}</ul> : <p>子の結果を待っています。</p>}</div>}
-		{run.error && <div className="team-run-error"><strong>失敗・中断の理由</strong><p>{run.error}</p></div>}
-		{run.result !== undefined && <div className="team-run-result"><strong>作業の結果</strong><p>{firstLine || "本文は空です"}</p><details><summary>結果の全文を読む</summary><div className="team-result-content"><Content value={run.result} onFile={onFile} /></div></details></div>}
+		<MotionSwap identity={taskText(run)}><p className="team-run-task">{taskText(run)}</p></MotionSwap>
+		<MotionSwap identity={owner?.agentId ?? "none"}>{owner ? <p className="team-dependency">引き継ぎ先: <button type="button" className="text-link" onClick={() => focus(owner.agentId)}>{label(owner)}</button></p> : null}</MotionSwap>
+		<Presence show={run.status === "waiting"}><div className="team-dependency"><strong>結果を待っている相手</strong><ul><MotionItems items={waiting ?? []} itemKey={(entry) => entry.id}>{({ id, agent, state }) => <li key={id}>
+			{agent ? <button className="text-link" type="button" onClick={() => focus(agent.agentId)}>{label(agent)}</button> : "不明な担当"}<span> · <MotionLabel value={state ? RUN_LABELS[state] : "状態不明"} /></span>
+		</li>}</MotionItems></ul><Presence show={!waiting?.length}><p>子の結果を待っています。</p></Presence></div></Presence>
+		<Presence show={!!run.error}><div className="team-run-error"><strong>失敗・中断の理由</strong><MotionSwap identity={run.error ?? ""}><p>{run.error}</p></MotionSwap></div></Presence>
+		<Presence show={run.result !== undefined}><div className="team-run-result"><strong>作業の結果</strong><MotionSwap identity={firstLine ?? ""}><p>{firstLine || "本文は空です"}</p></MotionSwap><details><summary>結果の全文を読む</summary><div className="team-result-content"><Content value={run.result} onFile={onFile} /></div></details></div></Presence>
 	</div>;
 }
 
@@ -311,24 +302,27 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	else if (rootState === "running") situation = managed ? "マネージャーが対応中です" : "親AIが作業中です";
 	else situation = "現在進行中の作業はありません";
 	const run = focused?.currentRun ?? focused?.latestRun;
+	const detailId = `${focused?.agentId ?? "none"}:${run?.runId ?? "idle"}`;
 	function focusAgent(id: string) {
-		if (id !== focused?.agentId) transitionItems(() => setFocusedId(id));
+		if (id !== focused?.agentId) setFocusedId(id);
 		if (mobile) setDetailsOpen(true);
 	}
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
-	const overview = <header className="team-overview"><h2 role="status">{situation}</h2><p>{managed ? "担当者" : "子の担当"} {managed ? specialists.length : workers.length}人 {managed && helpers > 0 && <><span>·</span> 補助 {helpers}人 </>}<span>·</span> 作業中 {counts.running} <span>·</span> 結果待ち {counts.waiting} <span>·</span> 開始待ち {counts.queued} <span>·</span> {managed ? <>指示待ち {counts.ready}</> : <>完了 {counts.completed}</>}{counts.cancelled > 0 && <> <span>·</span> 中止 {counts.cancelled}</>}{counts.stopping > 0 && <> <span>·</span> 停止中 {counts.stopping}</>}</p>{problems > 0 && <strong className="team-attention">確認が必要な作業 {problems}件</strong>}<UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></header>;
+	const summary = [`${managed ? "担当者" : "子の担当"} ${managed ? specialists.length : workers.length}人`, ...(managed && helpers > 0 ? [`補助 ${helpers}人`] : []), `作業中 ${counts.running}`, `結果待ち ${counts.waiting}`, `開始待ち ${counts.queued}`, managed ? `指示待ち ${counts.ready}` : `完了 ${counts.completed}`, ...(counts.cancelled > 0 ? [`中止 ${counts.cancelled}`] : []), ...(counts.stopping > 0 ? [`停止中 ${counts.stopping}`] : [])].join(" · ");
+	const overview = <header className="team-overview"><MotionSize><MotionSwap identity={situation}><h2 role="status">{situation}</h2></MotionSwap><MotionSwap identity={summary}><p>{summary}</p></MotionSwap><Presence show={problems > 0}><strong className="team-attention"><MotionLabel value={`確認が必要な作業 ${problems}件`} /></strong></Presence><UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></MotionSize></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
-				{focused.responsibility && <section className="team-responsibility"><h4>担当範囲</h4><p>{focused.responsibility}</p></section>}
+				<MotionSize><MotionSwap identity={detailId} enabled={visible}><div key={detailId} className="team-focus-content">
+				<Presence show={!!focused.responsibility}><section className="team-responsibility"><h4>担当範囲</h4><MotionSwap identity={focused.responsibility ?? ""}><p>{focused.responsibility}</p></MotionSwap></section></Presence>
 				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} onOpen={() => { setDetailsOpen(false); onSelect(focused.sessionId); }} /> : <p className="team-inline-note">まだ作業はありません。<button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></p>}
-				<div className="team-focus-actions">{focused.currentRun && <button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button>}</div>
+				<Presence show={!!focused.currentRun}><div className="team-focus-actions"><button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button></div></Presence>
+				</div></MotionSwap></MotionSize>
 			</section>;
 	return <section className="team-pane" aria-label="チームの進行状況">
-		{agents.length === 0 ? <div className="team-empty"><h2>この会話のチームはまだありません</h2></div> : <>
-			{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} swarm={swarm} visible={visible} />}
+		<Presence show={agents.length === 0}><div className="team-empty"><h2>この会話のチームはまだありません</h2></div></Presence>
+			<Presence show={!!snapshot && agents.length > 0}><div className="motion-contents"><MotionSwap identity={roots[0]?.teamId ?? "none"} className="team-graph-swap" enabled={visible}>{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} swarm={swarm} visible={visible} />}</MotionSwap></div></Presence>
 			{mobile ? <>
-				{focused && <button type="button" className="team-focus-trigger" aria-haspopup="dialog" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>{label(focused)}の詳細</button>}
-				<MobileSheet open={detailsOpen && visible} side="bottom" title="担当の詳細" onClose={() => setDetailsOpen(false)}>{details}</MobileSheet>
-			</> : details}
-		</>}
+				<Presence show={!!focused}><button type="button" className="team-focus-trigger" aria-haspopup="dialog" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>{focused && label(focused)}の詳細</button></Presence>
+				<MobileSheet open={detailsOpen && visible && agents.length > 0} side="bottom" title="担当の詳細" onClose={() => setDetailsOpen(false)}>{details}</MobileSheet>
+			</> : <Presence show={!!details}>{details}</Presence>}
 	</section>;
 }

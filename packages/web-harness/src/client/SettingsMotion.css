@@ -1,0 +1,56 @@
+.dialog-backdrop:has(> .settings-dialog) {
+	background-color: #11111b66;
+	animation: none;
+	transition: background-color 170ms ease;
+}
+.dialog-backdrop[data-closing="true"]:has(> .settings-dialog) { background-color: #11111b00; animation: none; }
+.settings-dialog.settings-dialog {
+	display: flex;
+	flex-direction: column;
+	height: min(720px, calc(100dvh - 48px));
+	overflow: hidden;
+	opacity: 1;
+	transform: translateY(0) scale(1);
+	animation: none;
+	transition: opacity 170ms ease, transform 170ms var(--motion-ease);
+}
+.dialog-backdrop[data-closing="true"] .settings-dialog.settings-dialog {
+	opacity: 0;
+	transform: translateY(6px) scale(.99);
+	animation: none;
+}
+.settings-dialog > .panel-heading, .settings-dialog > .settings-tabs { flex: none; }
+.settings-panels { position: relative; display: grid; flex: 1; min-width: 0; min-height: 0; }
+.settings-panels > .settings-content {
+	grid-area: 1 / 1;
+	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-gutter: stable;
+	animation: none;
+	view-transition-name: none;
+}
+.settings-panels > .settings-content[data-motion-exit="true"] { position: absolute; inset: 0; }
+.settings-dialog .settings-tabs [role="tab"] { position: relative; box-shadow: none; }
+.settings-tabs [role="tab"]::after {
+	content: "";
+	position: absolute;
+	inset: auto 8px 0;
+	height: 2px;
+	border-radius: 2px;
+	background: var(--primary);
+	transform: scaleX(0);
+	transition: transform 160ms var(--motion-ease);
+}
+.settings-tabs [role="tab"][aria-selected="true"]::after { transform: scaleX(1); }
+@starting-style {
+	.dialog-backdrop:has(> .settings-dialog) { background-color: #11111b00; }
+	.settings-dialog.settings-dialog { opacity: 0; transform: translateY(10px) scale(.985); }
+}
+@media (max-width: 600px) {
+	.settings-dialog.settings-dialog { height: calc(100dvh - 20px); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.dialog-backdrop:has(> .settings-dialog), .settings-dialog.settings-dialog, .settings-tabs [role="tab"]::after { transition: none; }
+}

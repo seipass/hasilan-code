@@ -10,6 +10,7 @@
 .canvas-destination { display: flex; align-items: center; }
 .canvas-destination select { padding: 5px 8px; min-height: 32px; font-size: 12px; }
 .canvas-title { flex: 1; width: 200px; min-width: 130px; max-width: 300px; padding: 5px 8px; min-height: 32px; font-size: 13px; font-weight: 600; background: transparent; border-color: transparent; }
+.canvas-title { transition: background-color var(--motion-quick) ease, border-color var(--motion-quick) ease; }
 .canvas-title:hover, .canvas-title:focus { border-color: var(--border-strong); background: var(--surface-raised); }
 .canvas-add, .canvas-use { border-color: var(--primary); color: var(--on-primary-container); background: var(--primary-container); }
 .canvas-toolbar-status { flex: 1; min-width: 80px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--on-surface-muted); }
@@ -19,6 +20,8 @@
 .canvas-properties > summary { border: 1px solid var(--border); border-radius: 8px; }
 .canvas-properties > div { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; display: grid; gap: 10px; width: min(300px, calc(100vw - 40px)); max-height: min(420px, 60dvh); overflow: auto; padding: 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface-panel); box-shadow: 0 10px 28px #0003; }
 .canvas-properties[open] > div { animation: status-enter var(--motion-base) var(--motion-ease); }
+.canvas-properties::details-content { opacity: 0; transition: opacity 140ms ease, content-visibility 140ms allow-discrete; }
+.canvas-properties[open]::details-content { opacity: 1; }
 .canvas-file-menu > div { left: auto; right: 0; width: 220px; }
 .canvas-properties label { display: grid; font-size: 11px; gap: 5px; }
 .canvas-properties input, .canvas-properties textarea { width: 100%; min-width: 0; padding: 8px; font-size: 12px; }
@@ -33,12 +36,14 @@
 .canvas-connections g > path { fill: none; stroke: var(--secondary); stroke-width: 2; }
 .canvas-connections marker path { fill: var(--secondary); }
 .canvas-connections .selected > path { stroke: var(--primary); stroke-width: 3; }
-.canvas-connections g > path { transition: stroke var(--motion-quick) ease; }
+.canvas-connections g > path { transition: stroke var(--motion-quick) ease, d var(--motion-base) var(--motion-ease); }
 .canvas-connections g > .canvas-edge-hit { stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: pointer; }
 .canvas-connections text { fill: var(--on-surface); font-size: 12px; font-family: inherit; stroke: var(--surface-sunken); stroke-width: 5px; paint-order: stroke; stroke-linejoin: round; }
 .canvas-connections > .canvas-connection-preview { fill: none; stroke: var(--primary); stroke-width: 2; stroke-dasharray: 7 5; }
 .canvas-node { position: absolute; display: flex; flex-direction: column; align-items: stretch; gap: 8px; box-sizing: border-box; padding: 15px; text-align: left; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-panel); color: var(--on-surface); box-shadow: 0 4px 14px #0002; cursor: grab; touch-action: none; user-select: none; }
-.canvas-node { transition: border-color var(--motion-quick) ease, background-color var(--motion-quick) ease, box-shadow var(--motion-quick) ease; }
+.canvas-node { transition: left var(--motion-base) var(--motion-ease), top var(--motion-base) var(--motion-ease), padding var(--motion-quick) ease, border-color var(--motion-quick) ease, background-color var(--motion-quick) ease, box-shadow var(--motion-quick) ease; }
+.canvas-viewport[data-dragging="true"] .canvas-node, .canvas-viewport[data-dragging="true"] .canvas-connections path { transition: none; }
+.canvas-node > strong, .canvas-node-description, .canvas-node-footer { animation: motion-label-enter 140ms ease; }
 .canvas-node:hover { background: var(--surface-raised); }
 .canvas-node:active { cursor: grabbing; }
 .canvas-node.selected { z-index: 2; border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-container), 0 5px 18px #0002; }

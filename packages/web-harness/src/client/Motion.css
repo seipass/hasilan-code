@@ -1,0 +1,22 @@
+.motion-contents { display: contents; }
+.motion-contents[hidden] { display: none; }
+[data-motion-exit="true"] { pointer-events: none !important; }
+.motion-label { animation: motion-label-enter 140ms ease; }
+@keyframes motion-label-enter { from { opacity: .25; } to { opacity: 1; } }
+.pending-input-row { flex-shrink: 0; }
+.session-list, .detail-tabs, .model-picker-results, .thinking-picker-results, .files-tree-list, .pending-input-list, .oauth-login-events, .session-import-candidates, .account-usage-panel { position: relative; }
+.motion-dialog {
+	opacity: 0;
+	transform: translateY(6px);
+	transition: opacity 140ms ease, transform 140ms var(--motion-exit), display 140ms allow-discrete, overlay 140ms allow-discrete;
+}
+.motion-dialog[open] { opacity: 1; transform: translateY(0); transition-duration: 180ms; transition-timing-function: var(--motion-ease); }
+.motion-dialog::backdrop { opacity: 0; transition: opacity 140ms ease, display 140ms allow-discrete, overlay 140ms allow-discrete; }
+.motion-dialog[open]::backdrop { opacity: 1; }
+@starting-style {
+	.motion-dialog[open] { opacity: 0; transform: translateY(6px); }
+	.motion-dialog[open]::backdrop { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.motion-dialog, .motion-dialog::backdrop { transition: none !important; transform: none !important; }
+}

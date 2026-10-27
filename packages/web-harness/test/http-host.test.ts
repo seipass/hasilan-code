@@ -1,9 +1,9 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { type IncomingHttpHeaders, request } from "node:http";
+import { type IncomingHttpHeaders, type IncomingMessage, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Type } from "typebox";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { ArtifactStore } from "../src/server/artifacts.ts";
 import {
@@ -14,6 +14,7 @@ import {
 	sendJson,
 	sendWebSocket,
 } from "../src/server/http-host.ts";
+import { LoopbackSecurity } from "../src/server/security.ts";
 
 interface Reply {
 	status: number;
@@ -76,9 +77,70 @@ afterEach(async () => {
 	}
 	await Promise.all(hosts.splice(0).map((host) => host.close()));
 	await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+	vi.unstubAllEnvs();
 });
 
 describe("loopback HTTP boundary", () => {
+	it("opens development UI, API and WebSockets without cookies while enforcing Host and Origin", async () => {
+		vi.stubEnv("NODE_ENV", "development");
+		const directory = await mkdtemp(join(tmpdir(), "hasilan-dev-static-"));
+		directories.push(directory);
+		await writeFile(join(directory, "index.html"), "<!doctype html><title>Development UI</title>");
+		const host = createHttpHost({
+			port: 0,
+			development: true,
+			staticDir: directory,
+			handleApi: (_request, response) => {
+				sendJson(response, 200, { ok: true });
+				return true;
+			},
+			handleWebSocket: (socket) => {
+				sendWebSocket(socket, { connected: true });
+			},
+		});
+		hosts.push(host);
+		const address = await host.listen();
+		expect(address.launchUrl).toBe(address.url);
+		expect(new URL(address.launchUrl).search).toBe("");
+		expect(address.lanLaunchUrls).toEqual([]);
+		const page = await http(address.origin, "/");
+		expect(page.status).toBe(200);
+		expect(page.headers["set-cookie"]).toBeUndefined();
+		expect((await http(address.origin, "/api/sessions")).status).toBe(200);
+		expect((await http(address.origin, "/api/sessions", { Origin: address.origin }, "POST")).status).toBe(200);
+		expect((await http(address.origin, "/api/sessions", {}, "POST")).status).toBe(403);
+		expect((await http(address.origin, "/api/sessions", { Origin: "http://evil.example" }, "POST")).status).toBe(403);
+		expect((await http(address.origin, "/api/sessions", { Host: "evil.example" })).status).toBe(403);
+		expect(await wsStatus(address.origin, {})).toBe(403);
+		expect(await wsStatus(address.origin, { Origin: "http://evil.example" })).toBe(403);
+		expect(await wsStatus(address.origin, { Origin: address.origin, Host: "evil.example" })).toBe(403);
+		expect(await wsStatus(address.origin, { Origin: address.origin })).toBe(101);
+	});
+
+	it("does not disable authentication from NODE_ENV alone or allow development mode outside development", async () => {
+		vi.stubEnv("NODE_ENV", "development");
+		const address = await start();
+		expect((await http(address.origin, "/api/sessions")).status).toBe(401);
+		expect(() => createHttpHost({ development: true, lan: true })).toThrow("cannot be combined");
+		expect(() => new LoopbackSecurity(["192.168.1.2"], true)).toThrow("loopback only");
+		for (const environment of [undefined, "test", "production"]) {
+			vi.stubEnv("NODE_ENV", environment);
+			expect(() => createHttpHost({ development: true })).toThrow("requires NODE_ENV=development");
+		}
+	});
+
+	it("rejects non-loopback peers even if they spoof the development Host", () => {
+		vi.stubEnv("NODE_ENV", "development");
+		const security = new LoopbackSecurity([], true);
+		security.setPort(3080);
+		const request = {
+			headers: { host: "127.0.0.1:3080" },
+			rawHeaders: ["Host", "127.0.0.1:3080"],
+			socket: { remoteAddress: "192.168.1.2" },
+		} as unknown as IncomingMessage;
+		expect(() => security.requireAuthentication(request)).toThrow("loopback only");
+	});
+
 	it("exchanges only the launch token for a scoped HttpOnly cookie and redirects without the token", async () => {
 		const address = await start({
 			handleApi: (_request, response) => {

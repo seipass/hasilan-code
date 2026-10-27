@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { layoutTeamGraph, selectedTeamAgents, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "../src/client/team-graph.ts";
+import {
+	layoutTeamGraph,
+	selectedTeamAgents,
+	TEAM_NODE_HEIGHT,
+	TEAM_NODE_WIDTH,
+	teamEdgePath,
+} from "../src/client/team-graph.ts";
 import type { Run, TeamAgent, TeamSnapshot } from "../src/client/types.ts";
 
 function agent(agentId: string, parentAgentId?: string, teamId = "team-a"): TeamAgent {
@@ -57,7 +63,7 @@ describe("team graph layout", () => {
 		]);
 	});
 
-	it("draws real current waits separately, deduplicating agents and ignoring unresolved or out-of-team runs", () => {
+	it("turns an existing parent edge into one waiting edge, deduplicating runs and ignoring unresolved targets", () => {
 		const root = agent("root");
 		const child = agent("child", root.agentId);
 		const runs: Run[] = [
@@ -76,14 +82,88 @@ describe("team graph layout", () => {
 		child.currentRun = runs[1];
 		const state = snapshot([root, child], runs);
 		const graph = layoutTeamGraph(state.agents, state);
-		expect(graph.edges.map((edge) => edge.kind)).toEqual(["waiting", "parent"]);
+		expect(graph.edges.map((edge) => edge.kind)).toEqual(["waiting"]);
 		const wait = graph.edges.find((edge) => edge.kind === "waiting");
 		expect(wait?.from.agent.agentId).toBe(root.agentId);
 		expect(wait?.to.agent.agentId).toBe(child.agentId);
 
 		root.latestRun = { ...runs[0], status: "completed" };
 		root.currentRun = undefined;
-		expect(layoutTeamGraph(state.agents, state).edges.map((edge) => edge.kind)).toEqual(["parent"]);
+		const settled = layoutTeamGraph(state.agents, state).edges;
+		expect(settled.map((edge) => edge.kind)).toEqual(["parent"]);
+		expect(settled[0].id).toBe(wait?.id);
+		expect(teamEdgePath(settled[0])).toBe(teamEdgePath(graph.edges[0]));
+	});
+
+	it("changes only connections the agent is actually waiting for", () => {
+		const root = agent("root");
+		const first = agent("first", root.agentId);
+		const second = agent("second", root.agentId);
+		const run: Run = { runId: "first-run", agentId: first.agentId, task: "Work", status: "running" };
+		root.currentRun = {
+			runId: "root-run",
+			agentId: root.agentId,
+			task: "Wait",
+			status: "waiting",
+			waitingOnRunIds: [run.runId],
+		};
+		const graph = layoutTeamGraph([root, first, second], snapshot([root, first, second], [run]));
+		expect(graph.edges.map((edge) => [edge.to.agent.agentId, edge.kind])).toEqual([
+			["first", "waiting"],
+			["second", "parent"],
+		]);
+		expect(graph.edges.filter((edge) => edge.to.agent.agentId === "first")).toHaveLength(1);
+	});
+
+	it("keeps a cross-branch wait directed from the waiter to its dependency", () => {
+		const root = agent("root");
+		const first = agent("first", root.agentId);
+		const second = agent("second", root.agentId);
+		const dependency: Run = { runId: "dependency", agentId: second.agentId, task: "Work", status: "running" };
+		first.currentRun = {
+			runId: "waiter",
+			agentId: first.agentId,
+			task: "Wait",
+			status: "waiting",
+			waitingOnRunIds: [dependency.runId],
+		};
+		const graph = layoutTeamGraph([root, first, second], snapshot([root, first, second], [dependency]));
+		expect(graph.edges.filter((edge) => edge.kind === "parent")).toHaveLength(2);
+		const wait = graph.edges.find((edge) => edge.kind === "waiting");
+		if (!wait) throw new Error("Missing waiting connection");
+		expect(wait.route).toBe("dependency");
+		expect(teamEdgePath(wait)).toMatch(
+			new RegExp(`^M ${wait.from.x + TEAM_NODE_WIDTH / 2} ${wait.from.y + TEAM_NODE_HEIGHT} C `),
+		);
+		expect(teamEdgePath(wait)).toMatch(
+			new RegExp(`${wait.to.x + TEAM_NODE_WIDTH / 2} ${wait.to.y + TEAM_NODE_HEIGHT}$`),
+		);
+	});
+
+	it("reuses the parent connection for a child waiting on its parent and reverses the path direction", () => {
+		const root = agent("root");
+		const child = agent("child", root.agentId);
+		const parentRun: Run = { runId: "parent-run", agentId: root.agentId, task: "Work", status: "running" };
+		child.currentRun = {
+			runId: "child-run",
+			agentId: child.agentId,
+			task: "Wait",
+			status: "waiting",
+			waitingOnRunIds: [parentRun.runId],
+		};
+		const graph = layoutTeamGraph([root, child], snapshot([root, child], [parentRun]));
+		expect(graph.edges).toHaveLength(1);
+		const edge = graph.edges[0];
+		expect(edge).toMatchObject({
+			kind: "waiting",
+			route: "parent",
+			from: { agent: { agentId: "child" } },
+			to: { agent: { agentId: "root" } },
+		});
+		expect(teamEdgePath(edge)).toMatch(new RegExp(`^M ${edge.from.x + TEAM_NODE_WIDTH / 2} ${edge.from.y} C `));
+		expect(teamEdgePath(edge)).toMatch(
+			new RegExp(`${edge.to.x + TEAM_NODE_WIDTH / 2} ${edge.to.y + TEAM_NODE_HEIGHT}$`),
+		);
 	});
 
 	it("keeps large and deep teams within scrollable bounds without overlapping nodes on the same row", () => {

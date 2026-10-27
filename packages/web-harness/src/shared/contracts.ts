@@ -1,4 +1,5 @@
 import { type Static, Type } from "typebox";
+import { ATTACHMENT_LIMITS, attachmentUploadSchema } from "./attachments.ts";
 
 export const workspaceCreateSchema = Type.Object(
 	{ path: Type.String({ minLength: 1 }) },
@@ -33,8 +34,9 @@ export const sessionCreateSchema = Type.Object(
 );
 export const promptSchema = Type.Object(
 	{
-		text: Type.String({ minLength: 1, maxLength: 1024 * 1024 }),
+		text: Type.String({ maxLength: 1024 * 1024 }),
 		mode: Type.Union([Type.Literal("prompt"), Type.Literal("steer"), Type.Literal("followUp")]),
+		attachments: Type.Optional(Type.Array(attachmentUploadSchema, { maxItems: ATTACHMENT_LIMITS.files })),
 	},
 	{ additionalProperties: false },
 );

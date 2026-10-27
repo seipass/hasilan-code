@@ -1,4 +1,5 @@
 import { type CSSProperties, type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { Presence, useChildrenMotion } from "./Motion.tsx";
 import "./SplitLayout.css";
 
 export type SplitMode = "single" | "columns" | "rows";
@@ -16,9 +17,11 @@ export function SplitActions({ label, mode, onChange }: { label: string; mode: S
 /** Children retain their React parents and keys when moved between grid areas. */
 export function SplitLayout({ mode, label, children, dragging = false, onEdgeDrop }: { mode: SplitMode; label: string; children: ReactNode; dragging?: boolean; onEdgeDrop?: (edge: SplitEdge) => void }) {
 	const [ratio, setRatio] = useState(50);
+	const [resizing, setResizing] = useState(false);
 	const root = useRef<HTMLDivElement>(null);
 	const pointer = useRef<number | undefined>(undefined);
 	const [dropEdge, setDropEdge] = useState<SplitEdge>();
+	useChildrenMotion(root, mode, !dragging && !resizing);
 	useEffect(() => { if (!dragging) setDropEdge(undefined); }, [dragging]);
 	function edgeAt(event: DragEvent<HTMLDivElement>): SplitEdge | undefined {
 		if (!dragging || !onEdgeDrop || !root.current) return undefined;
@@ -54,18 +57,18 @@ export function SplitLayout({ mode, label, children, dragging = false, onEdgeDro
 		{children}
 		{mode !== "single" && <div className="split-divider" role="separator" tabIndex={0} aria-label={`${label}の分割境界`} aria-orientation={mode === "columns" ? "vertical" : "horizontal"} aria-valuemin={15} aria-valuemax={85} aria-valuenow={Math.round(ratio)} onPointerDown={(event) => {
 			if (event.button !== 0) return;
-			event.preventDefault(); pointer.current = event.pointerId; event.currentTarget.setPointerCapture(event.pointerId);
+			event.preventDefault(); pointer.current = event.pointerId; setResizing(true); event.currentTarget.setPointerCapture(event.pointerId);
 		}} onPointerMove={(event) => {
 			if (pointer.current !== event.pointerId || !root.current) return;
 			const bounds = root.current.getBoundingClientRect();
 			const extent = mode === "columns" ? bounds.width : bounds.height;
 			if (extent > 8) setRatio(Math.max(15, Math.min(85, ((mode === "columns" ? event.clientX - bounds.left : event.clientY - bounds.top) - 4) / (extent - 8) * 100)));
-		}} onPointerUp={(event) => { if (pointer.current === event.pointerId) { pointer.current = undefined; event.currentTarget.releasePointerCapture(event.pointerId); } }} onLostPointerCapture={() => { pointer.current = undefined; }} onKeyDown={(event) => {
+		}} onPointerUp={(event) => { if (pointer.current === event.pointerId) { pointer.current = undefined; setResizing(false); event.currentTarget.releasePointerCapture(event.pointerId); } }} onLostPointerCapture={() => { pointer.current = undefined; setResizing(false); }} onKeyDown={(event) => {
 			const negative = mode === "columns" ? "ArrowLeft" : "ArrowUp";
 			const positive = mode === "columns" ? "ArrowRight" : "ArrowDown";
 			if (event.key === negative || event.key === positive) { event.preventDefault(); setRatio((value) => Math.max(15, Math.min(85, value + (event.key === negative ? -1 : 1) * (event.shiftKey ? 10 : 2)))); }
 			else if (event.key === "Home" || event.key === "End") { event.preventDefault(); setRatio(event.key === "Home" ? 15 : 85); }
 		}} />}
-		{dropEdge && <div className="split-drop-preview" data-edge={dropEdge} aria-hidden="true"><span>{({ left: "左に分割", right: "右に分割", top: "上に分割", bottom: "下に分割" })[dropEdge]}</span></div>}
+		<Presence show={!!dropEdge}><div className="split-drop-preview" data-edge={dropEdge} aria-hidden="true"><span>{dropEdge && ({ left: "左に分割", right: "右に分割", top: "上に分割", bottom: "下に分割" })[dropEdge]}</span></div></Presence>
 	</div>;
 }

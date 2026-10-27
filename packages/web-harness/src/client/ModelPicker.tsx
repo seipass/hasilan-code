@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { MotionItems, Presence } from "./Motion.tsx";
 import type { ModelCatalog } from "./types.ts";
 
 export interface ModelPickerProps {
@@ -68,14 +69,15 @@ export function ModelPicker({ catalog, value, onChange, disabled = false, autoFo
 			else if (event.key === "Enter" && matches[activeIndex]) { event.preventDefault(); onChange({ provider: matches[activeIndex].provider, id: matches[activeIndex].id }); }
 		}} /></label>}
 		{!catalog ? <p role="status">モデル一覧を読み込み中…</p> : <>{matches.length === 0 && <p role="status">{catalog.models.length === 0 ? "利用できるモデルがありません。" : "一致するモデルはありません。"}</p>}<ul id={resultsId} className="model-picker-results" role="listbox" aria-label="モデル">
-			{matches.map((model, index) => {
+			<MotionItems items={matches} itemKey={(model) => `${model.provider}/${model.id}`}>{(model) => {
+				const index = matches.indexOf(model);
 				const selected = value?.provider === model.provider && value.id === model.id;
 				const group = catalog.providers.find((entry) => entry.id === model.provider);
 				return <li role="presentation" key={`${model.provider}/${model.id}`}>
-					{(index === 0 || matches[index - 1].provider !== model.provider) && <div className="model-group-heading">{group?.name ?? model.provider}</div>}
-					<button id={`${resultsId}-${index}`} type="button" role="option" className="model-picker-option" aria-selected={selected} data-highlighted={activeIndex === index} onMouseMove={() => setCursor(index)} onClick={() => onChange({ provider: model.provider, id: model.id })}>{model.name ?? model.id}{selected && <span className="model-selected-mark" aria-label="選択中">✓</span>}</button>
+					{index >= 0 && (index === 0 || matches[index - 1].provider !== model.provider) && <div className="model-group-heading">{group?.name ?? model.provider}</div>}
+					<button id={index >= 0 ? `${resultsId}-${index}` : undefined} type="button" role="option" className="model-picker-option" aria-selected={selected} data-highlighted={activeIndex === index} onMouseMove={() => { if (index >= 0) setCursor(index); }} onClick={() => onChange({ provider: model.provider, id: model.id })}>{model.name ?? model.id}{selected && <span className="model-selected-mark motion-label" aria-label="選択中">✓</span>}</button>
 				</li>;
-			})}
+			}}</MotionItems>
 		</ul></>}
 	</fieldset>;
 	return <fieldset className="model-picker" disabled={disabled} aria-labelledby={labelId}>
@@ -104,13 +106,13 @@ export function ModelPicker({ catalog, value, onChange, disabled = false, autoFo
 		{catalog && <div className="model-picker-toolbar"><label><input type="checkbox" checked={connectedOnly} onChange={(event) => setConnectedOnly(event.target.checked)} />接続済みのみ</label><span role="status">{matches.length === 0 ? "該当するモデルはありません" : `${matches.length} 件${lastPage > 0 ? ` · ${currentPage + 1} / ${lastPage + 1} ページ` : ""}`}</span></div>}
 		{!catalog ? <p role="status">モデル一覧を読み込み中…</p> : <>
 			<ul id={resultsId} className="model-picker-results" role="listbox" aria-label="モデル">
-				{visible.map((model, index) => <li role="presentation" key={`${model.provider}/${model.id}`}>
-					<button id={`${resultsId}-${currentPage * PAGE_SIZE + index}`} type="button" role="option" className="model-picker-option" aria-selected={value?.provider === model.provider && value.id === model.id} data-highlighted={activeIndex === currentPage * PAGE_SIZE + index} onMouseMove={() => setCursor(currentPage * PAGE_SIZE + index)} onClick={() => onChange({ provider: model.provider, id: model.id })}>
+				<MotionItems items={visible} itemKey={(model) => `${model.provider}/${model.id}`}>{(model) => { const index = matches.indexOf(model); return <li role="presentation" key={`${model.provider}/${model.id}`}>
+					<button id={index >= 0 ? `${resultsId}-${index}` : undefined} type="button" role="option" className="model-picker-option" aria-selected={value?.provider === model.provider && value.id === model.id} data-highlighted={activeIndex === index} onMouseMove={() => { if (index >= 0) setCursor(index); }} onClick={() => onChange({ provider: model.provider, id: model.id })}>
 						<strong>{model.name ?? model.id}{value?.provider === model.provider && value.id === model.id && <span className="model-selected-mark">選択中</span>}</strong><span>{model.provider} / {model.id}</span>{catalog.providers.find((entry) => entry.id === model.provider)?.configured === false && <span className="model-needs-connection">接続が必要</span>}
 					</button>
-				</li>)}
+				</li>; }}</MotionItems>
 			</ul>
-			{matches.length === 0 && <div className="model-picker-empty"><p>{connectedOnly ? "接続済みのモデルに一致しません。" : "検索語やプロバイダーを変えてください。"}</p><button type="button" onClick={() => { setQuery(""); setProvider(singleProvider); setConnectedOnly(false); search.current?.focus(); }}>絞り込みを解除</button></div>}
+			<Presence show={matches.length === 0}><div className="model-picker-empty"><p>{connectedOnly ? "接続済みのモデルに一致しません。" : "検索語やプロバイダーを変えてください。"}</p><button type="button" onClick={() => { setQuery(""); setProvider(singleProvider); setConnectedOnly(false); search.current?.focus(); }}>絞り込みを解除</button></div></Presence>
 			{lastPage > 0 && <div className="model-picker-pagination" aria-label="モデル一覧のページ">
 				<button type="button" disabled={disabled || currentPage === 0} onClick={() => setCursor((currentPage - 1) * PAGE_SIZE)}>前の20件</button>
 				<span>{currentPage + 1} / {lastPage + 1}</span>

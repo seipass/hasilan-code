@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, open, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentMessage, ThinkingLevel } from "@hasilan-code/pi-agent-core";
-import { clampThinkingLevel, getSupportedThinkingLevels } from "@hasilan-code/pi-ai";
+import { clampThinkingLevel, getSupportedThinkingLevels, type ImageContent } from "@hasilan-code/pi-ai";
 import {
 	type AgentSessionEvent,
 	createAgentSession,
@@ -13,6 +13,12 @@ import {
 	SessionManager,
 	type ToolDefinition,
 } from "@hasilan-code/pi-coding-agent";
+import {
+	attachmentPrompt,
+	isPromptAttachments,
+	type PromptAttachment,
+	parseAttachmentPrompt,
+} from "../shared/attachments.ts";
 import {
 	CONTEXT_INJECTION_CUSTOM_TYPE,
 	type ContextInjection,
@@ -38,6 +44,7 @@ import {
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
 import { createHarnessSettings } from "./config.ts";
+import { projectAttachmentContent } from "./prompt-attachments.ts";
 import { appendRuntimeContext } from "./runtime-context.ts";
 import { sameWorkspace } from "./session-import/common.ts";
 import { importedRecord, storeImport } from "./session-import/persistence.ts";
@@ -134,6 +141,7 @@ export interface RegistryOptions {
 	workspaceFiles: WorkspaceDirectoryService;
 	modelRuntime?: ModelRuntime;
 	customTools?: (descriptor: SessionDescriptor) => ToolDefinition[];
+	readAttachments?: (workspaceId: string, attachments: PromptAttachment[]) => Promise<ImageContent[]>;
 	/** An execution seam for deterministic boundary tests; production uses the Pi SDK. */
 	adapterFactory?: (descriptor: SessionDescriptor, manager: SessionManager) => Promise<ExecutionAdapter>;
 }
@@ -346,7 +354,8 @@ function validateState(value: unknown): asserts value is HarnessState {
 			!["queued", "running", "waiting", "cancelling", "completed", "failed", "cancelled", "interrupted"].includes(
 				run.status,
 			) ||
-			(run.inputKind !== undefined && run.inputKind !== "prompt" && run.inputKind !== "context")
+			(run.inputKind !== undefined && run.inputKind !== "prompt" && run.inputKind !== "context") ||
+			(run.attachments !== undefined && !isPromptAttachments(run.attachments))
 		)
 			throw new Error("Invalid run state");
 		if (["queued", "running", "waiting", "cancelling"].includes(run.status)) {
@@ -400,7 +409,8 @@ function validateState(value: unknown): asserts value is HarnessState {
 			typeof input.text !== "string" ||
 			!["steer", "followUp"].includes(input.mode) ||
 			!["pending", "undelivered"].includes(input.status) ||
-			(input.contextInjection !== undefined && !isContextInjection(input.contextInjection))
+			(input.contextInjection !== undefined && !isContextInjection(input.contextInjection)) ||
+			(input.attachments !== undefined && !isPromptAttachments(input.attachments))
 		)
 			throw new Error("Invalid pending input state");
 }
@@ -499,7 +509,13 @@ export class SessionRegistry {
 					(message): ProjectedMessage => ({
 						messageId: randomUUID(),
 						role: message.role,
-						content: structuredClone("content" in message ? message.content : message),
+						content: structuredClone(
+							message.role === "user"
+								? projectAttachmentContent(message.content, descriptor.workspaceId)
+								: "content" in message
+									? message.content
+									: message,
+						),
 						partial: false,
 						...(message.role === "custom" && message.customType === SESSION_IMPORT_CONTEXT_TYPE
 							? { importedContext: true }
@@ -920,7 +936,10 @@ export class SessionRegistry {
 	}
 
 	mutateQueuedInput(sessionId: string, inputId: string, action: PendingInputAction): boolean {
-		return this.live.get(sessionId)?.adapter?.mutateQueuedInput(inputId, action) ?? false;
+		const input = this.state.pendingInput.find((entry) => entry.sessionId === sessionId && entry.inputId === inputId);
+		const mutation =
+			action.type === "edit" ? { ...action, text: attachmentPrompt(action.text, input?.attachments) } : action;
+		return this.live.get(sessionId)?.adapter?.mutateQueuedInput(inputId, mutation) ?? false;
 	}
 
 	persist(): Promise<void> {
@@ -955,6 +974,7 @@ export class SessionRegistry {
 					if (!runtime) throw new Error("Model runtime is not configured");
 					if (!descriptor.model) throw new HarnessError("No model selected; choose a model in the composer");
 					const settingsManager = createHarnessSettings(descriptor.cwd, this.options.agentDir);
+					const managedImages = new Map<string, ImageContent[]>();
 					const loader = new DefaultResourceLoader({
 						cwd: descriptor.cwd,
 						agentDir: this.options.agentDir,
@@ -962,6 +982,18 @@ export class SessionRegistry {
 						settingsManager,
 						extensionFactories: [
 							(pi) => {
+								// The SDK's managed queue accepts text only. Input hooks also run for
+								// that queue, so ordinary prompts and queued inputs load the same images.
+								pi.on("input", (event) => {
+									const { attachments } = parseAttachmentPrompt(event.text);
+									const images = managedImages.get(JSON.stringify(attachments));
+									if (!images?.length) return { action: "continue" };
+									return {
+										action: "transform",
+										text: event.text,
+										images: [...(event.images ?? []), ...images],
+									};
+								});
 								pi.on("before_agent_start", (event) => {
 									event.systemPromptOptions.defaultPreamble =
 										"You are an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files.";
@@ -1017,6 +1049,15 @@ export class SessionRegistry {
 						mutateQueuedInput(inputId: string, action: PendingInputAction): boolean;
 						resumeContext(): Promise<void>;
 					};
+					const prepareImages = async (text: string) => {
+						const { attachments } = parseAttachmentPrompt(text);
+						if (!attachments.length) return [];
+						if (!this.options.readAttachments) throw new Error("添付ファイルを読み込めません。");
+						const images = await this.options.readAttachments(descriptor.workspaceId, attachments);
+						if (images.length && !session.model?.input.includes("image"))
+							throw new Error("このモデルは画像入力に対応していません。画像対応モデルを選択してください。");
+						return images;
+					};
 					const configureExecution = () => {
 						const activeSwarm = descriptor.swarm?.status === "active";
 						const agent = this.state.agents.find((entry) => entry.sessionId === id);
@@ -1065,12 +1106,20 @@ export class SessionRegistry {
 									// A failed autonomous request must not trigger SDK overflow recovery or retry.
 									void session.abort().catch(() => undefined);
 							}),
-						prompt: (text) => {
+						prompt: async (text) => {
 							configureExecution();
-							return session.prompt(text, { expandPromptTemplates: false });
+							const images = await prepareImages(text);
+							return session.prompt(text, { expandPromptTemplates: false, images });
 						},
 						deliverInput: async (text, mode, inputId) => {
-							await managedSession.queueManagedInput(text, mode, inputId);
+							const images = await prepareImages(text);
+							const key = JSON.stringify(parseAttachmentPrompt(text).attachments);
+							if (images.length) managedImages.set(key, images);
+							try {
+								await managedSession.queueManagedInput(text, mode, inputId);
+							} finally {
+								managedImages.delete(key);
+							}
 						},
 						injectContext: async (injection, activeOnly) => {
 							if (activeOnly && !session.isStreaming) return false;
@@ -1161,7 +1210,13 @@ export class SessionRegistry {
 			const message: ProjectedMessage = {
 				messageId: live.liveMessageId,
 				role: event.message.role,
-				content: structuredClone("content" in event.message ? event.message.content : event.message),
+				content: structuredClone(
+					event.message.role === "user"
+						? projectAttachmentContent(event.message.content, this.descriptor(id).workspaceId)
+						: "content" in event.message
+							? event.message.content
+							: event.message,
+				),
 				partial: event.type !== "message_end",
 				runId: live.runId,
 				...(event.message.role === "custom" &&
@@ -1228,6 +1283,7 @@ export class SessionRegistry {
 		text: string,
 		signal: AbortSignal,
 		inputKind: "prompt" | "context" = "prompt",
+		attachments?: PromptAttachment[],
 	): Promise<ExecutionOutcome> {
 		const live = this.live.get(id);
 		if (!live) return { aborted: false, error: "Conversation file is missing" };
@@ -1253,7 +1309,7 @@ export class SessionRegistry {
 					}
 				}
 				await adapter.resumeContext();
-			} else await adapter.prompt(text);
+			} else await adapter.prompt(attachmentPrompt(text, attachments));
 			await adapter.waitForIdle();
 			return { aborted: live.aborted || signal.aborted, result: live.finalText, error: live.finalError };
 		} catch (error) {
@@ -1267,9 +1323,15 @@ export class SessionRegistry {
 			this.changed(id);
 		}
 	}
-	async deliver(id: string, text: string, mode: "steer" | "followUp", inputId: string): Promise<void> {
+	async deliver(
+		id: string,
+		text: string,
+		mode: "steer" | "followUp",
+		inputId: string,
+		attachments?: PromptAttachment[],
+	): Promise<void> {
 		const adapter = await this.adapter(id);
-		await adapter.deliverInput(text, mode, inputId);
+		await adapter.deliverInput(attachmentPrompt(text, attachments), mode, inputId);
 	}
 	async deliverContext(id: string, injection: ContextInjection): Promise<boolean> {
 		const adapter = await this.adapter(id);

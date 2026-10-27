@@ -1,4 +1,6 @@
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
+import type { PromptAttachment } from "../shared/attachments.ts";
+import type { ComputerStatus } from "../shared/computer.ts";
 import type { Goal } from "../shared/goals.ts";
 import type { HistoryMessage, HistoryPosition, HistoryTool } from "../shared/session-history.ts";
 import type { Swarm } from "../shared/swarm.ts";
@@ -21,6 +23,7 @@ export interface Run {
 	runId: string;
 	agentId: string;
 	task: string;
+	attachments?: PromptAttachment[];
 	inputKind?: "prompt" | "context";
 	requestedByAgentId?: string;
 	replyToAgentIds?: string[];
@@ -44,6 +47,7 @@ export interface PendingInput {
 	sessionId: string;
 	runId: string;
 	text: string;
+	attachments?: PromptAttachment[];
 	mode: "steer" | "followUp";
 	fromAgentId?: string;
 	status: "pending" | "undelivered";
@@ -106,6 +110,7 @@ export interface Settings {
 	};
 	teams: { maxConcurrentAgents: number; maxDepth: number };
 	browser?: { ready: boolean; error?: string };
+	computer?: ComputerStatus;
 }
 export interface ModelCatalog {
 	providers: { id: string; name: string; configured?: boolean; oauth?: { label: string }; apiKey?: boolean }[];

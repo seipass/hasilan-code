@@ -30,21 +30,24 @@ export interface CliOptions {
 	noOpen: boolean;
 	help: boolean;
 	lan: boolean;
+	development: boolean;
 }
 
 export const CLI_HELP = `Hasilan Code
 
-Usage: hasilan-code [--lan] [--no-open] [--port <0..65535>] [--cwd <directory>]
+Usage: hasilan-code [--lan] [--dev] [--no-open] [--port <0..65535>] [--cwd <directory>]
 
   --port     Loopback HTTP port (default 3080; 0 chooses an OS-assigned port)
   --cwd      Initial workspace directory (default current working directory)
   --no-open  Show launch instructions only (default; never opens a browser automatically)
   --lan      Share on private IPv4 LAN addresses and print authenticated links and terminal QR codes
+  --dev      Skip local launch authentication; requires NODE_ENV=development and cannot use --lan
   --help     Show this help
   --version  Show the Hasilan Code and bundled Pi versions
   setup      Install Chromium; --build-pty explicitly builds the terminal addon
 
 Source checkout: npm run web -- [options]
+Local development without launch authentication: npm run web:dev -- [options]
 
 The server binds to 127.0.0.1 by default; --lan binds to 0.0.0.0 and permits only
 local network clients. Shell and browser tools run with your user permissions;
@@ -58,9 +61,14 @@ export function parseCliArgs(argv: string[]): CliOptions {
 		noOpen: true,
 		help: false,
 		lan: false,
+		development: false,
 	};
 	for (let index = 0; index < argv.length; index++) {
 		const argument = argv[index];
+		if (argument === "--dev") {
+			options.development = true;
+			continue;
+		}
 		if (argument === "--lan") {
 			options.lan = true;
 			continue;
@@ -87,6 +95,9 @@ export function parseCliArgs(argv: string[]): CliOptions {
 			options.cwd = value;
 		}
 	}
+	if (options.development && options.lan) throw new Error("--dev cannot be combined with --lan");
+	if (options.development && process.env.NODE_ENV !== "development")
+		throw new Error("--dev requires NODE_ENV=development; use npm run web:dev from the source checkout");
 	return options;
 }
 

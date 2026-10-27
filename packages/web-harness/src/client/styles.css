@@ -534,18 +534,18 @@ legend { font-weight: 600; padding: 0 .4rem; }
 @keyframes backdrop-exit { from { opacity: 1; } to { opacity: 0; } }
 
 button, .workspace-accordion > summary, .panel-resize::after {
-	transition: background-color var(--motion-quick) ease, color var(--motion-quick) ease, border-color var(--motion-quick) ease;
+	transition: background-color var(--motion-quick) ease, color var(--motion-quick) ease, border-color var(--motion-quick) ease, opacity var(--motion-quick) ease;
 }
 .new-conversation, .session-button, .model-picker-option, .send-button, .stop-button {
-	transition: background-color var(--motion-quick) ease, color var(--motion-quick) ease, border-color var(--motion-quick) ease, transform var(--motion-quick) var(--motion-ease);
+	transition: background-color var(--motion-quick) ease, color var(--motion-quick) ease, border-color var(--motion-quick) ease, opacity var(--motion-quick) ease, transform var(--motion-quick) var(--motion-ease);
 }
 .new-conversation:hover:not(:disabled), .send-button:hover:not(:disabled), .stop-button:hover:not(:disabled) { transform: translateY(-2px); }
 .new-conversation:active:not(:disabled), .send-button:active:not(:disabled), .stop-button:active:not(:disabled) { transform: translateY(0) scale(.96); }
 .session-button:hover:not(.selected) { transform: translateX(3px); }
 .workspace-accordion > summary::before, .tool-card > summary::after { transition: transform var(--motion-base) var(--motion-ease); }
 @supports (interpolate-size: allow-keywords) {
-	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)::details-content { interpolate-size: allow-keywords; height: 0; overflow: clip; opacity: 0; transition: height 260ms var(--motion-ease), opacity 180ms ease, content-visibility 260ms allow-discrete; }
-	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)[open]::details-content { height: auto; opacity: 1; }
+	:where(.workspace-accordion, .conversation details, .settings-dialog details, .session-import-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)::details-content { interpolate-size: allow-keywords; height: 0; overflow: clip; opacity: 0; transition: height 260ms var(--motion-ease), opacity 180ms ease, content-visibility 260ms allow-discrete; }
+	:where(.workspace-accordion, .conversation details, .settings-dialog details, .session-import-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)[open]::details-content { height: auto; opacity: 1; }
 }
 .status-dot { transition: color var(--motion-base) ease, background-color var(--motion-base) ease; }
 .team-map-state { transition: color var(--motion-base) ease, background-color var(--motion-base) ease; }
@@ -553,7 +553,7 @@ button, .workspace-accordion > summary, .panel-resize::after {
 .composer-popover { transform-origin: bottom left; animation: surface-enter var(--motion-enter) var(--motion-ease) both; }
 .dialog-backdrop { animation: backdrop-enter var(--motion-base) ease-out both; }
 .settings-dialog { animation: surface-enter var(--motion-enter) var(--motion-ease) both; }
-.composer-popover[data-closing="true"], .dialog-backdrop[data-closing="true"] .settings-dialog {
+.dialog-backdrop[data-closing="true"] .settings-dialog {
 	animation: surface-exit 170ms var(--motion-exit) both;
 	pointer-events: none;
 }
@@ -563,16 +563,15 @@ button, .workspace-accordion > summary, .panel-resize::after {
 }
 .message:last-child:not(.partial) { animation: message-enter var(--motion-base) var(--motion-ease) both; }
 .composer-notice, .connection-warning, .global-error, .composer-error, .run-error, .back-to-bottom { animation: status-enter var(--motion-base) var(--motion-ease) both; }
-.settings-content:not([hidden]), .model-picker-results { animation: message-enter var(--motion-base) var(--motion-ease) both; }
+.model-picker-results { animation: message-enter var(--motion-base) var(--motion-ease) both; }
 .tool-card, .agent-card {
 	transition: border-color var(--motion-base) ease, background-color var(--motion-base) ease, box-shadow var(--motion-base) ease;
 }
 .tool-card:hover, .agent-card:hover { border-color: var(--border-strong); }
 .tool-card[open] { border-color: var(--border-strong); box-shadow: 0 8px 24px #11111b36; }
 .settings-tabs button {
-	transition: color var(--motion-base) ease, background-color var(--motion-base) ease;
+	transition: color var(--motion-base) ease, background-color var(--motion-base) ease, opacity var(--motion-quick) ease;
 }
-.settings-tabs [role="tab"][aria-selected="true"] { box-shadow: inset 0 -2px var(--primary); }
 .team-pane { animation: message-enter var(--motion-base) var(--motion-ease) both; }
 .status-dot.status-running, .status-dot.status-queued, .status-dot.status-waiting { animation: pulse 2s ease-in-out infinite; }
 /* Only explicit selection changes take snapshots; streaming and typing stay live. */
@@ -590,5 +589,11 @@ button, .workspace-accordion > summary, .panel-resize::after {
 		transition-delay: 0s !important;
 		scroll-behavior: auto !important;
 	}
-	:where(.workspace-accordion, .conversation details, .settings-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)::details-content { transition: none !important; }
+	:where(.workspace-accordion, .conversation details, .settings-dialog details, .session-import-dialog details, .right-panel details, .goal-panel, .usage-panel, .mobile-sheet details)::details-content { transition: none !important; }
 }
+
+.history-navigation { position: relative; }
+a { transition: color var(--motion-quick) ease, background-color var(--motion-quick) ease; }
+.badge, .goal-status, .credential-status, .settings-state, .context-usage { transition: color var(--motion-quick) ease, background-color var(--motion-quick) ease; }
+.chat-pane { animation: motion-label-enter 180ms ease; }
+.tool-card.status-running { animation: motion-label-enter 160ms ease; }

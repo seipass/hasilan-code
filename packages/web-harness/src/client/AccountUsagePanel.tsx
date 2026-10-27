@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { AccountUsageMetric } from "@hasilan-code/pi-ai";
 import type { ProviderAccountUsageView } from "../shared/account-usage.ts";
 import { api, errorMessage } from "./api.ts";
+import { MotionItems, Presence } from "./Motion.tsx";
 import "./AccountUsagePanel.css";
 
 function amount(value: number, unit?: string): string {
@@ -31,31 +32,33 @@ function Metric({ metric }: { metric: AccountUsageMetric }) {
 export function AccountUsagePanel() {
 	const [entries, setEntries] = useState<ProviderAccountUsageView[]>();
 	const [error, setError] = useState<string>();
+	const [loading, setLoading] = useState(true);
 	const [attempt, setAttempt] = useState(0);
 	useEffect(() => {
 		const controller = new AbortController();
-		setEntries(undefined);
+		setLoading(true);
 		setError(undefined);
 		void api<ProviderAccountUsageView[]>("/api/account-usage", { signal: controller.signal }).then((value) => {
 			if (!controller.signal.aborted) setEntries(value);
 		}).catch((reason: unknown) => {
 			if (!controller.signal.aborted) setError(`使用量を読み込めませんでした。詳細: ${errorMessage(reason)}`);
+		}).finally(() => {
+			if (!controller.signal.aborted) setLoading(false);
 		});
 		return () => controller.abort();
 	}, [attempt]);
-	const loading = !entries && !error;
 	return <div className="account-usage-panel" aria-busy={loading}>
 		<div className="account-usage-toolbar"><h3>アカウントの使用量</h3><button type="button" disabled={loading} onClick={() => setAttempt((value) => value + 1)}>{loading ? "取得中…" : "更新"}</button></div>
-		{error && <p className="error" role="alert">{error}</p>}
-		{loading && <p role="status">接続中のプロバイダーから取得しています…</p>}
-		{entries?.length === 0 && <p role="status">使用量の取得に対応したプロバイダーが接続されていません。</p>}
-		{entries?.map((entry) => <article key={entry.provider} className="settings-section account-usage-card" aria-label={`${entry.name}の使用量`}>
+		<Presence show={!!error}><p className="error" role="alert">{error}</p></Presence>
+		{loading && !entries && <div className="account-usage-loading" role="status"><span>使用量を取得しています…</span><div aria-hidden="true"><i /><i /><i /><i /></div></div>}
+		<Presence show={entries?.length === 0}><p role="status">使用量の取得に対応したプロバイダーが接続されていません。</p></Presence>
+		<MotionItems items={entries ?? []} itemKey={(entry) => entry.provider}>{(entry) => <article key={entry.provider} className="settings-section account-usage-card" aria-label={`${entry.name}の使用量`}>
 			<header><h4>{entry.name}</h4>{entry.usage?.plan && <span className="account-usage-plan">{entry.usage.plan}</span>}</header>
 			{entry.usage?.account && <p className="account-usage-account">{entry.usage.account}</p>}
 			{entry.status === "error" && <p className="error" role="alert">{entry.error}</p>}
 			{entry.status === "unsupported" && <p>現在の認証方式では使用量を取得できません。</p>}
 			{entry.status === "ok" && entry.usage && <><dl>{entry.usage.metrics.map((metric) => <Metric key={metric.id} metric={metric} />)}</dl>{entry.usage.notices?.map((notice) => <p className="fine-print" key={notice}>{notice}</p>)}</>}
 			<time className="account-usage-checked" dateTime={new Date(entry.checkedAt).toISOString()}>確認 {new Date(entry.checkedAt).toLocaleString("ja-JP")}</time>
-		</article>)}
+		</article>}</MotionItems>
 	</div>;
 }

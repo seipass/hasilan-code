@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { isVisionImage } from "../shared/attachments.ts";
 
 export function record(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -28,6 +29,14 @@ export function Content({ value, onFile }: { value: unknown; onFile: (path: stri
 	if (!record(value)) return value === undefined || value === null ? null : <pre>{String(value)}</pre>;
 	if (value.type === "text" && typeof value.text === "string") return <Markdown text={value.text} onFile={onFile} />;
 	if (value.type === "thinking" && typeof value.thinking === "string") return <Thinking text={value.thinking} summary={typeof value.summary === "string" ? value.summary : undefined} redacted={value.redacted === true} onFile={onFile} />;
+	if (value.type === "fileAttachment" && typeof value.path === "string" && value.path.startsWith(".hasilan-code/attachments/") && typeof value.name === "string") {
+		const path = value.path;
+		const image = typeof value.mimeType === "string" && isVisionImage(value.mimeType) && typeof value.url === "string" && /^\/api\/workspaces\/[^/]+\/file-content\?/.test(value.url) ? value.url : undefined;
+		return <figure className="message-attachment">
+			{image && <button type="button" aria-label={`${value.name}を開く`} onClick={() => onFile(path)}><img className="tool-image" loading="lazy" src={image} alt={value.name} /></button>}
+			<figcaption><button type="button" className="text-link" onClick={() => onFile(path)}>{value.name}</button></figcaption>
+		</figure>;
+	}
 	if (value.type === "attachment") {
 		const name = typeof value.name === "string" ? value.name : "添付ファイル";
 		const url = typeof value.url === "string" && (/^\/api\/session-imports\/[^/]+\/assets\/[a-f0-9]{64}$/.test(value.url) || /^https?:\/\//i.test(value.url)) ? value.url : undefined;

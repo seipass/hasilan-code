@@ -5,7 +5,8 @@ import { type DetailTab, detailTabsReducer, emptyDetailTabs } from "./detail-tab
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
 import { FilePreview } from "./files/FilePreview.tsx";
 import { nextClientId } from "./ids.ts";
-import { transitionItems } from "./item-transition.ts";
+import { MotionItems, Presence } from "./Motion.tsx";
+import { MotionSwap, useMeasuredSize } from "./MotionSwap.tsx";
 import { type PaneIndex, SplitActions, SplitLayout } from "./SplitLayout.tsx";
 import { TerminalView, type TerminalViewState } from "./terminal/TerminalPane.tsx";
 import "./DetailPane.css";
@@ -38,6 +39,11 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 	const suppressTabClick = useRef(false);
 	const dragged = useRef<string | undefined>(undefined);
 	const strip = useRef<HTMLDivElement>(null);
+	const tabs = useRef<HTMLDivElement>(null);
+	useMeasuredSize(strip, tabs, "width", !dragging);
+	const previousMode = useRef(layout.mode);
+	const modeChanged = previousMode.current !== layout.mode;
+	previousMode.current = layout.mode;
 	const layoutRef = useRef(layout);
 	layoutRef.current = layout;
 	const mounted = useRef(false);
@@ -80,8 +86,7 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 
 	function select(tab: DetailTab, focus = false) {
 		onViewChange("tabs");
-		if (tab.kind === "file" && tab.file) dispatch({ type: "openFile", path: tab.file.path, line: tab.file.line, id: tab.id, requestId: nextClientId() });
-		else dispatch({ type: "select", id: tab.id });
+		dispatch({ type: "select", id: tab.id });
 		if (focus && tab.kind === "terminal") setFocusRequest((previous) => ({ id: tab.id, number: previous.number + 1 }));
 	}
 	function addTab(pane = layout.focused) {
@@ -119,7 +124,7 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 	}
 	async function closeTab(tab: DetailTab) {
 		if (closingIds.current.has(tab.id) || creatingIds.current.has(tab.id)) return;
-		if (tab.kind !== "terminal") { transitionItems(() => dispatch({ type: "remove", id: tab.id })); return; }
+		if (tab.kind !== "terminal") { dispatch({ type: "remove", id: tab.id }); return; }
 		closingIds.current.add(tab.id);
 		setClosing((previous) => [...previous, tab.id]);
 		setError(undefined);
@@ -146,10 +151,11 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 	}
 	const selectedFiles = layout.tabs.filter((tab) => tab.kind === "file" && layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single"));
 	const activeFile = selectedFiles.find((tab) => tab.pane === layout.focused) ?? selectedFiles[0];
+	const bodyIdentity = layout.selected.map((id) => { const tab = layout.tabs.find((entry) => entry.id === id); return `${id}:${tab?.kind}:${tab?.kind === "file" ? tab.file?.path ?? "empty" : ""}`; }).join("|");
 	return <div className="detail-workspace">
 		<header className="detail-toolbar">
-			<div className="detail-tab-strip" ref={strip}><div className="detail-tabs" role="tablist" aria-label="作業タブ">
-				{layout.tabs.map((tab, index) => <div key={tab.id} className="detail-tab" data-kind={tab.kind} data-active={view === "tabs" && layout.selected[tab.pane] === tab.id} data-focused={layout.focused === tab.pane} data-dragging={dragging === tab.id || undefined} data-drop={dropTarget?.id === tab.id ? dropTarget.after ? "after" : "before" : undefined} draggable={!closing.includes(tab.id) && !creating.includes(tab.id)} onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); void closeTab(tab); } }} onDragStart={(event) => { dragged.current = tab.id; setDragging(tab.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-hasilan-detail-tab", tab.id); }} onDragEnd={endDrag} onDragOver={(event) => { if (!dragged.current) return; event.preventDefault(); event.stopPropagation(); setDropTarget({ id: tab.id, after: event.clientX >= event.currentTarget.getBoundingClientRect().left + event.currentTarget.clientWidth / 2 }); }} onDrop={(event) => {
+			<div className="detail-tab-strip" ref={strip}><div className="detail-tabs" ref={tabs} role="tablist" aria-label="作業タブ">
+				<MotionItems items={layout.tabs} itemKey={(tab) => tab.id} enabled={!dragging} resizeWidth>{(tab) => { const index = layout.tabs.indexOf(tab); return <div key={tab.id} className="detail-tab" data-kind={tab.kind} data-active={view === "tabs" && layout.selected[tab.pane] === tab.id} data-focused={layout.focused === tab.pane} data-dragging={dragging === tab.id || undefined} data-drop={dropTarget?.id === tab.id ? dropTarget.after ? "after" : "before" : undefined} draggable={!closing.includes(tab.id) && !creating.includes(tab.id)} onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); void closeTab(tab); } }} onDragStart={(event) => { dragged.current = tab.id; setDragging(tab.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-hasilan-detail-tab", tab.id); }} onDragEnd={endDrag} onDragOver={(event) => { if (!dragged.current) return; event.preventDefault(); event.stopPropagation(); setDropTarget({ id: tab.id, after: event.clientX >= event.currentTarget.getBoundingClientRect().left + event.currentTarget.clientWidth / 2 }); }} onDrop={(event) => {
 					if (!dragged.current) return;
 					event.preventDefault(); event.stopPropagation();
 					if (dragged.current !== tab.id) dispatch({ type: "move", id: dragged.current, pane: tab.pane, before: tab.id, after: event.clientX >= event.currentTarget.getBoundingClientRect().left + event.currentTarget.clientWidth / 2 });
@@ -166,7 +172,7 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 						event.preventDefault(); select(layout.tabs[next]); document.getElementById(`${id}-tab-${layout.tabs[next].id}`)?.focus();
 					}}><span className="detail-tab-kind" aria-hidden="true">{tab.kind === "terminal" ? ">_" : tab.kind === "file" ? "▤" : "+"}</span><span className="detail-tab-title">{title(tab)}</span>{tab.kind === "terminal" && tab.summary.status === "exited" && <span className="terminal-tab-exit">終了 {tab.summary.exitCode ?? "?"}</span>}</button>
 					<button type="button" className="detail-tab-close" draggable={false} aria-label={`${title(tab)}を閉じる`} disabled={closing.includes(tab.id) || creating.includes(tab.id)} onClick={() => { void closeTab(tab); }}>×</button>
-				</div>)}
+				</div>; }}</MotionItems>
 			</div></div><div className="detail-tab-add"><button type="button" className="detail-tab-new" aria-label="新しいタブを開く" title="クリックで新しいタブ・下へスライドで端末・右へスライドでファイル" data-gesture={tabGesture} onPointerDown={(event) => {
 				if (event.button !== 0) return;
 				setShowTabHints(false);
@@ -188,30 +194,30 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 				tabPress.current = undefined; setTabGesture(undefined); setShowTabHints(false);
 				if (x >= 18 && x > Math.abs(y)) chooseFile(undefined, layout.focused);
 				else if (y >= 18 && y > Math.abs(x)) void createTerminal(undefined, layout.focused);
-			}} onPointerCancel={() => { tabPress.current = undefined; suppressTabClick.current = true; setTabGesture(undefined); setShowTabHints(false); }} onLostPointerCapture={() => { tabPress.current = undefined; setTabGesture(undefined); setShowTabHints(false); }} onClick={(event) => { if (suppressTabClick.current && event.detail !== 0) { suppressTabClick.current = false; return; } addTab(); }}>＋</button>{showTabHints && <div className="detail-gesture-hints" role="status"><span className="detail-gesture-hint is-down" data-active={tabGesture === "terminal"}>↓ 端末</span><span className="detail-gesture-hint is-right" data-active={tabGesture === "file"}>→ ファイル</span></div>}</div>
+			}} onPointerCancel={() => { tabPress.current = undefined; suppressTabClick.current = true; setTabGesture(undefined); setShowTabHints(false); }} onLostPointerCapture={() => { tabPress.current = undefined; setTabGesture(undefined); setShowTabHints(false); }} onClick={(event) => { if (suppressTabClick.current && event.detail !== 0) { suppressTabClick.current = false; return; } addTab(); }}>＋</button><Presence show={showTabHints}><div className="detail-gesture-hints" role="status"><span className="detail-gesture-hint is-down" data-active={tabGesture === "terminal"}>↓ 端末</span><span className="detail-gesture-hint is-right" data-active={tabGesture === "file"}>→ ファイル</span></div></Presence></div>
 			<SplitActions label="作業タブ" mode={layout.mode} onChange={(mode) => { onViewChange("tabs"); dispatch({ type: "split", mode }); }} />
 			<div className="detail-panel-actions" role="group" aria-label="詳細パネル">
 				<button type="button" className="detail-panel-icon" aria-label="チーム" title="チーム" aria-pressed={view === "team"} aria-controls={`${id}-team`} onClick={() => onViewChange(view === "team" ? "tabs" : "team")}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 4v2" /></svg></button>
 				<button type="button" className="detail-panel-icon" aria-label="ツール" title="ツール" aria-pressed={view === "tools"} aria-controls={`${id}-tools`} onClick={() => onViewChange(view === "tools" ? "tabs" : "tools")}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6a5 5 0 0 0-6 6L3 17a3 3 0 0 0 4 4l5-5a5 5 0 0 0 6-6l-3 3-4-4 3-3z" /></svg></button>
 			</div>
 		</header>
-		{error && <div className="detail-error" role="alert">{error}{listFailed && <button type="button" onClick={() => { setError(undefined); setListAttempt((value) => value + 1); }}>端末一覧を再取得</button>}<button type="button" aria-label="エラーを閉じる" onClick={() => setError(undefined)}>×</button></div>}
-		<div className="detail-resource-area" hidden={view !== "tabs"}>
+		<Presence show={!!error}><div className="detail-error" role="alert">{error}{listFailed && <button type="button" onClick={() => { setError(undefined); setListAttempt((value) => value + 1); }}>端末一覧を再取得</button>}<button type="button" aria-label="エラーを閉じる" onClick={() => setError(undefined)}>×</button></div></Presence>
+		<div className="detail-views"><Presence show={view === "tabs"} keepMounted><div className="detail-resource-area">
 			<FilePane workspaceId={workspaceId} activePath={activeFile?.kind === "file" ? activeFile.file?.path : undefined} refreshToken={refreshToken} visible={visible && view === "tabs"} treeVisible={selectedFiles.length > 0} onOpen={openFile}>
-			<SplitLayout mode={layout.mode} label="作業タブ" dragging={!!dragging && layout.tabs.length > 1} onEdgeDrop={(edge) => { if (dragged.current) dispatch({ type: "edge", id: dragged.current, edge }); endDrag(); }}>
+			<MotionSwap identity={bodyIdentity} enabled={!dragging && !modeChanged} className="detail-tab-transition"><SplitLayout mode={layout.mode} label="作業タブ" dragging={!!dragging && layout.tabs.length > 1} onEdgeDrop={(edge) => { if (dragged.current) dispatch({ type: "edge", id: dragged.current, edge }); endDrag(); }}>
 				{layout.tabs.map((tab) => {
 					const selected = layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single");
 					const active = visible && view === "tabs" && selected;
 					if (tab.kind === "terminal") return <TerminalView key={tab.summary.terminalId} summary={tab.summary} pane={tab.pane} selected={selected} visible={active} id={`${id}-body-${tab.id}`} labelledBy={`${id}-tab-${tab.id}`} focusRequest={focusRequest.id === tab.id ? focusRequest.number : 0} onSummary={updateSummary} onState={updateViewState} onActivate={() => dispatch({ type: "focus", pane: tab.pane })} dragging={!!dragging} onTabDrop={() => dropOnPane(tab.pane)} />;
-					return <div key={tab.id} className="detail-tab-body split-tab-body" data-pane={tab.pane} data-focused={layout.focused === tab.pane} hidden={!selected} onPointerDownCapture={() => dispatch({ type: "focus", pane: tab.pane })} onFocusCapture={() => dispatch({ type: "focus", pane: tab.pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(tab.pane); } }}>
+					return <div key={tab.id} hidden={!selected} className="detail-tab-body split-tab-body" data-pane={tab.pane} data-focused={layout.focused === tab.pane} onPointerDownCapture={() => dispatch({ type: "focus", pane: tab.pane })} onFocusCapture={() => dispatch({ type: "focus", pane: tab.pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(tab.pane); } }}>
 						{tab.kind === "file" ? tab.file ? <FilePreview workspaceId={workspaceId} file={tab.file} refreshKey={`${refreshToken}:${tab.requestId ?? ""}`} visible={active} id={`${id}-body-${tab.id}`} labelledBy={`${id}-tab-${tab.id}`} onOpen={openFile} onChange={(_path, patch) => dispatch({ type: "patchFile", id: tab.id, patch })} /> : <div className="detail-file-empty" id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>ファイルを選択してください。</div> : <div id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>{choices(tab, tab.pane)}</div>}
 					</div>;
 				})}
 				{([0, 1] as const).map((pane) => !layout.tabs.some((tab) => tab.pane === pane) && <div key={`empty-${pane}`} className="detail-tab-body split-tab-body" data-pane={pane} hidden={pane === 1 && layout.mode === "single"} onPointerDownCapture={() => dispatch({ type: "focus", pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(pane); } }}>{choices(undefined, pane)}</div>)}
-			</SplitLayout>
+			</SplitLayout></MotionSwap>
 			</FilePane>
-		</div>
-		<div id={`${id}-team`} className="detail-auxiliary" hidden={view !== "team"}>{team}</div>
-		<div id={`${id}-tools`} className="detail-auxiliary detail-tools" hidden={view !== "tools"}>{tools}</div>
+		</div></Presence>
+		<Presence show={view === "team"} keepMounted><div id={`${id}-team`} className="detail-auxiliary">{team}</div></Presence>
+		<Presence show={view === "tools"} keepMounted><div id={`${id}-tools`} className="detail-auxiliary detail-tools">{tools}</div></Presence></div>
 	</div>;
 }

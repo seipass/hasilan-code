@@ -1,5 +1,5 @@
-.session-import-dialog { width: min(100% - 32px, 980px); height: min(88dvh, 800px); max-height: 100dvh; padding: 0; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-panel); color: var(--on-surface); }
-.session-import-dialog[open] { display: flex; flex-direction: column; }
+.session-import-dialog { flex-direction: column; width: min(100% - 32px, 980px); height: min(88dvh, 800px); max-height: 100dvh; padding: 0; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-panel); color: var(--on-surface); }
+.session-import-dialog[open] { display: flex; }
 .session-import-dialog::backdrop { background: #11111bb3; }
 .session-import-heading { display: flex; flex: none; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 20px 12px; }
 .session-import-heading h2 { margin: 0; }
@@ -20,7 +20,8 @@
 .session-import-candidates strong { font-weight: 600; font-size: 12px; overflow-wrap: anywhere; }
 .session-import-candidates span, .session-import-candidates time { color: var(--on-surface-muted); font-size: 11px; overflow-wrap: anywhere; }
 .session-import-candidates > p { margin: 12px; color: var(--on-surface-muted); font-size: 12px; }
-.session-import-preview { padding: 16px 20px; min-width: 0; min-height: 0; overflow: auto; }
+.session-import-preview { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; padding: 16px 20px; min-width: 0; min-height: 0; overflow: auto; }
+.session-import-preview > * { grid-area: 1 / 1; min-width: 0; margin-top: 0; }
 .session-import-preview h3 { margin-top: 0; overflow-wrap: anywhere; }
 .session-import-empty { color: var(--on-surface-muted); font-size: 13px; }
 .session-import-message { margin-top: 16px; }
@@ -41,9 +42,9 @@
 	.session-import-paths { padding-inline: 12px; }
 	.session-import-body { display: flex; flex-direction: column; }
 	.session-import-list { flex: 1; border-right: 0; }
-	.session-import-body:has(.session-import-message) .session-import-list { flex: 0 0 35%; border-bottom: 1px solid var(--border); }
+	.session-import-body[data-preview="true"] .session-import-list { flex: 0 0 35%; border-bottom: 1px solid var(--border); }
 	.session-import-preview { flex: 1; padding: 12px; }
-	.session-import-preview:has(.session-import-empty) { display: none; }
+	.session-import-body[data-preview="false"] .session-import-preview { display: none; }
 	.session-import-actions { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px; }
 	.session-import-actions button { min-height: 44px; }
 }

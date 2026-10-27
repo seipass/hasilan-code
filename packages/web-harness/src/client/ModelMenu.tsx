@@ -3,17 +3,17 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
 import { MobileSheet, useMobileLayout } from "./MobileSheet.tsx";
 import { ModelPicker } from "./ModelPicker.tsx";
+import { MotionItems } from "./Motion.tsx";
 import type { Model, ModelCatalog } from "./types.ts";
 import "./ModelMenu.css";
 
-export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingChange, onSettings, onClosingChange, onClose, disabled }: {
+export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingChange, onSettings, onClose, disabled }: {
 	catalog?: ModelCatalog;
 	value?: Model;
 	thinkingLevel?: ThinkingLevel;
 	onChange: (selection: Model) => Promise<void>;
 	onThinkingChange: (level: ThinkingLevel) => Promise<void>;
 	onSettings: () => void;
-	onClosingChange: (closing: boolean) => void;
 	onClose: () => void;
 	disabled: boolean;
 }) {
@@ -27,7 +27,6 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 	const levels: ThinkingLevel[] = selectedModel?.thinkingLevels ?? ["off"];
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string>();
-	const [closing, setClosing] = useState(false);
 	const menu = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		if (mobile) return;
@@ -61,18 +60,16 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 		};
 	}, [mobile]);
 	const requestClose = () => {
-		if (closing || busy) return;
-		if (mobile || window.matchMedia("(prefers-reduced-motion: reduce)").matches) onClose();
-		else { setClosing(true); onClosingChange(true); }
+		if (!busy) onClose();
 	};
 	useEffect(() => {
 		if (mobile) return;
 		const outside = (event: PointerEvent) => {
-			if (!closing && !busy && event.target instanceof Element && !menu.current?.contains(event.target) && !event.target.closest(".model-trigger")) requestClose();
+			if (!busy && event.target instanceof Element && !menu.current?.contains(event.target) && !event.target.closest(".model-trigger")) requestClose();
 		};
 		document.addEventListener("pointerdown", outside);
 		return () => document.removeEventListener("pointerdown", outside);
-	}, [mobile, busy, closing, onClose]);
+	}, [mobile, busy, onClose]);
 
 	async function choose(selection: Model) {
 		if (busy || disabled) return;
@@ -107,7 +104,7 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 					const index = options.indexOf(event.target);
 					options[(index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length]?.focus();
 				}}>
-					{levels.map((level) => <li key={level} role="presentation"><button type="button" className="model-picker-option" role="option" aria-selected={thinkingLevel === level} disabled={busy || disabled} onClick={() => { void update(() => onThinkingChange(level)); }}>{({ off: "オフ", minimal: "最小", low: "低", medium: "中", high: "高", xhigh: "超高", max: "最大" } satisfies Record<ThinkingLevel, string>)[level]}{thinkingLevel === level && <span className="model-selected-mark" aria-label="選択中">✓</span>}</button></li>)}
+					<MotionItems items={levels} itemKey={(level) => level}>{(level) => <li key={level} role="presentation"><button type="button" className="model-picker-option" role="option" aria-selected={thinkingLevel === level} disabled={busy || disabled} onClick={() => { void update(() => onThinkingChange(level)); }}>{({ off: "オフ", minimal: "最小", low: "低", medium: "中", high: "高", xhigh: "超高", max: "最大" } satisfies Record<ThinkingLevel, string>)[level]}{thinkingLevel === level && <span className="model-selected-mark motion-label" aria-label="選択中">✓</span>}</button></li>}</MotionItems>
 				</ul>}
 				{!selectedModel && <p className="fine-print">モデルを選択してください。</p>}
 			</section>
@@ -115,8 +112,8 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 		{disabled && <p className="fine-print">実行が終わるとモデルを変更できます。</p>}
 		{error && <p className="composer-error" role="alert">{error}</p>}
 	</>;
-	if (mobile) return <MobileSheet open side="bottom" title="モデル・Thinking" busy={busy} onClosing={() => onClosingChange(true)} onClose={requestClose}><div className="mobile-model-menu" aria-busy={busy}>{content}</div></MobileSheet>;
-	return <div ref={menu} className="composer-popover model-popover" data-closing={closing} inert={closing} role="dialog" aria-label="モデル・Thinking" aria-busy={busy} onAnimationEnd={(event) => { if (closing && event.target === event.currentTarget) onClose(); }} onKeyDown={(event) => {
+	if (mobile) return <MobileSheet open side="bottom" title="モデル・Thinking" busy={busy} onClose={requestClose}><div className="mobile-model-menu" aria-busy={busy}>{content}</div></MobileSheet>;
+	return <div ref={menu} className="composer-popover model-popover" role="dialog" aria-label="モデル・Thinking" aria-busy={busy} onKeyDown={(event) => {
 		if (event.key !== "Escape") return;
 		event.preventDefault(); event.stopPropagation();
 		if (!busy) { requestClose(); document.querySelector<HTMLButtonElement>(".model-trigger")?.focus(); }

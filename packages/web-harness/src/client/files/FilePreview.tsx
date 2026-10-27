@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import type { AudioMetadata } from "../../shared/media.ts";
 import { api, errorMessage } from "../api.ts";
+import { mediaReady, Presence } from "../Motion.tsx";
+import { AudioPreview } from "./AudioPreview.tsx";
 import { FileMarkdown, SourceLines } from "./FileRendering.tsx";
 
 export interface FileTab { path: string; line?: number; offset: number; mode?: "source" | "rendered" }
 interface FileView {
-	path: string; revision: string; kind: "text" | "image" | "video" | "binary";
+	path: string; revision: string; kind: "text" | "image" | "video" | "audio" | "binary"; audio?: AudioMetadata;
 	lines?: { number: number; text: string; truncated?: boolean }[]; nextOffset?: number; size: number;
 }
 export function FilePreview({ workspaceId, file, visible, refreshKey, id, labelledBy, onOpen, onChange }: {
@@ -51,10 +54,10 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 	return <>
 		{markdown && file && <div className="files-view-mode" role="group" aria-label="Markdown の表示方法"><button aria-pressed={rendered} onClick={() => onChange(file.path, { mode: "rendered", line: undefined })}>プレビュー</button><button aria-pressed={!rendered} onClick={() => onChange(file.path, { mode: "source" })}>ソース</button></div>}
 		<div className="files-viewer" id={id} role="tabpanel" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : "ファイルプレビュー"} ref={viewer} tabIndex={0} aria-busy={!!file && !loaded}>
-			{!file && <p className="files-message muted">このペインで開くファイルをツリーから選択してください。</p>}
-			{file && !loaded && <p className="files-message" role="status">読み込み中…</p>}
-			{loaded?.error && <p role="alert" className="files-message error">{loaded.error}</p>}
-			{file && loaded?.view && <div className="files-content" key={loaded.key}>
+			<Presence show={!file}><p className="files-message muted">このペインで開くファイルをツリーから選択してください。</p></Presence>
+			<Presence show={!!file && !loaded}><p className="files-message" role="status">読み込み中…</p></Presence>
+			<Presence show={!!loaded?.error}><p role="alert" className="files-message error">{loaded?.error}</p></Presence>
+			<Presence show={!!file && !!loaded?.view && !loaded.error}>{file && loaded?.view && <div className={`files-content${loaded.view.kind === "audio" ? " files-content-audio" : ""}`} key={loaded.key}>
 				{loaded.view.kind === "text" && rendered && loaded.markdown !== undefined && (loaded.markdown === "" ? <p className="files-message muted">空のファイル</p> : <FileMarkdown text={loaded.markdown} path={file.path} onFile={onOpen} />)}
 				{loaded.view.kind === "text" && !rendered && <>
 					{file.offset > 1 && <div className="files-page"><button onClick={() => onChange(file.path, { offset: Math.max(1, file.offset - 200) })}>前の行</button></div>}
@@ -63,10 +66,11 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 					{loaded.view.lines?.some((line) => line.truncated) && <p className="files-message warning">64 KiB の表示上限を超える行は先頭のみ表示しています。省略された行: {loaded.view.lines.filter((line) => line.truncated).map((line) => line.number).join(", ")}</p>}
 					{loaded.view.nextOffset && <div className="files-page"><button onClick={() => onChange(file.path, { offset: loaded.view!.nextOffset! })}>次の行 ({loaded.view.nextOffset}〜)</button></div>}
 				</>}
-				{loaded.view.kind === "image" && <img className="files-image" alt={loaded.view.path} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} />}
-				{loaded.view.kind === "video" && <div className="files-video-preview"><video className="files-video" controls playsInline preload="metadata" aria-label={loaded.view.path} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} onError={() => setResult((current) => current?.key === loaded.key ? { ...current, error: "動画を再生できません。ファイルの破損、またはブラウザー非対応のコーデックを確認してください。" } : current)}>お使いのブラウザーは動画再生に対応していません。</video></div>}
+				{loaded.view.kind === "image" && <img className="files-image" alt={loaded.view.path} onLoad={(event) => mediaReady(event.currentTarget)} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} />}
+				{loaded.view.kind === "video" && <div className="files-video-preview"><video className="files-video" controls playsInline preload="metadata" onLoadedData={(event) => mediaReady(event.currentTarget)} aria-label={loaded.view.path} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} onError={() => setResult((current) => current?.key === loaded.key ? { ...current, error: "動画を再生できません。ファイルの破損、またはブラウザー非対応のコーデックを確認してください。" } : current)}>お使いのブラウザーは動画再生に対応していません。</video></div>}
+				{loaded.view.kind === "audio" && <AudioPreview path={loaded.view.path} metadata={loaded.view.audio} visible={visible} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} />}
 				{loaded.view.kind === "binary" && <p className="files-message">バイナリファイル</p>}
-			</div>}
+			</div>}</Presence>
 		</div>
 	</>;
 }

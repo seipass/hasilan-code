@@ -1,5 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HistoryPosition } from "../shared/session-history.ts";
+import { ComputerActivity } from "./ComputerActivity.tsx";
+import { conversationRows } from "./computer-activity.ts";
+import { Presence } from "./Motion.tsx";
 import { Content, record } from "./Content.tsx";
 import { observeConversation } from "./conversation-resize.ts";
 import { RUN_LABELS } from "./TeamPane.tsx";
@@ -53,15 +56,17 @@ const Message = memo(function Message({ message, tools, onFile, expansions }: Me
 				{message.role !== "assistant" && message.role !== "user" && message.role !== "system" && <div className="message-label">{message.role}</div>}
 				<div className="message-content"><Content value={content} onFile={onFile} />{calls.map((part, index) => {
 					const tool = tools[index];
+					if (tool?.name === "computer") return null;
 					return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>;
 				})}{message.partial && <span className="streaming-dot" aria-label="応答中" />}</div>
 			</article>}
 	</div>;
 }, (previous, next) => previous.message === next.message && previous.onFile === next.onFile && previous.expansions === next.expansions && previous.tools.length === next.tools.length && previous.tools.every((tool, index) => tool === next.tools[index]));
 
-export const Conversation = memo(function Conversation({ messages: allMessages, tools, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError }: {
+export const Conversation = memo(function Conversation({ messages: allMessages, tools, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError }: {
 	messages: ChatMessage[];
 	tools: ToolCall[];
+	activeRunId?: string;
 	history?: HistoryPosition;
 	loading?: boolean;
 	error?: string;
@@ -86,24 +91,19 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const [measureVersion, setMeasureVersion] = useState(0);
 	const [viewport, setViewport] = useState({ top: 0, height: 600 });
 	const [nearBottom, setNearBottom] = useState(true);
-	const messages = useMemo(() => allMessages.filter((message) => message.contextInjection || message.role !== "toolResult"), [allMessages]);
+	const rows = useMemo(() => conversationRows(allMessages, tools, activeRunId), [allMessages, tools, activeRunId]);
 	const offsets = useMemo(() => {
 		const result = [0];
-		for (const message of messages) result.push(result[result.length - 1] + (heights.current.get(message.messageId) ?? ESTIMATED_HEIGHT));
+		for (const row of rows) result.push(result[result.length - 1] + (heights.current.get(row.key) ?? (row.kind === "computer" ? 430 : ESTIMATED_HEIGHT)));
 		return result;
-	}, [messages, measureVersion]);
+	}, [rows, measureVersion]);
 	const total = offsets[offsets.length - 1];
 	const topInset = history?.before || loading || error ? 40 : 0;
 	const top = following.current ? Math.max(0, total - viewport.height) : Math.max(0, viewport.top - origin.current - topInset);
 	const start = Math.max(0, rowAt(offsets, Math.max(0, top - OVERSCAN)));
-	const end = Math.min(messages.length, rowAt(offsets, top + viewport.height + OVERSCAN) + 1);
-	const toolMap = useMemo(() => {
-		const result = new Map<string, ToolCall>();
-		for (const tool of tools) result.set(`${tool.runId ?? ""}/${tool.callId}`, tool);
-		return result;
-	}, [tools]);
-	const geometry = useRef({ messages, offsets, topInset });
-	geometry.current = { messages, offsets, topInset };
+	const end = Math.min(rows.length, rowAt(offsets, top + viewport.height + OVERSCAN) + 1);
+	const geometry = useRef({ rows, offsets, topInset });
+	geometry.current = { rows, offsets, topInset };
 	const updateViewport = useCallback(() => {
 		const element = scroller.current;
 		if (!element) return;
@@ -115,13 +115,13 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 		if (content.current) origin.current = content.current.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
 		if (following.current) element.scrollTop = element.scrollHeight;
 		else if (anchor.current) {
-			const index = messages.findIndex((message) => message.messageId === anchor.current?.id);
+			const index = rows.findIndex((row) => row.key === anchor.current?.id);
 			if (index >= 0) element.scrollTop = origin.current + topInset + offsets[index] + anchor.current.offset;
 			else { following.current = true; element.scrollTop = element.scrollHeight; setNearBottom(true); }
 		}
 		programmaticTop.current = element.scrollTop;
 		updateViewport();
-	}, [messages, offsets, topInset, viewport.height, updateViewport]);
+	}, [rows, offsets, topInset, viewport.height, updateViewport]);
 	useLayoutEffect(() => {
 		const element = scroller.current;
 		if (!element) return;
@@ -131,10 +131,10 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	}, [updateViewport]);
 	useLayoutEffect(() => {
 		const resize = observer.current;
-		const rows = scroller.current?.querySelectorAll(".virtual-message");
-		rows?.forEach((row) => resize?.observe(row));
-		return () => rows?.forEach((row) => resize?.unobserve(row));
-	}, [start, end, messages]);
+		const elements = scroller.current?.querySelectorAll(".virtual-message");
+		elements?.forEach((row) => resize?.observe(row));
+		return () => elements?.forEach((row) => resize?.unobserve(row));
+	}, [start, end, rows]);
 	useEffect(() => {
 		following.current = true;
 		setNearBottom(true);
@@ -152,8 +152,8 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 			const current = geometry.current;
 			const y = element.scrollTop - origin.current - current.topInset;
 			const index = Math.max(0, rowAt(current.offsets, Math.max(0, y)));
-			const message = current.messages[index];
-			if (message) anchor.current = { id: message.messageId, offset: y - current.offsets[index] };
+			const row = current.rows[index];
+			if (row) anchor.current = { id: row.key, offset: y - current.offsets[index] };
 			updateViewport();
 			if (element.scrollTop < 160 && history?.before && !loading && !error) void onLoadOlder?.();
 		}}>
@@ -161,15 +161,13 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 				{topInset > 0 && <div className="history-control" aria-live="polite">{error ? <><span>{error}</span><button type="button" onClick={() => { void onLoadOlder?.(); }}>再試行</button></> : loading ? "過去のメッセージを読み込んでいます…" : <button type="button" onClick={() => { void onLoadOlder?.(); }}>過去のメッセージを読み込む</button>}</div>}
 				{fallback && <article className="message role-user"><div className="message-content"><Content value={fallback} onFile={openFile} /></div></article>}
 				<div className="history-spacer" aria-hidden="true" style={{ height: offsets[start] }} />
-				{messages.slice(start, end).map((message) => {
-					const calls: unknown[] = Array.isArray(message.content) ? message.content.filter((part: unknown) => record(part) && part.type === "toolCall") : [];
-					const messageTools = calls.map((part) => record(part) ? toolMap.get(`${message.runId ?? ""}/${String(part.id)}`) : undefined);
-					return <Message key={message.messageId} message={message} tools={messageTools} onFile={openFile} expansions={expansions.current} />;
-				})}
+				{rows.slice(start, end).map((row) => row.kind === "computer"
+					? <div key={row.key} className="virtual-message" data-message-id={row.key}><ComputerActivity group={row.group} onFile={openFile} /></div>
+					: <Message key={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current} />)}
 				<div className="history-spacer" aria-hidden="true" style={{ height: total - offsets[end] }} />
-				{latestError && <div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div>}
+				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>
 			</div>
 		</div>
-		{!nearBottom && <button className="back-to-bottom" onClick={() => { following.current = true; setNearBottom(true); if (scroller.current) { scroller.current.scrollTop = scroller.current.scrollHeight; programmaticTop.current = scroller.current.scrollTop; } updateViewport(); }}>最新のメッセージへ ↓</button>}
+		<Presence show={!nearBottom}><button className="back-to-bottom" onClick={() => { following.current = true; setNearBottom(true); if (scroller.current) { scroller.current.scrollTop = scroller.current.scrollHeight; programmaticTop.current = scroller.current.scrollTop; } updateViewport(); }}>最新のメッセージへ ↓</button></Presence>
 	</>;
 });

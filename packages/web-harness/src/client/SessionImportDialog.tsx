@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { SESSION_IMPORT_SOURCES, type SessionDiscovery, type SessionImportPreview, type SessionImportSource } from "../shared/session-import.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { Content } from "./Content.tsx";
+import { MotionItems, Presence, useChildrenMotion } from "./Motion.tsx";
 import type { Model, SessionSummary, Workspace } from "./types.ts";
 import "./SessionImportDialog.css";
 
@@ -30,6 +31,8 @@ export function SessionImportDialog({ workspace, model, thinkingLevel, onClose, 
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string>();
 	const [previewError, setPreviewError] = useState<string>();
+	const body = useRef<HTMLDivElement>(null);
+	useChildrenMotion(body, !!candidateId);
 	useEffect(() => {
 		const element = dialog.current;
 		const previous = document.activeElement;
@@ -70,7 +73,7 @@ export function SessionImportDialog({ workspace, model, thinkingLevel, onClose, 
 		} catch (reason) { setPreviewError(errorMessage(reason)); }
 		finally { setBusy(false); }
 	}
-	return <dialog ref={dialog} className="session-import-dialog" aria-labelledby={titleId} aria-busy={busy} onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }} onClick={(event) => {
+	return <dialog ref={dialog} className="session-import-dialog motion-dialog" aria-labelledby={titleId} aria-busy={busy} onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }} onClick={(event) => {
 		if (event.target !== event.currentTarget || busy) return;
 		const bounds = event.currentTarget.getBoundingClientRect();
 		if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
@@ -81,23 +84,23 @@ export function SessionImportDialog({ workspace, model, thinkingLevel, onClose, 
 			<label>履歴ファイル<input value={path} disabled={busy} onChange={(event) => setPath(event.target.value)} placeholder="自動検出 · フォルダーまたは履歴ファイルの絶対パス" /></label>
 			<button type="submit" disabled={busy || loading}>{loading ? "検索中…" : "再読み込み"}</button>
 		</form>
-		{discovery && <p className="session-import-paths">{discovery.paths.length ? discovery.paths.join(" · ") : "保存先を指定してください。"}</p>}
-		{error && <p className="session-import-error" role="alert">{error}</p>}
-		{discovery?.warnings.length ? <details className="session-import-warnings"><summary>読み込みについて（{discovery.warnings.length}件）</summary>{discovery.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details> : null}
-		<div className="session-import-body">
+		<Presence show={!!discovery}><p className="session-import-paths">{discovery?.paths.length ? discovery.paths.join(" · ") : "保存先を指定してください。"}</p></Presence>
+		<Presence show={!!error}><p className="session-import-error" role="alert">{error}</p></Presence>
+		<Presence show={!!discovery?.warnings.length}><details className="session-import-warnings"><summary>読み込みについて（{discovery?.warnings.length}件）</summary>{discovery?.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details></Presence>
+		<div ref={body} className="session-import-body" data-preview={!!candidateId}>
 			<section className="session-import-list" aria-label="引き継ぐセッション">
 				<label><span className="sr-only">引き継ぐセッションを検索</span><input type="search" value={query} disabled={busy} placeholder="タイトル・フォルダー・IDで検索" onChange={(event) => setQuery(event.target.value)} /></label>
 				<div className="session-import-candidates" role="listbox" aria-label="保存済みセッション" aria-busy={loading}>
-					{candidates.map((entry) => <button key={entry.candidateId} type="button" role="option" aria-selected={entry.candidateId === candidateId} disabled={busy} onClick={() => setCandidateId(entry.candidateId)}><strong>{entry.title}</strong><span>{entry.cwd ?? entry.sourceSessionId}</span><time dateTime={entry.updatedAt}>{new Date(entry.updatedAt).toLocaleString()}</time></button>)}
-					{loading && <p role="status">保存された履歴を検索しています…</p>}
-					{!loading && !error && candidates.length === 0 && <p>{query ? "一致するセッションはありません。" : "このワークスペースのセッションはありません。履歴ファイルを指定して再検索できます。"}</p>}
+					<MotionItems items={candidates} itemKey={(entry) => entry.candidateId}>{(entry) => <button key={entry.candidateId} type="button" role="option" aria-selected={entry.candidateId === candidateId} disabled={busy} onClick={() => setCandidateId(entry.candidateId)}><strong>{entry.title}</strong><span>{entry.cwd ?? entry.sourceSessionId}</span><time dateTime={entry.updatedAt}>{new Date(entry.updatedAt).toLocaleString()}</time></button>}</MotionItems>
+					<Presence show={loading}><p role="status">保存された履歴を検索しています…</p></Presence>
+					<Presence show={!loading && !error && candidates.length === 0}><p>{query ? "一致するセッションはありません。" : "このワークスペースのセッションはありません。履歴ファイルを指定して再検索できます。"}</p></Presence>
 				</div>
 			</section>
 			<section className="session-import-preview" aria-label="引き継ぐ履歴のプレビュー" aria-busy={previewLoading}>
-				{previewLoading && <p role="status">履歴を読み込んでいます…</p>}
-				{!previewLoading && !candidateId && <p className="session-import-empty">引き継ぐセッションを選択してください。</p>}
-				{preview && <><h3>{preview.title}</h3><p className="fine-print">履歴{preview.messageCount}件を引き継ぎます。会話の直近12件を表示しています。</p>{preview.warnings.map((warning) => <p className="session-import-warning" key={warning}>{warning}</p>)}{preview.messages.map((message, index) => <article className="session-import-message" key={`${preview.candidateId}-${index}`}><span>{message.role === "user" ? "ユーザー" : "AI"}</span><div className="message-content"><Content value={message.text} onFile={(path, line) => { onClose(); onFile(path, line); }} /></div></article>)}</>}
-				{previewError && <div className="session-import-error" role="alert"><p>{previewError}</p>{candidateId && <button type="button" disabled={busy} onClick={() => setPreviewAttempt((value) => value + 1)}>プレビューを再読み込み</button>}</div>}
+				<Presence show={previewLoading}><p role="status">履歴を読み込んでいます…</p></Presence>
+				<Presence show={!previewLoading && !candidateId}><p className="session-import-empty">引き継ぐセッションを選択してください。</p></Presence>
+				<Presence show={!!preview}>{preview && <div key={preview.candidateId} className="session-import-preview-content"><h3>{preview.title}</h3><p className="fine-print">履歴{preview.messageCount}件を引き継ぎます。会話の直近12件を表示しています。</p>{preview.warnings.map((warning) => <p className="session-import-warning" key={warning}>{warning}</p>)}{preview.messages.map((message, index) => <article className="session-import-message" key={`${preview.candidateId}-${index}`}><span>{message.role === "user" ? "ユーザー" : "AI"}</span><div className="message-content"><Content value={message.text} onFile={(path, line) => { onClose(); onFile(path, line); }} /></div></article>)}</div>}</Presence>
+				<Presence show={!!previewError}><div className="session-import-error" role="alert"><p>{previewError}</p>{candidateId && <button type="button" disabled={busy} onClick={() => setPreviewAttempt((value) => value + 1)}>プレビューを再読み込み</button>}</div></Presence>
 			</section>
 		</div>
 		<footer className="session-import-actions"><button type="button" disabled={busy || !preview || previewLoading} onClick={() => { void importSession(); }}>{busy ? "引き継ぎ中…" : "このセッションを引き継ぐ"}</button></footer>

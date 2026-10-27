@@ -37,11 +37,16 @@ export class LoopbackSecurity {
 	private port: number | undefined;
 	private readonly allowedHosts = new Set<string>();
 	private readonly lanAddresses: readonly string[];
+	private readonly development: boolean;
 
-	constructor(lanAddresses: readonly string[] = []) {
+	constructor(lanAddresses: readonly string[] = [], development = false) {
+		if (development && process.env.NODE_ENV !== "development")
+			throw new Error("Authentication-free development requires NODE_ENV=development");
+		if (development && lanAddresses.length) throw new Error("Authentication-free development is loopback only");
 		if (lanAddresses.some((address) => !isLanAddress(address)))
 			throw new Error("LAN addresses must be private IPv4 addresses");
 		this.lanAddresses = lanAddresses;
+		this.development = development;
 	}
 
 	setPort(port: number): void {
@@ -58,6 +63,7 @@ export class LoopbackSecurity {
 	}
 
 	get launchUrl(): string {
+		if (this.development) return `${this.origin}/`;
 		return `${this.origin}/?token=${this.launchToken}`;
 	}
 
@@ -75,6 +81,7 @@ export class LoopbackSecurity {
 		const host = singleHeader(request, "host");
 		if (!host || !this.allowedHosts.has(host)) throw new HttpError(403, "Host is not allowed");
 		const peer = request.socket.remoteAddress;
+		if (this.development && peer !== LOOPBACK_HOST) throw new HttpError(403, "Development access is loopback only");
 		if (peer !== LOOPBACK_HOST && (!peer || !isLanAddress(peer)))
 			throw new HttpError(403, "Only local network clients are allowed");
 		return `http://${host}`;
@@ -110,6 +117,10 @@ export class LoopbackSecurity {
 	}
 
 	requireAuthentication(request: IncomingMessage): void {
+		if (this.development) {
+			this.checkHost(request);
+			return;
+		}
 		const cookieHeader = singleHeader(request, "cookie") ?? "";
 		const matches: string[] = [];
 		for (const cookie of cookieHeader.split(";")) {

@@ -1,0 +1,89 @@
+:root {
+	--glass-surface: color-mix(in srgb, var(--surface-raised) 78%, transparent);
+	--glass-panel: color-mix(in srgb, var(--surface-panel) 80%, transparent);
+	--glass-filter: blur(24px) saturate(1.12);
+}
+
+.composer {
+	background: transparent;
+	isolation: isolate;
+}
+/* Keep the popup outside the composer's backdrop root so it can blur the image. */
+.composer::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	border-radius: inherit;
+	pointer-events: none;
+	background: color-mix(in srgb, var(--surface-hover) 78%, transparent);
+	backdrop-filter: var(--glass-filter);
+}
+.command-picker, .model-popover, .usage-popover-content, .settings-dialog, .mobile-sheet:has(.mobile-model-menu) {
+	background: var(--glass-surface);
+	backdrop-filter: var(--glass-filter);
+}
+.usage-popover-content { z-index: 18; }
+/* Settings contents cross-fade directly so the dialog keeps blurring the live page. */
+.settings-dialog { view-transition-name: none; }
+/* Team details use the same live transition with and without View Transition support. */
+.inspector-open:not(:has(.settings-dialog)) .right-panel-body { view-transition-name: none; }
+.inspector-open:not(:has(.settings-dialog)) .team-focus { view-transition-name: none; }
+/* Fade the dimmer color; animating parent opacity would isolate the modal's blur. */
+.dialog-backdrop { background: #11111b66; backdrop-filter: none; animation-name: glass-backdrop-enter; }
+.dialog-backdrop[data-closing="true"] { animation-name: glass-backdrop-exit; }
+@keyframes glass-backdrop-enter { from { background-color: #11111b00; } to { background-color: #11111b66; } }
+@keyframes glass-backdrop-exit { from { background-color: #11111b66; } to { background-color: #11111b00; } }
+.settings-dialog .settings-section, .settings-dialog .settings-key-entry, .settings-dialog .oauth-login {
+	background: color-mix(in srgb, var(--surface-panel) 55%, transparent);
+}
+.settings-dialog :is(input, select, textarea) { background: color-mix(in srgb, var(--surface-raised) 65%, transparent); }
+
+.app-shell[data-home-background="true"] :is(.topbar-leading, .topbar .quiet-button) {
+	background: var(--glass-surface);
+	backdrop-filter: var(--glass-filter);
+	border-radius: 10px;
+	color: var(--on-surface);
+}
+.app-shell[data-home-background="true"] .topbar-leading { min-height: 36px; padding: 7px 12px; }
+.app-shell.sidebar-closed[data-home-background="true"] .topbar-leading { padding-left: 46px; }
+.app-shell[data-home-background="true"] :is(.page-title, .sidebar-toggle) { color: var(--on-surface); }
+.app-shell[data-home-background="true"] .topbar .quiet-button:hover { background: color-mix(in srgb, var(--surface-hover) 85%, transparent); }
+
+/* One shared boundary keeps the resize handle attached to the docked panel. */
+.sidebar { border-radius: 0 12px 12px 0; }
+.right-panel { --detail-corner: 12px; border-left: 0; border-radius: var(--detail-corner) 0 0 var(--detail-corner); background: transparent; isolation: isolate; box-shadow: none; }
+.right-panel-body.detail-panel-body { border-radius: inherit; }
+/* A single background keeps every detail view at the same opacity. */
+.right-panel::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	border-radius: inherit;
+	pointer-events: none;
+	background: var(--glass-panel);
+	backdrop-filter: var(--glass-filter);
+}
+.right-panel :is(.files-pane, .detail-toolbar, .detail-new-tab, .detail-file-empty, .files-tree, .files-view-mode, .files-viewer, .files-splitter, .detail-auxiliary, .team-pane, .team-graph, .team-graph-viewport) { background-color: transparent; }
+/* The containing detail view already handles entrance and exit. */
+.right-panel .team-pane { animation: none; }
+.right-panel .detail-tab[data-active="true"] {
+	background: color-mix(in srgb, var(--surface-hover) 35%, transparent);
+	backdrop-filter: var(--glass-filter);
+}
+.right-panel .files-line-number { background: transparent; backdrop-filter: var(--glass-filter); }
+.right-panel .files-selected-line .files-line-number { background: var(--secondary-container); }
+@media (min-width: 901px) {
+	/* Continue the docked background behind the top bar instead of cutting off the image. */
+	.right-panel::before { top: -62px; }
+	.topbar { position: relative; z-index: 1; }
+	.app-shell .detail-resize-slot { position: relative; width: 0; overflow: visible; z-index: 2; }
+	.detail-resize-slot .panel-resize { position: absolute; inset: 0 auto 0 -4px; width: 8px; }
+	.detail-resize-slot .panel-resize::after { top: 12px; bottom: 12px; left: 3px; width: 1px; }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+	:root { --glass-surface: var(--surface-raised); --glass-panel: var(--surface-panel); }
+	.composer::before { background: var(--surface-hover); }
+}

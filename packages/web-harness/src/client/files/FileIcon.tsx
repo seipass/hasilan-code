@@ -5,7 +5,7 @@ export function FileIcon({ name }: { name: string }) {
 	let detail = "M8 14h8m-8 3h6";
 	if (/^(png|jpe?g|gif|webp|svg|ico|avif|bmp)$/.test(extension)) {
 		kind = "image"; detail = "m6 18 4-5 3 3 2-2 3 4M9 10h.01";
-	} else if (/^(mp3|wav|ogg|flac|m4a|aac)$/.test(extension)) {
+	} else if (/^(mp3|wav|wave|ogg|oga|opus|flac|m4a|m4b|m4r|aac|adts|weba|aif|aiff|aifc)$/.test(extension)) {
 		kind = "audio"; detail = "M14 10v7a2 2 0 1 1-2-2h2m0-5 3-1v6";
 	} else if (/^(mp4|webm|mov|mkv|avi)$/.test(extension)) {
 		kind = "video"; detail = "m10 11 6 4-6 4z";

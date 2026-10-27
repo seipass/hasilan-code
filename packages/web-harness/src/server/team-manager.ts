@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { AgentSessionEvent, ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
 
+import { attachmentPrompt, type PromptAttachment } from "../shared/attachments.ts";
 import {
 	CONTEXT_INJECTION_CUSTOM_TYPE,
 	type ContextInjection,
@@ -49,6 +50,7 @@ export interface RunRecord {
 	runId: string;
 	agentId: string;
 	task: string;
+	attachments?: PromptAttachment[];
 	inputKind?: "prompt" | "context";
 	requestedByAgentId?: string;
 	replyToAgentIds?: string[];
@@ -67,6 +69,7 @@ export interface PendingInput {
 	sessionId: string;
 	runId: string;
 	text: string;
+	attachments?: PromptAttachment[];
 	mode: "steer" | "followUp";
 	fromAgentId?: string;
 	status: "pending" | "undelivered";
@@ -456,6 +459,7 @@ export class TeamManager {
 				run.task,
 				runtime.controller.signal,
 				run.inputKind,
+				run.attachments,
 			);
 			await this.settle(
 				runId,
@@ -874,7 +878,7 @@ export class TeamManager {
 		if (input.contextInjection) {
 			input.delivered = await this.registry.deliverContext(input.sessionId, input.contextInjection);
 		} else {
-			await this.registry.deliver(input.sessionId, input.text, input.mode, input.inputId);
+			await this.registry.deliver(input.sessionId, input.text, input.mode, input.inputId, input.attachments);
 			input.delivered = true;
 		}
 	}
@@ -1023,9 +1027,10 @@ export class TeamManager {
 	}
 	async prompt(
 		sessionId: string,
-		input: { text: string; mode: "prompt" | "steer" | "followUp" },
+		input: { text: string; mode: "prompt" | "steer" | "followUp"; attachments?: PromptAttachment[] },
 	): Promise<AdmissionResult> {
-		if (!input.text.trim()) throw new HarnessError("Prompt must not be empty");
+		if (!input.text.trim() && !input.attachments?.length) throw new HarnessError("Prompt must not be empty");
+		const text = input.text.trim() ? input.text : "添付ファイルを確認してください。";
 		await this.ensureRoot(sessionId);
 		return this.registry.mutate(async () => {
 			const agent = this.agentForSession(sessionId);
@@ -1033,8 +1038,15 @@ export class TeamManager {
 			const current = this.current(agent);
 			if (current && input.mode === "prompt") throw new HarnessError("Session is busy; use steer or followUp", 409);
 			if (current)
-				return this.acceptInput(agent, current, input.text, input.mode === "steer" ? "steer" : "followUp");
-			const run = this.newRun(agent, input.text);
+				return this.acceptInput(
+					agent,
+					current,
+					text,
+					input.mode === "steer" ? "steer" : "followUp",
+					input.attachments,
+				);
+			const run = this.newRun(agent, text);
+			if (input.attachments?.length) run.attachments = structuredClone(input.attachments);
 			await this.registry.persist();
 			this.enqueue(agent.teamId, { runId: run.runId });
 			this.pump(agent.teamId);
@@ -1096,7 +1108,7 @@ export class TeamManager {
 					input.delivered = false;
 					if (current.status === "running" && this.started.has(current.runId)) {
 						try {
-							await this.registry.deliver(sessionId, input.text, "steer", inputId);
+							await this.registry.deliver(sessionId, input.text, "steer", inputId, input.attachments);
 							input.delivered = true;
 						} catch (error) {
 							Object.assign(input, previous);
@@ -1107,6 +1119,7 @@ export class TeamManager {
 			} else {
 				inputs.splice(index, 1);
 				const run = this.newRun(agent, input.text);
+				if (input.attachments?.length) run.attachments = structuredClone(input.attachments);
 				await this.registry.persist();
 				this.enqueue(agent.teamId, { runId: run.runId });
 				this.pump(agent.teamId);
@@ -1123,6 +1136,7 @@ export class TeamManager {
 		run: RunRecord,
 		text: string,
 		mode: "steer" | "followUp",
+		attachments?: PromptAttachment[],
 		fromAgentId?: string,
 		inputId = randomBytes(8).toString("hex"),
 	): Promise<AdmissionResult> {
@@ -1131,6 +1145,7 @@ export class TeamManager {
 			sessionId: agent.sessionId,
 			runId: run.runId,
 			text,
+			...(attachments?.length ? { attachments: structuredClone(attachments) } : {}),
 			mode,
 			fromAgentId,
 			status: "pending",
@@ -1139,7 +1154,7 @@ export class TeamManager {
 		this.registry.state.pendingInput.push(pending);
 		await this.registry.persist();
 		if (this.started.has(run.runId) && run.status === "running") {
-			await this.registry.deliver(agent.sessionId, text, mode, inputId);
+			await this.registry.deliver(agent.sessionId, text, mode, inputId, pending.attachments);
 			pending.delivered = true;
 			await this.registry.persist();
 		}
@@ -1734,7 +1749,10 @@ export class TeamManager {
 							input.status === "pending" &&
 							(marker
 								? input.inputId === marker[1]
-								: !isInitial && !input.fromAgentId && input.delivered && input.text === text),
+								: !isInitial &&
+									!input.fromAgentId &&
+									input.delivered &&
+									attachmentPrompt(input.text, input.attachments) === text),
 					);
 					if (index !== -1) this.registry.state.pendingInput.splice(index, 1);
 				}

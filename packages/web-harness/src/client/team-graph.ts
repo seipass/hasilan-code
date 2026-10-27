@@ -13,9 +13,33 @@ export interface TeamGraphNode {
 }
 
 export interface TeamGraphEdge {
+	id: string;
 	from: TeamGraphNode;
 	to: TeamGraphNode;
 	kind: "parent" | "waiting";
+	route: "parent" | "dependency";
+}
+
+/** Path order always follows the source and destination, including waits directed back to a parent. */
+export function teamEdgePath(edge: TeamGraphEdge): string {
+	const parent = edge.route === "parent";
+	if (!parent && edge.from.y === edge.to.y) {
+		const fromX = edge.from.x + TEAM_NODE_WIDTH / 2;
+		const toX = edge.to.x + TEAM_NODE_WIDTH / 2;
+		const bottom = edge.from.y + TEAM_NODE_HEIGHT;
+		const bendY = bottom + ROW_GAP / 2;
+		return `M ${fromX} ${bottom} C ${fromX} ${bendY}, ${toX} ${bendY}, ${toX} ${bottom}`;
+	}
+	const down = edge.to.y >= edge.from.y;
+	const x1 = edge.from.x + (parent ? TEAM_NODE_WIDTH / 2 : TEAM_NODE_WIDTH);
+	const y1 = edge.from.y + (parent ? (down ? TEAM_NODE_HEIGHT : 0) : TEAM_NODE_HEIGHT / 2);
+	const x2 = edge.to.x + (parent ? TEAM_NODE_WIDTH / 2 : TEAM_NODE_WIDTH);
+	const y2 = edge.to.y + (parent ? (down ? 0 : TEAM_NODE_HEIGHT) : TEAM_NODE_HEIGHT / 2);
+	const bendX = Math.max(x1, x2) + 20;
+	const middleY = (y1 + y2) / 2;
+	return parent
+		? `M ${x1} ${y1} C ${x1} ${middleY}, ${x2} ${middleY}, ${x2} ${y2}`
+		: `M ${x1} ${y1} C ${bendX} ${y1}, ${bendX} ${y2}, ${x2} ${y2}`;
 }
 
 export function selectedTeamAgents(
@@ -78,9 +102,15 @@ export function layoutTeamGraph(agents: TeamAgent[], snapshot: TeamSnapshot) {
 	}
 	const runs = new Map(snapshot.runs.map((run) => [run.runId, run]));
 	const edges: TeamGraphEdge[] = [];
+	const parentLinks = new Map<string, number>();
 	for (const node of nodes) {
 		const parent = node.agent.parentAgentId ? positioned.get(node.agent.parentAgentId) : undefined;
-		if (parent) edges.push({ from: parent, to: node, kind: "parent" });
+		if (parent) {
+			parentLinks.set(JSON.stringify([parent.agent.agentId, node.agent.agentId].sort()), edges.length);
+			edges.push({ id: `parent-${node.agent.agentId}`, from: parent, to: node, kind: "parent", route: "parent" });
+		}
+	}
+	for (const node of nodes) {
 		const waitingFor = new Set<string>();
 		for (const runId of node.agent.currentRun?.waitingOnRunIds ?? []) {
 			const run = runs.get(runId);
@@ -88,7 +118,18 @@ export function layoutTeamGraph(agents: TeamAgent[], snapshot: TeamSnapshot) {
 			const target = positioned.get(run.agentId);
 			if (!target || target === node) continue;
 			waitingFor.add(run.agentId);
-			edges.push({ from: node, to: target, kind: "waiting" });
+			const parentIndex = parentLinks.get(JSON.stringify([node.agent.agentId, target.agent.agentId].sort()));
+			const parent = parentIndex === undefined ? undefined : edges[parentIndex];
+			if (parentIndex !== undefined && parent?.kind === "parent") {
+				edges[parentIndex] = { ...parent, from: node, to: target, kind: "waiting" };
+			} else
+				edges.push({
+					id: JSON.stringify(["waiting", node.agent.agentId, target.agent.agentId]),
+					from: node,
+					to: target,
+					kind: "waiting",
+					route: "dependency",
+				});
 		}
 	}
 	return {

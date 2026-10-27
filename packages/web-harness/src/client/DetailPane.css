@@ -1,4 +1,6 @@
 .detail-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.detail-views { display: grid; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.detail-views > * { grid-area: 1 / 1; }
 .detail-toolbar { display: flex; align-items: center; flex: none; min-width: 0; min-height: 42px; border-bottom: 1px solid var(--border); background: var(--surface-panel); }
 .detail-tab-strip { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 .detail-tabs { display: flex; flex: none; min-width: 0; }
@@ -19,7 +21,7 @@
 .detail-tab-new { touch-action: none; user-select: none; }
 .detail-tab-new[data-gesture] { color: var(--primary-hover); background: var(--primary-container); }
 .detail-gesture-hints { pointer-events: none; }
-.detail-gesture-hint { position: absolute; z-index: 10; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: var(--on-surface-secondary); font-size: 12px; white-space: nowrap; }
+.detail-gesture-hint { position: absolute; z-index: 10; padding: 7px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: var(--on-surface-secondary); font-size: 12px; white-space: nowrap; transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease; }
 .detail-gesture-hint.is-down { top: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
 .detail-gesture-hint.is-right { left: calc(100% + 8px); top: 50%; transform: translateY(-50%); }
 .detail-gesture-hint[data-active="true"] { border-color: var(--primary); background: var(--primary-container); color: var(--on-primary-container); }

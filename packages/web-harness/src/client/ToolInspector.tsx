@@ -8,6 +8,7 @@ const toolVisuals = {
 	bash: { label: "Run command", kind: "terminal" },
 	terminal: { label: "Terminal", kind: "terminal" },
 	browser: { label: "Browser", kind: "browser" },
+	computer: { label: "Computer", kind: "browser" },
 	web_search: { label: "Web search", kind: "search" },
 	team: { label: "Agent team", kind: "team" },
 } as const;
@@ -47,6 +48,7 @@ function toolContext(name: string, input: Record<string, unknown> | undefined): 
 		const target = shortText(input.url) ?? shortText(input.selector) ?? shortText(input.tabId);
 		return [action, target].filter(Boolean).join(" · ");
 	}
+	if (name === "computer") return [shortText(input.action), typeof input.x === "number" && typeof input.y === "number" ? `${input.x}, ${input.y}` : shortText(input.key)].filter(Boolean).join(" · ");
 	if (name === "team") {
 		const action = shortText(input.action);
 		const tasks = Array.isArray(input.tasks) ? input.tasks : undefined;
@@ -94,13 +96,13 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 		: tool.name === "write" && typeof details?.totalLines === "number" ? countLabel(details.totalLines, "line") : undefined;
 	const teamEntries = details && (Array.isArray(details.tasks) ? details.tasks : Array.isArray(details.agents) ? details.agents : Array.isArray(details.runs) ? details.runs : undefined);
 	const isShell = tool.name === "bash" || tool.name === "terminal";
-	const specialized = ["read", "write", "edit", "bash", "terminal", "browser", "web_search", "team"].includes(tool.name);
+	const specialized = ["read", "write", "edit", "bash", "terminal", "browser", "computer", "web_search", "team"].includes(tool.name);
 	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
 		<summary>
 			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
 			{summary && <span className="tool-summary" title={summary}>{summary}</span>}
 			{resultNote && <span className="tool-result-note">{resultNote}</span>}
-			<span className={`badge status-${tool.status}`}>{status}</span>
+			<span key={tool.status} className={`badge status-${tool.status} motion-label`}>{status}</span>
 		</summary>
 		<div className="tool-body">
 			{tool.sourceStatus && <p className="muted">元の状態: {tool.sourceStatus}</p>}
@@ -147,6 +149,11 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 							{typeof item.url === "string" && <p className="muted">{item.url}</p>}
 							{typeof item.snippet === "string" && <p>{item.snippet}</p>}
 						</article> : null)}
+					</div>
+					: tool.name === "computer" && details ? <div className="browser-result">
+						<div className="tool-meta">{typeof details.monitor === "number" && <span>Monitor {details.monitor}</span>}{typeof details.width === "number" && typeof details.height === "number" && <span>{details.width} × {details.height}</span>}{details.released === true && <span>操作権を解放しました</span>}</div>
+						{Array.isArray(details.screens) && <div className="tool-task-list">{details.screens.map((screen: unknown, index) => record(screen) ? <article key={index}><strong>Monitor {typeof screen.index === "number" ? screen.index : index + 1}</strong><p>{String(screen.width)} × {String(screen.height)}</p></article> : null)}</div>}
+						{artifact && <a href={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} target="_blank" rel="noopener noreferrer"><img className="tool-image" src={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} alt="デスクトップのスクリーンショット" /></a>}
 					</div>
 					: tool.name === "browser" && details ? <div className="browser-result">
 						{typeof details.url === "string" && <p>{/^https?:\/\//i.test(details.url) ? <a href={details.url} target="_blank" rel="noopener noreferrer">{details.url}</a> : details.url}</p>}

@@ -1,0 +1,15 @@
+.workspace-surface { position: relative; isolation: isolate; }
+.home-backdrop { position: absolute; inset: 0 0 auto; height: min(100%, calc(50% + 120px)); overflow: hidden; pointer-events: none; z-index: -1; mask-image: linear-gradient(to bottom, #000 42%, #000c 60%, #0005 80%, transparent); }
+.home-backdrop img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; animation: motion-label-enter 180ms ease; }
+.home-backdrop::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 35%, var(--surface)); backdrop-filter: blur(36px); mask-image: linear-gradient(to bottom, transparent 28%, #000 75%); }
+.home-appearance > h3 { margin: 0 0 5px; }
+.home-appearance > p { color: var(--on-surface-secondary); }
+.home-background-preview { position: relative; isolation: isolate; overflow: hidden; aspect-ratio: 16 / 8; max-height: 260px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); display: grid; place-items: start center; }
+.home-background-preview > span { margin-top: 15%; color: var(--on-surface-muted); font-size: 12px; }
+.home-background-preview > .home-backdrop { height: 78%; }
+.home-background-preview > .home-backdrop::after { backdrop-filter: blur(18px); }
+.home-background-preview-composer { position: absolute; width: 65%; left: 17.5%; top: 47%; }
+.home-background-preview-composer > span { display: block; margin: 0 4px 6px; font-size: 10px; color: var(--on-surface-secondary); }
+.home-background-preview-composer > i { display: block; height: 46px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-hover); box-shadow: 0 3px 13px #11111b40; }
+.home-background-name { overflow-wrap: anywhere; font-size: 12px; }
+.home-background-actions { display: flex; flex-wrap: wrap; gap: 8px; }

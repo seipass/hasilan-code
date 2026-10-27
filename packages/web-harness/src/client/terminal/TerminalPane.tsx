@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import type { TerminalClientMessage, TerminalServerMessage, TerminalSummary } from "../../shared/terminal-protocol.ts";
 import type { PaneIndex } from "../SplitLayout.tsx";
+import { Presence } from "../Motion.tsx";
 import "@xterm/xterm/css/xterm.css";
 import "./terminal.css";
 
@@ -235,13 +236,13 @@ export function TerminalView({ summary, pane, visible, selected, focusRequest, o
 		if (visible) fitRef.current();
 	}, [visible, focusRequest]);
 
-	return <div className="terminal-view split-tab-body" data-pane={pane} onPointerDownCapture={onActivate} onDragOver={(event) => { if (dragging) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => { if (dragging) { event.preventDefault(); onTabDrop(); } }} id={id} role="tabpanel" aria-labelledby={labelledBy} hidden={!selected}>
-		{(connection !== "connected" || !controller || summary.status === "exited") && <div className="terminal-status-controls">
+	return <div hidden={!selected} className="terminal-view split-tab-body" data-pane={pane} onPointerDownCapture={onActivate} onDragOver={(event) => { if (dragging) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => { if (dragging) { event.preventDefault(); onTabDrop(); } }} id={id} role="tabpanel" aria-labelledby={labelledBy}>
+		<Presence show={connection !== "connected" || !controller || summary.status === "exited"}><div className="terminal-status-controls">
 			<span className="terminal-status" data-connection={connection} role="status" title={title}>{connection === "disconnected" ? "切断" : connection === "connecting" ? "接続中" : summary.status === "exited" ? `終了 ${summary.exitCode ?? "?"}` : "閲覧のみ"}</span>
 			{connection === "connected" && !controller && summary.status === "running" && <button type="button" onClick={takeControl}>操作権を取得</button>}
 			{connection === "disconnected" && <button type="button" onClick={reconnect}>再接続</button>}
-		</div>}
-		{error && <div className="terminal-error" role="alert">{error}</div>}
+		</div></Presence>
+		<Presence show={!!error}><div className="terminal-error" role="alert">{error}</div></Presence>
 		<div className="terminal-emulator" ref={container} onKeyDown={(event) => event.stopPropagation()} />
 	</div>;
 }

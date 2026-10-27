@@ -1,7 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
 import { api, command, errorMessage } from "./api.ts";
-import { transitionItems } from "./item-transition.ts";
+import { HomeAppearance } from "./HomeAppearance.tsx";
+import type { HomeBackground } from "./home-background.ts";
+import { Presence } from "./Motion.tsx";
+import { MotionSwap } from "./MotionSwap.tsx";
+import "./SettingsMotion.css";
 import { OAuthLogin } from "./OAuthLogin.tsx";
 import type { ModelCatalog, Settings } from "./types.ts";
 
@@ -10,6 +14,7 @@ const TABS = [
 	{ id: "usage", label: "使用量" },
 	{ id: "search", label: "検索" },
 	{ id: "agents", label: "エージェント" },
+	{ id: "appearance", label: "外観" },
 	{ id: "environment", label: "環境" },
 ] as const;
 type SettingsTab = (typeof TABS)[number]["id"];
@@ -21,7 +26,12 @@ const SEARCH_PROVIDERS = [
 ] as const;
 type SearchProviderId = Settings["search"]["defaultProvider"];
 
-export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgroundChange }: {
+	onClose: () => void;
+	onSaved: () => void;
+	homeBackground?: HomeBackground;
+	onHomeBackgroundChange: (next: HomeBackground | undefined) => void;
+}) {
 	const [settings, setSettings] = useState<Settings>();
 	const [savedSettings, setSavedSettings] = useState<Settings>();
 	const [catalog, setCatalog] = useState<ModelCatalog>();
@@ -108,11 +118,11 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 		<div className="settings-actions"><button type="submit" disabled={busy || loginActive || !hasLlmKey}>{busy ? "設定中…" : "一時 API キーを設定"}</button></div>
 	</form>;
 
-	return <div className="dialog-backdrop" data-closing={closing} onAnimationEnd={(event) => { if (closing && event.target === event.currentTarget) onClose(); }} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
-		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onKeyDown={(event) => {
+	return <div className="dialog-backdrop" data-closing={closing} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
+		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onTransitionEnd={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity") onClose(); }} onTransitionCancel={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) onClose(); }} onKeyDown={(event) => {
 			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); requestClose(); }
 			if (event.key !== "Tab") return;
-			const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled):not([tabindex='-1']), input:not(:disabled), select:not(:disabled), summary, a[href]") ?? [])].filter((element) => !element.matches(":disabled") && element.getClientRects().length > 0);
+			const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled):not([tabindex='-1']), input:not(:disabled), select:not(:disabled), summary, a[href]") ?? [])].filter((element) => !element.matches(":disabled") && !element.closest("[inert]") && element.getClientRects().length > 0);
 			const first = controls[0];
 			const last = controls[controls.length - 1];
 			if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
@@ -127,22 +137,26 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 				else if (event.key === "Home") next = 0;
 				else if (event.key === "End") next = TABS.length - 1;
 				else return;
-				event.preventDefault(); transitionItems(() => setTab(TABS[next].id)); tabRefs.current[next]?.focus();
+				event.preventDefault(); setTab(TABS[next].id); tabRefs.current[next]?.focus();
 			}}>
-				{TABS.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => { if (tab !== entry.id) transitionItems(() => setTab(entry.id)); }}>{entry.label}</button>)}
+				{TABS.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => { if (tab !== entry.id) setTab(entry.id); }}>{entry.label}</button>)}
 			</div>
-			{error && <div className="error" role="alert"><p>{error}</p>{!settings && <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>再読み込み</button>}</div>}
-			{notice && <p className="settings-notice" role="status">{notice}</p>}
-			{!settings && !error && <p role="status">設定を読み込み中…</p>}
+			<Presence show={!!error} collapse><div className="error" role="alert"><p>{error}</p>{!settings && <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>再読み込み</button>}</div></Presence>
+			<Presence show={!!notice} collapse><p className="settings-notice" role="status">{notice}</p></Presence>
+			<Presence show={!settings && !error} collapse><p role="status">設定を読み込み中…</p></Presence>
+			<div className="settings-panels">
+			<Presence show={tab === "appearance"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
+				<HomeAppearance background={homeBackground} onChange={onHomeBackgroundChange} />
+			</section></Presence>
 			{settings && <>
-				<section className="settings-content" role="tabpanel" id={`${tabsId}-providers-panel`} aria-labelledby={`${tabsId}-providers-tab`} hidden={tab !== "providers"}>
+				<Presence show={tab === "providers"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-providers-panel`} aria-labelledby={`${tabsId}-providers-tab`}>
 					<h3>プロバイダーの認証</h3>
 					<div className="settings-section settings-provider-section">
 						<p className="settings-inline-status">認証設定あり: {catalog?.providers.filter((provider) => provider.configured).length ?? 0} / {catalog?.providers.length ?? 0} 件</p>
 						<label>プロバイダーを検索<input type="search" value={providerQuery} disabled={busy || loginActive} placeholder="名前または ID で検索" onChange={(event) => setProviderQuery(event.target.value)} /></label>
 						<label>プロバイダー<select value={llmProvider} disabled={busy || loginActive || !catalog?.providers.length} onChange={(event) => {
 							const providerId = event.target.value;
-							transitionItems(() => { setLlmProvider(providerId); setNotice(undefined); });
+							setLlmProvider(providerId); setNotice(undefined);
 						}}>
 							{!llmProvider && <option value="">プロバイダーを選択</option>}
 							{selectedProvider && !matchingProviders.some((provider) => provider.id === selectedProvider.id) && <option value={selectedProvider.id}>{selectedProvider.name} · 現在の選択</option>}
@@ -151,7 +165,7 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 						{providerQuery.trim() && <p className="settings-inline-status" role="status">{matchingProviders.length ? `${matchingProviders.length} 件が一致しました。` : "一致するプロバイダーはありません。"}</p>}
 						{catalog?.providers.length === 0 && <p className="settings-next-action">利用できるプロバイダーがありません。サーバーのモデル設定を確認してください。</p>}
 					</div>
-					{selectedProvider && <div className="settings-section settings-provider-section">
+					<MotionSwap identity={llmProvider} animateHeight>{selectedProvider && <div className="settings-section settings-provider-section">
 						<h4>{selectedProvider.name}</h4>
 						<p className="credential-status" data-configured={selectedProvider.configured}>{selectedProvider.configured === true ? "認証設定あり" : selectedProvider.configured === false ? "認証未設定" : "認証状態は不明"}</p>
 						{!selectedProvider.oauth && !selectedProvider.apiKey && <p className="settings-next-action">auth.json / models.json または環境変数で認証を設定し、設定画面を開き直してください。</p>}
@@ -160,12 +174,12 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 							{selectedProvider.oauth && <p className="auth-method-divider">または、一時 API キーで接続</p>}
 							{keyForm}
 						</>)}
-					</div>}
-				</section>
-				<section className="settings-content" role="tabpanel" id={`${tabsId}-usage-panel`} aria-labelledby={`${tabsId}-usage-tab`} hidden={tab !== "usage"}>
-					{tab === "usage" && <AccountUsagePanel />}
-				</section>
-				<section className="settings-content" role="tabpanel" id={`${tabsId}-search-panel`} aria-labelledby={`${tabsId}-search-tab`} hidden={tab !== "search"}>
+					</div>}</MotionSwap>
+				</section></Presence>
+				<Presence show={tab === "usage"}><section className="settings-content" role="tabpanel" id={`${tabsId}-usage-panel`} aria-labelledby={`${tabsId}-usage-tab`}>
+					<AccountUsagePanel />
+				</section></Presence>
+				<Presence show={tab === "search"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-search-panel`} aria-labelledby={`${tabsId}-search-tab`}>
 					<h3>Web 検索</h3>
 					<p className="settings-state">現在の既定: {SEARCH_PROVIDERS.find((provider) => provider.id === savedSettings?.search.defaultProvider)?.label} · {settings.search.configured[savedSettings?.search.defaultProvider ?? "brave"] ? "キー設定済み" : "キー未設定"}</p>
 					<form onSubmit={(event) => { event.preventDefault(); if (!searchChanged) return; const provider = settings.search.defaultProvider; void perform(async () => {
@@ -192,8 +206,8 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 							}, `${label} の保存済みキーを削除しました。`, `${label} の保存済みキーを削除できませんでした。`); }}>キーを削除</button>
 						</div>)}
 					</fieldset>
-				</section>
-				<section className="settings-content" role="tabpanel" id={`${tabsId}-agents-panel`} aria-labelledby={`${tabsId}-agents-tab`} hidden={tab !== "agents"}>
+				</section></Presence>
+				<Presence show={tab === "agents"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-agents-panel`} aria-labelledby={`${tabsId}-agents-tab`}>
 					<h3>エージェントチーム</h3>
 					<p className="settings-state">現在の設定: 同時実行 {savedSettings?.teams.maxConcurrentAgents} · 最大深さ {savedSettings?.teams.maxDepth}</p>
 					<form onSubmit={(event) => { event.preventDefault(); if (!teamsChanged) return; const teams = { ...settings.teams }; void perform(async () => {
@@ -208,12 +222,20 @@ export function SettingsDialog({ onClose, onSaved }: { onClose: () => void; onSa
 							<button type="submit" disabled={!teamsChanged || !Number.isInteger(settings.teams.maxConcurrentAgents) || settings.teams.maxConcurrentAgents < 1 || settings.teams.maxConcurrentAgents > 32 || !Number.isInteger(settings.teams.maxDepth) || settings.teams.maxDepth < 1 || settings.teams.maxDepth > 8}>エージェント設定を保存</button>
 						</fieldset>
 					</form>
-				</section>
-				<section className="settings-content" role="tabpanel" id={`${tabsId}-environment-panel`} aria-labelledby={`${tabsId}-environment-tab`} hidden={tab !== "environment"}>
+				</section></Presence>
+				<Presence show={tab === "environment"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-environment-panel`} aria-labelledby={`${tabsId}-environment-tab`}>
 					<h3>実行環境</h3>
 					<section className="settings-section"><h4>Browser use · Playwright</h4><p className="credential-status" data-configured={settings.browser?.ready}>{settings.browser?.ready ? "Chromium を利用できます。" : "Chromium の準備が必要です。"}</p>{settings.browser?.error && <p className="error">{settings.browser.error}</p>}{!settings.browser?.ready && <><p>サーバーを起動する環境で、次のコマンドを実行してください。</p><code>npx playwright install chromium</code><p className="fine-print">インストール後、この設定を開き直して状態を確認してください。</p></>}</section>
-				</section>
+					<section className="settings-section"><h4>Computer use · デスクトップ操作</h4>
+						<p className="credential-status" data-configured={settings.computer?.ready}>{settings.computer?.ready ? "デスクトップを操作できます。" : "デスクトップ操作の準備が必要です。"}</p>
+						<p>画面取得・クリック・ドラッグ・スクロール・文字入力・キー操作に対応します。操作対象はサーバーを実行しているPCです。</p>
+						{settings.computer?.error && <p className="error">{settings.computer.error}</p>}
+						{!settings.computer?.ready && settings.computer?.setup.map((instruction) => <p key={instruction}><code>{instruction}</code></p>)}
+						<p className="fine-print">macOSは画面収録・アクセシビリティの許可が必要です。LinuxはX11に対応し、Waylandには対応していません。準備後、設定を開き直してください。</p>
+					</section>
+				</section></Presence>
 			</>}
+			</div>
 		</section>
 	</div>;
 }

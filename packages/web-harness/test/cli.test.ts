@@ -18,6 +18,22 @@ afterEach(async () => {
 });
 
 describe("CLI startup boundaries", () => {
+	it("requires explicit development mode and rejects LAN sharing in that mode", () => {
+		vi.stubEnv("NODE_ENV", "development");
+		expect(parseCliArgs([]).development).toBe(false);
+		expect(parseCliArgs(["--dev"]).development).toBe(true);
+		for (const args of [
+			["--dev", "--lan"],
+			["--lan", "--dev"],
+		])
+			expect(() => parseCliArgs(args)).toThrow("cannot be combined");
+		for (const environment of [undefined, "test", "production"]) {
+			vi.stubEnv("NODE_ENV", environment);
+			expect(() => parseCliArgs(["--dev"])).toThrow("requires NODE_ENV=development");
+			expect(parseCliArgs([]).development).toBe(false);
+		}
+	});
+
 	it("accepts explicit workspace and port options without exposing a bind option", () => {
 		const options = parseCliArgs(["--port", "0", "--cwd", "C:/a folder", "--no-open"]);
 		expect(options.port).toBe(0);
