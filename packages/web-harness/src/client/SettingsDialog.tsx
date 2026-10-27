@@ -83,6 +83,11 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 	const matchingProviders = catalog?.providers.filter((provider) => `${provider.name} ${provider.id}`.toLocaleLowerCase().includes(providerQuery.trim().toLocaleLowerCase())) ?? [];
 	const searchChanged = settings?.search.defaultProvider !== savedSettings?.search.defaultProvider;
 	const teamsChanged = settings?.teams.maxConcurrentAgents !== savedSettings?.teams.maxConcurrentAgents || settings?.teams.maxDepth !== savedSettings?.teams.maxDepth;
+	const selectedJev = settings?.jev?.model;
+	const jevProvider = catalog?.providers.find((provider) => provider.id === selectedJev?.provider);
+	const jevProviders = catalog?.providers.filter((provider) => catalog.classifiers?.some((model) => model.provider === provider.id)) ?? [];
+	const jevModels = catalog?.classifiers?.filter((model) => model.provider === selectedJev?.provider) ?? [];
+	const jevChanged = selectedJev?.provider !== savedSettings?.jev?.model?.provider || selectedJev?.id !== savedSettings?.jev?.model?.id;
 
 	async function perform(operation: () => Promise<void>, success: string, failure: string) {
 		setBusy(true); setError(undefined); setNotice(undefined);
@@ -107,15 +112,15 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			await command(`/api/credentials/llm/${encodeURIComponent(providerId)}`, { key: llmKey.trim() }, "PUT");
 			setCatalog((current) => current && ({ ...current, providers: current.providers.map((provider) => provider.id === providerId ? { ...provider, configured: true } : provider) }));
 			setLlmKeys((keys) => ({ ...keys, [providerId]: "" }));
-		}, "一時 API キーを設定しました。", `${selectedProvider.name} の一時 API キーを設定できませんでした。`);
+		}, "API キーを保存しました。", `${selectedProvider.name} のAPI キーを保存できませんでした。`);
 	}}>
-		<label htmlFor={keyId}>{selectedProvider.name} の一時 API キー<input id={keyId} type="password" autoComplete="new-password" spellCheck={false} disabled={busy || loginActive} value={llmKey} placeholder="API キーを入力" onChange={(event) => {
+		<label htmlFor={keyId}>{selectedProvider.name} のAPI キー<input id={keyId} type="password" autoComplete="new-password" spellCheck={false} disabled={busy || loginActive} value={llmKey} placeholder="API キーを入力" onChange={(event) => {
 			setLlmKeys((keys) => ({ ...keys, [selectedProvider.id]: event.target.value }));
 			setNotice(undefined);
 		}} /></label>
 		<p className="settings-inline-status" role="status">{hasLlmKey ? "入力中 · 未保存" : selectedProvider.configured ? "認証設定あり" : "キー未設定"}</p>
-		<p className="fine-print">有効期間: サーバー再起動まで</p>
-		<div className="settings-actions"><button type="submit" disabled={busy || loginActive || !hasLlmKey}>{busy ? "設定中…" : "一時 API キーを設定"}</button></div>
+		<p className="fine-print">サーバーに保存され、再起動後も利用できます。</p>
+		<div className="settings-actions"><button type="submit" disabled={busy || loginActive || !hasLlmKey}>{busy ? "保存中…" : "API キーを保存"}</button></div>
 	</form>;
 
 	return <div className="dialog-backdrop" data-closing={closing} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
@@ -170,8 +175,8 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 						<p className="credential-status" data-configured={selectedProvider.configured}>{selectedProvider.configured === true ? "認証設定あり" : selectedProvider.configured === false ? "認証未設定" : "認証状態は不明"}</p>
 						{!selectedProvider.oauth && !selectedProvider.apiKey && <p className="settings-next-action">auth.json / models.json または環境変数で認証を設定し、設定画面を開き直してください。</p>}
 						{selectedProvider.oauth && tab === "providers" && (selectedProvider.configured === true ? <details className="settings-reconnect"><summary>アカウントを再接続</summary><OAuthLogin key={llmProvider} provider={llmProvider} label={selectedProvider.oauth.label} disabled={busy} onActiveChange={setLoginActive} onComplete={accountConnected} /></details> : <OAuthLogin key={llmProvider} provider={llmProvider} label={selectedProvider.oauth.label} disabled={busy} onActiveChange={setLoginActive} onComplete={accountConnected} />)}
-						{selectedProvider.apiKey && (selectedProvider.configured === true ? <details className="settings-reconnect"><summary>一時 API キーを変更{hasLlmKey ? " · 入力中（未反映）" : ""}</summary>{keyForm}</details> : <>
-							{selectedProvider.oauth && <p className="auth-method-divider">または、一時 API キーで接続</p>}
+						{selectedProvider.apiKey && (selectedProvider.configured === true ? <details className="settings-reconnect"><summary>API キーを変更{hasLlmKey ? " · 入力中（未反映）" : ""}</summary>{keyForm}</details> : <>
+							{selectedProvider.oauth && <p className="auth-method-divider">または、API キーで接続</p>}
 							{keyForm}
 						</>)}
 					</div>}</MotionSwap>
@@ -208,6 +213,35 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 					</fieldset>
 				</section></Presence>
 				<Presence show={tab === "agents"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-agents-panel`} aria-labelledby={`${tabsId}-agents-tab`}>
+					<h3>Jev · ワークスペース・会話の自動選択</h3>
+					<form onSubmit={(event) => {
+						event.preventDefault();
+						if (busy || !jevChanged) return;
+						void perform(async () => {
+							const saved = await command<Settings>("/api/settings", { jev: { model: selectedJev ?? null } }, "PATCH");
+							setSettings((current) => current && ({ ...current, jev: saved.jev }));
+							setSavedSettings((current) => current && ({ ...current, jev: saved.jev }));
+						}, "Jevの接続先を保存しました。", "Jevの接続先を保存できませんでした。");
+					}}>
+						<fieldset disabled={busy} className="settings-section"><legend>Jevの接続先</legend>
+							<p>ホームで Ctrl / Cmd + Shift + Enter を押すと、作業内容からワークスペースと新規・既存の会話を選びます。曖昧な場合は入力欄の下に候補を表示します。既存の会話は履歴とモデル設定を引き継いで続行します。</p>
+							<label>Jevのプロバイダー<select value={selectedJev?.provider ?? ""} onChange={(event) => {
+								const provider = event.target.value;
+								const first = catalog?.classifiers?.find((model) => model.provider === provider);
+								setSettings((current) => current && ({ ...current, jev: { configured: !!catalog?.providers.find((entry) => entry.id === provider)?.configured, ...(first ? { model: { provider, id: first.id } } : {}) } }));
+								setNotice(undefined);
+							}}><option value="">選択してください</option>{selectedJev && !jevProviders.some((provider) => provider.id === selectedJev.provider) && <option value={selectedJev.provider}>{selectedJev.provider}（利用不可）</option>}{jevProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.configured ? "認証設定あり" : "未認証"}</option>)}</select></label>
+							<label>Jevのモデル<select value={selectedJev?.id ?? ""} disabled={!jevModels.length} onChange={(event) => {
+								if (!selectedJev) return;
+								setSettings({ ...settings, jev: { ...settings.jev, configured: !!jevProvider?.configured, model: { provider: selectedJev.provider, id: event.target.value } } });
+								setNotice(undefined);
+							}}>{!selectedJev && <option value="">プロバイダーを選択してください</option>}{selectedJev && !jevModels.some((model) => model.id === selectedJev.id) && <option value={selectedJev.id}>{selectedJev.id}（利用不可）</option>}{jevModels.map((model) => <option key={model.id} value={model.id}>{model.name ?? model.id} · {model.id}</option>)}</select></label>
+							<p className="settings-inline-status" role="status">{jevChanged ? "未保存 · " : ""}{selectedJev ? jevProvider?.configured ? "認証設定あり" : "プロバイダーの認証が必要です。" : "モデル未選択"}</p>
+							<p className="fine-print">「プロバイダー」で設定した認証を共用します。</p>
+							<p className="fine-print">本文・添付の名前と種類・登録フォルダーの概要・会話タイトルと直近の依頼・結果の抜粋をJevに送信します。添付ファイル本体は送信しません。</p>
+							<div className="settings-actions"><button type="submit" disabled={!jevChanged || !!selectedJev && !jevModels.some((model) => model.id === selectedJev.id)}>接続先を保存</button>{selectedJev && <button type="button" onClick={() => { setLlmProvider(selectedJev.provider); setProviderQuery(""); setTab("providers"); }}>プロバイダーの認証設定</button>}</div>
+						</fieldset>
+					</form>
 					<h3>エージェントチーム</h3>
 					<p className="settings-state">現在の設定: 同時実行 {savedSettings?.teams.maxConcurrentAgents} · 最大深さ {savedSettings?.teams.maxDepth}</p>
 					<form onSubmit={(event) => { event.preventDefault(); if (!teamsChanged) return; const teams = { ...settings.teams }; void perform(async () => {

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
 import { aggregateUsage } from "../shared/usage.ts";
+import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { ChatPane } from "./ChatPane.tsx";
 import { CanvasPane } from "./CanvasPane.tsx";
@@ -23,6 +24,7 @@ import { parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
 import { WidgetSpace } from "./widgets/WidgetSpace.tsx";
+import { sendWorkspacePrompt } from "./workspace-send.ts";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 import "./WorkspaceModes.css";
 
@@ -45,6 +47,7 @@ export function App() {
 	const [projections, setProjections] = useState<Record<string, WorkspaceProjection>>({});
 	const [initialSessions, setInitialSessions] = useState<SessionSummary[]>([]);
 	const [error, setError] = useState<string>();
+	const [routedConversation, setRoutedConversation] = useState<{ sessionId: string; message: string }>();
 	const [catalog, setCatalog] = useState<ModelCatalog>();
 	const [catalogVersion, setCatalogVersion] = useState(0);
 	const [savedSelection] = useState<{ model?: Model; thinkingLevel?: ThinkingLevel }>(() => {
@@ -213,11 +216,12 @@ export function App() {
 		if (!target) { const created = await command<SessionSummary>("/api/sessions", { workspaceId, model: { provider: model.provider, id: model.id }, ...(draftThinking ? { thinkingLevel: draftThinking } : {}) }); target = created.sessionId; draftSession.current = target; }
 		return target;
 	}
-	async function send(text: string, executionMode: "prompt" | "steer" | "followUp", attachments: AttachmentUpload[]): Promise<{ disposition?: "queued" | "started"; notice?: string }> {
+	async function send(text: string, executionMode: "prompt" | "steer" | "followUp", attachments: AttachmentUpload[], destination?: ComposerDestination): Promise<ComposerSendResult> {
 		if (commandPending.current) throw new Error("送信処理中です。完了してから送信してください。");
 		commandPending.current = true;
 		try {
 			const parsed = parseComposerCommand(text);
+			if (destination && (sessionId || mode !== "chat" || parsed.kind !== "prompt")) throw new Error("Jevによる選択はホームの通常メッセージで利用できます。");
 			if (attachments.length && parsed.kind !== "prompt") throw new Error("添付ファイルは通常のメッセージとして送信してください。");
 			if (parsed.kind === "canvas") {
 				if (!workspaceId) throw new Error("ワークスペースを選択してください。");
@@ -227,8 +231,28 @@ export function App() {
 			if (parsed.kind === "chat") { setMode("chat"); setModelOpen(false); return {}; }
 			if (sessionId ? sessionChannel.connection !== "connected" : workspaceChannel.connection !== "connected") throw new Error("接続が完了してから送信してください。");
 			if (session?.availability === "missing") throw new Error("保存された会話が見つかりません。新しい会話を開始してください。");
-			let result: { disposition?: "queued" | "started"; notice?: string };
-			if (parsed.kind === "hyakki") {
+			let result: ComposerSendResult;
+			if (destination && parsed.kind === "prompt") {
+				const routed = await sendWorkspacePrompt({
+					text: parsed.text, attachments, destination, workspaces, model, thinkingLevel: draftThinking,
+					beforeStart: (folder, target) => {
+						if (target.kind === "new") {
+							if (modelNeedsAuthentication) { setSettingsOpen(true); throw new Error("プロバイダーの認証を設定してください。"); }
+							if (!model) { setModelOpen(true); throw new Error("送信するモデルを選択してください。"); }
+						}
+						if (folder.workspaceId !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) throw new Error("送信をキャンセルしました。");
+					},
+				});
+				if (routed.kind === "candidates") return { destinationCandidates: routed.candidates };
+				if (routed.workspace.workspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
+				draftSession.current = undefined;
+				setWorkspaceId(routed.workspace.workspaceId); setSessionId(routed.sessionId);
+				setExpandedWorkspaces((previous) => ({ ...previous, [routed.workspace.workspaceId]: true }));
+				setRoutedConversation({ sessionId: routed.sessionId, message: routed.continued ? `続行した会話: ${routed.title} · ${routed.workspace.path}` : `開始したワークスペース: ${routed.workspace.path}` });
+				setFileTarget(undefined); setDraftInsertion(undefined); setHistoryQuery(""); setModelOpen(false);
+				if (window.innerWidth < 900) setSidebarOpen(false);
+				result = { disposition: routed.disposition };
+			} else if (parsed.kind === "hyakki") {
 				await startSwarm(parsed.objective);
 				result = { notice: "スウォームを開始しました。追加指示はこの入力欄から送れます。" };
 			} else if (parsed.kind === "goal") {
@@ -343,6 +367,7 @@ export function App() {
 			<HomeBackdrop background={homeBackgroundVisible ? background : undefined} />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div></Presence>
 			<div className="main-layout"><main className="chat-column"><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
+				<Presence show={!!routedConversation && routedConversation.sessionId === sessionId} collapse><div className="composer-notice" role="status"><span>{routedConversation?.message}</span><button type="button" aria-label="通知を閉じる" onClick={() => setRoutedConversation(undefined)}>×</button></div></Presence>
 				{canvasOpened && <Presence show={mode === "canvas"} keepMounted><div className="mode-page" inert={mode !== "canvas"}>
 					{workspaceId && <CanvasPane key={workspaceId} workspaceId={workspaceId} destinationControl={<label className="canvas-destination"><span className="sr-only">入力欄に追加する設計の送信先</span><select aria-label="入力欄に追加する設計の送信先" value={canvasTarget} onChange={(event) => setCanvasTarget(event.target.value === "swarm" ? "swarm" : "chat")}><option value="chat">会話</option><option value="swarm">Hyakki-Yako</option></select></label>} onComposeDesign={composeCanvasDesign} onDirtyChange={setCanvasDirty} />}
 				</div></Presence>}

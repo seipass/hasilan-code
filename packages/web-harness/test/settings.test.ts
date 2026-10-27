@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { InMemoryCredentialStore } from "@hasilan-code/pi-ai";
 import { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type SettingsModelRuntime, SettingsService } from "../src/server/settings.ts";
@@ -18,12 +19,61 @@ describe("Web harness settings", () => {
 		runtime = {
 			getProviders: catalog.getProviders.bind(catalog),
 			getModels: catalog.getModels.bind(catalog),
+			getModelsOfType: catalog.getModelsOfType.bind(catalog),
 			hasConfiguredAuth: () => false,
-			setRuntimeApiKey: vi.fn(async () => undefined),
+			saveApiKey: vi.fn(async () => undefined),
 		};
 	});
 	afterEach(async () => {
+		vi.unstubAllEnvs();
 		await rm(directory, { recursive: true, force: true });
+	});
+
+	it("persists the Jev provider and model independently from credentials and other settings", async () => {
+		const settings = await SettingsService.open(directory, runtime);
+		expect(settings.get().jev).toEqual({ configured: false });
+		const model = { provider: "commandcode", id: "typesafe/jev" };
+		await settings.patch({ jev: { model } });
+		await settings.setSearchKey("tavily", "private-tavily");
+		await settings.patch({ teams: { maxDepth: 5 } });
+		const restored = await SettingsService.open(directory, runtime);
+		expect(restored.get().jev).toEqual({ configured: false, model });
+		runtime.hasConfiguredAuth = (provider) => provider === "commandcode";
+		expect(restored.get().jev.configured).toBe(true);
+		expect(JSON.stringify(restored.get())).not.toContain("private-");
+		expect(await readFile(join(directory, "web-harness", "credentials.json"), "utf8")).not.toContain("jev");
+		await restored.patch({ jev: { model: null } });
+		const deleted = await SettingsService.open(directory, runtime);
+		expect(deleted.get().jev.model).toBeUndefined();
+		expect(deleted.get().teams.maxDepth).toBe(5);
+		expect(deleted.getSearchKey("tavily")).toBe("private-tavily");
+	});
+
+	it("lists Jev across providers and rejects non-Jev or nonexistent selections", async () => {
+		const settings = await SettingsService.open(directory, runtime);
+		const classifiers = settings.getModels().classifiers;
+		for (const provider of [
+			"commandcode",
+			"openrouter",
+			"opencode",
+			"typesafe",
+			"vercel-ai-gateway",
+			"cloudflare-workers-ai",
+		])
+			expect(classifiers.some((model) => model.provider === provider)).toBe(true);
+		expect(classifiers.every((model) => model.id.includes("jev"))).toBe(true);
+		expect(
+			classifiers.some((classifier) =>
+				settings
+					.getModels()
+					.models.some((model) => model.provider === classifier.provider && model.id === classifier.id),
+			),
+		).toBe(false);
+		await expect(settings.patch({ jev: { model: { provider: "commandcode", id: "gpt-6.1-sol" } } })).rejects.toThrow(
+			"Jevモデル",
+		);
+		await expect(settings.patch({ jev: { model: { provider: "missing", id: "jev" } } })).rejects.toThrow("Jevモデル");
+		expect(settings.get().jev.model).toBeUndefined();
 	});
 
 	it("persists independent keys and settings without exposing credentials", async () => {
@@ -122,18 +172,20 @@ describe("Web harness settings", () => {
 		expect(await readFile(path, "utf8")).toBe("broken-secret-json");
 	});
 
-	it("uses process-only SDK keys and redacts credential-bearing failures", async () => {
+	it("saves SDK keys and redacts credential-bearing failures", async () => {
 		const settings = await SettingsService.open(directory, runtime);
-		const provider = settings.getModels().providers[0].id;
-		await settings.setRuntimeApiKey(provider, "temporary-key");
-		expect(runtime.setRuntimeApiKey).toHaveBeenCalledWith(provider, "temporary-key");
-		expect(JSON.stringify(settings.getModels())).not.toContain("temporary-key");
-		vi.mocked(runtime.setRuntimeApiKey).mockRejectedValueOnce(
+		const provider = "commandcode";
+		await settings.saveApiKey(provider, " saved-key ");
+		expect(runtime.saveApiKey).toHaveBeenCalledWith(provider, "saved-key");
+		expect(JSON.stringify(settings.getModels())).not.toContain("saved-key");
+		await expect(settings.saveApiKey(provider, " ")).rejects.toThrow("must not be empty");
+		await expect(settings.saveApiKey("missing", "saved-key")).rejects.toThrow("supports API keys");
+		vi.mocked(runtime.saveApiKey).mockRejectedValueOnce(
 			Object.assign(new Error("secret-credential"), { credential: { key: "secret-credential" } }),
 		);
 		let failure: unknown;
 		try {
-			await settings.setRuntimeApiKey(provider, "secret-credential");
+			await settings.saveApiKey(provider, "secret-credential");
 		} catch (error) {
 			failure = error;
 		}
@@ -141,6 +193,47 @@ describe("Web harness settings", () => {
 		expect(String(failure)).not.toContain("secret-credential");
 		expect(failure).not.toHaveProperty("cause");
 		expect(failure).not.toHaveProperty("credential");
+	});
+
+	it("retains keys after recreating the runtime, preserving provider metadata and unrelated credentials", async () => {
+		const authPath = join(directory, "auth.json");
+		const providerEnv = { CLOUDFLARE_ACCOUNT_ID: "account-id" };
+		const other = { type: "api_key", key: "private-other-key" };
+		await writeFile(
+			authPath,
+			JSON.stringify({ commandcode: { type: "api_key", key: "old-key", env: providerEnv }, anthropic: other }),
+		);
+		const persistent = await ModelRuntime.create({ authPath, modelsPath: null, refreshOnCreate: false });
+		await persistent.setRuntimeApiKey("commandcode", "old-runtime-key");
+		const settings = await SettingsService.open(directory, persistent);
+		await settings.patch({ jev: { model: { provider: "commandcode", id: "typesafe/jev" } } });
+		await settings.saveApiKey("commandcode", "private-persisted-key");
+		expect((await persistent.getAuth("commandcode"))?.auth.apiKey).toBe("private-persisted-key");
+		expect(persistent.getProviderAuthStatus("commandcode").source).toBe("stored");
+		const stored = JSON.parse(await readFile(authPath, "utf8"));
+		expect(stored.commandcode).toEqual({ type: "api_key", key: "private-persisted-key", env: providerEnv });
+		expect(stored.anthropic).toEqual(other);
+		const restarted = await ModelRuntime.create({ authPath, modelsPath: null, refreshOnCreate: false });
+		await restarted.refresh({ providers: ["commandcode"], allowNetwork: false });
+		const restored = await SettingsService.open(directory, restarted);
+		expect((await restarted.getAuth("commandcode"))?.auth.apiKey).toBe("private-persisted-key");
+		expect(restored.getModels().providers.find((provider) => provider.id === "commandcode")?.configured).toBe(true);
+		expect(restored.get().jev.configured).toBe(true);
+		expect(JSON.stringify({ settings: restored.get(), models: restored.getModels() })).not.toContain("private-");
+		expect(await readFile(join(directory, "web-harness", "settings.json"), "utf8")).not.toContain("private-");
+		if (process.platform !== "win32") expect((await stat(authPath)).mode & 0o777).toBe(0o600);
+	});
+
+	it("keeps the active and saved keys when a credential write fails", async () => {
+		const credentials = new InMemoryCredentialStore();
+		await credentials.modify("commandcode", async () => ({ type: "api_key", key: "previous-key" }));
+		const persistent = await ModelRuntime.create({ credentials, modelsPath: null, refreshOnCreate: false });
+		await persistent.setRuntimeApiKey("commandcode", "active-runtime-key");
+		const settings = await SettingsService.open(directory, persistent);
+		vi.spyOn(credentials, "modify").mockRejectedValueOnce(new Error("private-write-failure"));
+		await expect(settings.saveApiKey("commandcode", "new-key")).rejects.toThrow("could not be saved");
+		expect((await persistent.getAuth("commandcode"))?.auth.apiKey).toBe("active-runtime-key");
+		expect(await credentials.read("commandcode")).toEqual({ type: "api_key", key: "previous-key" });
 	});
 
 	it("reports account and API-key capabilities independently without resolving stored secrets", async () => {

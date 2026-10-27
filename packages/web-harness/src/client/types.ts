@@ -5,6 +5,7 @@ import type { Goal } from "../shared/goals.ts";
 import type { HistoryMessage, HistoryPosition, HistoryTool } from "../shared/session-history.ts";
 import type { Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
+import type { JevStatus } from "../shared/workspace-routing.ts";
 
 export interface Workspace {
 	workspaceId: string;
@@ -104,6 +105,7 @@ export interface WorkspaceProjection {
 	teams: TeamSnapshot;
 }
 export interface Settings {
+	jev?: JevStatus;
 	search: {
 		defaultProvider: "brave" | "tavily" | "exa" | "firecrawl";
 		configured: { brave: boolean; tavily: boolean; exa: boolean; firecrawl: boolean };
@@ -113,6 +115,7 @@ export interface Settings {
 	computer?: ComputerStatus;
 }
 export interface ModelCatalog {
+	classifiers?: Model[];
 	providers: { id: string; name: string; configured?: boolean; oauth?: { label: string }; apiKey?: boolean }[];
 	models: (Model & { contextWindow: number; thinkingLevels?: ThinkingLevel[] })[];
 }

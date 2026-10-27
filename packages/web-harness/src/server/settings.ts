@@ -5,6 +5,7 @@ import { getSupportedThinkingLevels } from "@hasilan-code/pi-ai";
 import type { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
+import { isJevModel, type JevSelection, type JevStatus, jevSelectionSchema } from "../shared/workspace-routing.ts";
 
 export const searchProviderSchema = Type.Union([
 	Type.Literal("brave"),
@@ -15,6 +16,9 @@ export const searchProviderSchema = Type.Union([
 export type SearchProviderId = Static<typeof searchProviderSchema>;
 export const settingsPatchSchema = Type.Object(
 	{
+		jev: Type.Optional(
+			Type.Object({ model: Type.Union([jevSelectionSchema, Type.Null()]) }, { additionalProperties: false }),
+		),
 		search: Type.Optional(
 			Type.Object({ defaultProvider: Type.Optional(searchProviderSchema) }, { additionalProperties: false }),
 		),
@@ -32,25 +36,29 @@ export const settingsPatchSchema = Type.Object(
 );
 export type SettingsPatch = Static<typeof settingsPatchSchema>;
 export interface HarnessSettings {
+	jev?: { model?: JevSelection };
 	search: { defaultProvider: SearchProviderId };
 	teams: { maxConcurrentAgents: number; maxDepth: number };
 }
 export interface SettingsSnapshot extends HarnessSettings {
 	search: HarnessSettings["search"] & { configured: Record<SearchProviderId, boolean> };
+	jev: JevStatus;
 }
 export interface ModelCatalog {
+	classifiers: { provider: string; id: string; name: string }[];
 	providers: { id: string; name: string; configured: boolean; apiKey?: boolean; oauth?: { label: string } }[];
 	models: { provider: string; id: string; name: string; contextWindow: number; input: string[] }[];
 }
-/** Deliberately exposes catalogue and process-only credentials, not Pi's auth storage. */
+/** Exposes catalogue and credential writes without access to saved secrets. */
 export type SettingsModelRuntime = Pick<
 	ModelRuntime,
-	"getProviders" | "getModels" | "hasConfiguredAuth" | "setRuntimeApiKey"
+	"getProviders" | "getModels" | "getModelsOfType" | "hasConfiguredAuth" | "saveApiKey"
 >;
 
 const settingsFileSchema = Type.Object(
 	{
 		schemaVersion: Type.Literal(1),
+		jev: Type.Optional(Type.Object({ model: jevSelectionSchema }, { additionalProperties: false })),
 		search: Type.Object({ defaultProvider: searchProviderSchema }, { additionalProperties: false }),
 		teams: Type.Object(
 			{
@@ -139,7 +147,11 @@ export class SettingsService {
 		const settings: HarnessSettings =
 			savedSettings === undefined
 				? { search: { defaultProvider: "brave" }, teams: { maxConcurrentAgents: 4, maxDepth: 3 } }
-				: { search: savedSettings.search, teams: savedSettings.teams };
+				: {
+						search: savedSettings.search,
+						teams: savedSettings.teams,
+						...(savedSettings.jev ? { jev: savedSettings.jev } : {}),
+					};
 		if (savedCredentials !== undefined && process.platform !== "win32")
 			await chmod(join(directory, "credentials.json"), 0o600);
 		if (savedSettings !== storedSettings)
@@ -159,6 +171,11 @@ export class SettingsService {
 				},
 			},
 			teams: { ...this.settings.teams },
+			jev: {
+				...(this.settings.jev?.model ? { model: { ...this.settings.jev.model } } : {}),
+				configured:
+					!!this.settings.jev?.model && this.modelRuntime.hasConfiguredAuth(this.settings.jev.model.provider),
+			},
 		};
 	}
 
@@ -166,10 +183,27 @@ export class SettingsService {
 		if (!Check(settingsPatchSchema, patch))
 			return Promise.reject(new Error("Invalid settings; concurrency must be 1..32 and depth 1..8"));
 		return this.enqueue(async () => {
+			if (
+				patch.jev?.model &&
+				!this.modelRuntime
+					.getModelsOfType("classifier")
+					.some(
+						(model) =>
+							isJevModel(model) &&
+							model.provider === patch.jev?.model?.provider &&
+							model.id === patch.jev?.model?.id,
+					)
+			)
+				throw new Error("利用できるJevモデルを選択してください。");
 			const next: HarnessSettings = {
+				...(this.settings.jev ? { jev: this.settings.jev } : {}),
 				search: { ...this.settings.search, ...patch.search },
 				teams: { ...this.settings.teams, ...patch.teams },
 			};
+			if (patch.jev) {
+				if (patch.jev.model) next.jev = { model: { ...patch.jev.model } };
+				else delete next.jev;
+			}
 			await saveJson(join(this.directory, "settings.json"), { schemaVersion: 1, ...next });
 			this.settings = next;
 			return this.get();
@@ -206,6 +240,10 @@ export class SettingsService {
 
 	getModels(): ModelCatalog {
 		return {
+			classifiers: this.modelRuntime
+				.getModelsOfType("classifier")
+				.filter(isJevModel)
+				.map(({ provider, id, name }) => ({ provider, id, name })),
 			providers: this.modelRuntime.getProviders().map((provider) => ({
 				id: provider.id,
 				name: provider.name,
@@ -226,15 +264,15 @@ export class SettingsService {
 		};
 	}
 
-	async setRuntimeApiKey(providerId: string, key: string): Promise<void> {
-		if (!this.modelRuntime.getProviders().some((provider) => provider.id === providerId))
-			throw new Error("Unknown model provider; select a provider from Settings");
-		if (typeof key !== "string" || !key.trim()) throw new Error("Runtime API key must not be empty");
+	async saveApiKey(providerId: string, key: string): Promise<void> {
+		if (!this.modelRuntime.getProviders().some((provider) => provider.id === providerId && provider.auth.apiKey))
+			throw new Error("Select a model provider that supports API keys");
+		if (typeof key !== "string" || !key.trim()) throw new Error("API key must not be empty");
 		try {
-			await this.modelRuntime.setRuntimeApiKey(providerId, key.trim());
+			await this.modelRuntime.saveApiKey(providerId, key.trim());
 		} catch {
 			// SDK credential synchronization errors can carry the credential itself.
-			throw new Error("Runtime credential synchronization failed; check provider configuration in Settings");
+			throw new Error("API key could not be saved or activated; check provider configuration in Settings");
 		}
 	}
 

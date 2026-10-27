@@ -480,7 +480,7 @@ const XAI_RESPONSES_COMPAT: OpenAIResponsesCompat = {
 };
 
 const OPENCODE_OPENAI_COMPLETIONS_LONG_CACHE_RETENTION_UNSUPPORTED_MODELS = new Set([
-	"opencode:deepseek-v4-flash",
+	"opencode:deepseek-v4.1-flash",
 	"opencode:deepseek-v4-pro",
 	"opencode:kimi-k2.5",
 	"opencode:kimi-k2.6",
@@ -1821,6 +1821,42 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 		const models: Model<any>[] = [];
 		const nvidiaNimModelIds = data.nvidia?.models ? await fetchNvidiaNimModelIds() : new Map<string, string>();
 
+		// Command Code's public listing is authoritative for endpoint routing; models.dev
+		// supplies capabilities, output limits and prices. Claude only accepts Messages.
+		// https://commandcode.ai/docs/provider
+		if (data.commandcode?.models) {
+			const response = await fetch("https://api.commandcode.ai/provider/v1/models", { signal: AbortSignal.timeout(15_000) });
+			if (!response.ok) throw new Error(`Command Code model list returned ${response.status}`);
+			const listing = await response.json() as { data?: { id: string; context_length?: number; supported_endpoints?: string[] }[] };
+			if (!Array.isArray(listing.data) || !listing.data.length) throw new Error("Command Code model list is empty");
+			const listed = new Map(listing.data.map((entry) => [entry.id, entry]));
+			for (const [id, metadata] of Object.entries(data.commandcode.models)) {
+				const entry = listed.get(id);
+				if (!entry || metadata.tool_call !== true || metadata.status === "deprecated") continue;
+				const endpoints = entry.supported_endpoints ?? [];
+				const api = endpoints.includes("/messages") ? "anthropic-messages"
+					: id.startsWith("gpt-") && endpoints.includes("/responses") ? "openai-responses"
+					: endpoints.includes("/chat/completions") ? "openai-completions" : undefined;
+				if (!api) continue;
+				const thinkingLevelMap = getEffortThinkingLevelMap(metadata.reasoning_options ?? []);
+				models.push({
+					id, name: metadata.name || id, provider: "commandcode", api,
+					baseUrl: api === "anthropic-messages" ? "https://api.commandcode.ai/provider" : "https://api.commandcode.ai/provider/v1",
+					reasoning: metadata.reasoning === true,
+					input: metadata.modalities?.input?.includes("image") ? ["text", "image"] : ["text"],
+					cost: getModelsDevCost(metadata.cost),
+					contextWindow: Math.min(entry.context_length ?? Infinity, metadata.limit?.context || 4096),
+					maxTokens: metadata.limit?.output || 4096,
+					...(thinkingLevelMap ? { thinkingLevelMap } : {}),
+					...(api === "openai-completions" ? { compat: {
+						supportsStore: false, supportsLongCacheRetention: false, supportsDeveloperRole: false,
+						maxTokensField: "max_tokens", supportsReasoningEffort: !!thinkingLevelMap,
+						...(!thinkingLevelMap && metadata.reasoning ? { thinkingFormat: "deepseek" } : {}),
+					} } : {}),
+				});
+			}
+		}
+
 		// Process Amazon Bedrock models
 		if (data["amazon-bedrock"]?.models) {
 			for (const [modelId, model] of Object.entries(data["amazon-bedrock"].models)) {
@@ -2677,6 +2713,15 @@ const OPENCODE_CLASSIFIER_MODELS: ClassifierModel<"typesafe-system-one">[] = [
 	},
 ];
 
+// These models are documented but omitted from Command Code's public /models response.
+// https://commandcode.ai/docs/provider#decision-models-typesafejev
+const COMMANDCODE_CLASSIFIER_MODELS: ClassifierModel<"typesafe-system-one">[] = ["typesafe/jev", "typesafe/jev-1.14.0"].map((id) => ({
+	type: "classifier", id, name: id.endsWith("1.14.0") ? "Jev 1.14" : "Jev",
+	api: "typesafe-system-one", provider: "commandcode", baseUrl: "https://api.commandcode.ai/provider/v1",
+	input: ["text"], contextWindow: 32000,
+	cost: { input: 0.042, output: 0, cacheRead: 0, cacheWrite: 0 },
+}));
+
 // Workers AI has no unauthenticated catalog, so its System One models are listed here from
 // Cloudflare's model pages.
 const CLOUDFLARE_WORKERS_AI_CLASSIFIER_MODELS: ClassifierModel<"cloudflare-workers-ai-system-one">[] = [
@@ -3416,6 +3461,7 @@ async function generateModels() {
 		...openRouterCatalog.classifiers,
 		...aiGatewayCatalog.classifiers,
 		...OPENCODE_CLASSIFIER_MODELS,
+		...COMMANDCODE_CLASSIFIER_MODELS,
 		...CLOUDFLARE_WORKERS_AI_CLASSIFIER_MODELS,
 		...OPENAI_CLASSIFIER_MODELS,
 	];

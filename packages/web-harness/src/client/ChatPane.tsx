@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
+import type { ComposerDestination, ComposerSendResult, ConversationCandidate } from "../shared/workspace-routing.ts";
 import { errorMessage } from "./api.ts";
+import { matchesAppKeybinding } from "./app-keybindings.ts";
 import { CommandPicker } from "./CommandPicker.tsx";
 import { ComposerAttachments, useComposerAttachments } from "./ComposerAttachments.tsx";
 import { Conversation } from "./Conversation.tsx";
@@ -10,6 +12,10 @@ import { COMPOSER_COMMANDS } from "./slash-command.ts";
 import type { PendingInputAction, SessionDetail } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { useComposerSize } from "./use-composer-size.ts";
+
+function destinationKey(candidate: ConversationCandidate): string {
+	return candidate.kind === "session" ? `session:${candidate.sessionId}` : `new:${candidate.workspaceId}`;
+}
 
 export function ChatPane({ session, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError }: {
 	session?: SessionDetail;
@@ -24,7 +30,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	surface?: boolean;
 	draftInsertion?: { id: string; text: string };
 	onDraftInserted: () => void;
-	onSend: (text: string, mode: "prompt" | "steer" | "followUp", attachments: AttachmentUpload[]) => Promise<{ disposition?: "queued" | "started"; notice?: string }>;
+	onSend: (text: string, mode: "prompt" | "steer" | "followUp", attachments: AttachmentUpload[], destination?: ComposerDestination) => Promise<ComposerSendResult>;
 	onPendingInputAction: (inputId: string, action: PendingInputAction) => Promise<void>;
 	onFile: (path: string, line?: number) => void;
 	onStop: () => void;
@@ -46,6 +52,9 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const [commandIndex, setCommandIndex] = useState(0);
 	const [pickerDismissed, setPickerDismissed] = useState(false);
 	const pickerId = useId();
+	const workspacePickerId = useId();
+	const [workspaceCandidates, setWorkspaceCandidates] = useState<ConversationCandidate[]>();
+	const [workspaceIndex, setWorkspaceIndex] = useState(0);
 	const [editingInput, setEditingInput] = useState<{ inputId: string; text: string }>();
 	const [mutatingInputId, setMutatingInputId] = useState<string>();
 	const [followRequest, setFollowRequest] = useState(0);
@@ -58,7 +67,12 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const suggestions = COMPOSER_COMMANDS.filter((entry) => entry.command.startsWith(commandPrefix));
 	const pickerOpen = slashInput && !/\s/.test(text.trimStart()) && !pickerDismissed;
 	const activeCommand = Math.min(commandIndex, Math.max(0, suggestions.length - 1));
+	const canRouteWorkspace = !session && !loading && !surface;
+	const workspacePickerOpen = canRouteWorkspace && !!workspaceCandidates?.length;
+	const activeWorkspace = Math.min(workspaceIndex, Math.max(0, (workspaceCandidates?.length ?? 0) - 1));
+	useEffect(() => { if (workspacePickerOpen && !sending) input.current?.focus(); }, [workspacePickerOpen, sending]);
 	function chooseCommand(command: string) {
+		setWorkspaceCandidates(undefined);
 		setText(`${command}${command === "/hyakki" || command === "/goal" ? " " : ""}`);
 		setPickerDismissed(true);
 		input.current?.focus();
@@ -66,6 +80,8 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	useEffect(() => {
 		if (!draftInsertion || insertedDraft.current === draftInsertion.id) return;
 		insertedDraft.current = draftInsertion.id;
+		setWorkspaceCandidates(undefined);
+		setNotice(undefined);
 		setText((current) => {
 			if (!current.trim()) return draftInsertion.text;
 			// Keep a leading command first when attaching a design to an existing draft.
@@ -84,24 +100,33 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	useEffect(() => {
 		try { if (text) localStorage.setItem(`pi-web-draft:${draftKey}`, text); else localStorage.removeItem(`pi-web-draft:${draftKey}`); } catch { /* Drafting remains available without browser storage. */ }
 	}, [draftKey, text]);
-	async function submit() {
+	async function submit(destination?: ComposerDestination) {
 		if ((!text.trim() && !attachments.length) || reading || submitting.current) return;
 		submitting.current = true;
 		setSending(true); setError(undefined); setNotice(undefined);
+		if (destination?.kind === "auto") setNotice("Jevがワークスペースと会話を選択しています…");
 		const submitted = text;
 		const submittedAttachments = attachments;
 		try {
-			const result = await onSend(submitted, busy ? mode : "prompt", submittedAttachments.map(({ name, mimeType, data }) => ({ name, mimeType, data })));
+			const result = await onSend(submitted, busy ? mode : "prompt", submittedAttachments.map(({ name, mimeType, data }) => ({ name, mimeType, data })), destination);
+			if (result.destinationCandidates) {
+				setWorkspaceCandidates(result.destinationCandidates); setWorkspaceIndex(0);
+				setNotice("続ける会話、または新しい会話の開始先を選んでください。");
+				return;
+			}
+			setWorkspaceCandidates(undefined); setNotice(undefined);
 			setText((current) => current === submitted ? "" : current);
 			remove(submittedAttachments.map((attachment) => attachment.id));
 			if (result.notice) setNotice(result.notice);
 			else if (busy && result.disposition) setNotice(result.disposition === "queued" ? "追加の指示を予約しました。" : "追加の指示を送信しました。");
 			setFollowRequest((value) => value + 1);
-		} catch (reason) { setError(errorMessage(reason)); }
+		} catch (reason) { setNotice(undefined); setError(errorMessage(reason)); }
 		finally { submitting.current = false; setSending(false); }
 	}
 	async function attach(files: File[]) {
 		if (submitting.current) return;
+		setWorkspaceCandidates(undefined);
+		setNotice(undefined);
 		setError(undefined);
 		try { await addFiles(files); input.current?.focus(); }
 		catch (reason) { setError(errorMessage(reason)); }
@@ -177,12 +202,24 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 				event.preventDefault(); setDragging(false); void attach(Array.from(event.dataTransfer.files));
 			}}>
 				<Presence show={pickerOpen}><div className="motion-contents"><CommandPicker id={pickerId} commands={suggestions} activeIndex={activeCommand} onActive={setCommandIndex} onChoose={chooseCommand} /></div></Presence>
-				<Presence show={attachments.length > 0} collapse><ComposerAttachments attachments={attachments} disabled={sending} onRemove={(id) => remove([id])} /></Presence>
+				<Presence show={workspacePickerOpen}><div className="motion-contents"><CommandPicker id={workspacePickerId} label="送信先の会話" below commands={(workspaceCandidates ?? []).map((candidate) => ({ command: destinationKey(candidate), label: candidate.kind === "session" ? candidate.title : "＋ 新しい会話で開始", description: candidate.kind === "session" ? `${candidate.name}${candidate.updatedAt ? ` · ${new Date(candidate.updatedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""} · ${candidate.path}` : `${candidate.name} · ${candidate.path}` }))} activeIndex={activeWorkspace} onActive={setWorkspaceIndex} disabled={sending || reading} onChoose={(key) => { const candidate = workspaceCandidates?.find((entry) => destinationKey(entry) === key); if (workspacePickerOpen && candidate) void submit(candidate); }} /></div></Presence>
+				<Presence show={attachments.length > 0} collapse><ComposerAttachments attachments={attachments} disabled={sending} onRemove={(id) => { setWorkspaceCandidates(undefined); setNotice(undefined); remove([id]); }} /></Presence>
 				<input ref={fileInput} type="file" multiple hidden aria-label="添付ファイルを選択" disabled={sending || reading} onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void attach(files); }} />
 				<label className="sr-only" htmlFor="message">メッセージ</label>
 				<div className="composer-input-row">
-					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen} aria-controls={pickerOpen ? pickerId : undefined} aria-activedescendant={pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={2} disabled={sending} onKeyDown={(event) => {
+					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setNotice(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={2} disabled={sending} onKeyDown={(event) => {
 						if (event.nativeEvent.isComposing) return;
+						if (matchesAppKeybinding(event, "composer.routeWorkspace")) { event.preventDefault(); if (canRouteWorkspace && !event.repeat) void submit({ kind: "auto" }); return; }
+						if (matchesAppKeybinding(event, "composer.send")) { event.preventDefault(); if (!event.repeat) void submit(); return; }
+						if (workspacePickerOpen && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setWorkspaceCandidates(undefined); setNotice(undefined); return; }
+						if (workspacePickerOpen && workspaceCandidates && !event.ctrlKey && !event.metaKey && !event.altKey) {
+							if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+								event.preventDefault();
+								setWorkspaceIndex((activeWorkspace + (event.key === "ArrowDown" ? 1 : -1) + workspaceCandidates.length) % workspaceCandidates.length);
+								return;
+							}
+							if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!event.repeat) void submit(workspaceCandidates[activeWorkspace]); return; }
+						}
 						if (pickerOpen && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setPickerDismissed(true); return; }
 						if (pickerOpen && suggestions.length && !event.ctrlKey && !event.metaKey && !event.altKey) {
 							if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -192,7 +229,6 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 							}
 							if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") { event.preventDefault(); chooseCommand(suggestions[activeCommand].command); return; }
 						}
-						if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); void submit(); }
 					}} onPaste={(event) => {
 						const files = Array.from(event.clipboardData.files);
 						if (!files.length) return;
@@ -207,7 +243,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 					<div className="composer-delivery">
 						<Presence show={busy} collapse axis="width"><label><span className="sr-only">追加指示の送信方法</span><select aria-label="追加指示の送信方法" value={mode} onChange={(event) => setMode(event.target.value as "steer" | "followUp")}><option value="followUp">完了後に続ける</option><option value="steer">実行中に指示</option></select></label></Presence>
 						<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage">{contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit ?? 0)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span>} /></div></Presence>
-						{busy && !text.trim() && !attachments.length ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span key="stop" className="motion-label" aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title="Ctrl / Cmd + Enter で送信" disabled={sending || reading || (!text.trim() && !attachments.length) || !slashInput && (!connected || session?.availability === "missing")}><span key={sending ? "sending" : "send"} className="motion-label" aria-hidden="true">{sending ? "…" : "↑"}</span></button>}
+						{busy && !text.trim() && !attachments.length ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span key="stop" className="motion-label" aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Ctrl / Cmd + Enter で送信 · Ctrl / Cmd + Shift + Enter でJevがワークスペース・会話を選択" : "Ctrl / Cmd + Enter で送信"} disabled={sending || reading || (!text.trim() && !attachments.length) || !slashInput && (!connected || session?.availability === "missing")}><span key={sending ? "sending" : "send"} className="motion-label" aria-hidden="true">{sending ? "…" : "↑"}</span></button>}
 					</div>
 				</div></MotionSize>
 			</form>

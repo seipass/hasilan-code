@@ -21,6 +21,7 @@ import {
 } from "../shared/contracts.ts";
 import { goalActionSchema } from "../shared/goals.ts";
 import { workspaceSwarmStartSchema } from "../shared/swarm.ts";
+import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
 import { readAccountUsage } from "./account-usage.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
@@ -46,6 +47,7 @@ import { createHashlineTools } from "./tools/hashline/index.ts";
 import { SearchService } from "./tools/search.ts";
 import { WidgetData } from "./widget-data.ts";
 import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
+import { WorkspaceRouter } from "./workspace-router.ts";
 
 async function main() {
 	const options = parseCliArgs(process.argv.slice(2));
@@ -97,6 +99,7 @@ async function main() {
 	await registry.initialize();
 	await teams.initialize();
 	await registry.addWorkspace(cwd);
+	const workspaceRouter = new WorkspaceRouter(files, modelRuntime, () => settings.get().jev.model, registry);
 	const canvases = new CanvasStore(agentDir, (id) => {
 		registry.getWorkspaceRoot(id);
 	});
@@ -200,6 +203,8 @@ async function main() {
 						selectingWorkspace = false;
 					}
 				}
+				if (url.pathname === "/api/workspaces/route" && method === "POST")
+					return reply(await workspaceRouter.select(await readJson(request, workspaceRouteSchema)));
 				if (url.pathname === "/api/sessions") {
 					if (method === "GET") return reply(registry.list(url.searchParams.get("workspaceId") ?? undefined));
 					if (method === "POST") {
@@ -303,8 +308,8 @@ async function main() {
 				}
 				if (parts[1] === "credentials" && parts[2] === "llm" && parts[3] && method === "PUT") {
 					const { key } = await readJson(request, credentialSchema);
-					await settings.setRuntimeApiKey(parts[3], key);
-					return reply({ configured: true, persistent: false });
+					await settings.saveApiKey(parts[3], key);
+					return reply({ configured: true, persistent: true });
 				}
 				if (parts[1] === "workspaces" && parts[2]) {
 					const id = parts[2];

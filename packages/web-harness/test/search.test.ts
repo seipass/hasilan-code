@@ -188,6 +188,7 @@ describe("Search provider consumer boundaries", () => {
 
 	it("reads changed defaults and keys on each call and never falls back", async () => {
 		const snapshot: SettingsSnapshot = {
+			jev: { configured: false },
 			search: { defaultProvider: "brave", configured: { brave: false, tavily: true, exa: false, firecrawl: false } },
 			teams: { maxConcurrentAgents: 4, maxDepth: 3 },
 		};

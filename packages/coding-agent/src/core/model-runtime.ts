@@ -133,7 +133,12 @@ export interface ModelRuntimeAuthOverrides extends AuthOperationOptions {
 	minOAuthValidityMs?: number;
 }
 
-export type CredentialSynchronizationOperation = "login" | "logout" | "setRuntimeApiKey" | "removeRuntimeApiKey";
+export type CredentialSynchronizationOperation =
+	| "login"
+	| "logout"
+	| "saveApiKey"
+	| "setRuntimeApiKey"
+	| "removeRuntimeApiKey";
 
 /** Credentials changed successfully, but the local model/auth snapshot could not be synchronized. */
 export class CredentialSynchronizationError extends Error {
@@ -623,6 +628,27 @@ export class ModelRuntime implements Models {
 		} catch (cause) {
 			throw new CredentialSynchronizationError(providerId, operation, credential, { cause });
 		}
+	}
+
+	/** Persist an API key in the configured credential store and use it for subsequent requests. */
+	saveApiKey(providerId: string, apiKey: string, options: AuthOperationOptions = {}): Promise<void> {
+		const signal = operationSignal(options.signal);
+		return this.enqueueCredentialOperation(providerId, signal, async () => {
+			if (!this.models.getProvider(providerId)?.auth.apiKey)
+				throw new ModelsError("auth", `Provider does not support API keys: ${providerId}`);
+			if (!apiKey.trim()) throw new ModelsError("auth", "API key must not be empty");
+			const credential = await this.credentials.modify(
+				providerId,
+				async (current) => ({
+					type: "api_key",
+					key: apiKey.trim(),
+					...(current?.type === "api_key" && current.env ? { env: current.env } : {}),
+				}),
+				{ signal },
+			);
+			this.credentials.removeRuntimeApiKey(providerId);
+			await this.synchronizeCredentialState(providerId, "saveApiKey", credential, signal);
+		});
 	}
 
 	setRuntimeApiKey(providerId: string, apiKey: string, options: AuthOperationOptions = {}): Promise<void> {
