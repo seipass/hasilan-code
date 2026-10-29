@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { InMemoryCredentialStore } from "@hasilan-code/pi-ai";
@@ -48,7 +48,7 @@ describe("Jev workspace and conversation selection", () => {
 	let sessions: SavedSession[];
 	beforeEach(async () => {
 		vi.stubEnv("CMD_API_KEY", "");
-		directory = await mkdtemp(join(tmpdir(), "pi-workspace-router-"));
+		directory = await realpath(await mkdtemp(join(tmpdir(), "pi-workspace-router-")));
 		paths = [join(directory, "web", "app"), join(directory, "mobile", "app")];
 		files = new WorkspaceFiles();
 		for (const [index, path] of paths.entries()) {
