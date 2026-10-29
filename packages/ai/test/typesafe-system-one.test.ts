@@ -47,6 +47,40 @@ const wireAnswers = {
 };
 
 describe("TypeSafe System One", () => {
+	it("sends an image and parses an experimental Box with bounded coordinates", async () => {
+		const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+			const payload = JSON.parse(String(init?.body));
+			expect(payload.questions.target).toEqual({ type: "box", instructions: "Find the settings button" });
+			expect(new Headers(init?.headers).get("typesafe-danger-zone-images")).toBe("true");
+			return Response.json({
+				answers: {
+					target: { type: "box", box: { left: 0.2, top: 0.3, right: 0.6, bottom: 0.7 }, confidence: 0.9 },
+				},
+			});
+		});
+		const input: ClassifierContext = {
+			state: { image: "screenshot" },
+			images: [{ type: "image", data: "cG5n", mimeType: "image/png" }],
+			questions: { target: { type: "box", instructions: "Find the settings button" } },
+		};
+		const result = await classify({ ...model, input: ["text", "image"] }, input, { apiKey: "secret", fetch });
+		expect(result.answers.target).toEqual({
+			type: "box",
+			box: { left: 0.2, top: 0.3, right: 0.6, bottom: 0.7 },
+			confidence: 0.9,
+		});
+		const invalid = await classify({ ...model, input: ["text", "image"] }, input, {
+			apiKey: "secret",
+			fetch: async () =>
+				Response.json({
+					answers: { target: { type: "box", box: { left: 0.8, top: 0, right: 0.2, bottom: 1 }, confidence: 0.9 } },
+				}),
+		});
+		expect(invalid.stopReason).toBe("error");
+		const withoutImage = await classify(model, { ...input, images: undefined }, { apiKey: "secret", fetch });
+		expect(withoutImage.stopReason).toBe("error");
+		expect(fetch).toHaveBeenCalledTimes(1);
+	});
 	it("maps public bool questions and answers to TypeSafe noul values", async () => {
 		const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
 			const payload = JSON.parse(String(init?.body)) as {

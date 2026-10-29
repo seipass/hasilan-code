@@ -691,7 +691,17 @@ export interface ClassifierBoolQuestion {
 	criteria: { true: string; false: string };
 }
 
-export type ClassifierQuestion = ClassifierChoiceQuestion | ClassifierScoreQuestion | ClassifierBoolQuestion;
+/** Experimental System One question locating a target in an image. */
+export interface ClassifierBoxQuestion {
+	type: "box";
+	instructions: string;
+}
+
+export type ClassifierQuestion =
+	| ClassifierChoiceQuestion
+	| ClassifierScoreQuestion
+	| ClassifierBoolQuestion
+	| ClassifierBoxQuestion;
 
 export interface ClassifierContext {
 	state: JsonObject;
@@ -721,7 +731,17 @@ export interface ClassifierBoolAnswer {
 	probability: number;
 }
 
-export type ClassifierAnswer = ClassifierChoiceAnswer | ClassifierScoreAnswer | ClassifierBoolAnswer;
+export interface ClassifierBoxAnswer {
+	type: "box";
+	box: { left: number; top: number; right: number; bottom: number };
+	confidence: number;
+}
+
+export type ClassifierAnswer =
+	| ClassifierChoiceAnswer
+	| ClassifierScoreAnswer
+	| ClassifierBoolAnswer
+	| ClassifierBoxAnswer;
 export type ClassifierStopReason = "stop" | "error" | "aborted";
 
 export interface ClassifierResult {

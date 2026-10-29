@@ -49,6 +49,7 @@ function predicateInstructions(question: Extract<ClassifierQuestion, { type: "bo
 }
 
 function wireQuestion(name: string, question: ClassifierQuestion): DecisionQuestion {
+	if (question.type === "box") throw new Error(`${LABEL} does not support box questions`);
 	if (question.type === "choice") {
 		return {
 			type: "choice",

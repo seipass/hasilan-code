@@ -5,7 +5,7 @@ import { getSupportedThinkingLevels } from "@hasilan-code/pi-ai";
 import type { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
-import { isJevModel, type JevSelection, type JevStatus, jevSelectionSchema } from "../shared/workspace-routing.ts";
+import { type JevSelection, type JevStatus, jevSelectionSchema } from "../shared/workspace-routing.ts";
 
 export const searchProviderSchema = Type.Union([
 	Type.Literal("brave"),
@@ -18,6 +18,9 @@ export const settingsPatchSchema = Type.Object(
 	{
 		jev: Type.Optional(
 			Type.Object({ model: Type.Union([jevSelectionSchema, Type.Null()]) }, { additionalProperties: false }),
+		),
+		jevComputer: Type.Optional(
+			Type.Object({ textModel: Type.Union([jevSelectionSchema, Type.Null()]) }, { additionalProperties: false }),
 		),
 		search: Type.Optional(
 			Type.Object({ defaultProvider: Type.Optional(searchProviderSchema) }, { additionalProperties: false }),
@@ -37,6 +40,7 @@ export const settingsPatchSchema = Type.Object(
 export type SettingsPatch = Static<typeof settingsPatchSchema>;
 export interface HarnessSettings {
 	jev?: { model?: JevSelection };
+	jevComputer?: { textModel: JevSelection };
 	search: { defaultProvider: SearchProviderId };
 	teams: { maxConcurrentAgents: number; maxDepth: number };
 }
@@ -59,6 +63,7 @@ const settingsFileSchema = Type.Object(
 	{
 		schemaVersion: Type.Literal(1),
 		jev: Type.Optional(Type.Object({ model: jevSelectionSchema }, { additionalProperties: false })),
+		jevComputer: Type.Optional(Type.Object({ textModel: jevSelectionSchema }, { additionalProperties: false })),
 		search: Type.Object({ defaultProvider: searchProviderSchema }, { additionalProperties: false }),
 		teams: Type.Object(
 			{
@@ -151,6 +156,7 @@ export class SettingsService {
 						search: savedSettings.search,
 						teams: savedSettings.teams,
 						...(savedSettings.jev ? { jev: savedSettings.jev } : {}),
+						...(savedSettings.jevComputer ? { jevComputer: savedSettings.jevComputer } : {}),
 					};
 		if (savedCredentials !== undefined && process.platform !== "win32")
 			await chmod(join(directory, "credentials.json"), 0o600);
@@ -171,6 +177,9 @@ export class SettingsService {
 				},
 			},
 			teams: { ...this.settings.teams },
+			...(this.settings.jevComputer
+				? { jevComputer: { textModel: { ...this.settings.jevComputer.textModel } } }
+				: {}),
 			jev: {
 				...(this.settings.jev?.model ? { model: { ...this.settings.jev.model } } : {}),
 				configured:
@@ -184,25 +193,36 @@ export class SettingsService {
 			return Promise.reject(new Error("Invalid settings; concurrency must be 1..32 and depth 1..8"));
 		return this.enqueue(async () => {
 			if (
+				patch.jevComputer?.textModel &&
+				!this.modelRuntime
+					.getModels()
+					.some(
+						(model) =>
+							model.provider === patch.jevComputer?.textModel?.provider &&
+							model.id === patch.jevComputer?.textModel?.id,
+					)
+			)
+				throw new Error("利用できる文章生成モデルを選択してください。");
+			if (
 				patch.jev?.model &&
 				!this.modelRuntime
 					.getModelsOfType("classifier")
-					.some(
-						(model) =>
-							isJevModel(model) &&
-							model.provider === patch.jev?.model?.provider &&
-							model.id === patch.jev?.model?.id,
-					)
+					.some((model) => model.provider === patch.jev?.model?.provider && model.id === patch.jev?.model?.id)
 			)
-				throw new Error("利用できるJevモデルを選択してください。");
+				throw new Error("利用できる判断モデルを選択してください。");
 			const next: HarnessSettings = {
 				...(this.settings.jev ? { jev: this.settings.jev } : {}),
+				...(this.settings.jevComputer ? { jevComputer: this.settings.jevComputer } : {}),
 				search: { ...this.settings.search, ...patch.search },
 				teams: { ...this.settings.teams, ...patch.teams },
 			};
 			if (patch.jev) {
 				if (patch.jev.model) next.jev = { model: { ...patch.jev.model } };
 				else delete next.jev;
+			}
+			if (patch.jevComputer) {
+				if (patch.jevComputer.textModel) next.jevComputer = { textModel: { ...patch.jevComputer.textModel } };
+				else delete next.jevComputer;
 			}
 			await saveJson(join(this.directory, "settings.json"), { schemaVersion: 1, ...next });
 			this.settings = next;
@@ -242,7 +262,6 @@ export class SettingsService {
 		return {
 			classifiers: this.modelRuntime
 				.getModelsOfType("classifier")
-				.filter(isJevModel)
 				.map(({ provider, id, name }) => ({ provider, id, name })),
 			providers: this.modelRuntime.getProviders().map((provider) => ({
 				id: provider.id,

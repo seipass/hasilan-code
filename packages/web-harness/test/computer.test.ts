@@ -109,6 +109,26 @@ describe("Computer tool boundaries", () => {
 		await expect(manager.execute("s1", "a1", { action: "screenshot" })).resolves.toBeDefined();
 	});
 
+	it("remembers each agent's last monitor after release and does not share it with other agents", async () => {
+		vi.mocked(backend.screens).mockResolvedValue([
+			{ index: 1, ...frame.bounds },
+			{ index: 3, ...frame.bounds },
+		]);
+		await manager.execute("s1", "a1", { action: "screenshot", monitor: 3 });
+		await manager.execute("s1", "a1", { action: "release" });
+		const resumed = await manager.execute("s1", "a1", { action: "screenshot" });
+		expect(resumed.details.monitor).toBe(3);
+		await manager.execute("s1", "a1", { action: "release" });
+		expect((await manager.execute("s1", "a2", { action: "screenshot" })).details.monitor).toBe(1);
+	});
+
+	it("refuses to reuse a remembered monitor if its geometry changes", async () => {
+		await manager.execute("s1", "a1", { action: "screenshot", monitor: 1 });
+		await manager.execute("s1", "a1", { action: "release" });
+		vi.mocked(backend.frame).mockResolvedValueOnce({ ...frame, bounds: { ...frame.bounds, left: 20 } });
+		await expect(manager.execute("s1", "a1", { action: "screenshot" })).rejects.toThrow("monitor changed");
+	});
+
 	it("invalidates the old frame if input succeeds but the next screenshot fails", async () => {
 		const screenshot = await manager.execute("s1", "a1", { action: "screenshot" });
 		vi.mocked(backend.frame).mockRejectedValueOnce(new Error("capture denied"));

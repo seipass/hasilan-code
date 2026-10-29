@@ -32,7 +32,9 @@ export function conversationRows(messages: ChatMessage[], tools: ToolCall[], act
 		const computerTools =
 			message.contextInjection || message.importedContext
 				? []
-				: messageTools.filter((tool): tool is ToolCall => tool?.name === "computer");
+				: messageTools.filter(
+						(tool): tool is ToolCall => tool?.name === "computer" || tool?.name === "jev_computer",
+					);
 		for (const tool of computerTools) {
 			if (!current || current.group.released || current.group.runId !== tool.runId) {
 				current = {
@@ -44,7 +46,11 @@ export function conversationRows(messages: ChatMessage[], tools: ToolCall[], act
 			current.group.tools.push(tool);
 			current.anchor = message.messageId;
 			const input = record(tool.input) ? tool.input : undefined;
-			if (input?.action === "release" && tool.status === "success" && computerDetails(tool)?.released === true)
+			if (
+				(input?.action === "release" || tool.name === "jev_computer") &&
+				tool.status === "success" &&
+				computerDetails(tool)?.released === true
+			)
 				current.group.released = true;
 		}
 		const hasBody = parts.some((part) => {
@@ -86,6 +92,20 @@ export interface ComputerFrame {
 export function computerFrames(tools: ToolCall[]): ComputerFrame[] {
 	return tools.flatMap((tool): ComputerFrame[] => {
 		const details = computerDetails(tool);
+		if (details?.mode === "jev" && Array.isArray(details.frames)) {
+			return details.frames.flatMap((entry): ComputerFrame[] => {
+				if (!record(entry) || typeof entry.frameId !== "string") return [];
+				return computerFrames([
+					{
+						...tool,
+						key: `${tool.key}:${entry.frameId}`,
+						input: record(entry.input) ? entry.input : {},
+						result: { details: entry },
+						status: "success",
+					},
+				]);
+			});
+		}
 		const artifact = details && record(details.artifact) ? details.artifact : undefined;
 		if (
 			tool.status !== "success" ||

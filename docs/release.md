@@ -6,7 +6,7 @@
 
 - [Hasilan Code CI](../.github/workflows/hasilan-ci.yml): Windows・macOS・Linux でビルド、全体チェック、対象テストを実行します。Ubuntu で作った同一の配布物を 3 OS のリポジトリ外へインストールし、CLI・変更済み SDK・認証付き HTTP・実際の PTY 入出力を検証します。
 - [Hasilan Code Release](../.github/workflows/hasilan-release.yml): `hasilan-vX.Y.Z`タグだけで動作し、CI で検証した配布物・インストーラー・`SHA256SUMS`・ソース情報を GitHub Releases へ公開します。本家の`vX.Y.Z`タグとは分離します。同じバージョンの配布物を上書きしません。
-- ビルドには`nix/model-catalog.json`で固定した Pi のモデルカタログを、SHA-256 で検証してから使用します。実行時依存の解決結果がルート lockfile にないバージョンへ変わった場合はパッケージ作成を拒否します。
+- ビルドには`nix/model-catalog.json`で固定した Pi のモデルカタログを SHA-256 で検証したうえで、`nix/hasilan-model-catalog.json`の Hasilan 固有モデルを追加して使用します。実行時依存の解決結果がルート lockfile にないバージョンへ変わった場合はパッケージ作成を拒否します。
 
 ローカルで配布物を作り、作業ツリー外への導入を検証します。
 

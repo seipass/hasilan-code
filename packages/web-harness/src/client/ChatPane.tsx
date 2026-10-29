@@ -104,7 +104,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 		if ((!text.trim() && !attachments.length) || reading || submitting.current) return;
 		submitting.current = true;
 		setSending(true); setError(undefined); setNotice(undefined);
-		if (destination?.kind === "auto") setNotice("Jevがワークスペースと会話を選択しています…");
+		if (destination?.kind === "auto") setNotice("判断モデルがワークスペースと会話を選択しています…");
 		const submitted = text;
 		const submittedAttachments = attachments;
 		try {
@@ -243,7 +243,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 					<div className="composer-delivery">
 						<Presence show={busy} collapse axis="width"><label><span className="sr-only">追加指示の送信方法</span><select aria-label="追加指示の送信方法" value={mode} onChange={(event) => setMode(event.target.value as "steer" | "followUp")}><option value="followUp">完了後に続ける</option><option value="steer">実行中に指示</option></select></label></Presence>
 						<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage">{contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit ?? 0)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span>} /></div></Presence>
-						{busy && !text.trim() && !attachments.length ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span key="stop" className="motion-label" aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Ctrl / Cmd + Enter で送信 · Ctrl / Cmd + Shift + Enter でJevがワークスペース・会話を選択" : "Ctrl / Cmd + Enter で送信"} disabled={sending || reading || (!text.trim() && !attachments.length) || !slashInput && (!connected || session?.availability === "missing")}><span key={sending ? "sending" : "send"} className="motion-label" aria-hidden="true">{sending ? "…" : "↑"}</span></button>}
+						{busy && !text.trim() && !attachments.length ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span key="stop" className="motion-label" aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Ctrl / Cmd + Enter で送信 · Ctrl / Cmd + Shift + Enter で判断モデルがワークスペース・会話を選択" : "Ctrl / Cmd + Enter で送信"} disabled={sending || reading || (!text.trim() && !attachments.length) || !slashInput && (!connected || session?.availability === "missing")}><span key={sending ? "sending" : "send"} className="motion-label" aria-hidden="true">{sending ? "…" : "↑"}</span></button>}
 					</div>
 				</div></MotionSize>
 			</form>

@@ -287,7 +287,7 @@ describe("Jev workspace and conversation selection", () => {
 		selection = undefined;
 		await expect(router.select({ text: "Fix music" })).rejects.toThrow("モデルを選択");
 		selection = { provider: "commandcode", id: "gpt-6.1-sol" };
-		await expect(router.select({ text: "Fix music" })).rejects.toThrow("利用できるJev");
+		await expect(router.select({ text: "Fix music" })).rejects.toThrow("利用できる判断モデル");
 		selection = { provider: "commandcode", id: "typesafe/jev" };
 		await runtime.removeRuntimeApiKey("commandcode");
 		await expect(router.select({ text: "Fix music" })).rejects.toThrow("認証");
@@ -301,7 +301,7 @@ describe("Jev workspace and conversation selection", () => {
 		["workspace_2", { workspace_1: 0, workspace_2: 1, undetermined: 0, unregistered: 1 }],
 	])("rejects results outside the offered options: %s", async (choice, probabilities) => {
 		request.mockResolvedValue(decision(choice, 0.99, probabilities));
-		await expect(router.select({ text: "Fix music" })).rejects.toThrow("Jev");
+		await expect(router.select({ text: "Fix music" })).rejects.toThrow("判断モデル");
 	});
 
 	it.each([401, 403, 429, 500])("does not expose reflected credentials or retry HTTP %s", async (status) => {
@@ -323,6 +323,8 @@ describe("Jev workspace and conversation selection", () => {
 
 	it.each([
 		["typesafe", "jev-latest", "https://api.typesafe.ai/v1/systemone"],
+		["liquid", "d1", "https://api.liquid.ai/decisions/v1/systemone"],
+		["vercel-ai-gateway", "liquid/d1", "https://ai-gateway.vercel.sh/typesafe/v1/systemone"],
 		["openrouter", "typesafe/jev-1.14", "https://openrouter.ai/api/v1/systemone"],
 		["vercel-ai-gateway", "typesafe-ai/jev", "https://ai-gateway.vercel.sh/typesafe/v1/systemone"],
 		["opencode", "jev-1.13", "https://opencode.ai/inference/v1/systemone"],

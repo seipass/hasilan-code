@@ -5,7 +5,6 @@ import { Check } from "typebox/value";
 import {
 	type ConversationCandidate,
 	canContinueSession,
-	isJevModel,
 	type JevSelection,
 	type WorkspaceRouteInput,
 	type WorkspaceRouteResult,
@@ -63,14 +62,14 @@ export class WorkspaceRouter {
 		if (!input.text.trim() && !input.attachments?.length) throw new HttpError(400, "作業内容を入力してください。");
 		const workspaces = this.files.getWorkspaces();
 		if (!workspaces.length) throw new HttpError(400, "ワークスペースを追加してください。");
-		if (workspaces.length > 254) throw new HttpError(400, "Jevで選択できるワークスペースは254件までです。");
+		if (workspaces.length > 254) throw new HttpError(400, "判断モデルで選択できるワークスペースは254件までです。");
 		const selection = this.getSelection();
-		if (!selection) throw new HttpError(409, "設定の「エージェント」でJevのプロバイダーとモデルを選択してください。");
+		if (!selection)
+			throw new HttpError(409, "設定の「エージェント」で判断モデルのプロバイダーとモデルを選択してください。");
 		const model = this.runtime.getModelOfType("classifier", selection.provider, selection.id);
-		if (!model || !isJevModel(model))
-			throw new HttpError(409, "設定の「エージェント」で利用できるJevモデルを選択してください。");
+		if (!model) throw new HttpError(409, "設定の「エージェント」で利用できる判断モデルを選択してください。");
 		if (!this.runtime.hasConfiguredAuth(model.provider))
-			throw new HttpError(409, "設定の「プロバイダー」で選択したJevの接続先を認証してください。");
+			throw new HttpError(409, "設定の「プロバイダー」で選択した判断モデルの接続先を認証してください。");
 		const excerptLimit = Math.min(600, Math.floor(5000 / workspaces.length));
 		const candidates: { choice: string; candidate: ConversationCandidate; description: Record<string, unknown> }[] =
 			await Promise.all(
@@ -179,20 +178,20 @@ export class WorkspaceRouter {
 			);
 			if (result.stopReason !== "stop") {
 				if (status === 401 || status === 403)
-					throw new HttpError(502, "Jevのプロバイダーの認証と利用条件を設定画面で確認してください。");
+					throw new HttpError(502, "判断モデルのプロバイダーの認証と利用条件を設定画面で確認してください。");
 				if (status === 429)
-					throw new HttpError(503, "Jevの利用制限に達しました。しばらく待って再送信してください。");
+					throw new HttpError(503, "判断モデルの利用制限に達しました。しばらく待って再送信してください。");
 				throw new HttpError(
 					502,
-					"Jevによるワークスペース・会話の選択に失敗しました。プロバイダーの設定を確認してください。",
+					"判断モデルによるワークスペース・会話の選択に失敗しました。プロバイダーの設定を確認してください。",
 				);
 			}
 			data = result;
 		} catch (error) {
 			if (error instanceof HttpError) throw error;
-			throw new HttpError(502, "Jevへ接続できませんでした。しばらく待って再送信してください。");
+			throw new HttpError(502, "判断モデルへ接続できませんでした。しばらく待って再送信してください。");
 		}
-		if (!Check(decisionSchema, data)) throw new HttpError(502, "Jevの選択結果を読み取れませんでした。");
+		if (!Check(decisionSchema, data)) throw new HttpError(502, "判断モデルの選択結果を読み取れませんでした。");
 		const answer = data.answers.destination;
 		const offered = new Set([...candidates.map((candidate) => candidate.choice), "undetermined"]);
 		if (
@@ -200,7 +199,7 @@ export class WorkspaceRouter {
 			Object.keys(answer.probabilities).some((choice) => !offered.has(choice)) ||
 			[...offered].some((choice) => answer.probabilities[choice] === undefined)
 		)
-			throw new HttpError(502, "Jevが返した選択結果はワークスペース・会話の候補と一致しません。");
+			throw new HttpError(502, "判断モデルが返した選択結果はワークスペース・会話の候補と一致しません。");
 		const ranked = candidates
 			.map(({ candidate, choice }) => ({
 				choice,

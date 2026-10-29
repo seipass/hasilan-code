@@ -49,7 +49,25 @@ describe("Web harness settings", () => {
 		expect(deleted.getSearchKey("tavily")).toBe("private-tavily");
 	});
 
-	it("lists Jev across providers and rejects non-Jev or nonexistent selections", async () => {
+	it("persists and validates the independent Jev Computer Use text model", async () => {
+		const settings = await SettingsService.open(directory, runtime);
+		const model = runtime.getModels().find((entry) => entry.provider === "commandcode");
+		if (!model) throw new Error("Expected Command Code chat model");
+		const selection = { provider: model.provider, id: model.id };
+		await settings.patch({ jev: { model: { provider: "commandcode", id: "typesafe/jev" } } });
+		await settings.patch({ jevComputer: { textModel: selection } });
+		const restored = await SettingsService.open(directory, runtime);
+		expect(restored.get().jevComputer?.textModel).toEqual(selection);
+		expect(restored.get().jev.model?.id).toBe("typesafe/jev");
+		await expect(
+			restored.patch({ jevComputer: { textModel: { provider: "missing", id: "unknown" } } }),
+		).rejects.toThrow("文章生成モデル");
+		expect(restored.get().jevComputer?.textModel).toEqual(selection);
+		await restored.patch({ jevComputer: { textModel: null } });
+		expect((await SettingsService.open(directory, runtime)).get().jevComputer).toBeUndefined();
+	});
+
+	it("lists decision models across providers and rejects nonexistent selections", async () => {
 		const settings = await SettingsService.open(directory, runtime);
 		const classifiers = settings.getModels().classifiers;
 		for (const provider of [
@@ -61,18 +79,28 @@ describe("Web harness settings", () => {
 			"cloudflare-workers-ai",
 		])
 			expect(classifiers.some((model) => model.provider === provider)).toBe(true);
-		expect(classifiers.every((model) => model.id.includes("jev"))).toBe(true);
+		expect(classifiers.some((model) => model.provider === "liquid" && model.id === "d1")).toBe(true);
+		expect(classifiers.some((model) => model.provider === "vercel-ai-gateway" && model.id === "liquid/d1")).toBe(
+			true,
+		);
 		expect(
-			classifiers.some((classifier) =>
-				settings
-					.getModels()
-					.models.some((model) => model.provider === classifier.provider && model.id === classifier.id),
-			),
+			classifiers
+				.filter((classifier) => classifier.id.includes("jev"))
+				.some((classifier) =>
+					settings
+						.getModels()
+						.models.some((model) => model.provider === classifier.provider && model.id === classifier.id),
+				),
 		).toBe(false);
 		await expect(settings.patch({ jev: { model: { provider: "commandcode", id: "gpt-6.1-sol" } } })).rejects.toThrow(
-			"Jevモデル",
+			"判断モデル",
 		);
-		await expect(settings.patch({ jev: { model: { provider: "missing", id: "jev" } } })).rejects.toThrow("Jevモデル");
+		await expect(settings.patch({ jev: { model: { provider: "missing", id: "jev" } } })).rejects.toThrow(
+			"判断モデル",
+		);
+		await settings.patch({ jev: { model: { provider: "liquid", id: "d1" } } });
+		expect(settings.get().jev.model?.id).toBe("d1");
+		await settings.patch({ jev: { model: null } });
 		expect(settings.get().jev.model).toBeUndefined();
 	});
 

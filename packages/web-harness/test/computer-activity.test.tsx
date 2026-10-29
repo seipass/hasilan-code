@@ -22,6 +22,21 @@ function message(index: number, tools: ToolCall[], content: unknown[] = []): Cha
 }
 
 describe("Computer use activity", () => {
+	it("shows the Jev tool's live screen and its recorded operations in the same interactive viewer", () => {
+		const jev = tool(1, "task", { name: "jev_computer", status: "running", input: { objective: "Open settings" }, result: { details: { mode: "jev", frames: [
+			{ action: "screenshot", frameId: "first", width: 100, height: 50, artifact: { id: "first-image" } },
+			{ action: "click", frameId: "second", width: 100, height: 50, artifact: { id: "second-image" }, input: { action: "click", frameId: "first", x: 10, y: 20 } },
+		] } } });
+		const [row] = conversationRows([message(1, [jev])], [jev], "run");
+		if (row.kind !== "computer") throw new Error("Expected computer activity");
+		const frames = computerFrames(row.group.tools);
+		expect(frames.map((entry) => entry.url)).toEqual(["/api/artifacts/first-image", "/api/artifacts/second-image"]);
+		expect(computerPointer(frames[1].tool, frames)).toEqual({ x: 10, y: 40 });
+		const markup = renderToStaticMarkup(<ComputerActivity group={row.group} onFile={() => {}} />);
+		expect(markup).toContain("判断モデル Computer use");
+		expect(markup).toContain('src="/api/artifacts/second-image"');
+		expect(markup).toContain("操作の履歴");
+	});
 	it("keeps one stable viewer as operations move across assistant messages", () => {
 		const screenshot = tool(1);
 		const click = tool(2, "click");

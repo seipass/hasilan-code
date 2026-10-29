@@ -49,6 +49,23 @@ export function localPiPackages(workspaces, dependencies) {
 	return [...selected.values()];
 }
 
+/** Add fork-specific models to the verified upstream catalog. */
+export function mergeHasilanCatalog(catalog, overlay) {
+	const merged = { ...catalog };
+	for (const [provider, additions] of Object.entries(overlay)) {
+		if (!Array.isArray(additions) || additions.length === 0 || (merged[provider] && !Array.isArray(merged[provider])))
+			throw new Error(`Invalid Hasilan model catalog for provider: ${provider}`);
+		const models = new Map();
+		for (const model of [...(merged[provider] ?? []), ...additions]) {
+			if (!model || model.provider !== provider || !model.type || !model.id || !model.api)
+				throw new Error(`Invalid Hasilan model catalog entry for provider: ${provider}`);
+			models.set(`${model.type}\0${model.id}`, model);
+		}
+		merged[provider] = [...models.values()];
+	}
+	return merged;
+}
+
 export async function buildHasilan(root) {
 	const pin = JSON.parse(readFileSync(join(root, "nix/model-catalog.json"), "utf8"));
 	const response = await fetch(`https://pi.dev/api/models/revisions/${pin.revision}?types=chat,image,classifier`);
@@ -59,7 +76,9 @@ export async function buildHasilan(root) {
 	const temporary = mkdtempSync(join(tmpdir(), "hasilan-catalog-"));
 	try {
 		const catalog = join(temporary, "catalog.json");
-		writeFileSync(catalog, bytes);
+		const upstream = JSON.parse(bytes.toString("utf8"));
+		const overlay = JSON.parse(readFileSync(join(root, "nix/hasilan-model-catalog.json"), "utf8"));
+		writeFileSync(catalog, JSON.stringify(mergeHasilanCatalog(upstream, overlay)));
 		execFileSync(process.execPath, ["packages/ai/scripts/hydrate-model-catalog.ts", catalog], {
 			cwd: root,
 			stdio: "inherit",

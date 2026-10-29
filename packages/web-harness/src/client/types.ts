@@ -106,6 +106,7 @@ export interface WorkspaceProjection {
 }
 export interface Settings {
 	jev?: JevStatus;
+	jevComputer?: { textModel: Model };
 	search: {
 		defaultProvider: "brave" | "tavily" | "exa" | "firecrawl";
 		configured: { brave: boolean; tavily: boolean; exa: boolean; firecrawl: boolean };

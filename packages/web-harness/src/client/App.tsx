@@ -221,7 +221,7 @@ export function App() {
 		commandPending.current = true;
 		try {
 			const parsed = parseComposerCommand(text);
-			if (destination && (sessionId || mode !== "chat" || parsed.kind !== "prompt")) throw new Error("Jevによる選択はホームの通常メッセージで利用できます。");
+			if (destination && (sessionId || mode !== "chat" || parsed.kind !== "prompt")) throw new Error("判断モデルによる選択はホームの通常メッセージで利用できます。");
 			if (attachments.length && parsed.kind !== "prompt") throw new Error("添付ファイルは通常のメッセージとして送信してください。");
 			if (parsed.kind === "canvas") {
 				if (!workspaceId) throw new Error("ワークスペースを選択してください。");

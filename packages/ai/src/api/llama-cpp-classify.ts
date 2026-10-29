@@ -103,6 +103,7 @@ function renderState(state: JsonObject): string {
 
 /** The answer labels of a question and the keys they stand for. Throws for unsupported option counts. */
 function questionLabels(question: ClassifierQuestion): { labels: string[]; keys: string[] } {
+	if (question.type === "box") throw new Error(`${LABEL} does not support box questions`);
 	if (question.type === "choice") {
 		const keys = Object.keys(question.criteria);
 		if (keys.length < 2 || keys.length > CHOICE_LABELS.length) {
@@ -122,6 +123,7 @@ function questionLabels(question: ClassifierQuestion): { labels: string[]; keys:
 
 /** The question and its options. `labels` puts the answer labels on choice options. */
 function renderTask(question: ClassifierQuestion, labels: readonly string[] | undefined): string {
+	if (question.type === "box") throw new Error(`${LABEL} does not support box questions`);
 	const head = `Question: ${question.instructions}`;
 	if (question.type === "choice") {
 		const lines = Object.entries(question.criteria).map(([key, description], index) => {
@@ -199,6 +201,7 @@ export function answerFromProbabilities(
 	keys: readonly string[],
 	probabilities: readonly number[],
 ): ClassifierAnswer {
+	if (question.type === "box") throw new Error(`${LABEL} does not support box questions`);
 	if (question.type === "bool") {
 		return { type: "bool", probability: probabilities[keys.indexOf("true")]! };
 	}

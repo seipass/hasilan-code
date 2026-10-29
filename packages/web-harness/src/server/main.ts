@@ -43,6 +43,7 @@ import { TerminalManager } from "./terminal-manager.ts";
 import { BrowserManager } from "./tools/browser.ts";
 import { PythonDesktop } from "./tools/computer/backend.ts";
 import { ComputerManager } from "./tools/computer/index.ts";
+import { JevComputer } from "./tools/computer/jev.ts";
 import { createHashlineTools } from "./tools/hashline/index.ts";
 import { SearchService } from "./tools/search.ts";
 import { WidgetData } from "./widget-data.ts";
@@ -68,6 +69,10 @@ async function main() {
 	const artifacts = new ArtifactStore();
 	const browser = new BrowserManager(artifacts);
 	const computer = new ComputerManager(new PythonDesktop(agentDir), artifacts);
+	const jevComputer = new JevComputer(computer, modelRuntime, () => ({
+		jev: settings.get().jev.model,
+		textModel: settings.get().jevComputer?.textModel,
+	}));
 	const search = new SearchService(settings);
 	const widgets = new WidgetData();
 	let events: EventHub | undefined;
@@ -84,6 +89,7 @@ async function main() {
 				...createHashlineTools(files, descriptor.workspaceId),
 				browser.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				computer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
+				jevComputer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				search.createTool(),
 				teams.createTool(descriptor.sessionId),
 				teams.createGoalTool(descriptor.sessionId),

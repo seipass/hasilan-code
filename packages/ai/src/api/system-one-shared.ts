@@ -108,6 +108,28 @@ function parseAnswers(label: string, value: unknown, context: ClassifierContext)
 					confidence: requiredNumber(label, answer.confidence, `confidence for ${id}`),
 				},
 			]);
+		} else if (question.type === "box") {
+			if (answer.type !== "box" || !isRecord(answer.box))
+				throw new Error(`${label} did not return a box answer for ${id}`);
+			const box = {
+				left: requiredNumber(label, answer.box.left, `box left for ${id}`),
+				top: requiredNumber(label, answer.box.top, `box top for ${id}`),
+				right: requiredNumber(label, answer.box.right, `box right for ${id}`),
+				bottom: requiredNumber(label, answer.box.bottom, `box bottom for ${id}`),
+			};
+			const confidence = requiredNumber(label, answer.confidence, `confidence for ${id}`);
+			if (
+				box.left < 0 ||
+				box.top < 0 ||
+				box.right > 1 ||
+				box.bottom > 1 ||
+				box.left >= box.right ||
+				box.top >= box.bottom ||
+				confidence < 0 ||
+				confidence > 1
+			)
+				throw new Error(`${label} returned an invalid box for ${id}`);
+			answers.push([id, { type: "box", box, confidence }]);
 		} else {
 			if (answer.type !== "noul") throw new Error(`${label} did not return a bool answer for ${id}`);
 			answers.push([
@@ -203,6 +225,8 @@ export async function classifySystemOne(
 
 	try {
 		if (model.api !== transport.api) throw new Error(`Unsupported classifier API: ${model.api}`);
+		if (Object.values(context.questions).some((question) => question.type === "box") && !context.images?.length)
+			throw new Error(`${transport.label} box questions require an image`);
 		const request = wireRequest(context);
 		let requestOptions = options;
 		if (context.images?.length) {
