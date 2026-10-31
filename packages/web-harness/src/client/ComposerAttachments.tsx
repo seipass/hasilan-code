@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { type Ref, useRef, useState } from "react";
 import { ATTACHMENT_LIMITS, type AttachmentUpload, isVisionImage } from "../shared/attachments.ts";
 import { FileIcon } from "./files/FileIcon.tsx";
 import { nextClientId } from "./ids.ts";
@@ -51,12 +51,13 @@ export function useComposerAttachments(draftKey: string) {
 	return { attachments, reading, addFiles, remove };
 }
 
-export function ComposerAttachments({ attachments, disabled, onRemove }: {
+export function ComposerAttachments({ attachments, disabled, onRemove, ref }: {
 	attachments: DraftAttachment[];
 	disabled: boolean;
 	onRemove: (id: string) => void;
+	ref?: Ref<HTMLUListElement>;
 }) {
-	return <ul className="composer-attachments" aria-label="添付ファイル">
+	return <ul ref={ref} className="composer-attachments" aria-label="添付ファイル">
 		{attachments.map((attachment) => <li className="composer-attachment" key={attachment.id}>
 			{isVisionImage(attachment.mimeType)
 				? <img src={`data:${attachment.mimeType};base64,${attachment.data}`} alt={attachment.name} />

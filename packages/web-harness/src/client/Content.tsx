@@ -1,3 +1,4 @@
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isVisionImage } from "../shared/attachments.ts";
@@ -23,12 +24,12 @@ export function Markdown({ text, onFile }: { text: string; onFile: (path: string
 	}}>{text}</ReactMarkdown>;
 }
 
-export function Content({ value, onFile }: { value: unknown; onFile: (path: string, line?: number) => void }) {
+export function Content({ value, onFile, activeThinking = false }: { value: unknown; onFile: (path: string, line?: number) => void; activeThinking?: boolean }) {
 	if (typeof value === "string") return <Markdown text={value} onFile={onFile} />;
-	if (Array.isArray(value)) return <>{value.map((part: unknown, index: number) => <Content key={index} value={part} onFile={onFile} />)}</>;
+	if (Array.isArray(value)) return <>{value.map((part: unknown, index: number) => <Content key={index} value={part} onFile={onFile} activeThinking={activeThinking && index === value.length - 1} />)}</>;
 	if (!record(value)) return value === undefined || value === null ? null : <pre>{String(value)}</pre>;
 	if (value.type === "text" && typeof value.text === "string") return <Markdown text={value.text} onFile={onFile} />;
-	if (value.type === "thinking" && typeof value.thinking === "string") return <Thinking text={value.thinking} summary={typeof value.summary === "string" ? value.summary : undefined} redacted={value.redacted === true} onFile={onFile} />;
+	if (value.type === "thinking" && typeof value.thinking === "string") return <Thinking text={value.thinking} summary={typeof value.summary === "string" ? value.summary : undefined} redacted={value.redacted === true} onFile={onFile} initiallyOpen={activeThinking} />;
 	if (value.type === "fileAttachment" && typeof value.path === "string" && value.path.startsWith(".hasilan-code/attachments/") && typeof value.name === "string") {
 		const path = value.path;
 		const image = typeof value.mimeType === "string" && isVisionImage(value.mimeType) && typeof value.url === "string" && /^\/api\/workspaces\/[^/]+\/file-content\?/.test(value.url) ? value.url : undefined;
@@ -54,9 +55,7 @@ export function Content({ value, onFile }: { value: unknown; onFile: (path: stri
 	if (value.type === "toolCall") return <p className="muted">ツール呼び出し: {typeof value.name === "string" ? value.name : "tool"}</p>;
 	return <pre className="json-content">{JSON.stringify(value, null, 2)}</pre>;
 }
-import { useState } from "react";
-
-function Thinking({ text, summary, redacted, onFile }: { text: string; summary?: string; redacted: boolean; onFile: (path: string, line?: number) => void }) {
-	const [open, setOpen] = useState(false);
-	return <details className="thinking" onToggle={(event) => setOpen(event.currentTarget.open)}><summary><span className="thinking-title">{summary && !text ? "推論の要約" : "思考"}</span><span className="thinking-preview">{(text || summary || "").replace(/\s+/g, " ").trim().slice(0, 180) || (redacted ? "暗号化された推論（原記録に保持）" : "")}</span></summary>{open && <>{text && <Markdown text={text} onFile={onFile} />}{summary && <div className="thinking-summary"><strong>保存された要約</strong><Markdown text={summary} onFile={onFile} /></div>}{redacted && <p className="muted">暗号化された内容は復号していません。元のデータを保存しています。</p>}</>}</details>;
+function Thinking({ text, summary, redacted, onFile, initiallyOpen }: { text: string; summary?: string; redacted: boolean; onFile: (path: string, line?: number) => void; initiallyOpen: boolean }) {
+	const [open, setOpen] = useState(initiallyOpen);
+	return <details className="thinking" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}><summary><span className="thinking-title">{summary && !text ? "推論の要約" : "思考"}</span><span className="thinking-preview">{(text || summary || "").replace(/\s+/g, " ").trim().slice(0, 180) || (redacted ? "暗号化された推論（原記録に保持）" : "")}</span></summary>{open && <>{text && <Markdown text={text} onFile={onFile} />}{summary && <div className="thinking-summary"><strong>保存された要約</strong><Markdown text={summary} onFile={onFile} /></div>}{redacted && <p className="muted">暗号化された内容は復号していません。元のデータを保存しています。</p>}</>}</details>;
 }
