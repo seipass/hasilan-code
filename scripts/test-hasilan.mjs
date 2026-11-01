@@ -48,6 +48,7 @@ execFileSync(
 		vitest,
 		"--run",
 		"--maxWorkers=2",
+		"test/http-dispatcher.test.ts",
 		"test/suite/agent-session-context-injection.test.ts",
 		"test/suite/agent-session-queue.test.ts",
 	],
