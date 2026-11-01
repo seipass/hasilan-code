@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { zstdCompressSync } from "node:zlib";
 import { fauxAssistantMessage } from "@hasilan-code/pi-ai/compat";
 import type { AgentSessionEvent, SessionManager } from "@hasilan-code/pi-coding-agent";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHttpHost } from "../src/server/http-host.ts";
 import { handleSessionImport } from "../src/server/session-import/routes.ts";
 import { readSessionDatabase, SessionImportService, sessionImportPaths } from "../src/server/session-import/service.ts";
@@ -144,6 +144,46 @@ async function sources(home: string, cwd: string): Promise<Record<SessionImportS
 }
 
 describe("session import discovery and persistence", () => {
+	it("imports JSONL without combining the entire source into one buffer", async () => {
+		const { home, cwd, service } = await fixture();
+		const path = join(home, ".codex/sessions/rollout-stream-limit.jsonl");
+		await jsonl(path, [
+			{ type: "session_meta", payload: { id: "stream-limit", cwd } },
+			...Array.from({ length: 5 }, (_, index) => ({ type: "source-metadata", index, padding: "x".repeat(300_000) })),
+			{ type: "response_item", payload: { type: "message", role: "user", content: "complete history" } },
+		]);
+		const candidate = (await service.discover({ source: "codex" })).candidates[0];
+		const concat = Buffer.concat;
+		const limited = vi.spyOn(Buffer, "concat").mockImplementation((list, totalLength) => {
+			if ((totalLength ?? list.reduce((sum, item) => sum + item.byteLength, 0)) > 1_000_000)
+				throw new Error("Cannot create a string longer than 0x1fffffe8 characters");
+			return concat(list, totalLength);
+		});
+		try {
+			const preview = await service.preview(candidate.candidateId);
+			expect(preview.messages[0].text).toBe("complete history");
+			expect((await service.read(candidate.candidateId, preview.revision)).data.records).toHaveLength(7);
+		} finally {
+			limited.mockRestore();
+		}
+	});
+	it("streams plain JSONL across chunks and preserves a partially written final line warning", async () => {
+		const { home, cwd, service } = await fixture();
+		const path = join(home, ".codex/sessions/rollout-streamed.jsonl");
+		await mkdir(dirname(path), { recursive: true });
+		const rows = [
+			{ type: "session_meta", payload: { id: "streamed", cwd } },
+			{ type: "response_item", payload: { type: "message", role: "user", content: `${"a".repeat(65530)}あ` } },
+		];
+		await writeFile(path, `\uFEFF${rows.map((row) => JSON.stringify(row)).join("\r\n")}\r\n{"type":`);
+		const candidate = (await service.discover({ source: "codex" })).candidates[0];
+		const preview = await service.preview(candidate.candidateId);
+		const { data } = await service.read(candidate.candidateId, preview.revision);
+		expect(data.messages[0].text).toBe(rows[1].payload.content);
+		expect(data.warnings.join(" ")).toContain("書き込み途中の最終行");
+		await writeFile(path, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n{broken}\n`);
+		await expect(service.read(candidate.candidateId)).rejects.toThrow("3 行目");
+	});
 	it("lists user conversations without Codex's internal subagent sessions", async () => {
 		const { home, cwd, service } = await fixture();
 		for (const [id, source] of [

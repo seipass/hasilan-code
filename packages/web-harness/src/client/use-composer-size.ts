@@ -6,14 +6,14 @@ export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text
 	useLayoutEffect(() => {
 		const element = ref.current;
 		if (!element) return;
+		element.style.scrollbarGutter = "stable";
+		element.style.overflowY = "auto";
 		let width = element.clientWidth;
 		const resize = (animate: boolean) => {
 			const initialized = element.style.height !== "";
 			const before = element.getBoundingClientRect().height;
 			motion.current?.cancel();
-			element.style.overflowY = "hidden";
 			element.style.height = "auto";
-			const overflow = element.scrollHeight > 220 ? "auto" : "hidden";
 			const height = Math.max(48, Math.min(element.scrollHeight, 220));
 			element.style.height = `${height}px`;
 			if (
@@ -27,10 +27,7 @@ export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text
 					easing: "cubic-bezier(.2, .75, .25, 1)",
 				});
 				motion.current = animation;
-				animation.onfinish = () => {
-					element.style.overflowY = overflow;
-				};
-			} else element.style.overflowY = overflow;
+			}
 		};
 		resize(true);
 		const observer = new ResizeObserver(() => {

@@ -105,6 +105,7 @@ export interface WorkspaceProjection {
 	teams: TeamSnapshot;
 }
 export interface Settings {
+	translation: { language: string; model?: Model };
 	jev?: JevStatus;
 	jevComputer?: { textModel: Model };
 	search: {

@@ -1,0 +1,28 @@
+{
+	"name": "@hasilan-code/desktop",
+	"version": "0.1.7",
+	"private": true,
+	"type": "module",
+	"main": "dist/main.cjs",
+	"description": "Hasilan Code desktop application",
+	"author": "Hasilan",
+	"license": "MIT",
+	"scripts": {
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"test": "node --test test/*.test.ts test/*.test.mjs",
+		"compile": "node scripts/compile.mjs",
+		"start": "node scripts/start.mjs",
+		"pack": "node scripts/package.mjs"
+	},
+	"dependencies": {
+		"electron-updater": "6.8.12"
+	},
+	"devDependencies": {
+		"@electron/get": "5.1.0",
+		"@electron-internal/extract-zip": "1.0.8",
+		"electron": "45.1.0",
+		"electron-builder": "26.18.1",
+		"playwright": "1.64.0",
+		"sharp": "0.35.5"
+	}
+}

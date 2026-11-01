@@ -3,7 +3,7 @@
 
   # Hasilan Code
 
-  Hasilan Code はPi を基盤にしたローカルの単一ユーザー向け Web コーディング環境です。
+  Hasilan Code は Pi を基盤にした、ローカルの単一ユーザー向け AI コーディング環境です。
   AI との会話、複数の AI による作業分担、設計画面、ファイル閲覧、端末操作をひとつの画面で行えます。
 
   [使い始める](#クイックスタート) · [主な機能](#主な機能) · [詳しい使い方](packages/web-harness/README.md)
@@ -26,17 +26,25 @@
 
 会話、作業フォルダー、チームの状態はローカルに保存します。Hasilan Code の設定と履歴は、本家 Pi と別の場所に保存します。
 
+Web 版に加えて、同じ画面とデータを使う [Electron デスクトップ版](docs/desktop.md) を開発しています。
+
 ## クイックスタート
 
 ### 必要なもの
 
 - Node.js 22.19.0 以上
 - AI モデルの認証または API キー（利用開始時に設定）
-- ソースからビルドする場合は Git、Linux で端末機能を使う場合は C++ コンパイラー・make・Python
+- ソースからビルドする場合は Git。Linux では端末機能に必要な `node-pty` のビルドに C++ コンパイラー（g++）、make、Python が必要です。
 
 ### ビルド済み版を使う
 
-通常の利用では npm または GitHub Releases から導入します。手順は[導入・更新](#導入更新)を参照してください。ビルド済み版に Git は不要です。Linux で端末機能を使う場合だけ、別途ネイティブビルド環境が必要です。
+使いやすい方法を選んでください。いずれも導入後に `hasilan-code` で起動できます。
+
+1. **[npm から導入](#npm-から導入更新)**：Node.js がある場合の通常の方法。
+2. **[GitHub Releases から導入](#github-releases-から導入)**：GitHub の配布物とインストーラーを使う方法。
+3. **[AI にインストールを依頼](#ai-にインストールを依頼)**：インストール手順を AI に実行してもらう方法。
+
+配布版に Git は不要です。Linux の端末機能には別途ビルド環境が必要です。
 
 ### ソースから起動する（開発者向け）
 
@@ -91,9 +99,9 @@ hasilan-code --version
 hasilan-code
 ```
 
-`setup`はインストール後の初回準備です。ブラウザー機能用のChromiumをダウンロードし、macOSでは端末用補助プログラムの実行権限も設定します。アプリの起動やログインは行いません。Chromiumが不要なら`hasilan-code setup --skip-browser`を使います。
+`setup`はインストール後の初回準備です。ブラウザー機能用のChromiumを準備し、対応するバージョンが既にあれば再利用します。macOSでは端末用補助プログラムの実行権限も設定します。アプリの起動やログインは行いません。Chromiumが不要なら`hasilan-code setup --skip-browser`を使います。
 
-更新するとnpmの`latest`に置き換わります。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.6`のように指定します。アプリ内に自己更新コマンドはありません。
+更新するとnpmの`latest`に置き換わります。認証・会話・チームの状態は配布物とは別の`~/.hasilan-code/agent`に保持され、更新では変更されません。バージョンを固定する場合は`hasilan-code@0.1.7`のように指定します。アプリ内に自己更新コマンドはありません。
 
 起動コマンド`hasilan-code`は既定で`127.0.0.1:3080`にサーバーを立ち上げ、認証付きURLを表示します。ブラウザーは自動で開きません。表示される認証URLは共有しないでください。
 
@@ -136,7 +144,9 @@ hasilan-code
 
 ### GitHub Releases から導入
 
-npmレジストリからではなくGitHubの配布物を使う場合は、[GitHub Releases](https://github.com/seipass/hasilan-code/releases)から`install-hasilan.mjs`を保存して実行します。
+Windows のデスクトップ版を使う場合は、[GitHub Releases](https://github.com/seipass/hasilan-code/releases) の `Hasilan-Code-<version>-win-x64.exe` をダウンロードしてインストールしてください。Node.js の別途インストールは不要です。
+
+ブラウザーで使う版を GitHub の配布物から導入する場合は、同じページから `install-hasilan.mjs` を保存し、Node.js で実行します。
 
 ```sh
 node install-hasilan.mjs --setup
@@ -145,6 +155,14 @@ node install-hasilan.mjs --setup
 インストーラーは配布物の SHA-256 を確認して専用ディレクトリへ導入し、コマンドの配置先を表示します。`--version`を省略すると最新リリースを使い、`--prefix <directory>`で配置先を指定できます。同じコマンドを再実行すると更新できます。
 
 認証・会話は配布物とは別の`~/.hasilan-code/agent`に保持します。Windows/macOS 向けの PTY prebuild は同梱しています。Linux では`hasilan-code setup --build-pty`でビルドしてください。
+
+### AI にインストールを依頼
+
+端末を操作できる AI に、次の文章を渡してください。AI が OS とインストール済みの状態を確認し、[INSTALL.md](INSTALL.md) の手順に従って導入または更新します。
+
+```text
+https://github.com/seipass/hasilan-code/blob/main/INSTALL.md に従って Hasilan Code をインストールしてください。
+```
 
 ### 同じLANの別端末から使う
 
@@ -209,7 +227,7 @@ URLとQRには認証情報が含まれます。起動し直すと無効になる
 | 会話の履歴 | `web-harness/sessions/` |
 | ワークスペースごとの設計 | `web-harness/canvases/` |
 
-モデル選択など、一部の画面設定はブラウザー内にも保存されます。設定画面で入力した AI モデル用の API キーは、実行中のプロセスだけで有効です。再起動後は再設定してください。
+画面の設定は Web 版とデスクトップ版で共有します。設定画面で保存した AI モデルの API キーは再起動後も利用できます。
 
 ### Devinアカウントを使う
 

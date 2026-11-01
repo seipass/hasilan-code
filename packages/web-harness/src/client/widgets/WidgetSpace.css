@@ -1,4 +1,4 @@
-.topbar-actions.has-widgets { min-width: 0; height: 100%; margin-right: -25px; padding: 0 12px; align-items: center; gap: 8px; }
+.topbar-actions.has-widgets { min-width: 0; height: 100%; margin-right: -12px; padding: 0 12px; align-items: center; gap: 8px; }
 .topbar-actions.has-widgets > .quiet-button { flex: none; }
 .widget-space { display: flex; flex: 1; align-items: center; min-width: 0; height: 100%; gap: 6px; }
 .widget-space[hidden] { display: none; }

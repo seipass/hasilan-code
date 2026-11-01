@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { ModelRuntime, type ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { toString as qrCodeText } from "qrcode";
 import { ATTACHMENT_LIMITS } from "../shared/attachments.ts";
@@ -26,13 +26,14 @@ import { readAccountUsage } from "./account-usage.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
 import { CanvasStore, CanvasStoreError } from "./canvas-store.ts";
-import { CLI_HELP, openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
+import { CLI_HELP, type CliOptions, openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
 import { EventHub } from "./events.ts";
 import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { mediaView, serveMedia } from "./media.ts";
+import { acquireProfile } from "./profile-lock.ts";
 import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
 import { handleSessionImport } from "./session-import/routes.ts";
 import { SessionImportService } from "./session-import/service.ts";
@@ -40,22 +41,42 @@ import { HarnessError, SessionRegistry } from "./session-registry.ts";
 import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./settings.ts";
 import { TeamManager } from "./team-manager.ts";
 import { TerminalManager } from "./terminal-manager.ts";
+import { textTransformSchema, transformText } from "./text-transform.ts";
 import { BrowserManager } from "./tools/browser.ts";
 import { PythonDesktop } from "./tools/computer/backend.ts";
 import { ComputerManager } from "./tools/computer/index.ts";
 import { JevComputer } from "./tools/computer/jev.ts";
 import { createHashlineTools } from "./tools/hashline/index.ts";
 import { SearchService } from "./tools/search.ts";
+import { UiPreferencesStore } from "./ui-preferences.ts";
 import { WidgetData } from "./widget-data.ts";
 import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
 import { WorkspaceRouter } from "./workspace-router.ts";
 
-async function main() {
-	const options = parseCliArgs(process.argv.slice(2));
-	if (options.help) {
-		console.log(CLI_HELP);
-		return;
+export interface HarnessHooks {
+	pickFolder?: (cwd: string, signal: AbortSignal) => Promise<string | undefined>;
+}
+
+/** The CLI and desktop own the same services, API and persistence format. */
+export async function startHarness(options: CliOptions, hooks: HarnessHooks = {}) {
+	const release = await acquireProfile(getHarnessAgentDir());
+	try {
+		const harness = await createHarness(options, hooks);
+		let stopping: Promise<void> | undefined;
+		return {
+			...harness,
+			shutdown: () => {
+				stopping ??= harness.shutdown().finally(release);
+				return stopping;
+			},
+		};
+	} catch (error) {
+		await release();
+		throw error;
 	}
+}
+
+async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const cwd = await resolveCliWorkspace(options);
 	const agentDir = getHarnessAgentDir();
 	const modelRuntime = await ModelRuntime.create({
@@ -64,6 +85,7 @@ async function main() {
 		modelsStorePath: join(agentDir, "models-store.json"),
 	});
 	const settings = await SettingsService.open(agentDir, modelRuntime);
+	const uiPreferences = await UiPreferencesStore.open(agentDir);
 	const agentSettings = createHarnessSettings(cwd, agentDir);
 	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
 	const artifacts = new ArtifactStore();
@@ -173,6 +195,7 @@ async function main() {
 					sendJson(response, status, data);
 					return true;
 				};
+				if (await uiPreferences.handle(request, response, url)) return true;
 				if (url.pathname.startsWith("/api/widgets/")) {
 					if (method !== "GET") throw new HttpError(405, "Method is not allowed");
 					return reply(await widgets.query(url));
@@ -201,7 +224,7 @@ async function main() {
 					if (selectingWorkspace) throw new HttpError(409, "フォルダー選択はすでに開いています。");
 					selectingWorkspace = true;
 					try {
-						const selected = await pickWorkspaceFolder(cwd, folderPickerAbort.signal);
+						const selected = await (hooks.pickFolder ?? pickWorkspaceFolder)(cwd, folderPickerAbort.signal);
 						if (!selected) return reply({ workspace: null });
 						const workspace = await registry.addWorkspace(selected);
 						return reply({ workspace: { ...workspace, workspaceId: workspace.id } }, 201);
@@ -243,6 +266,8 @@ async function main() {
 						if (method === "GET") return reply(await teams.goal(id, { op: "get" }));
 						if (method === "POST") return reply(await teams.goal(id, await readJson(request, goalActionSchema)));
 					}
+					if (parts[3] === "swarm" && parts[4] === "continue" && parts.length === 5 && method === "POST")
+						return reply(await teams.continueSwarm(id), 202);
 					if (parts[3] === "prompt" && method === "POST") {
 						const input = await readJson(request, promptSchema, ATTACHMENT_LIMITS.requestBytes);
 						const descriptor = registry.descriptor(id);
@@ -285,6 +310,17 @@ async function main() {
 					if (method === "PATCH") return reply(await settings.patch(await readJson(request, settingsPatchSchema)));
 				}
 				if (url.pathname === "/api/models" && method === "GET") return reply(settings.getModels());
+				if (url.pathname === "/api/text-transform" && method === "POST") {
+					const input = await readJson(request, textTransformSchema, 512 * 1024);
+					const controller = new AbortController();
+					const abort = () => controller.abort();
+					response.once("close", abort);
+					try {
+						return reply(await transformText(input, settings, modelRuntime, files, controller.signal));
+					} finally {
+						response.off("close", abort);
+					}
+				}
 				if (url.pathname === "/api/auth/login" && method === "POST") {
 					const { provider } = await readJson(request, authLoginSchema, 64 * 1024);
 					return reply(authLogin.start(provider), 202);
@@ -400,6 +436,59 @@ async function main() {
 		},
 	});
 	const launch = await host.listen();
+	const shutdown = async () => {
+		if (shuttingDown) return;
+		shuttingDown = true;
+		folderPickerAbort.abort();
+		// Attempt every cleanup even when a device or PTY refuses to close.
+		const owners = await Promise.allSettled([authLogin.close(), teams.close()]);
+		const results = await Promise.allSettled([
+			registry.close(),
+			browser.close(),
+			computer.close(),
+			terminals.shutdown(),
+			uiPreferences.close(),
+		]);
+		hub.close();
+		artifacts.close();
+		await host.close();
+		const failed = [...owners, ...results].find((result) => result.status === "rejected");
+		if (failed?.status === "rejected") throw failed.reason;
+	};
+	return {
+		launch,
+		shutdown,
+		activity: () => ({
+			runs: registry.list().filter((session) => session.currentRun).length,
+			queued: registry.list().reduce((count, session) => count + session.pendingInput.length, 0),
+			terminals: registry
+				.listWorkspaces()
+				.reduce(
+					(count, workspace) =>
+						count + terminals.list(workspace.id).filter((terminal) => terminal.status === "running").length,
+					0,
+				),
+		}),
+	};
+}
+
+async function main() {
+	const options = parseCliArgs(process.argv.slice(2));
+	if (options.help) {
+		console.log(CLI_HELP);
+		return;
+	}
+	const { launch, shutdown } = await startHarness(options);
+	process.once("SIGINT", () => {
+		void shutdown().catch(() => {
+			process.exitCode = 1;
+		});
+	});
+	process.once("SIGTERM", () => {
+		void shutdown().catch(() => {
+			process.exitCode = 1;
+		});
+	});
 	console.log(`Hasilan Code: ${launch.url}`);
 	if (!(await openBrowser(launch.launchUrl, { noOpen: options.noOpen })))
 		console.log(
@@ -414,31 +503,11 @@ async function main() {
 		console.log(
 			"LAN access grants control of this account's files and terminal. Use only a trusted network; HTTP is not encrypted.",
 		);
-	const shutdown = async () => {
-		if (shuttingDown) return;
-		shuttingDown = true;
-		folderPickerAbort.abort();
-		await authLogin.close();
-		await teams.close();
-		await Promise.all([browser.close(), computer.close(), terminals.shutdown()]);
-		await registry.close();
-		hub.close();
-		artifacts.close();
-		await host.close();
-	};
-	process.once("SIGINT", () => {
-		void shutdown().catch(() => {
-			process.exitCode = 1;
-		});
-	});
-	process.once("SIGTERM", () => {
-		void shutdown().catch(() => {
-			process.exitCode = 1;
-		});
-	});
 }
 
-main().catch((error: unknown) => {
-	console.error(error instanceof Error ? error.message : "Web harness startup failed");
-	process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+	main().catch((error: unknown) => {
+		console.error(error instanceof Error ? error.message : "Web harness startup failed");
+		process.exitCode = 1;
+	});
+}

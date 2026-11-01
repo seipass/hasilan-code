@@ -152,6 +152,30 @@ async function idle(registry: SessionRegistry, sessionId: string) {
 }
 
 describe("Hyakki-Yako real SDK orchestration", () => {
+	it("continues a stopped swarm with the same objective, identity, and team", async () => {
+		const f = await fixture(2);
+		await expect(f.teams.continueSwarm(f.session.sessionId)).rejects.toMatchObject({ statusCode: 409 });
+		f.script();
+		const original = await f.teams.startSwarm(f.session.sessionId, { objective: "Resume the same work" });
+		await expect.poll(() => f.held.size, { timeout: 10000 }).toBe(2);
+		await expect(f.teams.continueSwarm(f.session.sessionId)).rejects.toMatchObject({ statusCode: 409 });
+		await f.teams.stop(f.session.sessionId);
+		const members = f.teams.snapshot(f.workspace.id).agents.map((agent) => agent.agentId);
+		f.script();
+		const resumed = await f.teams.continueSwarm(f.session.sessionId);
+		expect(resumed.swarm).toMatchObject({
+			id: original.swarm.id,
+			rootRunId: original.swarm.rootRunId,
+			objective: "Resume the same work",
+			status: "active",
+		});
+		expect(f.registry.state.runs.find((run) => run.runId === resumed.runId)).toMatchObject({
+			inputKind: "context",
+			swarmId: original.swarm.id,
+		});
+		expect(f.teams.snapshot(f.workspace.id).agents.map((agent) => agent.agentId)).toEqual(members);
+		await f.teams.stop(f.session.sessionId);
+	});
 	it("decomposes through the actual team tool on a loaded restricted root and integrates sourced results at concurrency one", async () => {
 		const f = await fixture(1);
 		f.faux.setResponses([fauxAssistantMessage("Ordinary warmup")]);

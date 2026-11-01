@@ -1,7 +1,7 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { AudioMetadata } from "../../shared/media.ts";
 import { mediaReady, Presence } from "../Motion.tsx";
-import { registerMusic } from "../widgets/music.ts";
+import { readMusicPreferences, registerMusic } from "../widgets/music.ts";
 
 function timeLabel(seconds: number) {
 	const value = Math.max(0, Math.floor(seconds));
@@ -17,8 +17,8 @@ export function AudioPreview({ path, src, metadata, visible }: {
 	const [position, setPosition] = useState(0);
 	const [error, setError] = useState<string>();
 	const [coverFailed, setCoverFailed] = useState(false);
-	const [volume, setVolume] = useState(1);
-	const [muted, setMuted] = useState(false);
+	const [volume, setVolume] = useState(() => readMusicPreferences().volume);
+	const [muted, setMuted] = useState(() => readMusicPreferences().muted);
 	const previousVolume = useRef(1);
 	const silent = muted || volume === 0;
 	const percentage = silent ? 0 : Math.round(volume * 100);

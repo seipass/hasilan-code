@@ -1,13 +1,15 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { AttachmentUpload } from "../shared/attachments.ts";
+import { ATTACHMENT_LIMITS, type AttachmentUpload } from "../shared/attachments.ts";
 import type { ComposerDestination, ComposerSendResult, ConversationCandidate } from "../shared/workspace-routing.ts";
 import { errorMessage } from "./api.ts";
 import { matchesAppKeybinding } from "./app-keybindings.ts";
+import type { BrowserAnnotation, BrowserAnnotationDelivery } from "./BrowserPane.tsx";
 import { CommandPicker } from "./CommandPicker.tsx";
 import { ComposerAttachments, useComposerAttachments } from "./ComposerAttachments.tsx";
 import { Conversation } from "./Conversation.tsx";
 import { MotionItems, Presence, useLayoutMotion } from "./Motion.tsx";
 import { MotionSize } from "./MotionSwap.tsx";
+import { usePreferenceText } from "./preferences.ts";
 import { COMPOSER_COMMANDS } from "./slash-command.ts";
 import type { PendingInputAction, SessionDetail } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
@@ -16,6 +18,8 @@ import { useComposerSize } from "./use-composer-size.ts";
 function destinationKey(candidate: ConversationCandidate): string {
 	return candidate.kind === "session" ? `session:${candidate.sessionId}` : `new:${candidate.workspaceId}`;
 }
+
+const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
 export function ChatPane({ session, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError }: {
 	session?: SessionDetail;
@@ -41,12 +45,13 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	historyLoading?: boolean;
 	historyError?: string;
 }) {
-	const [text, setText] = useState(() => { try { return localStorage.getItem(`pi-web-draft:${draftKey}`) ?? ""; } catch { return ""; } });
+	const [text, setText] = usePreferenceText(`pi-web-draft:${draftKey}`);
 	const [mode, setMode] = useState<"steer" | "followUp">("followUp");
 	const [sending, setSending] = useState(false);
 	const [error, setError] = useState<string>();
 	const [notice, setNotice] = useState<string>();
-	const { attachments, reading, addFiles, remove } = useComposerAttachments(draftKey);
+	const { attachments, reading, error: attachmentError, addFiles, remove } = useComposerAttachments(draftKey);
+	const [browserAnnotations, setBrowserAnnotations] = useState<BrowserAnnotation[]>(() => annotationDrafts.get(draftKey) ?? []);
 	const [dragging, setDragging] = useState(false);
 	const fileInput = useRef<HTMLInputElement>(null);
 	const [commandIndex, setCommandIndex] = useState(0);
@@ -71,6 +76,22 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const workspacePickerOpen = canRouteWorkspace && !!workspaceCandidates?.length;
 	const activeWorkspace = Math.min(workspaceIndex, Math.max(0, (workspaceCandidates?.length ?? 0) - 1));
 	useEffect(() => { if (workspacePickerOpen && !sending) input.current?.focus(); }, [workspacePickerOpen, sending]);
+	useEffect(() => {
+		const receive = (event: Event) => {
+			if (!input.current?.getClientRects().length || input.current.closest("[inert]")) return;
+			const delivery = (event as CustomEvent<BrowserAnnotationDelivery>).detail;
+			const annotation = delivery.annotation;
+			const images = [...browserAnnotations.map((item) => item.image), annotation.image];
+			const sizes = images.map((image) => Math.floor((image.length - image.indexOf(",") - 1) * 3 / 4));
+			if (sending || reading || attachments.length + images.length > ATTACHMENT_LIMITS.files || sizes.some((size) => size > ATTACHMENT_LIMITS.fileBytes) || sizes.reduce((a, b) => a + b, 0) + attachments.reduce((sum, file) => sum + file.size, 0) > ATTACHMENT_LIMITS.totalBytes) {
+				setError("注釈を追加できません。添付は10件、合計20 MBまでです。"); return;
+			}
+			delivery.accepted = true;
+			setBrowserAnnotations((current) => { const next = [...current, annotation]; annotationDrafts.set(draftKey, next); return next; }); setError(undefined); setWorkspaceCandidates(undefined);
+		};
+		window.addEventListener("hasilan:browser-annotation", receive);
+		return () => window.removeEventListener("hasilan:browser-annotation", receive);
+	}, [attachments, browserAnnotations, draftKey, reading, sending]);
 	function chooseCommand(command: string) {
 		setWorkspaceCandidates(undefined);
 		setText(`${command}${command === "/hyakki" || command === "/goal" ? " " : ""}`);
@@ -97,18 +118,22 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const latestRunFallback = session?.messages.length === 0 && session.latestRun?.inputKind !== "context" ? session.latestRun : undefined;
 	const empty = !loading && (!session || (session.messages.length === 0 && !latestRunFallback));
 	useComposerSize(input, text);
-	useEffect(() => {
-		try { if (text) localStorage.setItem(`pi-web-draft:${draftKey}`, text); else localStorage.removeItem(`pi-web-draft:${draftKey}`); } catch { /* Drafting remains available without browser storage. */ }
-	}, [draftKey, text]);
 	async function submit(destination?: ComposerDestination) {
-		if ((!text.trim() && !attachments.length) || reading || submitting.current) return;
+		if ((!text.trim() && !attachments.length && !browserAnnotations.length) || reading || submitting.current || attachmentError) return;
+		const annotationSizes = browserAnnotations.map(({ image }) => Math.floor((image.length - image.indexOf(",") - 1) * 3 / 4));
+		if (attachments.length + annotationSizes.length > ATTACHMENT_LIMITS.files || annotationSizes.reduce((sum, size) => sum + size, 0) + attachments.reduce((sum, file) => sum + file.size, 0) > ATTACHMENT_LIMITS.totalBytes) {
+			setError("添付は10件、合計20 MBまでです。不要な添付や注釈を削除してください。"); return;
+		}
 		submitting.current = true;
 		setSending(true); setError(undefined); setNotice(undefined);
 		if (destination?.kind === "auto") setNotice("判断モデルがワークスペースと会話を選択しています…");
 		const submitted = text;
 		const submittedAttachments = attachments;
+		const submittedAnnotations = browserAnnotations;
+		const annotationText = submittedAnnotations.map(({ selection, note }, index) => `ブラウザ注釈 ${index + 1}（画像: browser-comment-${index + 1}.png）\n${JSON.stringify(selection)}\nコメント: ${note}`).join("\n\n");
+		const annotationImages = submittedAnnotations.map(({ image }, index) => ({ name: `browser-comment-${index + 1}.png`, mimeType: "image/png", data: image.slice(image.indexOf(",") + 1) }));
 		try {
-			const result = await onSend(submitted, busy ? mode : "prompt", submittedAttachments.map(({ name, mimeType, data }) => ({ name, mimeType, data })), destination);
+			const result = await onSend([submitted, annotationText].filter(Boolean).join("\n\n"), busy ? mode : "prompt", [...submittedAttachments.map(({ name, mimeType, data }) => ({ name, mimeType, data })), ...annotationImages], destination);
 			if (result.destinationCandidates) {
 				setWorkspaceCandidates(result.destinationCandidates); setWorkspaceIndex(0);
 				setNotice("続ける会話、または新しい会話の開始先を選んでください。");
@@ -117,6 +142,8 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 			setWorkspaceCandidates(undefined); setNotice(undefined);
 			setText((current) => current === submitted ? "" : current);
 			remove(submittedAttachments.map((attachment) => attachment.id));
+			annotationDrafts.delete(draftKey);
+			setBrowserAnnotations([]);
 			if (result.notice) setNotice(result.notice);
 			else if (busy && result.disposition) setNotice(result.disposition === "queued" ? "追加の指示を予約しました。" : "追加の指示を送信しました。");
 			setFollowRequest((value) => value + 1);
@@ -204,6 +231,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 				<Presence show={pickerOpen}><div className="motion-contents"><CommandPicker id={pickerId} commands={suggestions} activeIndex={activeCommand} onActive={setCommandIndex} onChoose={chooseCommand} /></div></Presence>
 				<Presence show={workspacePickerOpen}><div className="motion-contents"><CommandPicker id={workspacePickerId} label="送信先の会話" below commands={(workspaceCandidates ?? []).map((candidate) => ({ command: destinationKey(candidate), label: candidate.kind === "session" ? candidate.title : "＋ 新しい会話で開始", description: candidate.kind === "session" ? `${candidate.name}${candidate.updatedAt ? ` · ${new Date(candidate.updatedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""} · ${candidate.path}` : `${candidate.name} · ${candidate.path}` }))} activeIndex={activeWorkspace} onActive={setWorkspaceIndex} disabled={sending || reading} onChoose={(key) => { const candidate = workspaceCandidates?.find((entry) => destinationKey(entry) === key); if (workspacePickerOpen && candidate) void submit(candidate); }} /></div></Presence>
 				<Presence show={attachments.length > 0} collapse><ComposerAttachments attachments={attachments} disabled={sending} onRemove={(id) => { setWorkspaceCandidates(undefined); setNotice(undefined); remove([id]); }} /></Presence>
+				{browserAnnotations.length > 0 && <ul className="browser-annotation-list" aria-label="ブラウザ注釈">{browserAnnotations.map((annotation, index) => <li key={`${annotation.selection.url}:${index}`}><img src={annotation.image} alt="選択箇所のスクリーンショット" /><span><strong>{annotation.selection.title || annotation.selection.url}</strong><small>{annotation.note}</small></span><button type="button" aria-label={`注釈 ${index + 1} を削除`} disabled={sending} onClick={() => setBrowserAnnotations((current) => { const next = current.filter((_, itemIndex) => itemIndex !== index); if (next.length) annotationDrafts.set(draftKey, next); else annotationDrafts.delete(draftKey); return next; })}>×</button></li>)}</ul>}
 				<input ref={fileInput} type="file" multiple hidden aria-label="添付ファイルを選択" disabled={sending || reading} onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void attach(files); }} />
 				<label className="sr-only" htmlFor="message">メッセージ</label>
 				<div className="composer-input-row">
@@ -243,12 +271,12 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 					<div className="composer-delivery">
 						<Presence show={busy} collapse axis="width"><label><span className="sr-only">追加指示の送信方法</span><select aria-label="追加指示の送信方法" value={mode} onChange={(event) => setMode(event.target.value as "steer" | "followUp")}><option value="followUp">完了後に続ける</option><option value="steer">実行中に指示</option></select></label></Presence>
 						<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage">{contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit ?? 0)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span>} /></div></Presence>
-						{busy && !text.trim() && !attachments.length ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span key="stop" className="motion-label" aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Ctrl / Cmd + Enter で送信 · Ctrl / Cmd + Shift + Enter で判断モデルがワークスペース・会話を選択" : "Ctrl / Cmd + Enter で送信"} disabled={sending || reading || (!text.trim() && !attachments.length) || !slashInput && (!connected || session?.availability === "missing")}><span key={sending ? "sending" : "send"} className="motion-label" aria-hidden="true">{sending ? "…" : "↑"}</span></button>}
+						{busy && !text.trim() && !attachments.length && !browserAnnotations.length ? <button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><span key="stop" className="motion-label" aria-hidden="true">■</span></button> : <button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Ctrl / Cmd + Enter で送信 · Ctrl / Cmd + Shift + Enter で判断モデルがワークスペース・会話を選択" : "Ctrl / Cmd + Enter で送信"} disabled={sending || reading || (!text.trim() && !attachments.length && !browserAnnotations.length) || !slashInput && (!connected || session?.availability === "missing")}><span key={sending ? "sending" : "send"} className="motion-label" aria-hidden="true">{sending ? "…" : "↑"}</span></button>}
 					</div>
 				</div></MotionSize>
 			</form>
 			<Presence show={!!modelSetup} collapse><div className="composer-caption"><button className="text-link" onClick={modelSetup === "authentication" ? onProviderSettings : onModelSelect}>{modelSetup === "authentication" ? "プロバイダーの認証を設定してください" : "モデルを選択してください"}</button></div></Presence>
-			<Presence show={!!error} collapse><p className="composer-error" role="alert">{error}</p></Presence>
+			<Presence show={!!(error || attachmentError)} collapse><p className="composer-error" role="alert">{error ?? attachmentError}</p></Presence>
 		</div>
 	</section>;
 }

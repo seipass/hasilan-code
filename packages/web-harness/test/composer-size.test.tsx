@@ -14,7 +14,7 @@ let cleanup: void | (() => void);
 let unmount: void | (() => void);
 let reduced = false;
 const input = {
-	style: { height: "", overflowY: "" }, clientWidth: 700, scrollHeight: 24, visibleHeight: 48,
+	style: { height: "", overflowY: "", scrollbarGutter: "" }, clientWidth: 700, scrollHeight: 24, visibleHeight: 48,
 	getBoundingClientRect: () => ({ height: input.visibleHeight }),
 	animate: vi.fn((_frames: Keyframe[], _options: KeyframeAnimationOptions) => ({ cancel: vi.fn(), onfinish: undefined as undefined | (() => void) })),
 };
@@ -28,7 +28,7 @@ function render(text = "") {
 }
 beforeEach(() => {
 	cleanup = undefined; unmount = undefined; reduced = false; hooks.ref.current = undefined;
-	input.style = { height: "", overflowY: "" }; input.clientWidth = 700; input.scrollHeight = 24; input.visibleHeight = 48;
+	input.style = { height: "", overflowY: "", scrollbarGutter: "" }; input.clientWidth = 700; input.scrollHeight = 24; input.visibleHeight = 48;
 	input.animate.mockClear();
 	vi.stubGlobal("window", { matchMedia: () => ({ matches: reduced }) });
 	vi.stubGlobal("ResizeObserver", class {
@@ -49,10 +49,18 @@ it("sets the initial composer height immediately and animates later edits", () =
 	expect(input.style.height).toBe("96px");
 });
 
+it("keeps the scroll area stable while growing beyond the height limit", () => {
+	render();
+	input.scrollHeight = 280;
+	render("long text");
+	expect(input.style.overflowY).toBe("auto");
+	expect(input.style.scrollbarGutter).toBe("stable");
+});
+
 it("recalculates wrapping during width changes without delaying direct resizing", () => {
 	render(); input.clientWidth = 270; input.scrollHeight = 119; resize();
 	expect(input.style.height).toBe("119px");
-	expect(input.style.overflowY).toBe("hidden");
+	expect(input.style.overflowY).toBe("auto");
 	expect(input.animate).not.toHaveBeenCalled();
 	input.clientWidth = 220; input.scrollHeight = 280; resize();
 	expect(input.style.height).toBe("220px");

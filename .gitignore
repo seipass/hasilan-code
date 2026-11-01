@@ -1,6 +1,7 @@
 node_modules
 dist/
 .artifacts/
+apps/desktop/.runtime/
 *.log
 .DS_Store
 *.tsbuildinfo

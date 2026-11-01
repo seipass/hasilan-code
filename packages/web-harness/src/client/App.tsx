@@ -16,6 +16,8 @@ import { ModelMenu } from "./ModelMenu.tsx";
 import { MotionItems, Presence } from "./Motion.tsx";
 import { MotionSwap } from "./MotionSwap.tsx";
 import { PanelResize } from "./PanelResize.tsx";
+import { preferences, usePreferenceState } from "./preferences.ts";
+import { PreferenceStatus } from "./PreferenceStatus.tsx";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
 import { SessionImportDialog } from "./SessionImportDialog.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
@@ -43,39 +45,33 @@ export function App() {
 	const [canvasOpened, setCanvasOpened] = useState(false);
 	const [draftInsertion, setDraftInsertion] = useState<{ id: string; text: string }>();
 	const [workspaceId, setWorkspaceId] = useState<string>();
-	const [sessionId, setSessionId] = useState<string | undefined>(() => { try { return localStorage.getItem("pi-web-selected-session") || undefined; } catch { return undefined; } });
+	const [sessionId, setSessionId] = useState<string | undefined>(() => preferences.getItem("pi-web-selected-session") || undefined);
 	const [projections, setProjections] = useState<Record<string, WorkspaceProjection>>({});
 	const [initialSessions, setInitialSessions] = useState<SessionSummary[]>([]);
 	const [error, setError] = useState<string>();
 	const [routedConversation, setRoutedConversation] = useState<{ sessionId: string; message: string }>();
 	const [catalog, setCatalog] = useState<ModelCatalog>();
 	const [catalogVersion, setCatalogVersion] = useState(0);
-	const [savedSelection] = useState<{ model?: Model; thinkingLevel?: ThinkingLevel }>(() => {
-		try {
-			const saved = JSON.parse(localStorage.getItem("pi-web-model-selection") ?? "null") as { model?: Model; thinkingLevel?: ThinkingLevel } | null;
-			if (!saved || typeof saved.model?.provider !== "string" || typeof saved.model?.id !== "string") return {};
-			return {
-				model: { provider: saved.model.provider, id: saved.model.id },
-				thinkingLevel: saved.thinkingLevel && ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(saved.thinkingLevel) ? saved.thinkingLevel : undefined,
-			};
-		} catch { return {}; }
-	});
-	const [draftModel, setDraftModel] = useState<Model | undefined>(savedSelection.model);
-	const [draftThinking, setDraftThinking] = useState<ThinkingLevel | undefined>(savedSelection.thinkingLevel);
+	const [draftSelection, setDraftSelection] = usePreferenceState<{ model?: Model; thinkingLevel?: ThinkingLevel }>("pi-web-model-selection", {});
+	const draftModel = draftSelection.model;
+	const draftThinking = draftSelection.thinkingLevel;
+	function setDraftModel(model: Model | undefined) { setDraftSelection((previous) => ({ ...previous, model: model ? { provider: model.provider, id: model.id } : undefined })); }
+	function setDraftThinking(thinkingLevel: ThinkingLevel | undefined) { setDraftSelection((previous) => ({ ...previous, thinkingLevel })); }
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [importOpen, setImportOpen] = useState(false);
 	const [sessionAction, setSessionAction] = useState<SessionActionTarget>();
 	const closeSessionAction = useCallback(() => setSessionAction(undefined), []);
 	const [modelOpen, setModelOpen] = useState(false);
 	const [addingWorkspace, setAddingWorkspace] = useState(false);
-	const [expandedWorkspaces, setExpandedWorkspaces] = useState<Record<string, boolean>>({});
-	const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 900);
+	const [expandedWorkspaces, setExpandedWorkspaces] = usePreferenceState<Record<string, boolean>>("pi-web-expanded-workspaces", {});
+	const [sidebarOpen, setSidebarOpen] = usePreferenceState("pi-web-sidebar-open", () => window.innerWidth >= 900);
 	const [historyQuery, setHistoryQuery] = useState("");
-	const [rightTab, setRightTab] = useState<DetailView>("tabs");
-	const [rightOpen, setRightOpen] = useState(false);
-	const [rightWidth, setRightWidth] = useState(660);
+	const [rightTab, setRightTab] = usePreferenceState<DetailView>("pi-web-right-tab", "tabs");
+	const [rightOpen, setRightOpen] = usePreferenceState("pi-web-right-open", false);
+	const [rightWidth, setRightWidth] = usePreferenceState("pi-web-right-width", 660);
 	const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
 	const [fileTarget, setFileTarget] = useState<FileTarget>();
+	const [browserTarget, setBrowserTarget] = useState<{ id: string; url: string }>();
 	const [filesVersion, setFilesVersion] = useState(0);
 	const draftSession = useRef<string | undefined>(undefined);
 	const searchInput = useRef<HTMLInputElement>(null);
@@ -110,6 +106,19 @@ export function App() {
 		return () => window.removeEventListener("resize", resize);
 	}, []);
 	useEffect(() => {
+		const open = (event: MessageEvent<unknown>) => {
+			if (!document.documentElement.dataset.desktopPlatform || event.source !== window || event.origin !== location.origin || !event.data || typeof event.data !== "object" || !("type" in event.data) || event.data.type !== "hasilan:open-browser" || !("url" in event.data) || typeof event.data.url !== "string") return;
+			try {
+				const url = new URL(event.data.url);
+				if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
+				if (!workspaceId) { setError("内蔵ブラウザを開くにはワークスペースを選択してください。"); return; }
+				setBrowserTarget({ id: nextClientId(), url: url.href }); setRightTab("tabs"); setRightOpen(true);
+			} catch { /* Invalid links cannot be opened. */ }
+		};
+		window.addEventListener("message", open);
+		return () => window.removeEventListener("message", open);
+	}, [workspaceId]);
+	useEffect(() => {
 		if (!sidebarOpen && sidebarRef.current?.contains(document.activeElement)) sidebarOpener.current?.focus();
 	}, [sidebarOpen]);
 	useEffect(() => {
@@ -120,8 +129,7 @@ export function App() {
 		const controller = new AbortController();
 		Promise.all([api<Workspace[]>("/api/workspaces", { signal: controller.signal }), api<SessionSummary[]>("/api/sessions", { signal: controller.signal })]).then(([folders, sessions]) => {
 			setWorkspaces(folders); setInitialSessions(sessions);
-			let previousSession: string | null = null; let previousWorkspace: string | null = null;
-			try { previousSession = localStorage.getItem("pi-web-selected-session"); previousWorkspace = localStorage.getItem("pi-web-workspace"); } catch { /* Browser storage is optional. */ }
+			const previousSession = preferences.getItem("pi-web-selected-session"); const previousWorkspace = preferences.getItem("pi-web-workspace");
 			const restored = sessions.find((entry) => entry.sessionId === previousSession);
 			setSessionId(restored?.sessionId);
 			setMode("chat");
@@ -136,14 +144,12 @@ export function App() {
 		return () => controller.abort();
 	}, [catalogVersion, workspaceId]);
 	useEffect(() => {
-		try { if (sessionId) localStorage.setItem("pi-web-selected-session", sessionId); else localStorage.removeItem("pi-web-selected-session"); if (workspaceId) localStorage.setItem("pi-web-workspace", workspaceId); } catch { /* Selection remains functional without storage. */ }
+		if (!workspaceId) return;
+		if (sessionId) preferences.setItem("pi-web-selected-session", sessionId); else preferences.removeItem("pi-web-selected-session");
+		preferences.setItem("pi-web-workspace", workspaceId);
 	}, [sessionId, workspaceId]);
 	useEffect(() => {
-		try { localStorage.setItem("pi-web-model-selection", JSON.stringify({ model: draftModel, thinkingLevel: draftThinking })); }
-		catch { /* Selection remains functional without browser storage. */ }
-	}, [draftModel, draftThinking]);
-	useEffect(() => {
-		const keydown = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); } if (event.key === "Escape") { setModelOpen(false); setRightOpen(false); } };
+		const keydown = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); } if (event.key === "Escape") setModelOpen(false); };
 		window.addEventListener("keydown", keydown); return () => window.removeEventListener("keydown", keydown);
 	}, []);
 	function selectSession(id: string) {
@@ -255,6 +261,14 @@ export function App() {
 			} else if (parsed.kind === "hyakki") {
 				await startSwarm(parsed.objective);
 				result = { notice: "スウォームを開始しました。追加指示はこの入力欄から送れます。" };
+			} else if (parsed.kind === "hyakki-continue") {
+				const manager = team?.agents.find((agent) => agent.agentId === workspaceTeam?.rootAgentId);
+				const target = manager?.sessionId ?? sessionId;
+				if (!target) throw new Error("再開するスウォームがありません。");
+				await command(`/api/sessions/${encodeURIComponent(target)}/swarm/continue`, {});
+				setSessionId(target); setMode("chat"); setRightTab("team");
+				if (window.innerWidth >= 1100) setRightOpen(true);
+				result = { notice: "スウォームを再開しました。" };
 			} else if (parsed.kind === "goal") {
 				const goal = await goalAction(parsed.action);
 				result = { notice: goal ? `Goal: ${goal.objective}` : "Goal は設定されていません。" };
@@ -263,7 +277,6 @@ export function App() {
 				result = await command<{ runId: string; disposition: "queued" | "started" }>(`/api/sessions/${encodeURIComponent(target)}/prompt`, { text: parsed.text, mode: executionMode, ...(attachments.length ? { attachments } : {}) });
 				setSessionId(target);
 			}
-			try { localStorage.removeItem(`pi-web-draft:${sessionId ?? `new:${workspaceId}`}`); } catch { /* Storage is optional. */ }
 			return result;
 		} finally { commandPending.current = false; }
 	}
@@ -363,8 +376,9 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}>設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className={`topbar-actions${rightOpen ? " has-widgets" : ""}`} style={{ width: rightOpen && viewport.width > 900 ? actualRightWidth : undefined }}><WidgetSpace visible={rightOpen} usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className={`topbar-actions${rightOpen ? " has-widgets" : ""}`} style={{ width: rightOpen && viewport.width > 900 ? `calc(${actualRightWidth}px - var(--desktop-controls-right, 0px))` : undefined }}><WidgetSpace visible={rightOpen} usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
 			<HomeBackdrop background={homeBackgroundVisible ? background : undefined} />
+			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div></Presence>
 			<div className="main-layout"><main className="chat-column"><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
 				<Presence show={!!routedConversation && routedConversation.sessionId === sessionId} collapse><div className="composer-notice" role="status"><span>{routedConversation?.message}</span><button type="button" aria-label="通知を閉じる" onClick={() => setRoutedConversation(undefined)}>×</button></div></Presence>
@@ -376,7 +390,7 @@ export function App() {
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : -actualRightWidth : undefined }}>
 					<div className="right-panel-body detail-panel-body">
-						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
+						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
 							team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>

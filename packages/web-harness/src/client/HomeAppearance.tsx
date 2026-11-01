@@ -1,21 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
-import { HOME_BACKGROUND_KEY, type HomeBackground, parseHomeBackground, prepareHomeBackground, readHomeBackground, saveHomeBackground } from "./home-background.ts";
+import { HOME_BACKGROUND_KEY, type HomeBackground, parseHomeBackground, prepareHomeBackground, saveHomeBackground } from "./home-background.ts";
+import { preferences, usePreferenceString } from "./preferences.ts";
 import { Presence } from "./Motion.tsx";
 import "./HomeAppearance.css";
 
 export function useHomeBackground() {
-	const [background, setBackground] = useState(readHomeBackground);
+	const stored = usePreferenceString(HOME_BACKGROUND_KEY);
+	const background = useMemo(() => parseHomeBackground(stored), [stored]);
 	const changeBackground = useCallback((next: HomeBackground | undefined) => {
 		saveHomeBackground(next);
-		setBackground(next);
-	}, []);
-	useEffect(() => {
-		const sync = (event: StorageEvent) => {
-			if (event.key === HOME_BACKGROUND_KEY || event.key === null) setBackground(parseHomeBackground(event.newValue));
-		};
-		window.addEventListener("storage", sync);
-		return () => window.removeEventListener("storage", sync);
+		void preferences.flush().catch(() => undefined);
 	}, []);
 	return { background, changeBackground };
 }
@@ -56,7 +51,7 @@ export function HomeAppearance({ background, onChange }: { background?: HomeBack
 			try { onChange(undefined); setError(undefined); }
 			catch (reason) { setError(errorMessage(reason)); }
 		}}>背景を解除</button></div>
-		<p className="fine-print">20 MB 以下の JPEG・PNG・WebP・AVIF・GIF・BMP。画像はこのブラウザーに保存されます。</p>
+		<p className="fine-print">20 MB 以下の JPEG・PNG・WebP・AVIF・GIF・BMP。画像はWeb・デスクトップで共有されます。</p>
 		<Presence show={!!error}><p className="error" role="alert">{error}</p></Presence>
 	</div>;
 }

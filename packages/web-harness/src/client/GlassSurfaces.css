@@ -16,7 +16,7 @@
 	z-index: -1;
 	border-radius: inherit;
 	pointer-events: none;
-	background: color-mix(in srgb, var(--surface-hover) 78%, transparent);
+	background: var(--glass-surface);
 	backdrop-filter: var(--glass-filter);
 }
 .command-picker, .model-popover, .usage-popover-content, .settings-dialog, .mobile-sheet:has(.mobile-model-menu) {
@@ -85,5 +85,5 @@
 
 @supports not (backdrop-filter: blur(1px)) {
 	:root { --glass-surface: var(--surface-raised); --glass-panel: var(--surface-panel); }
-	.composer::before { background: var(--surface-hover); }
+	.composer::before { background: var(--surface-raised); }
 }

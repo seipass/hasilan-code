@@ -22,6 +22,15 @@ export const settingsPatchSchema = Type.Object(
 		jevComputer: Type.Optional(
 			Type.Object({ textModel: Type.Union([jevSelectionSchema, Type.Null()]) }, { additionalProperties: false }),
 		),
+		translation: Type.Optional(
+			Type.Object(
+				{
+					language: Type.String({ minLength: 1, maxLength: 80 }),
+					model: Type.Union([jevSelectionSchema, Type.Null()]),
+				},
+				{ additionalProperties: false },
+			),
+		),
 		search: Type.Optional(
 			Type.Object({ defaultProvider: Type.Optional(searchProviderSchema) }, { additionalProperties: false }),
 		),
@@ -41,6 +50,7 @@ export type SettingsPatch = Static<typeof settingsPatchSchema>;
 export interface HarnessSettings {
 	jev?: { model?: JevSelection };
 	jevComputer?: { textModel: JevSelection };
+	translation?: { language: string; model?: JevSelection };
 	search: { defaultProvider: SearchProviderId };
 	teams: { maxConcurrentAgents: number; maxDepth: number };
 }
@@ -64,6 +74,12 @@ const settingsFileSchema = Type.Object(
 		schemaVersion: Type.Literal(1),
 		jev: Type.Optional(Type.Object({ model: jevSelectionSchema }, { additionalProperties: false })),
 		jevComputer: Type.Optional(Type.Object({ textModel: jevSelectionSchema }, { additionalProperties: false })),
+		translation: Type.Optional(
+			Type.Object(
+				{ language: Type.String({ minLength: 1, maxLength: 80 }), model: Type.Optional(jevSelectionSchema) },
+				{ additionalProperties: false },
+			),
+		),
 		search: Type.Object({ defaultProvider: searchProviderSchema }, { additionalProperties: false }),
 		teams: Type.Object(
 			{
@@ -151,9 +167,13 @@ export class SettingsService {
 			throw new Error("Invalid Web harness credentials.json; repair the file before starting");
 		const settings: HarnessSettings =
 			savedSettings === undefined
-				? { search: { defaultProvider: "brave" }, teams: { maxConcurrentAgents: 4, maxDepth: 3 } }
+				? {
+						search: { defaultProvider: "brave" },
+						teams: { maxConcurrentAgents: 4, maxDepth: 3 },
+					}
 				: {
 						search: savedSettings.search,
+						...(savedSettings.translation ? { translation: savedSettings.translation } : {}),
 						teams: savedSettings.teams,
 						...(savedSettings.jev ? { jev: savedSettings.jev } : {}),
 						...(savedSettings.jevComputer ? { jevComputer: savedSettings.jevComputer } : {}),
@@ -167,6 +187,10 @@ export class SettingsService {
 
 	get(): SettingsSnapshot {
 		return {
+			translation: {
+				...(this.settings.translation ?? { language: "日本語" }),
+				...(this.settings.translation?.model ? { model: { ...this.settings.translation.model } } : {}),
+			},
 			search: {
 				...this.settings.search,
 				configured: {
@@ -192,6 +216,17 @@ export class SettingsService {
 		if (!Check(settingsPatchSchema, patch))
 			return Promise.reject(new Error("Invalid settings; concurrency must be 1..32 and depth 1..8"));
 		return this.enqueue(async () => {
+			if (patch.translation && !patch.translation.language.trim()) throw new Error("母国語を入力してください。");
+			if (
+				patch.translation?.model &&
+				!this.modelRuntime
+					.getModels()
+					.some(
+						(model) =>
+							model.provider === patch.translation?.model?.provider && model.id === patch.translation?.model?.id,
+					)
+			)
+				throw new Error("利用できる翻訳・要約モデルを選択してください。");
 			if (
 				patch.jevComputer?.textModel &&
 				!this.modelRuntime
@@ -211,6 +246,16 @@ export class SettingsService {
 			)
 				throw new Error("利用できる判断モデルを選択してください。");
 			const next: HarnessSettings = {
+				...(patch.translation
+					? {
+							translation: {
+								language: patch.translation.language.trim(),
+								...(patch.translation.model ? { model: patch.translation.model } : {}),
+							},
+						}
+					: this.settings.translation
+						? { translation: this.settings.translation }
+						: {}),
 				...(this.settings.jev ? { jev: this.settings.jev } : {}),
 				...(this.settings.jevComputer ? { jevComputer: this.settings.jevComputer } : {}),
 				search: { ...this.settings.search, ...patch.search },

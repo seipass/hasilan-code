@@ -39,6 +39,12 @@ describe("shared composer slash commands", () => {
 		});
 	});
 
+	it("routes continue to the existing swarm and goal rather than creating new objectives", () => {
+		expect(parseComposerCommand("/hyakki continue")).toEqual({ kind: "hyakki-continue" });
+		expect(parseComposerCommand("/goal continue")).toEqual({ kind: "goal", action: { op: "resume" } });
+		expect(() => parseComposerCommand("/goal continue extra")).toThrow("使い方");
+	});
+
 	it.each(["pause", "resume", "drop", "status"])("routes goal lifecycle %s without creating another goal", (op) => {
 		expect(parseComposerCommand(`/goal ${op}`)).toEqual({
 			kind: "goal",

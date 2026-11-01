@@ -2,7 +2,7 @@
 .detail-views { display: grid; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .detail-views > * { grid-area: 1 / 1; }
 .detail-toolbar { display: flex; align-items: center; flex: none; min-width: 0; min-height: 42px; border-bottom: 1px solid var(--border); background: var(--surface-panel); }
-.detail-tab-strip { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+.detail-tab-strip { display: flex; align-items: flex-start; flex: 0 1 auto; min-width: 0; height: 44px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 .detail-tabs { display: flex; flex: none; min-width: 0; }
 .detail-tab { position: relative; display: flex; align-items: center; flex: none; max-width: 240px; min-height: 40px; border-right: 1px solid var(--border-subtle); border-bottom: 2px solid transparent; transition: background-color var(--motion-quick) ease, border-color var(--motion-quick) ease; }
 .detail-tab[data-active="true"] { background: var(--surface-raised); border-bottom-color: var(--border-strong); }

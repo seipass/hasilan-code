@@ -1,0 +1,41 @@
+name: Hasilan Code Desktop Preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    if: github.repository == 'seipass/hasilan-code'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      PI_OFFLINE: '1'
+      PI_NO_LOCAL_LLM: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:hasilan
+      - run: npm run build:desktop
+      - run: npm run check
+      - run: node --test apps/desktop/test/host.test.ts apps/desktop/test/launch.test.mjs
+      - run: npm run smoke:desktop
+      - run: npm run pack:desktop
+      - run: npm run smoke:desktop -- --executable ".artifacts/desktop/win-unpacked/Hasilan Code.exe"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hasilan-desktop-windows-preview
+          path: |
+            .artifacts/desktop/*.exe
+            .artifacts/desktop/*.blockmap
+            .artifacts/desktop/latest.yml
+          if-no-files-found: error
+          retention-days: 14

@@ -14,6 +14,7 @@ const TABS = [
 	{ id: "usage", label: "使用量" },
 	{ id: "search", label: "検索" },
 	{ id: "agents", label: "エージェント" },
+	{ id: "translation", label: "翻訳・要約" },
 	{ id: "appearance", label: "外観" },
 	{ id: "environment", label: "環境" },
 ] as const;
@@ -90,6 +91,9 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 	const jevChanged = selectedJev?.provider !== savedSettings?.jev?.model?.provider || selectedJev?.id !== savedSettings?.jev?.model?.id;
 	const textModel = settings?.jevComputer?.textModel;
 	const textModelChanged = textModel?.provider !== savedSettings?.jevComputer?.textModel.provider || textModel?.id !== savedSettings?.jevComputer?.textModel.id;
+	const translationChanged = JSON.stringify(settings?.translation) !== JSON.stringify(savedSettings?.translation);
+	const translationModel = settings?.translation.model;
+	const translationModelAvailable = !!translationModel && !!catalog?.providers.some((provider) => provider.id === translationModel.provider && provider.configured === true) && !!catalog.models.some((model) => model.provider === translationModel.provider && model.id === translationModel.id);
 
 	async function perform(operation: () => Promise<void>, success: string, failure: string) {
 		setBusy(true); setError(undefined); setNotice(undefined);
@@ -156,6 +160,28 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 				<HomeAppearance background={homeBackground} onChange={onHomeBackgroundChange} />
 			</section></Presence>
 			{settings && <>
+				<Presence show={tab === "translation"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-translation-panel`} aria-labelledby={`${tabsId}-translation-tab`}>
+					<h3>翻訳・要約</h3>
+					<form onSubmit={(event) => { event.preventDefault(); if (!translationChanged) return; void perform(async () => {
+						const saved = await command<Settings>("/api/settings", { translation: { language: settings.translation.language, model: settings.translation.model ?? null } }, "PATCH");
+						setSettings((current) => current && ({ ...current, translation: saved.translation }));
+						setSavedSettings((current) => current && ({ ...current, translation: saved.translation }));
+					}, "翻訳・要約の設定を保存しました。", "設定を保存できませんでした。"); }}>
+						<fieldset disabled={busy} className="settings-section"><legend>出力の設定</legend>
+							<label>母国語<input required maxLength={80} value={settings.translation.language} onChange={(event) => { setSettings({ ...settings, translation: { ...settings.translation, language: event.target.value } }); setNotice(undefined); }} /></label>
+							<label>翻訳・要約モデル<select value={translationModelAvailable && translationModel ? JSON.stringify([translationModel.provider, translationModel.id]) : ""} onChange={(event) => {
+								const model = catalog?.models.find((entry) => catalog.providers.some((provider) => provider.id === entry.provider && provider.configured === true) && JSON.stringify([entry.provider, entry.id]) === event.target.value);
+								setSettings({ ...settings, translation: { ...settings.translation, model: model ? { provider: model.provider, id: model.id } : undefined } }); setNotice(undefined);
+							}}><option value="">選択してください</option>{catalog?.providers.filter((provider) => provider.configured === true).map((provider) => {
+								const models = catalog.models.filter((model) => model.provider === provider.id);
+								return models.length ? <optgroup key={provider.id} label={provider.name}>{models.map((model) => <option key={`${model.provider}/${model.id}`} value={JSON.stringify([model.provider, model.id])}>{model.name ?? model.id}</option>)}</optgroup> : null;
+							})}</select></label>
+							{translationModel && !translationModelAvailable && <p className="settings-inline-status">保存済みのモデルは利用できません。プロバイダーの認証を確認するか、別のモデルを選択してください。</p>}
+							<p className="fine-print">翻訳・要約を押したときに対象の内容を選択したモデルへ送信します。ファイルや会話の原文は変更しません。</p>
+							<button type="submit" disabled={!translationChanged || !settings.translation.language.trim()}>設定を保存</button>
+						</fieldset>
+					</form>
+				</section></Presence>
 				<Presence show={tab === "providers"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-providers-panel`} aria-labelledby={`${tabsId}-providers-tab`}>
 					<h3>プロバイダーの認証</h3>
 					<div className="settings-section settings-provider-section">
@@ -286,7 +312,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 				</section></Presence>
 				<Presence show={tab === "environment"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-environment-panel`} aria-labelledby={`${tabsId}-environment-tab`}>
 					<h3>実行環境</h3>
-					<section className="settings-section"><h4>Browser use · Playwright</h4><p className="credential-status" data-configured={settings.browser?.ready}>{settings.browser?.ready ? "Chromium を利用できます。" : "Chromium の準備が必要です。"}</p>{settings.browser?.error && <p className="error">{settings.browser.error}</p>}{!settings.browser?.ready && <><p>サーバーを起動する環境で、次のコマンドを実行してください。</p><code>npx playwright install chromium</code><p className="fine-print">インストール後、この設定を開き直して状態を確認してください。</p></>}</section>
+					<section className="settings-section"><h4>Browser use · Playwright</h4><p className="credential-status" data-configured={settings.browser?.ready}>{settings.browser?.ready ? "Chromium を利用できます。" : "Chromium の準備が必要です。"}</p>{settings.browser?.error && <p className="error">{settings.browser.error}</p>}{!settings.browser?.ready && <><p>サーバーを起動する環境で、次のコマンドを実行してください。</p><code>npx playwright install --no-shell chromium</code><p className="fine-print">インストール後、この設定を開き直して状態を確認してください。</p></>}</section>
 					<section className="settings-section"><h4>Computer use · デスクトップ操作</h4>
 						<p className="credential-status" data-configured={settings.computer?.ready}>{settings.computer?.ready ? "デスクトップを操作できます。" : "デスクトップ操作の準備が必要です。"}</p>
 						<p>画面取得・クリック・ドラッグ・スクロール・文字入力・キー操作に対応します。操作対象はサーバーを実行しているPCです。</p>

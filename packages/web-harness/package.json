@@ -1,6 +1,6 @@
 {
 	"name": "hasilan-code",
-	"version": "0.1.6",
+	"version": "0.1.7",
 	"private": true,
 	"description": "Local authenticated web harness for Pi sessions, teams, browser tools and user terminals",
 	"type": "module",
@@ -43,6 +43,7 @@
 		"prepublishOnly": "node -e \"throw new Error('Publish the verified tarball from npm run pack:hasilan, not this workspace')\""
 	},
 	"dependencies": {
+		"proper-lockfile": "4.1.2",
 		"@hasilan-code/pi-agent-core": "1.4.0",
 		"@hasilan-code/pi-ai": "1.4.0",
 		"@hasilan-code/pi-coding-agent": "1.4.0",
@@ -59,6 +60,7 @@
 		"xxhashjs": "0.2.2"
 	},
 	"devDependencies": {
+		"@types/proper-lockfile": "4.1.4",
 		"@types/node": "22.19.19",
 		"@types/qrcode": "1.5.6",
 		"@types/react": "19.3.0",

@@ -51,11 +51,19 @@ try {
 			}
 		}
 		if (!args.includes("--skip-browser")) {
-			const cli = join(dirname(require.resolve("playwright/package.json")), "cli.js");
-			const result = spawnSync(process.execPath, [cli, "install", "chromium"], { cwd: root, stdio: "inherit" });
-			if (result.error) throw result.error;
-			if (result.status !== 0)
-				throw new Error("Chromium installation failed. Check the Playwright platform dependencies.");
+			const { chromium } = require("playwright");
+			if (existsSync(chromium.executablePath()))
+				console.log("Compatible Chromium is already installed; skipping download.");
+			else {
+				const cli = join(dirname(require.resolve("playwright/package.json")), "cli.js");
+				const result = spawnSync(process.execPath, [cli, "install", "--no-shell", "chromium"], {
+					cwd: root,
+					stdio: "inherit",
+				});
+				if (result.error) throw result.error;
+				if (result.status !== 0)
+					throw new Error("Chromium installation failed. Check the Playwright platform dependencies.");
+			}
 		}
 		console.log("Hasilan Code setup completed.");
 		if (process.platform === "linux" && !args.includes("--build-pty") && terminalModuleFailure())

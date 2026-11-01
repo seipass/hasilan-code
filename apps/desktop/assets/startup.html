@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-REPLACE'; img-src 'self'">
+  <title>Hasilan Code</title>
+  <style>
+    :root { color-scheme:dark; font-family:system-ui,sans-serif; background:#1e1e2e; color:#cdd6f4 }
+    body { margin:0; min-height:100vh; display:grid; place-items:center }
+    main { max-width:560px; padding:48px; text-align:center }
+    img { width:64px; height:64px }
+    h1 { font-size:23px; margin:16px 0 24px; font-weight:600 }
+    p { color:#a6adc8; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere }
+    a { display:inline-block; color:#1e1e2e; background:#cba6f7; padding:10px 22px; border-radius:8px; text-decoration:none; margin-top:16px }
+    [hidden] { display:none }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="icon.png" alt="">
+    <h1>Hasilan Code</h1>
+    <p id="message" role="status">起動しています…</p>
+    <a id="retry" href="hasilan-desktop:retry" hidden>もう一度起動</a>
+  </main>
+  <script>
+const query = new URLSearchParams(location.search);
+document.getElementById("message").textContent = query.get("message") || "起動しています…";
+document.getElementById("retry").hidden = query.get("failed") !== "true";
+  </script>
+</body>
+</html>

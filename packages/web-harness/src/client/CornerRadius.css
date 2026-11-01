@@ -1,0 +1,36 @@
+/* Shared corner sizes for controls and floating surfaces. */
+button { border-radius: 10px; }
+input, textarea, select { border-radius: 9px; }
+pre { border-radius: 10px; }
+fieldset { border-radius: 12px; }
+
+:is(.workspace-accordion > summary, .files-tree-entry, .usage-popover-trigger) { border-radius: 9px; }
+:is(.new-conversation, .session-import-trigger, .composer-attachment, .session-context-menu, .widget-chip,
+	.settings-provider-section, .settings-key-entry, .oauth-login, .canvas-properties > div, .team-graph-node) { border-radius: 12px; }
+:is(.tool-card, .context-entry, .composer-notice, .command-picker-option, .settings-next-action, .settings-notice,
+	.model-picker-empty, .usage-panel-body, .canvas-message) { border-radius: 10px; }
+:is(.command-picker, .usage-popover-content, .goal-panel, .team-overview, .team-focus, .team-empty,
+	.computer-activity, .home-background-preview, .account-usage-loading, .files-audio-artwork, .canvas-node,
+	.widget-quake-row, .widget-quake-tsunami) { border-radius: 14px; }
+:is(.composer-popover, .session-action-dialog, .widget-quake-latest, .team-graph-node.is-root,
+	.widget-news-list a) { border-radius: 16px; }
+.session-import-dialog { border-radius: 16px; }
+.role-user .message-content { border-radius: 17px; }
+:is(.composer, .settings-dialog) { border-radius: 20px; }
+.send-button, .stop-button { border-radius: 13px; }
+.sidebar { border-radius: 0 14px 14px 0; }
+.right-panel { --detail-corner: 14px; }
+.canvas-drawing { border-radius: 12px; }
+.canvas-view-controls { border-radius: 12px 12px 0 0; }
+.canvas-viewport { border-radius: 0 0 12px 12px; }
+.mobile-sheet { border-radius: 20px 20px 0 0; }
+.mobile-sheet.is-right { border-radius: 18px 0 0 18px; }
+.mobile-sheet.is-top.widget-top-sheet { border-radius: 0 0 18px 18px; }
+
+@media (max-width: 600px) {
+	.session-import-dialog { border-radius: 0; }
+}
+
+@media (max-width: 520px) {
+	.composer, .settings-dialog { border-radius: 17px; }
+}

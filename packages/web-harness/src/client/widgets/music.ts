@@ -1,4 +1,17 @@
 import { useSyncExternalStore } from "react";
+import { Check } from "typebox/value";
+import { type MusicPreferences, musicPreferencesSchema } from "../../shared/ui-preferences.ts";
+import { preferences } from "../preferences.ts";
+
+export function readMusicPreferences(): MusicPreferences {
+	try {
+		const stored: unknown = JSON.parse(preferences.getItem("pi-web-music") ?? "null");
+		if (Check(musicPreferencesSchema, stored)) return stored;
+	} catch {
+		/* New profiles use the native media defaults. */
+	}
+	return { volume: 1, muted: false, positions: {} };
+}
 
 export interface MusicState {
 	title: string;
@@ -29,6 +42,23 @@ export function useMusic(): MusicState | null {
 
 /** Keep transport state on the real media element; both the viewer and widget observe its events. */
 export function registerMusic(element: HTMLAudioElement, title: string, artist: string): () => void {
+	const url = new URL(element.getAttribute("src") ?? "", window.location.href);
+	const track = `${url.pathname}?path=${url.searchParams.get("path") ?? ""}`;
+	let lastSaved = -1;
+	const restoreVolume = () => {
+		const saved = readMusicPreferences();
+		element.volume = saved.volume;
+		element.muted = saved.muted;
+	};
+	const restorePosition = () => {
+		const position = readMusicPreferences().positions[track];
+		if (position !== undefined && Number.isFinite(element.duration))
+			element.currentTime = Math.min(position, Math.max(0, element.duration - 0.1));
+	};
+	restoreVolume();
+	if (element.readyState >= 1) restorePosition();
+	element.addEventListener("loadedmetadata", restorePosition);
+	const unsubscribe = preferences.subscribe("pi-web-music", restoreVolume);
 	const update = () => {
 		if (active !== element) return;
 		state = {
@@ -42,6 +72,25 @@ export function registerMusic(element: HTMLAudioElement, title: string, artist: 
 			error: !!element.error,
 		};
 		for (const listener of listeners) listener();
+		const saved = readMusicPreferences();
+		const position = Math.floor(element.currentTime);
+		if (
+			saved.volume !== element.volume ||
+			saved.muted !== element.muted ||
+			(element.readyState >= 1 &&
+				(Math.abs(position - lastSaved) >= 2 || (element.paused && position !== lastSaved)))
+		) {
+			const positions = { ...saved.positions, ...(element.readyState >= 1 ? { [track]: element.currentTime } : {}) };
+			preferences.setItem(
+				"pi-web-music",
+				JSON.stringify({
+					volume: element.volume,
+					muted: element.muted,
+					positions: Object.fromEntries(Object.entries(positions).slice(-100)),
+				}),
+			);
+			lastSaved = position;
+		}
 	};
 	const select = () => {
 		active = element;
@@ -51,6 +100,9 @@ export function registerMusic(element: HTMLAudioElement, title: string, artist: 
 	for (const event of events) element.addEventListener(event, update);
 	element.addEventListener("play", select);
 	return () => {
+		update();
+		unsubscribe();
+		element.removeEventListener("loadedmetadata", restorePosition);
 		for (const event of events) element.removeEventListener(event, update);
 		element.removeEventListener("play", select);
 		if (active === element) {

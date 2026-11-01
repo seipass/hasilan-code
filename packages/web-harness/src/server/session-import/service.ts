@@ -4,6 +4,7 @@ import type { Stats } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { zstdDecompress } from "node:zlib";
@@ -482,6 +483,58 @@ export class SessionImportService {
 			digest.update(path).update("\0").update(text);
 			return text;
 		};
+		const readEntries = async (path: string): Promise<JsonRecord[]> => {
+			if (/\.(zst|zstd)$/.test(path)) return jsonLines(await read(path), warnings);
+			if ((await realpath(path)) !== path || (await lstat(path)).isSymbolicLink())
+				throw new HarnessError("履歴の保存先が変更されました。再読み込みしてください。", 409);
+			const file = await open(path, "r");
+			try {
+				if (!(await file.stat()).isFile()) throw new HarnessError("履歴にはファイルを指定してください。");
+				digest.update(path).update("\0");
+				const stream = file.createReadStream({ autoClose: false });
+				let endsWithNewline = false;
+				stream.on("data", (chunk) => {
+					const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+					digest.update(bytes);
+					if (bytes.length) endsWithNewline = bytes[bytes.length - 1] === 10;
+				});
+				const lines = createInterface({ input: stream, crlfDelay: Infinity });
+				const entries: JsonRecord[] = [];
+				let previous: string | undefined;
+				let lineNumber = 0;
+				const append = (line: string, last = false) => {
+					lineNumber++;
+					if (lineNumber === 1) line = line.replace(/^\uFEFF/, "");
+					if (!line.trim()) return;
+					try {
+						const value = record(JSON.parse(line));
+						if (!Object.keys(value).length) throw new Error("Expected a record");
+						entries.push(value);
+					} catch {
+						if (last && !endsWithNewline) {
+							warnings.push(
+								"書き込み途中の最終行を除外しました。元のハーネスで保存を終えてから再読み込みできます。",
+							);
+							return;
+						}
+						throw new Error(`履歴の ${lineNumber} 行目が不正な JSON です。`);
+					}
+				};
+				try {
+					for await (const line of lines) {
+						if (previous !== undefined) append(previous);
+						previous = line;
+					}
+					if (previous !== undefined) append(previous, true);
+				} finally {
+					lines.close();
+					stream.destroy();
+				}
+				return entries;
+			} finally {
+				await file.close();
+			}
+		};
 		let data: ImportedTranscript;
 		if (candidate.database) {
 			if ((await realpath(candidate.path)) !== candidate.path)
@@ -532,7 +585,7 @@ export class SessionImportService {
 		} else if (candidate.source === "opencode")
 			data = parseOpenCode(JSON.parse(await read(candidate.path)), candidate.sourceSessionId, warnings);
 		else {
-			let entries = jsonLines(await read(candidate.path), warnings);
+			let entries = await readEntries(candidate.path);
 			if (candidate.source === "codex") {
 				const seen = new Set<string>([candidate.path]);
 				let meta = record(entries.find((entry) => entry.type === "session_meta")?.payload);
@@ -547,7 +600,7 @@ export class SessionImportService {
 							"Codex の継承元が見つかりません。親セッションを含む保存フォルダーを指定してください。",
 						);
 					seen.add(parent.path);
-					const prefix = jsonLines(await read(parent.path), warnings).filter(
+					const prefix = (await readEntries(parent.path)).filter(
 						(entry, index) => Number(entry.ordinal ?? index) < Number(base.end_ordinal_exclusive),
 					);
 					meta = record(prefix.find((entry) => entry.type === "session_meta")?.payload);

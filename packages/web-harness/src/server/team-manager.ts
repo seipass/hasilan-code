@@ -714,6 +714,48 @@ export class TeamManager {
 			};
 		});
 	}
+	async continueSwarm(sessionId: string): Promise<AdmissionResult & { swarm: Swarm }> {
+		return this.registry.mutate(async () => {
+			const agent = this.agentForSession(sessionId);
+			this.assertOpen(agent);
+			const descriptor = this.registry.descriptor(sessionId);
+			const swarm = descriptor.swarm;
+			if (
+				agent.parentAgentId ||
+				descriptor.parentSessionId ||
+				!swarm ||
+				!["paused", "blocked"].includes(swarm.status)
+			)
+				throw new HarnessError("Only a paused or blocked Hyakki-Yako swarm can continue", 409);
+			if (descriptor.goal?.status === "active")
+				throw new HarnessError("Pause the active Goal before continuing a swarm", 409);
+			if (
+				this.registry.state.agents.some(
+					(entry) =>
+						(entry.agentId === agent.agentId || this.ancestor(agent.agentId, entry)) && this.current(entry),
+				)
+			)
+				throw new HarnessError("Continue a swarm only while its entire subtree is idle", 409);
+			await this.registry.assertModelReady(sessionId);
+			this.updateSwarm(sessionId, "active");
+			const run = this.newRun(agent, `Hyakki-Yako: ${swarm.objective}`, "context");
+			for (const input of this.registry.state.pendingInput)
+				if (input.sessionId === sessionId && input.status === "undelivered" && input.contextInjection) {
+					input.runId = run.runId;
+					input.status = "pending";
+					input.delivered = false;
+				}
+			await this.registry.persist();
+			this.enqueue(agent.teamId, { runId: run.runId });
+			this.pump(agent.teamId);
+			this.changed(agent);
+			return {
+				runId: run.runId,
+				disposition: run.status === "running" ? "started" : "queued",
+				swarm: structuredClone(swarm),
+			};
+		});
+	}
 	async goal(sessionId: string, action: GoalAction): Promise<Goal | null> {
 		if (action.op === "get") return structuredClone(this.registry.descriptor(sessionId).goal ?? null);
 		await this.ensureRoot(sessionId);

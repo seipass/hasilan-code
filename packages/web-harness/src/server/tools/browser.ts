@@ -66,7 +66,7 @@ interface SessionBrowser {
 	context: BrowserContext;
 	tabs: Map<string, Tab>;
 }
-const installMessage = "Chromium is not installed. Run npx playwright install chromium";
+const installMessage = "Chromium is not installed. Run npx playwright install --no-shell chromium";
 
 function truncateUtf8(text: string, limit: number): string {
 	const bytes = Buffer.from(text, "utf8");
@@ -285,7 +285,7 @@ export class BrowserManager {
 	private async getBrowser(): Promise<Browser> {
 		if (this.closed) throw new Error("Browser manager is closed");
 		if (!this.browser) {
-			const launching = chromium.launch({ headless: true });
+			const launching = chromium.launch({ channel: "chromium", headless: true });
 			this.browser = launching;
 			try {
 				const browser = await launching;

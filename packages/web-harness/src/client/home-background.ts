@@ -1,3 +1,5 @@
+import { preferences } from "./preferences.ts";
+
 export interface HomeBackground {
 	image: string;
 	name: string;
@@ -29,7 +31,7 @@ export function parseHomeBackground(stored: string | null): HomeBackground | und
 
 export function readHomeBackground(storage?: Pick<Storage, "getItem">): HomeBackground | undefined {
 	try {
-		return parseHomeBackground((storage ?? localStorage).getItem(HOME_BACKGROUND_KEY));
+		return parseHomeBackground((storage ?? preferences).getItem(HOME_BACKGROUND_KEY));
 	} catch {
 		return undefined;
 	}
@@ -40,15 +42,15 @@ export function saveHomeBackground(
 	storage?: Pick<Storage, "setItem" | "removeItem">,
 ): void {
 	try {
-		const target = storage ?? localStorage;
+		const target = storage ?? preferences;
 		if (background) target.setItem(HOME_BACKGROUND_KEY, JSON.stringify(background));
 		else target.removeItem(HOME_BACKGROUND_KEY);
 	} catch {
-		throw new Error("背景を保存できませんでした。ブラウザーの保存容量や設定を確認してください。");
+		throw new Error("背景を保存できませんでした。画像のサイズを確認してください。");
 	}
 }
 
-/** Store a bounded raster image so large originals do not fill browser storage. */
+/** Store a bounded raster image in the shared profile. */
 export async function prepareHomeBackground(file: File): Promise<HomeBackground> {
 	if (!file.size || file.size > 20 * 1024 * 1024) throw new Error("20 MB 以下の画像を選択してください。");
 	if (file.type && !file.type.startsWith("image/")) throw new Error("画像ファイルを選択してください。");

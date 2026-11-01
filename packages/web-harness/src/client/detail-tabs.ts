@@ -5,6 +5,7 @@ import type { PaneIndex, SplitEdge, SplitMode } from "./SplitLayout.tsx";
 export type DetailTab = { id: string; pane: PaneIndex } & (
 	| { kind: "new" }
 	| { kind: "file"; file?: FileTab; requestId?: string }
+	| { kind: "browser"; url?: string }
 	| { kind: "terminal"; summary: TerminalSummary; number: number }
 );
 export interface DetailTabs {
@@ -16,6 +17,7 @@ export interface DetailTabs {
 export const emptyDetailTabs: DetailTabs = { tabs: [], selected: [undefined, undefined], focused: 0, mode: "single" };
 
 export type DetailTabsAction =
+	| { type: "restoreLayout"; layout: DetailTabs }
 	| { type: "add"; tab: DetailTab }
 	| { type: "select"; id: string }
 	| { type: "focus"; pane: PaneIndex }
@@ -59,6 +61,8 @@ function reconcileTabs(state: DetailTabs): DetailTabs {
 
 export function detailTabsReducer(state: DetailTabs, action: DetailTabsAction): DetailTabs {
 	switch (action.type) {
+		case "restoreLayout":
+			return action.layout;
 		case "add":
 			return selectTab({ ...state, tabs: [...state.tabs, action.tab] }, action.tab);
 		case "select": {

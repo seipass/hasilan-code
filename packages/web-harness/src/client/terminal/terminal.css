@@ -4,7 +4,7 @@
 	height: 100%;
 	display: flex;
 	flex-direction: column;
-	background: var(--surface-sunken);
+	background: transparent;
 	color: var(--on-surface);
 }
 .terminal-pane[hidden], .terminal-view[hidden] { display: none; }
@@ -93,10 +93,11 @@
 	min-width: 0;
 	min-height: 0;
 	overflow: auto;
-	background: var(--surface-sunken);
+	background: transparent;
 }
 /* FitAddon subtracts the xterm element's padding, not its parent's padding. */
 .terminal-emulator .xterm { height: 100%; padding: 6px 8px; }
+.terminal-emulator .xterm-viewport { background-color: transparent; }
 .terminal-error {
 	flex-shrink: 0;
 	max-height: 80px;

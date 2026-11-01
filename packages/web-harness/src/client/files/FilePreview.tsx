@@ -10,16 +10,32 @@ interface FileView {
 	path: string; revision: string; kind: "text" | "image" | "video" | "audio" | "binary"; audio?: AudioMetadata;
 	lines?: { number: number; text: string; truncated?: boolean }[]; nextOffset?: number; size: number;
 }
-export function FilePreview({ workspaceId, file, visible, refreshKey, id, labelledBy, onOpen, onChange }: {
+export function FilePreview({ workspaceId, file, visible, refreshKey, id, labelledBy, onOpen, onChange, transformRequest, onTransformHandled }: {
 	workspaceId: string; file?: FileTab; visible: boolean; refreshKey: string; id: string; labelledBy?: string;
+	transformRequest?: { path: string; operation: "translate" | "summarize"; requestId: string };
+	onTransformHandled: (requestId: string) => void;
 	onOpen: (path: string, line?: number) => void; onChange: (path: string, patch: Partial<FileTab>) => void;
 }) {
 	const [result, setResult] = useState<{ key: string; view?: FileView; markdown?: string; error?: string }>();
 	const viewer = useRef<HTMLDivElement>(null);
+	const [transformed, setTransformed] = useState<{ path: string; operation: "translate" | "summarize"; text?: string; error?: string; busy?: boolean }>();
+	const transformController = useRef<AbortController | undefined>(undefined);
+	useEffect(() => () => transformController.current?.abort(), []);
+	useEffect(() => {
+		if (!transformRequest || !file || transformRequest.path !== file.path) return;
+		const { operation, path, requestId } = transformRequest;
+		transformController.current?.abort();
+		const controller = new AbortController(); transformController.current = controller;
+		setTransformed({ path, operation, busy: true }); onTransformHandled(requestId);
+		void api<{ text: string }>("/api/text-transform", { method: "POST", body: JSON.stringify({ operation, source: { kind: "file", workspaceId, path } }), signal: controller.signal }).then((result) => {
+			if (!controller.signal.aborted) setTransformed({ path, operation, text: result.text });
+		}).catch((error: unknown) => { if (!controller.signal.aborted) setTransformed({ path, operation, error: errorMessage(error) }); });
+	}, [transformRequest?.requestId, file?.path, workspaceId]);
 	const markdown = !!file && /\.(?:md|markdown)$/i.test(file.path);
 	const rendered = markdown && (file.mode ?? (file.line === undefined ? "rendered" : "source")) === "rendered";
 	const requestKey = file ? JSON.stringify([workspaceId, file.path, file.offset, rendered, refreshKey]) : undefined;
 	const loaded = result?.key === requestKey ? result : undefined;
+	const output = transformed?.path === file?.path ? transformed : undefined;
 	useEffect(() => {
 		if (!visible || !file || !requestKey) return;
 		const controller = new AbortController();
@@ -52,8 +68,9 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 		if (visible && loaded?.view && file?.line) viewer.current?.querySelector(`[data-line="${file.line}"]`)?.scrollIntoView({ block: "center", inline: "nearest" });
 	}, [loaded?.view, file?.line, visible]);
 	return <>
-		{markdown && file && <div className="files-view-mode" role="group" aria-label="Markdown の表示方法"><button aria-pressed={rendered} onClick={() => onChange(file.path, { mode: "rendered", line: undefined })}>プレビュー</button><button aria-pressed={!rendered} onClick={() => onChange(file.path, { mode: "source" })}>ソース</button></div>}
-		<div className="files-viewer" id={id} role="tabpanel" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : "ファイルプレビュー"} ref={viewer} tabIndex={0} aria-busy={!!file && !loaded}>
+		{output ? <div className="files-view-mode text-transform-header"><strong>{output.operation === "translate" ? "翻訳" : "要約"}</strong><button type="button" onClick={() => { transformController.current?.abort(); setTransformed(undefined); }}>原文を表示</button></div> : markdown && file && <div className="files-view-mode" role="group" aria-label="Markdown の表示方法"><button aria-pressed={rendered} onClick={() => onChange(file.path, { mode: "rendered", line: undefined })}>プレビュー</button><button aria-pressed={!rendered} onClick={() => onChange(file.path, { mode: "source" })}>ソース</button></div>}
+		<div className="files-viewer" id={id} role="tabpanel" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : "ファイルプレビュー"} ref={viewer} tabIndex={0} aria-busy={output ? !!output.busy : !!file && !loaded}>
+			{output ? <div className="text-transform-result">{output.busy ? <p role="status">処理中…</p> : output.error ? <p className="error" role="alert">{output.error}</p> : file && <FileMarkdown text={output.text ?? ""} path={file.path} onFile={onOpen} />}</div> : <>
 			<Presence show={!file}><p className="files-message muted">このペインで開くファイルをツリーから選択してください。</p></Presence>
 			<Presence show={!!file && !loaded}><p className="files-message" role="status">読み込み中…</p></Presence>
 			<Presence show={!!loaded?.error}><p role="alert" className="files-message error">{loaded?.error}</p></Presence>
@@ -70,7 +87,7 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 				{loaded.view.kind === "video" && <div className="files-video-preview"><video className="files-video" controls playsInline preload="metadata" onLoadedData={(event) => mediaReady(event.currentTarget)} aria-label={loaded.view.path} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} onError={() => setResult((current) => current?.key === loaded.key ? { ...current, error: "動画を再生できません。ファイルの破損、またはブラウザー非対応のコーデックを確認してください。" } : current)}>お使いのブラウザーは動画再生に対応していません。</video></div>}
 				{loaded.view.kind === "audio" && <AudioPreview path={loaded.view.path} metadata={loaded.view.audio} visible={visible} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} />}
 				{loaded.view.kind === "binary" && <p className="files-message">バイナリファイル</p>}
-			</div>}</Presence>
+			</div>}</Presence></>}
 		</div>
 	</>;
 }

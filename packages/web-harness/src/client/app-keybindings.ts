@@ -1,3 +1,5 @@
+import { preferences } from "./preferences.ts";
+
 export const DEFAULT_APP_KEYBINDINGS = {
 	"composer.send": ["ctrl+enter", "meta+enter"],
 	"composer.routeWorkspace": ["ctrl+shift+enter", "meta+shift+enter"],
@@ -5,11 +7,11 @@ export const DEFAULT_APP_KEYBINDINGS = {
 export type AppKeybinding = keyof typeof DEFAULT_APP_KEYBINDINGS;
 type KeyEvent = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">;
 
-/** Browser-specific overrides are stored as action-to-key arrays in pi-web-keybindings. */
+/** Overrides are shared with the desktop through the agent profile. */
 export function matchesAppKeybinding(event: KeyEvent, action: AppKeybinding): boolean {
 	let keys: readonly string[] = DEFAULT_APP_KEYBINDINGS[action];
 	try {
-		const config: unknown = JSON.parse(localStorage.getItem("pi-web-keybindings") ?? "{}");
+		const config: unknown = JSON.parse(preferences.getItem("pi-web-keybindings") ?? "{}");
 		if (config && typeof config === "object" && action in config) {
 			const configured = Reflect.get(config, action) as unknown;
 			if (Array.isArray(configured) && configured.every((value: unknown) => typeof value === "string"))

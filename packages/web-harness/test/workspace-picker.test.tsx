@@ -3,9 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 import { matchesAppKeybinding } from "../src/client/app-keybindings.ts";
 import { CommandPicker } from "../src/client/CommandPicker.tsx";
+import { preferences } from "../src/client/preferences.ts";
 import { COMPOSER_COMMANDS } from "../src/client/slash-command.ts";
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 it("keeps routing and ordinary send distinct on Windows and macOS, with configurable overrides", () => {
 	const event = { key: "Enter", ctrlKey: true, metaKey: false, altKey: false, shiftKey: true };
@@ -14,10 +15,10 @@ it("keeps routing and ordinary send distinct on Windows and macOS, with configur
 	expect(matchesAppKeybinding({ ...event, ctrlKey: false, metaKey: true }, "composer.routeWorkspace")).toBe(true);
 	expect(matchesAppKeybinding({ ...event, shiftKey: false }, "composer.send")).toBe(true);
 	expect(matchesAppKeybinding({ ...event, altKey: true }, "composer.routeWorkspace")).toBe(false);
-	vi.stubGlobal("localStorage", { getItem: () => JSON.stringify({ "composer.routeWorkspace": ["alt+r"] }) });
+	const stored = vi.spyOn(preferences, "getItem").mockReturnValue(JSON.stringify({ "composer.routeWorkspace": ["alt+r"] }));
 	expect(matchesAppKeybinding(event, "composer.routeWorkspace")).toBe(false);
 	expect(matchesAppKeybinding({ ...event, key: "r", ctrlKey: false, altKey: true, shiftKey: false }, "composer.routeWorkspace")).toBe(true);
-	vi.stubGlobal("localStorage", { getItem: () => "invalid-json" });
+	stored.mockReturnValue("invalid-json");
 	expect(matchesAppKeybinding(event, "composer.routeWorkspace")).toBe(true);
 });
 

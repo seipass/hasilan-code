@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isVisionImage } from "../shared/attachments.ts";
+import { api, errorMessage } from "./api.ts";
+import "./TextTransform.css";
 
 export function record(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -57,5 +59,21 @@ export function Content({ value, onFile, activeThinking = false }: { value: unkn
 }
 function Thinking({ text, summary, redacted, onFile, initiallyOpen }: { text: string; summary?: string; redacted: boolean; onFile: (path: string, line?: number) => void; initiallyOpen: boolean }) {
 	const [open, setOpen] = useState(initiallyOpen);
-	return <details className="thinking" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}><summary><span className="thinking-title">{summary && !text ? "推論の要約" : "思考"}</span><span className="thinking-preview">{(text || summary || "").replace(/\s+/g, " ").trim().slice(0, 180) || (redacted ? "暗号化された推論（原記録に保持）" : "")}</span></summary>{open && <>{text && <Markdown text={text} onFile={onFile} />}{summary && <div className="thinking-summary"><strong>保存された要約</strong><Markdown text={summary} onFile={onFile} /></div>}{redacted && <p className="muted">暗号化された内容は復号していません。元のデータを保存しています。</p>}</>}</details>;
+	const [result, setResult] = useState<{ operation: "translate" | "summarize"; text?: string; source: string; error?: string }>();
+	const [busy, setBusy] = useState(false);
+	const pending = useRef<AbortController | undefined>(undefined);
+	useEffect(() => () => pending.current?.abort(), []);
+	async function transform(operation: "translate" | "summarize") {
+		const source = text || summary || "";
+		if (!source.trim()) return;
+		pending.current?.abort();
+		const controller = new AbortController(); pending.current = controller;
+		setOpen(true); setBusy(true); setResult({ operation, source });
+		try {
+			const response = await api<{ text: string }>("/api/text-transform", { method: "POST", body: JSON.stringify({ operation, source: { kind: "text", text: source } }), signal: controller.signal });
+			if (!controller.signal.aborted) setResult({ operation, text: response.text, source });
+		} catch (error) { if (!controller.signal.aborted) setResult({ operation, source, error: errorMessage(error) }); }
+		finally { if (!controller.signal.aborted) setBusy(false); }
+	}
+	return <details className="thinking" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}><summary><span className="thinking-title">{summary && !text ? "推論の要約" : "思考"}</span><span className="thinking-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><button type="button" title="思考を翻訳" aria-label="思考を翻訳" disabled={busy || !(text || summary)} onClick={() => { void transform("translate"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h12M9 3v3c0 5-3 8-6 9M5 9c1 3 4 5 7 6M13 20l4-10 4 10M14.5 17h5" /></svg></button><button type="button" title="思考を要約" aria-label="思考を要約" disabled={busy || !(text || summary)} onClick={() => { void transform("summarize"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 11h16M4 16h10M4 21h7" /></svg></button></span><span className="thinking-preview">{(text || summary || "").replace(/\s+/g, " ").trim().slice(0, 180) || (redacted ? "暗号化された推論（原記録に保持）" : "")}</span></summary>{open && <>{result ? <div className="text-transform-result"><div className="text-transform-header"><strong>{result.operation === "translate" ? "翻訳" : "要約"}</strong><button type="button" onClick={() => { pending.current?.abort(); setBusy(false); setResult(undefined); }}>原文を表示</button></div>{busy ? <p role="status">処理中…</p> : result.error ? <p role="alert" className="error">{result.error}</p> : <Markdown text={result.text ?? ""} onFile={onFile} />}{result.source !== (text || summary || "") && <p className="muted">実行時の内容を表示しています。</p>}</div> : <>{text && <Markdown text={text} onFile={onFile} />}{summary && <div className="thinking-summary"><strong>保存された要約</strong><Markdown text={summary} onFile={onFile} /></div>}</>}{redacted && <p className="muted">暗号化された内容は復号していません。元のデータを保存しています。</p>}</>}</details>;
 }

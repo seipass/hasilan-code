@@ -1,5 +1,6 @@
 import { type CSSProperties, type DragEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { Presence, useChildrenMotion } from "./Motion.tsx";
+import { preferences, usePreferenceString } from "./preferences.ts";
 import "./SplitLayout.css";
 
 export type SplitMode = "single" | "columns" | "rows";
@@ -15,8 +16,15 @@ export function SplitActions({ label, mode, onChange }: { label: string; mode: S
 }
 
 /** Children retain their React parents and keys when moved between grid areas. */
-export function SplitLayout({ mode, label, children, dragging = false, onEdgeDrop }: { mode: SplitMode; label: string; children: ReactNode; dragging?: boolean; onEdgeDrop?: (edge: SplitEdge) => void }) {
-	const [ratio, setRatio] = useState(50);
+export function SplitLayout({ mode, label, children, dragging = false, onEdgeDrop, preferenceKey }: { mode: SplitMode; label: string; children: ReactNode; dragging?: boolean; onEdgeDrop?: (edge: SplitEdge) => void; preferenceKey?: string }) {
+	const [localRatio, setLocalRatio] = useState(50);
+	const savedRatio = usePreferenceString(preferenceKey ?? "");
+	const ratio = savedRatio === null ? localRatio : Number(savedRatio);
+	function setRatio(next: number | ((value: number) => number)) {
+		const value = typeof next === "function" ? next(ratio) : next;
+		setLocalRatio(value);
+		if (preferenceKey) preferences.setItem(preferenceKey, String(value));
+	}
 	const [resizing, setResizing] = useState(false);
 	const root = useRef<HTMLDivElement>(null);
 	const pointer = useRef<number | undefined>(undefined);

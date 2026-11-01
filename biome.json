@@ -25,6 +25,10 @@
 	},
 	"files": {
 		"includes": [
+			"apps/desktop/src/**/*.ts",
+			"apps/desktop/test/**/*.ts",
+			"apps/desktop/test/**/*.mjs",
+			"apps/desktop/scripts/*.mjs",
 			"scripts/model-catalog-protocol.ts",
 			"scripts/model-catalog-protocol.test.ts",
 			"scripts/hasilan-*.mjs",
@@ -41,8 +45,7 @@
 			"!**/models.generated.ts",
 			"!**/*.models.ts",
 			"!packages/mom/data/**/*",
-			"!!**/node_modules",
-			"!!apps"
+			"!!**/node_modules"
 		]
 	},
 	"plugins": ["./scripts/biome/model-type-comparison.grit"]

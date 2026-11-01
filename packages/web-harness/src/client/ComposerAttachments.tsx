@@ -1,29 +1,42 @@
-import { type Ref, useRef, useState } from "react";
-import { ATTACHMENT_LIMITS, type AttachmentUpload, isVisionImage } from "../shared/attachments.ts";
+import { type Ref, useEffect, useRef, useState } from "react";
+import { ATTACHMENT_LIMITS, type DraftAttachment, isDraftAttachments, isVisionImage } from "../shared/attachments.ts";
 import { FileIcon } from "./files/FileIcon.tsx";
 import { nextClientId } from "./ids.ts";
+import { preferences } from "./preferences.ts";
 import "./ComposerAttachments.css";
 
-export interface DraftAttachment extends AttachmentUpload {
-	id: string;
-	size: number;
-}
-
-// File drafts survive switching conversations without putting large base64 data in localStorage.
-const drafts = new Map<string, DraftAttachment[]>();
+export type { DraftAttachment } from "../shared/attachments.ts";
 
 export function useComposerAttachments(draftKey: string) {
-	const [attachments, setAttachments] = useState(() => drafts.get(draftKey) ?? []);
+	const key = `pi-web-attachments:${draftKey}`;
+	const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
 	const current = useRef(attachments);
-	const [reading, setReading] = useState(false);
+	const [reading, setReading] = useState(true);
+	const [error, setError] = useState<string>();
 	const readingFiles = useRef(false);
+	useEffect(() => {
+		let mounted = true;
+		const sync = () => {
+			try {
+				const value: unknown = JSON.parse(preferences.getItem(key) ?? "[]");
+				if (mounted && isDraftAttachments(value)) { current.current = value; setAttachments(value); }
+			} catch { /* Invalid drafts are not offered for sending. */ }
+		};
+		const unsubscribe = preferences.subscribe(key, sync);
+		void preferences.load(key).then(() => { sync(); if (mounted) { setReading(false); setError(undefined); } }).catch(() => {
+			if (mounted) { setReading(false); setError("添付の下書きを読み込めません。画面を再読み込みしてください。"); }
+		});
+		return () => { mounted = false; unsubscribe(); };
+	}, [key]);
 	function update(next: DraftAttachment[]) {
 		current.current = next;
-		if (next.length) drafts.set(draftKey, next); else drafts.delete(draftKey);
+		if (next.length) preferences.setItem(key, JSON.stringify(next)); else preferences.removeItem(key);
 		setAttachments(next);
 	}
 	async function addFiles(files: File[]) {
 		if (!files.length) return;
+		if (error) throw new Error(error);
+		if (reading) throw new Error("添付の読み込みが完了してから追加してください。");
 		if (readingFiles.current) throw new Error("ファイルの読み込みが完了してから追加してください。");
 		if (current.current.length + files.length > ATTACHMENT_LIMITS.files) throw new Error("添付は10ファイルまでです。");
 		if (files.some((file) => file.size > ATTACHMENT_LIMITS.fileBytes)) throw new Error("添付は1ファイル10 MBまでです。");
@@ -43,12 +56,13 @@ export function useComposerAttachments(draftKey: string) {
 				reader.readAsDataURL(file);
 			})));
 			update([...current.current, ...added]);
+			await preferences.flush();
 		} finally { readingFiles.current = false; setReading(false); }
 	}
 	function remove(ids: string[]) {
 		update(current.current.filter((attachment) => !ids.includes(attachment.id)));
 	}
-	return { attachments, reading, addFiles, remove };
+	return { attachments, reading, error, addFiles, remove };
 }
 
 export function ComposerAttachments({ attachments, disabled, onRemove, ref }: {

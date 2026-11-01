@@ -1,21 +1,26 @@
 import { type ReactNode, useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { TerminalSummary } from "../shared/terminal-protocol.ts";
 import { api, command, errorMessage } from "./api.ts";
+import { BrowserPane } from "./BrowserPane.tsx";
 import { type DetailTab, detailTabsReducer, emptyDetailTabs } from "./detail-tabs.ts";
+import { restoreDetailTabs, saveDetailTabs } from "./detail-preferences.ts";
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
 import { FilePreview } from "./files/FilePreview.tsx";
 import { nextClientId } from "./ids.ts";
 import { MotionItems, Presence } from "./Motion.tsx";
 import { MotionSwap, useMeasuredSize } from "./MotionSwap.tsx";
+import { preferences, usePreferenceString } from "./preferences.ts";
 import { type PaneIndex, SplitActions, SplitLayout } from "./SplitLayout.tsx";
 import { TerminalView, type TerminalViewState } from "./terminal/TerminalPane.tsx";
 import "./DetailPane.css";
 
 export type DetailView = "tabs" | "team" | "tools";
 
-export function DetailPane({ workspaceId, target, refreshToken, visible, view, onViewChange, team, tools }: {
+export function DetailPane({ workspaceId, target, browserTarget, refreshToken, visible, view, onViewChange, team, tools }: {
 	workspaceId: string;
 	target?: FileTarget;
+	browserTarget?: { id: string; url: string };
 	refreshToken: number;
 	visible: boolean;
 	view: DetailView;
@@ -25,8 +30,13 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 }) {
 	const [layout, dispatch] = useReducer(detailTabsReducer, { ...emptyDetailTabs, tabs: [{ id: "initial-files", kind: "file", pane: 0 }], selected: ["initial-files", undefined] });
 	const [error, setError] = useState<string>();
+	const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number }>();
+	const [transformRequest, setTransformRequest] = useState<{ id: string; path: string; operation: "translate" | "summarize"; requestId: string }>();
 	const [listFailed, setListFailed] = useState(false);
 	const [listAttempt, setListAttempt] = useState(0);
+	const [restored, setRestored] = useState(false);
+	const didRestore = useRef(false);
+	const savedLayout = usePreferenceString(`pi-web-tabs:${workspaceId}`);
 	const [creating, setCreating] = useState<string[]>([]);
 	const [closing, setClosing] = useState<string[]>([]);
 	const [viewStates, setViewStates] = useState(() => new Map<string, TerminalViewState>());
@@ -52,22 +62,60 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 	const closingIds = useRef(new Set<string>());
 	const terminalNumber = useRef(0);
 	const handledRequest = useRef<string | undefined>(undefined);
+	const handledBrowserRequest = useRef<string | undefined>(undefined);
 	const id = useId();
 	useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+	useEffect(() => {
+		if (!contextMenu) return;
+		const dismiss = () => setContextMenu(undefined);
+		const key = (event: KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); dismiss(); } };
+		document.addEventListener("pointerdown", dismiss); document.addEventListener("keydown", key, true);
+		return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", key, true); };
+	}, [contextMenu]);
 	useEffect(() => {
 		const controller = new AbortController();
 		void api<TerminalSummary[]>(`/api/terminals?workspaceId=${encodeURIComponent(workspaceId)}`, { signal: controller.signal }).then((items) => {
 			if (controller.signal.aborted) return;
-			dispatch({ type: "restoreTerminals", tabs: items.filter((item) => !dismissed.current.has(item.terminalId)).map((summary) => ({ id: `terminal-${summary.terminalId}`, pane: 0, kind: "terminal", summary, number: ++terminalNumber.current })) });
+			const available = items.filter((item) => !dismissed.current.has(item.terminalId));
+			if (!didRestore.current) {
+				const saved = restoreDetailTabs(preferences.getItem(`pi-web-tabs:${workspaceId}`), available);
+				terminalNumber.current = Math.max(0, ...saved.tabs.map((tab) => tab.kind === "terminal" ? tab.number : 0));
+				dispatch({ type: "restoreLayout", layout: saved });
+				setRestored(true);
+				didRestore.current = true;
+			} else dispatch({ type: "restoreTerminals", tabs: available.map((summary) => ({ id: `terminal-${summary.terminalId}`, pane: 0, kind: "terminal", summary, number: ++terminalNumber.current })) });
 			setListFailed(false);
-		}).catch((reason: unknown) => { if (!controller.signal.aborted) { setError(errorMessage(reason)); setListFailed(true); } });
+		}).catch((reason: unknown) => { if (!controller.signal.aborted) {
+			setError(errorMessage(reason)); setListFailed(true);
+			if (!didRestore.current) {
+				dispatch({ type: "restoreLayout", layout: restoreDetailTabs(preferences.getItem(`pi-web-tabs:${workspaceId}`), []) });
+				didRestore.current = true; setRestored(true);
+			}
+		} });
 		return () => controller.abort();
 	}, [workspaceId, listAttempt]);
+	useEffect(() => { if (restored && !listFailed) preferences.setItem(`pi-web-tabs:${workspaceId}`, saveDetailTabs(layout)); }, [workspaceId, layout, restored, listFailed]);
 	useEffect(() => {
-		if (!target || target.requestId === handledRequest.current) return;
+		if (!restored || savedLayout === null || savedLayout === saveDetailTabs(layoutRef.current)) return;
+		const controller = new AbortController();
+		void api<TerminalSummary[]>(`/api/terminals?workspaceId=${encodeURIComponent(workspaceId)}`, { signal: controller.signal }).then((items) => {
+			if (controller.signal.aborted) return;
+			const restored = restoreDetailTabs(savedLayout, items);
+			terminalNumber.current = Math.max(terminalNumber.current, ...restored.tabs.map((tab) => tab.kind === "terminal" ? tab.number : 0));
+			dispatch({ type: "restoreLayout", layout: restored });
+		}).catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
+		return () => controller.abort();
+	}, [workspaceId, savedLayout, restored]);
+	useEffect(() => {
+		if (!restored || !target || target.requestId === handledRequest.current) return;
 		handledRequest.current = target.requestId;
 		dispatch({ type: "openFile", ...target, id: nextClientId() });
-	}, [target]);
+	}, [target, restored]);
+	useEffect(() => {
+		if (!restored || !browserTarget || browserTarget.id === handledBrowserRequest.current) return;
+		handledBrowserRequest.current = browserTarget.id;
+		dispatch({ type: "add", tab: { id: browserTarget.id, pane: layoutRef.current.focused, kind: "browser", url: browserTarget.url } });
+	}, [browserTarget, restored]);
 	useEffect(() => {
 		strip.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
 	}, [layout.selected, layout.focused]);
@@ -96,6 +144,11 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 	function chooseFile(tab: DetailTab | undefined, pane: PaneIndex) {
 		onViewChange("tabs");
 		const next: DetailTab = { id: tab?.id ?? nextClientId(), pane, kind: "file" };
+		dispatch(tab ? { type: "replace", tab: next } : { type: "add", tab: next });
+	}
+	function chooseBrowser(tab: DetailTab | undefined, pane: PaneIndex) {
+		onViewChange("tabs");
+		const next: DetailTab = { id: tab?.id ?? nextClientId(), pane, kind: "browser" };
 		dispatch(tab ? { type: "replace", tab: next } : { type: "add", tab: next });
 	}
 	function openFile(path: string, line?: number) {
@@ -144,18 +197,18 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 		endDrag();
 	}
 	function title(tab: DetailTab): string {
-		return tab.kind === "terminal" ? `端末 ${tab.number}` : tab.kind === "file" ? tab.file?.path.split(/[\\/]/).at(-1) || "ファイルを選択" : "新しいタブ";
+		return tab.kind === "terminal" ? `端末 ${tab.number}` : tab.kind === "file" ? tab.file?.path.split(/[\\/]/).at(-1) || "ファイルを選択" : tab.kind === "browser" ? "ブラウザ" : "新しいタブ";
 	}
 	function choices(tab: DetailTab | undefined, pane: PaneIndex) {
-		return <div className="detail-new-tab"><h2>新しいタブ</h2><div className="detail-new-choices"><button type="button" disabled={!!tab && creating.includes(tab.id)} onClick={() => chooseFile(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6l2 3h8v13H4z" /></svg><span>ファイル</span></button><button type="button" disabled={creating.includes(tab?.id ?? "")} onClick={() => { void createTerminal(tab, pane); }}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></svg><span>{tab && creating.includes(tab.id) ? "作成中…" : "端末"}</span></button></div></div>;
+		return <div className="detail-new-tab"><h2>新しいタブ</h2><div className="detail-new-choices"><button type="button" disabled={!!tab && creating.includes(tab.id)} onClick={() => chooseFile(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6l2 3h8v13H4z" /></svg><span>ファイル</span></button><button type="button" disabled={creating.includes(tab?.id ?? "")} onClick={() => { void createTerminal(tab, pane); }}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></svg><span>{tab && creating.includes(tab.id) ? "作成中…" : "端末"}</span></button>{document.documentElement.dataset.desktopPlatform && <button type="button" onClick={() => chooseBrowser(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18" /></svg><span>ブラウザ</span></button>}</div></div>;
 	}
 	const selectedFiles = layout.tabs.filter((tab) => tab.kind === "file" && layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single"));
 	const activeFile = selectedFiles.find((tab) => tab.pane === layout.focused) ?? selectedFiles[0];
 	const bodyIdentity = layout.selected.map((id) => { const tab = layout.tabs.find((entry) => entry.id === id); return `${id}:${tab?.kind}:${tab?.kind === "file" ? tab.file?.path ?? "empty" : ""}`; }).join("|");
 	return <div className="detail-workspace">
-		<header className="detail-toolbar">
+		<header className="detail-toolbar" inert={!restored}>
 			<div className="detail-tab-strip" ref={strip}><div className="detail-tabs" ref={tabs} role="tablist" aria-label="作業タブ">
-				<MotionItems items={layout.tabs} itemKey={(tab) => tab.id} enabled={!dragging} resizeWidth>{(tab) => { const index = layout.tabs.indexOf(tab); return <div key={tab.id} className="detail-tab" data-kind={tab.kind} data-active={view === "tabs" && layout.selected[tab.pane] === tab.id} data-focused={layout.focused === tab.pane} data-dragging={dragging === tab.id || undefined} data-drop={dropTarget?.id === tab.id ? dropTarget.after ? "after" : "before" : undefined} draggable={!closing.includes(tab.id) && !creating.includes(tab.id)} onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); void closeTab(tab); } }} onDragStart={(event) => { dragged.current = tab.id; setDragging(tab.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-hasilan-detail-tab", tab.id); }} onDragEnd={endDrag} onDragOver={(event) => { if (!dragged.current) return; event.preventDefault(); event.stopPropagation(); setDropTarget({ id: tab.id, after: event.clientX >= event.currentTarget.getBoundingClientRect().left + event.currentTarget.clientWidth / 2 }); }} onDrop={(event) => {
+				<MotionItems items={layout.tabs} itemKey={(tab) => tab.id} enabled={!dragging} resizeWidth>{(tab) => { const index = layout.tabs.indexOf(tab); return <div key={tab.id} className="detail-tab" data-kind={tab.kind} data-active={view === "tabs" && layout.selected[tab.pane] === tab.id} data-focused={layout.focused === tab.pane} data-dragging={dragging === tab.id || undefined} data-drop={dropTarget?.id === tab.id ? dropTarget.after ? "after" : "before" : undefined} draggable={!closing.includes(tab.id) && !creating.includes(tab.id)} onContextMenu={(event) => { if (tab.kind !== "file" || !tab.file) return; event.preventDefault(); setContextMenu({ id: tab.id, x: Math.min(event.clientX, window.innerWidth - 160), y: Math.min(event.clientY, window.innerHeight - 100) }); }} onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); void closeTab(tab); } }} onDragStart={(event) => { dragged.current = tab.id; setDragging(tab.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("application/x-hasilan-detail-tab", tab.id); }} onDragEnd={endDrag} onDragOver={(event) => { if (!dragged.current) return; event.preventDefault(); event.stopPropagation(); setDropTarget({ id: tab.id, after: event.clientX >= event.currentTarget.getBoundingClientRect().left + event.currentTarget.clientWidth / 2 }); }} onDrop={(event) => {
 					if (!dragged.current) return;
 					event.preventDefault(); event.stopPropagation();
 					if (dragged.current !== tab.id) dispatch({ type: "move", id: dragged.current, pane: tab.pane, before: tab.id, after: event.clientX >= event.currentTarget.getBoundingClientRect().left + event.currentTarget.clientWidth / 2 });
@@ -204,13 +257,13 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 		<Presence show={!!error}><div className="detail-error" role="alert">{error}{listFailed && <button type="button" onClick={() => { setError(undefined); setListAttempt((value) => value + 1); }}>端末一覧を再取得</button>}<button type="button" aria-label="エラーを閉じる" onClick={() => setError(undefined)}>×</button></div></Presence>
 		<div className="detail-views"><Presence show={view === "tabs"} keepMounted><div className="detail-resource-area">
 			<FilePane workspaceId={workspaceId} activePath={activeFile?.kind === "file" ? activeFile.file?.path : undefined} refreshToken={refreshToken} visible={visible && view === "tabs"} treeVisible={selectedFiles.length > 0} onOpen={openFile}>
-			<MotionSwap identity={bodyIdentity} enabled={!dragging && !modeChanged} className="detail-tab-transition"><SplitLayout mode={layout.mode} label="作業タブ" dragging={!!dragging && layout.tabs.length > 1} onEdgeDrop={(edge) => { if (dragged.current) dispatch({ type: "edge", id: dragged.current, edge }); endDrag(); }}>
+			<MotionSwap identity={bodyIdentity} enabled={!dragging && !modeChanged} className="detail-tab-transition"><SplitLayout preferenceKey={`pi-web-split:${workspaceId}`} mode={layout.mode} label="作業タブ" dragging={!!dragging && layout.tabs.length > 1} onEdgeDrop={(edge) => { if (dragged.current) dispatch({ type: "edge", id: dragged.current, edge }); endDrag(); }}>
 				{layout.tabs.map((tab) => {
 					const selected = layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single");
 					const active = visible && view === "tabs" && selected;
 					if (tab.kind === "terminal") return <TerminalView key={tab.summary.terminalId} summary={tab.summary} pane={tab.pane} selected={selected} visible={active} id={`${id}-body-${tab.id}`} labelledBy={`${id}-tab-${tab.id}`} focusRequest={focusRequest.id === tab.id ? focusRequest.number : 0} onSummary={updateSummary} onState={updateViewState} onActivate={() => dispatch({ type: "focus", pane: tab.pane })} dragging={!!dragging} onTabDrop={() => dropOnPane(tab.pane)} />;
 					return <div key={tab.id} hidden={!selected} className="detail-tab-body split-tab-body" data-pane={tab.pane} data-focused={layout.focused === tab.pane} onPointerDownCapture={() => dispatch({ type: "focus", pane: tab.pane })} onFocusCapture={() => dispatch({ type: "focus", pane: tab.pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(tab.pane); } }}>
-						{tab.kind === "file" ? tab.file ? <FilePreview workspaceId={workspaceId} file={tab.file} refreshKey={`${refreshToken}:${tab.requestId ?? ""}`} visible={active} id={`${id}-body-${tab.id}`} labelledBy={`${id}-tab-${tab.id}`} onOpen={openFile} onChange={(_path, patch) => dispatch({ type: "patchFile", id: tab.id, patch })} /> : <div className="detail-file-empty" id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>ファイルを選択してください。</div> : <div id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>{choices(tab, tab.pane)}</div>}
+						{tab.kind === "file" ? tab.file ? <FilePreview workspaceId={workspaceId} file={tab.file} transformRequest={transformRequest?.id === tab.id ? transformRequest : undefined} onTransformHandled={(requestId) => setTransformRequest((current) => current?.requestId === requestId ? undefined : current)} refreshKey={`${refreshToken}:${tab.requestId ?? ""}`} visible={active} id={`${id}-body-${tab.id}`} labelledBy={`${id}-tab-${tab.id}`} onOpen={openFile} onChange={(_path, patch) => dispatch({ type: "patchFile", id: tab.id, patch })} /> : <div className="detail-file-empty" id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>ファイルを選択してください。</div> : tab.kind === "browser" ? <BrowserPane initialUrl={tab.url} /> : <div id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>{choices(tab, tab.pane)}</div>}
 					</div>;
 				})}
 				{([0, 1] as const).map((pane) => !layout.tabs.some((tab) => tab.pane === pane) && <div key={`empty-${pane}`} className="detail-tab-body split-tab-body" data-pane={pane} hidden={pane === 1 && layout.mode === "single"} onPointerDownCapture={() => dispatch({ type: "focus", pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(pane); } }}>{choices(undefined, pane)}</div>)}
@@ -219,5 +272,6 @@ export function DetailPane({ workspaceId, target, refreshToken, visible, view, o
 		</div></Presence>
 		<Presence show={view === "team"} keepMounted><div id={`${id}-team`} className="detail-auxiliary">{team}</div></Presence>
 		<Presence show={view === "tools"} keepMounted><div id={`${id}-tools`} className="detail-auxiliary detail-tools">{tools}</div></Presence></div>
+		{contextMenu && createPortal(<div className="detail-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>{(["translate", "summarize"] as const).map((operation) => <button key={operation} type="button" role="menuitem" onClick={() => { const tab = layout.tabs.find((entry) => entry.id === contextMenu.id); if (tab?.kind === "file" && tab.file) { select(tab); setTransformRequest({ id: tab.id, path: tab.file.path, operation, requestId: nextClientId() }); } setContextMenu(undefined); }}>{operation === "translate" ? "翻訳" : "要約"}</button>)}</div>, document.body)}
 	</div>;
 }

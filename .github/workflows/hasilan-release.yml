@@ -17,8 +17,49 @@ jobs:
     if: github.repository == 'seipass/hasilan-code' && startsWith(github.ref, 'refs/tags/hasilan-v')
     uses: ./.github/workflows/hasilan-ci.yml
 
-  github-release:
+  desktop-package:
     needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PI_OFFLINE: '1'
+      PI_NO_LOCAL_LLM: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:hasilan
+      - run: npm run build:desktop
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: hasilan-code-package
+          path: .artifacts/hasilan-code
+      - name: Package the verified Web archive in the desktop application
+        shell: pwsh
+        run: |
+          $archive = (Get-ChildItem .artifacts/hasilan-code/hasilan-code-*.tgz | Select-Object -First 1).FullName
+          if (-not $archive) { throw 'Verified Web archive not found' }
+          npm run pack:desktop -- --web-package $archive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify the packaged desktop application
+        run: npm run smoke:desktop -- --executable ".artifacts/desktop/win-unpacked/Hasilan Code.exe"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hasilan-code-desktop-windows
+          path: |
+            .artifacts/desktop/Hasilan-Code-*.exe
+            .artifacts/desktop/Hasilan-Code-*.exe.blockmap
+            .artifacts/desktop/latest.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  github-release:
+    needs: [verify, desktop-package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33,6 +74,10 @@ jobs:
         with:
           name: hasilan-code-package
           path: .artifacts/hasilan-code
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: hasilan-code-desktop-windows
+          path: .artifacts/hasilan-code
       - name: Validate tag, source commit and release checksums
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -40,6 +85,7 @@ jobs:
           node --input-type=module -e 'import { readFileSync } from "node:fs"; import assert from "node:assert/strict"; const release=JSON.parse(readFileSync(".artifacts/hasilan-code/release.json","utf8")); assert.equal(process.env.RELEASE_TAG,`hasilan-v${release.version}`); assert.equal(release.commit,process.env.GITHUB_SHA);'
           cd .artifacts/hasilan-code
           sha256sum --check SHA256SUMS
+          sha256sum Hasilan-Code-*.exe Hasilan-Code-*.exe.blockmap latest.yml >> SHA256SUMS
       - name: Publish immutable verified GitHub release assets
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,4 +1,5 @@
 import { objectValue, validCoordinate, type WeatherPlace } from "../../shared/widgets.ts";
+import { preferences } from "../preferences.ts";
 
 export const WIDGET_KEY = "hasilan-widgets-v1";
 export const WIDGET_KINDS = [
@@ -114,7 +115,7 @@ export function parseWidgetPreferences(raw: string | null): WidgetPreferences {
 
 export function readWidgetPreferences(): WidgetPreferences {
 	try {
-		return parseWidgetPreferences(localStorage.getItem(WIDGET_KEY));
+		return parseWidgetPreferences(preferences.getItem(WIDGET_KEY));
 	} catch {
 		return defaultWidgetPreferences();
 	}

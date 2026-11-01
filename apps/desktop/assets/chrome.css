@@ -1,0 +1,89 @@
+/* VS Code titlebar dimensions and control states; see THIRD_PARTY_NOTICES.txt. */
+/* Injected only by Electron; the browser UI keeps its existing layout. */
+html[data-desktop-platform] {
+	--desktop-zoom: 1;
+	--desktop-titlebar-height: 35px;
+	--desktop-controls-left: 0px;
+	--desktop-controls-right: 0px;
+}
+html[data-desktop-platform] .app-shell { padding-top: var(--desktop-titlebar-height); }
+html[data-desktop-platform] .sidebar { position: relative; }
+html[data-desktop-platform] .sidebar::before {
+	content: "";
+	position: absolute;
+	top: calc(-1 * var(--desktop-titlebar-height));
+	left: 0;
+	width: calc(100% + 1px);
+	height: var(--desktop-titlebar-height);
+	background: var(--panel);
+	border-right: 1px solid var(--border);
+	pointer-events: none;
+}
+html[data-desktop-platform] .sidebar-toggle { top: calc(15px + var(--desktop-titlebar-height)); }
+html[data-desktop-platform] .workspace-surface > .home-backdrop {
+	top: calc(-1 * var(--desktop-titlebar-height));
+	height: min(calc(100% + var(--desktop-titlebar-height)), calc(70% + 120px + var(--desktop-titlebar-height)));
+}
+.desktop-titlebar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 3000;
+	display: flex;
+	align-items: center;
+	height: var(--desktop-titlebar-height);
+	background: transparent;
+	-webkit-app-region: drag;
+	user-select: none;
+}
+.desktop-titlebar[hidden] { display: none; }
+.desktop-titlebar-icon { width: 20px; height: 20px; margin-left: 8px; zoom: calc(1 / var(--desktop-zoom)); pointer-events: none; }
+html[data-desktop-platform="darwin"] .desktop-titlebar-icon { margin-left: 80px; }
+.desktop-window-controls {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 3000;
+	display: flex;
+	width: 138px;
+	height: 35px;
+	background: color-mix(in srgb, var(--surface-panel, #181825) 80%, transparent);
+	backdrop-filter: blur(12px);
+	zoom: calc(1 / var(--desktop-zoom));
+	-webkit-app-region: no-drag;
+	pointer-events: auto;
+	user-select: none;
+}
+.desktop-window-controls[hidden] { display: none; }
+.desktop-window-controls > .window-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 46px;
+	width: 46px;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--on-surface, #cdd6f4);
+	cursor: default;
+	transition: none;
+}
+.desktop-window-controls .window-icon svg { width: 16px; height: 16px; fill: currentColor; }
+.desktop-window-controls[data-focused="false"] > .window-icon { color: var(--on-surface-muted, #a6adc8); }
+.desktop-window-controls > .window-icon:hover { background: rgb(255 255 255 / 10%); }
+.desktop-window-controls > .window-close:hover { background: rgb(232 17 35 / 90%); color: white; }
+.desktop-window-controls > .window-icon:focus-visible { outline: 1px solid var(--accent, #cba6f7); outline-offset: -2px; }
+.desktop-link-menu { position: fixed; z-index: 2999; display: flex; gap: 4px; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: 0 8px 24px #0008; }
+.desktop-link-menu button { padding: 7px 9px; white-space: nowrap; font-size: 12px; }
+@media (min-width: 901px) {
+	html[data-desktop-platform] .right-panel::before { top: calc(-62px - var(--desktop-titlebar-height)); }
+}
+@media (max-width: 900px) {
+	html[data-desktop-platform] .sidebar { position: fixed; top: var(--desktop-titlebar-height); }
+	html[data-desktop-platform] .sidebar-toggle { top: calc(12px + var(--desktop-titlebar-height)); }
+	html[data-desktop-platform] .navigation-scrim { top: var(--desktop-titlebar-height); }
+}

@@ -103,7 +103,7 @@
 	background-size: 18px 18px;
 }
 
-.team-graph-viewport:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
+.team-graph-viewport:focus { outline: none; }
 .team-graph-viewport.is-dragging { cursor: grabbing; }
 .team-graph-canvas { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
 .team-graph-edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }

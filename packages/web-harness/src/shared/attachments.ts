@@ -18,6 +18,33 @@ export const attachmentUploadSchema = Type.Object(
 );
 export type AttachmentUpload = Static<typeof attachmentUploadSchema>;
 
+const draftAttachmentsSchema = Type.Array(
+	Type.Object(
+		{
+			...attachmentUploadSchema.properties,
+			id: Type.String({ minLength: 1, maxLength: 128 }),
+			size: Type.Integer({ minimum: 0, maximum: ATTACHMENT_LIMITS.fileBytes }),
+		},
+		{ additionalProperties: false },
+	),
+	{ maxItems: ATTACHMENT_LIMITS.files },
+);
+export type DraftAttachment = Static<typeof draftAttachmentsSchema>[number];
+
+export function isDraftAttachments(value: unknown): value is DraftAttachment[] {
+	if (!Check(draftAttachmentsSchema, value)) return false;
+	return (
+		new Set(value.map((item) => item.id)).size === value.length &&
+		value.reduce((sum, item) => sum + item.size, 0) <= ATTACHMENT_LIMITS.totalBytes &&
+		value.every(
+			(item) =>
+				/^[A-Za-z0-9+/]*={0,2}$/.test(item.data) &&
+				item.data.length % 4 === 0 &&
+				item.size === (item.data.length / 4) * 3 - (item.data.endsWith("==") ? 2 : item.data.endsWith("=") ? 1 : 0),
+		)
+	);
+}
+
 const promptAttachmentSchema = Type.Object(
 	{
 		name: Type.String({ minLength: 1, maxLength: 255 }),
