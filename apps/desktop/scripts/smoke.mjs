@@ -9,8 +9,9 @@ import { appDirectory, provision } from "./provision.mjs";
 const temporary = await mkdtemp(join(tmpdir(), "hasilan-desktop-smoke-"));
 const owned = relative(await realpath(tmpdir()), await realpath(temporary));
 if (!owned || owned === ".." || owned.startsWith(`..${sep}`)) throw new Error("Unsafe smoke data directory");
-const selected = join(temporary, "workspace");
-await mkdir(selected);
+const selectedPath = join(temporary, "workspace");
+await mkdir(selectedPath);
+const selected = await realpath(selectedPath);
 const packagedIndex = process.argv.indexOf("--executable");
 const executable = packagedIndex < 0 ? await provision() : resolve(process.argv[packagedIndex + 1]);
 const env = {

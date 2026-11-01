@@ -25,6 +25,8 @@ Linux の配布物検証は`npm run smoke:hasilan -- --build-pty`で行います
 4. `git tag hasilan-vX.Y.Z`、`git push origin hasilan-vX.Y.Z`で公開します。npm の通常導入先は明示的に`latest`へ設定します。
 5. GitHub Actions の成功と公開先を確認します。公開済みタグ・配布物は置き換えず、修正は次のバージョンで出します。npm 公開だけが失敗した場合は失敗ジョブだけを再実行します。
 
+3 OS のソース・配布物検証がすべて成功した後、デスクトップ版の検証スクリプトだけに不具合が見つかった場合は、修正を `main` に反映して `Hasilan Code Release` を手動実行できます。`release_tag` に既存タグ、`verified_run_id` にそのタグの検証成功ジョブを含む実行 ID を指定します。タグのコミットと6つの検証結果を確認し、元の検証済み Web 配布物を使ってデスクトップ版を再作成します。
+
 ## npmの初回公開とtrusted publishing
 
 初回のみ所有者が`npm login --registry=https://registry.npmjs.org --auth-type=web`で認証し、検証済みの`hasilan-code-X.Y.Z.tgz`を`npm publish <tarball> --tag latest --access public --ignore-scripts`で公開します。認証コードやトークンはリポジトリやチャットへ保存しません。

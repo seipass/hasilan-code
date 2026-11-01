@@ -4,9 +4,19 @@ on:
   push:
     tags: ['hasilan-v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing Hasilan release tag to recover
+        required: true
+        type: string
+      verified_run_id:
+        description: Release workflow run with successful verification jobs
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: hasilan-release-${{ github.ref }}
@@ -17,8 +27,26 @@ jobs:
     if: github.repository == 'seipass/hasilan-code' && startsWith(github.ref, 'refs/tags/hasilan-v')
     uses: ./.github/workflows/hasilan-ci.yml
 
+  verify-recovery:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'seipass/hasilan-code'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_tag }}
+          persist-credentials: false
+      - name: Confirm that the tagged commit passed all release verification jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERIFIED_RUN: ${{ inputs.verified_run_id }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^hasilan-v[0-9]+\.[0-9]+\.[0-9]+$ && "$VERIFIED_RUN" =~ ^[0-9]+$ ]]
+          gh run view "$VERIFIED_RUN" --json headSha,jobs | jq -e --arg sha "$(git rev-parse HEAD)" '.headSha == $sha and ([.jobs[] | select(.name | startswith("verify / "))] | length == 6 and all(.[]; .conclusion == "success"))'
+
   desktop-package:
-    needs: verify
+    needs: [verify, verify-recovery]
+    if: always() && (needs.verify.result == 'success' || needs.verify-recovery.result == 'success')
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -27,7 +55,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.release_tag || github.ref }}
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          ref: ${{ github.sha }}
+          path: .recovery-support
+          persist-credentials: false
+      - name: Apply the corrected desktop verification script
+        if: github.event_name == 'workflow_dispatch'
+        run: Copy-Item .recovery-support/apps/desktop/scripts/smoke.mjs apps/desktop/scripts/smoke.mjs
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
@@ -39,6 +77,8 @@ jobs:
         with:
           name: hasilan-code-package
           path: .artifacts/hasilan-code
+          run-id: ${{ inputs.verified_run_id || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Package the verified Web archive in the desktop application
         shell: pwsh
         run: |
@@ -59,13 +99,16 @@ jobs:
           retention-days: 14
 
   github-release:
-    needs: [verify, desktop-package]
+    needs: [verify, verify-recovery, desktop-package]
+    if: always() && needs.desktop-package.result == 'success' && (needs.verify.result == 'success' || needs.verify-recovery.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.release_tag || github.ref }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -74,22 +117,25 @@ jobs:
         with:
           name: hasilan-code-package
           path: .artifacts/hasilan-code
+          run-id: ${{ inputs.verified_run_id || github.run_id }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: hasilan-code-desktop-windows
           path: .artifacts/hasilan-code
       - name: Validate tag, source commit and release checksums
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
-          node --input-type=module -e 'import { readFileSync } from "node:fs"; import assert from "node:assert/strict"; const release=JSON.parse(readFileSync(".artifacts/hasilan-code/release.json","utf8")); assert.equal(process.env.RELEASE_TAG,`hasilan-v${release.version}`); assert.equal(release.commit,process.env.GITHUB_SHA);'
+          export RELEASE_COMMIT="$(git rev-parse HEAD)"
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; import assert from "node:assert/strict"; const release=JSON.parse(readFileSync(".artifacts/hasilan-code/release.json","utf8")); assert.equal(process.env.RELEASE_TAG,`hasilan-v${release.version}`); assert.equal(release.commit,process.env.RELEASE_COMMIT);'
           cd .artifacts/hasilan-code
           sha256sum --check SHA256SUMS
           sha256sum Hasilan-Code-*.exe Hasilan-Code-*.exe.blockmap latest.yml >> SHA256SUMS
       - name: Publish immutable verified GitHub release assets
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
           gh release create "$RELEASE_TAG" .artifacts/hasilan-code/* --verify-tag --title "Hasilan Code ${RELEASE_TAG#hasilan-v}" --notes "Independent Hasilan Code release, including its patched Pi SDK. The same archive passed installed-package checks on Windows, macOS and Linux. See README for installation and SHA256SUMS for artifact checksums."
 
@@ -100,10 +146,12 @@ jobs:
     environment: npm-publish
     permissions:
       contents: read
+      actions: read
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.release_tag || github.ref }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -114,6 +162,8 @@ jobs:
         with:
           name: hasilan-code-package
           path: package
+          run-id: ${{ inputs.verified_run_id || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Publish the tested tarball using npm trusted publishing
         working-directory: package
         run: |
