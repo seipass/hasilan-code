@@ -13,6 +13,11 @@ on:
         description: Release workflow run with successful verification jobs
         required: true
         type: string
+      npm_only:
+        description: Publish npm from the verified archive after the GitHub release exists
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -46,7 +51,7 @@ jobs:
 
   desktop-package:
     needs: [verify, verify-recovery]
-    if: always() && (needs.verify.result == 'success' || needs.verify-recovery.result == 'success')
+    if: always() && !inputs.npm_only && (needs.verify.result == 'success' || needs.verify-recovery.result == 'success')
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -140,8 +145,8 @@ jobs:
           gh release create "$RELEASE_TAG" .artifacts/hasilan-code/* --verify-tag --title "Hasilan Code ${RELEASE_TAG#hasilan-v}" --notes "Independent Hasilan Code release, including its patched Pi SDK. The same archive passed installed-package checks on Windows, macOS and Linux. See README for installation and SHA256SUMS for artifact checksums."
 
   npm-publish:
-    needs: github-release
-    if: vars.HASILAN_NPM_PUBLISH == 'true'
+    needs: [github-release, verify-recovery]
+    if: always() && vars.HASILAN_NPM_PUBLISH == 'true' && (needs.github-release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only && needs.verify-recovery.result == 'success'))
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
@@ -164,6 +169,17 @@ jobs:
           path: package
           run-id: ${{ inputs.verified_run_id || github.run_id }}
           github-token: ${{ github.token }}
+      - name: Verify the public GitHub archive before npm recovery
+        if: github.event_name == 'workflow_dispatch' && inputs.npm_only
+        working-directory: package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          tarball=$(node -p "JSON.parse(require('fs').readFileSync('release.json','utf8')).tarball")
+          public_digest=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" | jq -r --arg file "$tarball" '.assets[] | select(.name == $file) | .digest')
+          test -n "$public_digest"
+          test "$public_digest" = "sha256:$(sha256sum "$tarball" | cut -d' ' -f1)"
       - name: Publish the tested tarball using npm trusted publishing
         working-directory: package
         run: |
