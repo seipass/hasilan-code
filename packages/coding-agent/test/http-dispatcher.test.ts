@@ -1,6 +1,8 @@
+import { execFileSync } from "node:child_process";
 import http from "node:http";
 import net from "node:net";
 import tls from "node:tls";
+import { fileURLToPath } from "node:url";
 import * as undici from "undici";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyHttpProxySettings, configureHttpDispatcher } from "../src/core/http-dispatcher.ts";
@@ -61,6 +63,16 @@ describe("http dispatcher", () => {
 	const originalDispatcher = undici.getGlobalDispatcher();
 	const originalFetch = globalThis.fetch;
 	let savedProxyEnv: Record<(typeof DISPATCHER_PROXY_ENV_KEYS)[number], string | undefined>;
+
+	// Regression for seipass/hasilan-code#1 (GHSA-xjj6-f33q-929c).
+	it.each(["fetch", "configured-global"])("survives excessive content encodings with %s", (mode) => {
+		const output = execFileSync(
+			process.execPath,
+			[fileURLToPath(new URL("./fixtures/excessive-content-encoding.mjs", import.meta.url)), mode],
+			{ encoding: "utf8", timeout: 10_000 },
+		);
+		expect(output.trim()).toBe("survived excessive content encodings");
+	});
 
 	beforeEach(() => {
 		savedProxyEnv = Object.fromEntries(DISPATCHER_PROXY_ENV_KEYS.map((key) => [key, process.env[key]])) as Record<
