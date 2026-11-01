@@ -11,4 +11,4 @@ it("uses the patched HTTP implementation after the shared web and desktop startu
 		timeout: 30_000,
 	});
 	expect(output.trim()).toBe("survived excessive content encodings");
-});
+}, 40_000);
