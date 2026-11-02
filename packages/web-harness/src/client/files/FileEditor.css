@@ -7,7 +7,7 @@
 .file-editor-body .cm-scroller { font: inherit; overflow: auto; }
 .file-editor-body .cm-content { padding: 14px 20px 14px 0; caret-color: var(--on-surface); }
 .file-editor-body .cm-editor .cm-cursor, .file-editor-body .cm-editor .cm-dropCursor { border-left-color: var(--on-surface); }
-.file-editor-body .cm-gutters { padding-top: 14px; color: var(--on-surface-muted); background: transparent; border: 0; }
+.file-editor-body .cm-editor .cm-gutters { padding-top: 14px; color: var(--on-surface-muted); background: var(--surface-panel); border: 0; }
 .file-editor-body .cm-lineNumbers .cm-gutterElement { min-width: 4.2rem; padding: 0 14px 0 8px; }
 .file-editor-body .cm-activeLine, .file-editor-body .cm-activeLineGutter { background: color-mix(in srgb, var(--surface-hover) 45%, transparent); }
 .file-editor-body .cm-tooltip { border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); color: var(--on-surface); }
