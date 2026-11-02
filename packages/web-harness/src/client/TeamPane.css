@@ -74,6 +74,8 @@
 }
 
 .team-focus > .motion-size { display: flex; flex-direction: column; justify-content: flex-end; }
+.team-focus-close { position: sticky; top: 0; float: right; z-index: 3; width: 28px; height: 28px; margin: -8px -8px 0 8px; padding: 0; border: 0; background: var(--surface-raised); font-size: 18px; }
+.team-focus-reopen { position: absolute; right: 12px; bottom: 12px; z-index: 2; padding: 7px 12px; background: var(--surface-raised); }
 .team-focus > .motion-size > div { flex: none; }
 
 .team-pane > .team-empty { margin: 12px; }

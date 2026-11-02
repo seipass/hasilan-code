@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ATTACHMENT_LIMITS, type AttachmentUpload } from "../shared/attachments.ts";
 import type { ComposerDestination, ComposerSendResult, ConversationCandidate } from "../shared/workspace-routing.ts";
 import { errorMessage } from "./api.ts";
@@ -9,11 +9,12 @@ import { ComposerAttachments, useComposerAttachments } from "./ComposerAttachmen
 import { Conversation } from "./Conversation.tsx";
 import { MotionItems, Presence, useLayoutMotion } from "./Motion.tsx";
 import { MotionSize } from "./MotionSwap.tsx";
-import { usePreferenceText } from "./preferences.ts";
+import { usePreferenceState, usePreferenceText } from "./preferences.ts";
 import { COMPOSER_COMMANDS } from "./slash-command.ts";
 import type { PendingInputAction, SessionDetail } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { useComposerSize } from "./use-composer-size.ts";
+import "./ChatWidth.css";
 
 function destinationKey(candidate: ConversationCandidate): string {
 	return candidate.kind === "session" ? `session:${candidate.sessionId}` : `new:${candidate.workspaceId}`;
@@ -46,6 +47,8 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	historyError?: string;
 }) {
 	const [text, setText] = usePreferenceText(`pi-web-draft:${draftKey}`);
+	const [chatWidth, setChatWidth] = usePreferenceState("pi-web-chat-width", 744);
+	const widthDrag = useRef<{ id: number; x: number; width: number } | undefined>(undefined);
 	const [mode, setMode] = useState<"steer" | "followUp">("followUp");
 	const [sending, setSending] = useState(false);
 	const [error, setError] = useState<string>();
@@ -181,7 +184,8 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const hasContextLimit = contextLimit !== undefined && contextLimit > 0;
 	const pendingInputs = session?.pendingInput.filter((input) => !input.fromAgentId && !input.completionRunId) ?? [];
 	useLayoutMotion(pendingList, pendingInputs, true, true);
-	return <section className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}`} aria-label="会話">
+	return <section className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}`} aria-label="会話" style={{ "--chat-content-width": `${chatWidth}px` } as CSSProperties}>
+		{!surface && !empty && <div className="chat-width-handle" role="separator" tabIndex={0} aria-label="チャットの幅" aria-orientation="vertical" aria-valuemin={320} aria-valuemax={3000} aria-valuenow={chatWidth} title="ドラッグしてチャットの幅を変更" onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); widthDrag.current = { id: event.pointerId, x: event.clientX, width: Math.max(320, Math.min(chatWidth, (event.currentTarget.parentElement?.clientWidth ?? chatWidth + 56) - 56)) }; }} onPointerMove={(event) => { const drag = widthDrag.current; if (drag?.id === event.pointerId) setChatWidth(Math.max(320, Math.min(3000, Math.round(drag.width + 2 * (drag.x - event.clientX))))); }} onPointerUp={(event) => { if (widthDrag.current?.id === event.pointerId) { widthDrag.current = undefined; event.currentTarget.releasePointerCapture(event.pointerId); } }} onLostPointerCapture={() => { widthDrag.current = undefined; }} onDoubleClick={() => setChatWidth(744)} onKeyDown={(event) => { if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return; event.preventDefault(); setChatWidth((width) => Math.max(320, Math.min(3000, width + (event.key === "ArrowLeft" ? 32 : -32)))); }} />}
 		{loading && <div className="conversation conversation-loading" role="status">会話を読み込んでいます…</div>}
 		<Presence show={!!session?.parentSessionId} collapse><div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session?.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div></Presence>
 		<Presence show={session?.availability === "missing"} collapse><div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div></Presence>

@@ -10,13 +10,13 @@
 .session-import-source button { min-height: 36px; }
 .session-import-paths { flex: none; margin: 0; padding: 0 20px 12px; color: var(--on-surface-muted); font-size: 11px; overflow-wrap: anywhere; }
 .session-import-warnings { flex: none; max-height: 100px; overflow: auto; margin: 0 20px 12px; color: var(--warning); font-size: 12px; }
-.session-import-body { display: grid; flex: 1; grid-template-columns: minmax(220px, 36%) minmax(0, 1fr); min-height: 0; border-block: 1px solid var(--border); }
-.session-import-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--border); }
+.session-import-body { display: grid; flex: 1; grid-template-columns: minmax(220px, 36%) minmax(0, 1fr); min-height: 0; background: color-mix(in srgb, var(--surface-sunken) 32%, transparent); }
+.session-import-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .session-import-list > label { padding: 12px; }
 .session-import-list input { width: 100%; font-size: 12px; }
 .session-import-candidates { flex: 1; overflow: auto; min-height: 0; padding: 0 6px 6px; }
 .session-import-candidates > button { display: grid; gap: 5px; width: 100%; margin-bottom: 4px; padding: 12px; border: 1px solid transparent; text-align: left; background: transparent; }
-.session-import-candidates > [aria-selected="true"] { border-color: var(--primary); background: var(--primary-container); }
+.session-import-candidates > [aria-selected="true"] { background: var(--primary-container); }
 .session-import-candidates strong { font-weight: 600; font-size: 12px; overflow-wrap: anywhere; }
 .session-import-candidates span, .session-import-candidates time { color: var(--on-surface-muted); font-size: 11px; overflow-wrap: anywhere; }
 .session-import-candidates > p { margin: 12px; color: var(--on-surface-muted); font-size: 12px; }

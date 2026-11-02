@@ -1,0 +1,6 @@
+.chat-pane .conversation-content { width: min(100%, var(--chat-content-width, 744px)); }
+.chat-pane .composer-area { width: min(100%, calc(var(--chat-content-width, 744px) + 56px)); }
+.chat-width-handle { position: absolute; z-index: 3; top: 38%; height: 24%; min-height: 70px; width: 20px; left: max(0px, calc((100% - min(var(--chat-content-width, 744px), 100% - 56px)) / 2 - 14px)); cursor: col-resize; touch-action: none; }
+.chat-width-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 9px; width: 2px; border-radius: 2px; background: var(--primary); opacity: 0; transition: opacity 120ms ease; }
+.chat-width-handle:hover::after, .chat-width-handle:focus-visible::after, .chat-width-handle:active::after { opacity: .7; }
+@media (max-width: 900px) { .chat-width-handle { display: none; } }

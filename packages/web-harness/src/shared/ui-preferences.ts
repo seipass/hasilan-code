@@ -104,6 +104,7 @@ export function uiPreferenceLimit(key: string): number | undefined {
 			"pi-web-right-open",
 			"pi-web-right-tab",
 			"pi-web-right-width",
+			"pi-web-chat-width",
 		].includes(key)
 	)
 		return 4096;
@@ -123,6 +124,7 @@ export function validUiPreference(key: string, value: unknown): value is string 
 		const parsed: unknown = JSON.parse(value);
 		if (key === "pi-web-sidebar-open" || key === "pi-web-right-open") return typeof parsed === "boolean";
 		if (key === "pi-web-right-width") return typeof parsed === "number" && parsed >= 320 && parsed <= 10_000;
+		if (key === "pi-web-chat-width") return typeof parsed === "number" && parsed >= 320 && parsed <= 3000;
 		if (key === "pi-web-right-tab") return parsed === "tabs" || parsed === "team" || parsed === "tools";
 		if (key === "pi-web-model-selection") return Check(modelSelectionSchema, parsed);
 		if (key === "pi-web-expanded-workspaces") return Check(Type.Record(Type.String(), Type.Boolean()), parsed);

@@ -1,0 +1,2 @@
+.model-picker-compact .model-group-heading { display: block; width: 100%; padding: 8px 10px 5px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.model-picker-compact .model-group-heading:hover { background: var(--surface-hover); }

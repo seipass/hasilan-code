@@ -29,6 +29,7 @@ import { CanvasStore, CanvasStoreError } from "./canvas-store.ts";
 import { CLI_HELP, type CliOptions, openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
 import { EventHub } from "./events.ts";
+import { fileEditSchema, readEditableFile, saveEditableFile } from "./file-editor.ts";
 import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
@@ -386,6 +387,13 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 							);
 					}
 					if (parts[3] === "files" && method === "GET") return reply(await files.list(id, path));
+					if (parts[3] === "file-edit" && parts.length === 4) {
+						if (method === "GET") return reply(await readEditableFile(files, id, path));
+						if (method === "PUT") {
+							const { revision, text } = await readJson(request, fileEditSchema, 12 * 1024 * 1024);
+							return reply(await saveEditableFile(files, id, path, revision, text));
+						}
+					}
 					if (parts[3] === "file" && method === "GET")
 						return reply(
 							(await mediaView(files, id, path)) ??

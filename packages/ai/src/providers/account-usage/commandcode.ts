@@ -46,8 +46,8 @@ export const commandCodeAccountUsage: AccountUsageReader = async (context) => {
 		if (["authorization", "cookie"].includes(key.toLowerCase()) && value) headers[key.toLowerCase()] = value;
 	}
 	const [credits, subscription] = await Promise.allSettled([
-		usageJson("https://api.commandcode.ai/internal/billing/credits", context, headers),
-		usageJson("https://api.commandcode.ai/internal/billing/subscriptions", context, headers),
+		usageJson("https://api.commandcode.ai/alpha/billing/credits", context, headers),
+		usageJson("https://api.commandcode.ai/alpha/billing/subscriptions", context, headers),
 	]);
 	context.signal.throwIfAborted();
 	if (credits.status === "rejected") throw credits.reason;

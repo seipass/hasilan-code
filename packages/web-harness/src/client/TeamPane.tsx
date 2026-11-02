@@ -258,6 +258,7 @@ function RunDetail({ run, snapshot, focus, onFile, now, onOpen }: {
 export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true, onSelect, onStop, onFile }: TeamPaneProps) {
 	const mobile = useMobileLayout();
 	const [detailsOpen, setDetailsOpen] = useState(false);
+	const [desktopDetailsOpen, setDesktopDetailsOpen] = useState(true);
 	const [focusedId, setFocusedId] = useState<string>();
 	const [now, setNow] = useState(() => Date.now());
 	const agents = useMemo(() => selectedTeamAgents(snapshot, selectedSessionId), [snapshot, selectedSessionId]);
@@ -306,11 +307,13 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	function focusAgent(id: string) {
 		if (id !== focused?.agentId) setFocusedId(id);
 		if (mobile) setDetailsOpen(true);
+		else setDesktopDetailsOpen(true);
 	}
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
 	const summary = [`${managed ? "担当者" : "子の担当"} ${managed ? specialists.length : workers.length}人`, ...(managed && helpers > 0 ? [`補助 ${helpers}人`] : []), `作業中 ${counts.running}`, `結果待ち ${counts.waiting}`, `開始待ち ${counts.queued}`, managed ? `指示待ち ${counts.ready}` : `完了 ${counts.completed}`, ...(counts.cancelled > 0 ? [`中止 ${counts.cancelled}`] : []), ...(counts.stopping > 0 ? [`停止中 ${counts.stopping}`] : [])].join(" · ");
 	const overview = <header className="team-overview"><MotionSize><MotionSwap identity={situation}><h2 role="status">{situation}</h2></MotionSwap><MotionSwap identity={summary}><p>{summary}</p></MotionSwap><Presence show={problems > 0}><strong className="team-attention"><MotionLabel value={`確認が必要な作業 ${problems}件`} /></strong></Presence><UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></MotionSize></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
+				{!mobile && <button type="button" className="team-focus-close" aria-label="担当の詳細を閉じる" onClick={() => setDesktopDetailsOpen(false)}>×</button>}
 				<MotionSize><MotionSwap identity={detailId} enabled={visible}><div key={detailId} className="team-focus-content">
 				<Presence show={!!focused.responsibility}><section className="team-responsibility"><h4>担当範囲</h4><MotionSwap identity={focused.responsibility ?? ""}><p>{focused.responsibility}</p></MotionSwap></section></Presence>
 				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} onOpen={() => { setDetailsOpen(false); onSelect(focused.sessionId); }} /> : <p className="team-inline-note">まだ作業はありません。<button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く ↗</button></p>}
@@ -323,6 +326,6 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 			{mobile ? <>
 				<Presence show={!!focused}><button type="button" className="team-focus-trigger" aria-haspopup="dialog" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>{focused && label(focused)}の詳細</button></Presence>
 				<MobileSheet open={detailsOpen && visible && agents.length > 0} side="bottom" title="担当の詳細" onClose={() => setDetailsOpen(false)}>{details}</MobileSheet>
-			</> : <Presence show={!!details}>{details}</Presence>}
+			</> : <><Presence show={!!details && desktopDetailsOpen}>{details}</Presence>{!!focused && !desktopDetailsOpen && <button type="button" className="team-focus-reopen" onClick={() => setDesktopDetailsOpen(true)}>{label(focused)}の詳細</button>}</>}
 	</section>;
 }

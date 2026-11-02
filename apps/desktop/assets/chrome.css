@@ -7,7 +7,7 @@ html[data-desktop-platform] {
 	--desktop-controls-right: 0px;
 }
 html[data-desktop-platform] .app-shell { padding-top: var(--desktop-titlebar-height); }
-html[data-desktop-platform] .sidebar { position: relative; }
+html[data-desktop-platform] .sidebar { position: relative; border-top-right-radius: 0; }
 html[data-desktop-platform] .sidebar::before {
 	content: "";
 	position: absolute;
