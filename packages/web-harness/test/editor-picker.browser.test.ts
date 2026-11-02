@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
@@ -45,10 +46,23 @@ createRoot(document.getElementById("root")).render(<><FilePreview workspaceId="w
 			return route.fulfill({ json: { text: "const existingName = 1;\r\n", revision: "a".repeat(64) } });
 		});
 		await page.goto("http://fixture.test/");
+		const editorCss = await readFile(new URL("../src/client/files/FileEditor.css", import.meta.url), "utf8");
+		await page.addStyleTag({
+			content: `:root { --on-surface: #cdd6f4; --surface-sunken: #11111b; } body { background: #11111b; } ${editorCss}`,
+		});
 		await page.addScriptTag({ content: bundle.outputFiles[0].text });
 		const editors = page.getByRole("textbox", { name: "a.js を編集" });
 		const editor = editors.first();
 		await expect.poll(() => editors.count()).toBe(2);
+		await editor.click();
+		await expect
+			.poll(() =>
+				page
+					.locator(".cm-focused .cm-cursor-primary")
+					.first()
+					.evaluate((cursor) => getComputedStyle(cursor).borderLeftColor),
+			)
+			.toBe("rgb(205, 214, 244)");
 		expect(await page.getByRole("group", { name: "ソースの表示方法" }).count()).toBe(0);
 		await expect
 			.poll(() =>
