@@ -18,7 +18,6 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 	onOpen: (path: string, line?: number) => void; onChange: (path: string, patch: Partial<FileTab>) => void;
 }) {
 	const [result, setResult] = useState<{ key: string; view?: FileView; markdown?: string; error?: string }>();
-	const [editing, setEditing] = useState(true);
 	const viewer = useRef<HTMLDivElement>(null);
 	const [transformed, setTransformed] = useState<{ path: string; operation: "translate" | "summarize"; text?: string; error?: string; busy?: boolean }>();
 	const transformController = useRef<AbortController | undefined>(undefined);
@@ -71,16 +70,15 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 	}, [loaded?.view, file?.line, visible]);
 	return <>
 		{output ? <div className="files-view-mode text-transform-header"><strong>{output.operation === "translate" ? "翻訳" : "要約"}</strong><button type="button" onClick={() => { transformController.current?.abort(); setTransformed(undefined); }}>原文を表示</button></div> : markdown && file && <div className="files-view-mode" role="group" aria-label="Markdown の表示方法"><button aria-pressed={rendered} onClick={() => onChange(file.path, { mode: "rendered", line: undefined })}>プレビュー</button><button aria-pressed={!rendered} onClick={() => onChange(file.path, { mode: "source" })}>ソース</button></div>}
-		{!output && !rendered && loaded?.view?.kind === "text" && loaded.view.size <= 2 * 1024 * 1024 && <div className="files-view-mode" role="group" aria-label="ソースの表示方法"><button type="button" aria-pressed={editing} onClick={() => setEditing(true)}>編集</button><button type="button" aria-pressed={!editing} onClick={() => setEditing(false)}>閲覧</button></div>}
-		<div className="files-viewer" id={id} role="tabpanel" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : "ファイルプレビュー"} ref={viewer} tabIndex={0} aria-busy={output ? !!output.busy : !!file && !loaded}>
+		<div className={`files-viewer${!output && !rendered && loaded?.view?.kind === "text" && loaded.view.size <= 2 * 1024 * 1024 ? " is-editing" : ""}`} id={id} role="tabpanel" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : "ファイルプレビュー"} ref={viewer} tabIndex={0} aria-busy={output ? !!output.busy : !!file && !loaded}>
 			{output ? <div className="text-transform-result">{output.busy ? <p role="status">処理中…</p> : output.error ? <p className="error" role="alert">{output.error}</p> : file && <FileMarkdown text={output.text ?? ""} path={file.path} onFile={onOpen} />}</div> : <>
 			<Presence show={!file}><p className="files-message muted">このペインで開くファイルをツリーから選択してください。</p></Presence>
 			<Presence show={!!file && !loaded}><p className="files-message" role="status">読み込み中…</p></Presence>
 			<Presence show={!!loaded?.error}><p role="alert" className="files-message error">{loaded?.error}</p></Presence>
 			<Presence show={!!file && !!loaded?.view && !loaded.error}>{file && loaded?.view && <div className={`files-content${loaded.view.kind === "audio" ? " files-content-audio" : ""}`} key={loaded.key}>
 				{loaded.view.kind === "text" && rendered && loaded.markdown !== undefined && (loaded.markdown === "" ? <p className="files-message muted">空のファイル</p> : <FileMarkdown text={loaded.markdown} path={file.path} onFile={onOpen} />)}
-				{loaded.view.kind === "text" && !rendered && editing && loaded.view.size <= 2 * 1024 * 1024 && <FileEditor workspaceId={workspaceId} path={file.path} line={file.line} />}
-				{loaded.view.kind === "text" && !rendered && (!editing || loaded.view.size > 2 * 1024 * 1024) && <>
+				{loaded.view.kind === "text" && !rendered && loaded.view.size <= 2 * 1024 * 1024 && <FileEditor workspaceId={workspaceId} path={file.path} line={file.line} />}
+				{loaded.view.kind === "text" && !rendered && loaded.view.size > 2 * 1024 * 1024 && <>
 					{loaded.view.size > 2 * 1024 * 1024 && <p className="files-message muted">2 MB を超えるファイルは閲覧のみ対応しています。</p>}
 					{file.offset > 1 && <div className="files-page"><button onClick={() => onChange(file.path, { offset: Math.max(1, file.offset - 200) })}>前の行</button></div>}
 					{loaded.view.lines?.length === 0 && <p className="files-message muted">空のファイル</p>}

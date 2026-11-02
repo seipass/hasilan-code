@@ -60,6 +60,8 @@
 .files-view-mode button, .files-tree-entry { transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease; }
 .files-view-mode [aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); border-color: var(--primary); }
 .files-viewer { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(100%, auto); align-content: start; flex: 1; min-height: 0; min-width: 0; overflow: auto; background: var(--surface-sunken); }
+.files-viewer.is-editing { grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.files-viewer.is-editing .files-content { min-height: 0; }
 /* Loading and content share a slot while their fades overlap. */
 .files-viewer > .files-message, .files-viewer > .files-content { grid-area: 1 / 1; min-width: 0; }
 .files-viewer:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }

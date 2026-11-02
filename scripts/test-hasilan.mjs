@@ -37,6 +37,7 @@ execFileSync(
 		"test/model-picker.browser.test.ts",
 		"test/team-focus.browser.test.ts",
 		"test/settings-search.browser.test.ts",
+		"test/editor-picker.browser.test.ts",
 	],
 	{
 		cwd: web,
