@@ -35,6 +35,7 @@ execFileSync(
 		"--hookTimeout=30000",
 		"test/browser.test.ts",
 		"test/model-picker.browser.test.ts",
+		"test/team-focus.browser.test.ts",
 	],
 	{
 		cwd: web,

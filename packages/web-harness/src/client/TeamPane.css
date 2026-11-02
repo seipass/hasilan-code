@@ -68,9 +68,13 @@
 	overflow: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
+	scrollbar-gutter: stable;
 	scrollbar-color: var(--scroll-thumb) transparent;
 	box-shadow: 0 6px 24px #0004;
 }
+
+.team-focus > .motion-size { display: flex; flex-direction: column; justify-content: flex-end; }
+.team-focus > .motion-size > div { flex: none; }
 
 .team-pane > .team-empty { margin: 12px; }
 
@@ -166,6 +170,7 @@
 .team-graph-line.is-waiting { border-top-color: var(--warning); border-top-style: dashed; }
 .team-graph-selection { width: 10px; height: 10px; border: 2px solid var(--primary); border-radius: 3px; background: var(--primary-container); }
 .team-focus-content .team-run-detail { border-top: 0; padding-top: 0; }
+.team-run-meta .motion-label-swap { white-space: nowrap; }
 .team-run-result > .motion-swap p { max-height: 75px; overflow: hidden; }
 .team-dependency ul { position: relative; }
 .team-graph-node-footer { position: relative; }
