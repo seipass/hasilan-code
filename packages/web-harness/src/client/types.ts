@@ -109,8 +109,9 @@ export interface Settings {
 	jev?: JevStatus;
 	jevComputer?: { textModel: Model };
 	search: {
-		defaultProvider: "brave" | "tavily" | "exa" | "firecrawl";
-		configured: { brave: boolean; tavily: boolean; exa: boolean; firecrawl: boolean };
+		defaultProvider: "brave" | "tavily" | "exa" | "firecrawl" | "rustxng";
+		rustxngUrl: string;
+		configured: { brave: boolean; tavily: boolean; exa: boolean; firecrawl: boolean; rustxng: boolean };
 	};
 	teams: { maxConcurrentAgents: number; maxDepth: number };
 	browser?: { ready: boolean; error?: string };

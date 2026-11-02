@@ -4,6 +4,7 @@ import { Check } from "typebox/value";
 import { BraveSearchProvider } from "../search-providers/brave.ts";
 import { ExaSearchProvider } from "../search-providers/exa.ts";
 import { FirecrawlSearchProvider } from "../search-providers/firecrawl.ts";
+import { RustxngSearchProvider } from "../search-providers/rustxng.ts";
 import { TavilySearchProvider } from "../search-providers/tavily.ts";
 import type { SearchFetch, SearchProvider, SearchResult } from "../search-providers/types.ts";
 import { type SearchProviderId, type SettingsService, searchProviderSchema } from "../settings.ts";
@@ -32,6 +33,7 @@ export class SearchService {
 			tavily: new TavilySearchProvider(() => settings.getSearchKey("tavily"), fetcher),
 			exa: new ExaSearchProvider(() => settings.getSearchKey("exa"), fetcher),
 			firecrawl: new FirecrawlSearchProvider(() => settings.getSearchKey("firecrawl"), fetcher),
+			rustxng: new RustxngSearchProvider(() => settings.get().search.rustxngUrl, fetcher),
 		};
 	}
 
@@ -52,8 +54,8 @@ export class SearchService {
 			name: "web_search",
 			label: "Web search",
 			description:
-				"Search the web using the configured Brave, Tavily, Exa, or Firecrawl provider. Results contain source title, URL, and snippet. No provider fallback or automatic retry is performed.",
-			promptSnippet: "Search the web with Brave, Tavily, Exa, or Firecrawl and return source links",
+				"Search the web using the configured Brave, Tavily, Exa, Firecrawl, or RustXNG provider. Results contain source title, URL, and snippet. No provider fallback or automatic retry is performed.",
+			promptSnippet: "Search the web with the configured provider and return source links",
 			parameters: webSearchSchema,
 			execute: async (_toolCallId, params, signal) => {
 				const result = await this.search(params, signal);

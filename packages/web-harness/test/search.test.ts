@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BraveSearchProvider } from "../src/server/search-providers/brave.ts";
 import { ExaSearchProvider } from "../src/server/search-providers/exa.ts";
 import { FirecrawlSearchProvider } from "../src/server/search-providers/firecrawl.ts";
+import { RustxngSearchProvider } from "../src/server/search-providers/rustxng.ts";
 import { TavilySearchProvider } from "../src/server/search-providers/tavily.ts";
 import type { SearchFetch } from "../src/server/search-providers/types.ts";
 import type { SettingsService, SettingsSnapshot } from "../src/server/settings.ts";
@@ -65,9 +66,11 @@ describe("Search provider consumer boundaries", () => {
 					JSON.stringify(
 						url.pathname === "/v2/search"
 							? { success: true, data: { web: rows } }
-							: url.searchParams.has("q")
-								? { web: { results: rows } }
-								: { results: rows },
+							: url.searchParams.has("format")
+								? { results: rows }
+								: url.searchParams.has("q")
+									? { web: { results: rows } }
+									: { results: rows },
 					),
 				);
 			})().catch(() => {
@@ -83,6 +86,42 @@ describe("Search provider consumer boundaries", () => {
 			const original = new URL(input instanceof Request ? input.url : String(input));
 			return fetch(`${local}${original.pathname}${original.search}`, init);
 		};
+	});
+
+	it("uses RustXNG's JSON endpoint without credentials and applies its search filters", async () => {
+		const provider = new RustxngSearchProvider(() => "http://rustxng.invalid/prefix", fetcher);
+		expect(await provider.search({ query: "query", limit: 2, timeRange: "week" })).toEqual({
+			provider: "rustxng",
+			query: "query",
+			results: [{ title: "Source", url: "https://example.org/source", snippet: "Tavily snippet" }],
+		});
+		expect(requests[0].url.pathname).toBe("/prefix/search");
+		expect(Object.fromEntries(requests[0].url.searchParams)).toEqual({
+			q: "query",
+			format: "json",
+			max_results: "2",
+			time_range: "week",
+		});
+		expect(requests[0].headers.authorization).toBeUndefined();
+		await expect(provider.search({ query: "429", limit: 5 })).rejects.toThrow("RustXNG search failed (HTTP 429)");
+		expect(requests).toHaveLength(2);
+	});
+
+	it("uses the latest saved RustXNG endpoint for each search", async () => {
+		const snapshot: SettingsSnapshot = {
+			jev: { configured: false },
+			search: {
+				defaultProvider: "rustxng",
+				rustxngUrl: "http://rustxng.invalid/first",
+				configured: { brave: false, tavily: false, exa: false, firecrawl: false, rustxng: true },
+			},
+			teams: { maxConcurrentAgents: 4, maxDepth: 3 },
+		};
+		const search = new SearchService({ get: () => snapshot, getSearchKey: () => undefined }, fetcher);
+		expect((await search.search({ query: "query" })).provider).toBe("rustxng");
+		snapshot.search.rustxngUrl = "http://rustxng.invalid/second";
+		expect((await search.search({ query: "query" })).provider).toBe("rustxng");
+		expect(requests.map((request) => request.url.pathname)).toEqual(["/first/search", "/second/search"]);
 	});
 	afterEach(async () => {
 		server.closeAllConnections();
@@ -189,10 +228,15 @@ describe("Search provider consumer boundaries", () => {
 	it("reads changed defaults and keys on each call and never falls back", async () => {
 		const snapshot: SettingsSnapshot = {
 			jev: { configured: false },
-			search: { defaultProvider: "brave", configured: { brave: false, tavily: true, exa: false, firecrawl: false } },
+			search: {
+				defaultProvider: "brave",
+				configured: { brave: false, tavily: true, exa: false, firecrawl: false, rustxng: true },
+			},
 			teams: { maxConcurrentAgents: 4, maxDepth: 3 },
 		};
-		const keys: { brave?: string; tavily?: string; exa?: string; firecrawl?: string } = { tavily: "private-secret" };
+		const keys: { brave?: string; tavily?: string; exa?: string; firecrawl?: string; rustxng?: string } = {
+			tavily: "private-secret",
+		};
 		const settings: Pick<SettingsService, "get" | "getSearchKey"> = {
 			get: () => snapshot,
 			getSearchKey: (id) => keys[id],

@@ -130,7 +130,9 @@ Hasilan Codeの標準AIプロンプトは製品名を含めず、Pi本体のド�
 
 アカウント認証は独自SDKのプロバイダー認証を使い、専用の `auth.json` に保存します。認証情報の更新もSDKが管理します。ログインは明示クリックで開始し、表示したリンクをユーザーが開きます。デバイスコード、選択肢、コード・コールバックURL入力に対応し、キャンセル・画面を閉じる操作・ホスト終了で待機を中止します。同時ログインは一つです。失敗時は一つのエラー表示に詳細をまとめ、ログインボタンで再試行できます。送信に失敗した入力は入力欄に残します。認証成功後はモデル一覧を更新します。モデル選択パネル・設定画面で入力したLLM APIキーは現在プロセス専用で、再起動すると失われます。キー・トークンの値はGETやWebSocketへ返しません。
 
-Web検索は Brave、Tavily、[Exa](https://exa.ai/docs/reference/search)、[Firecrawl](https://docs.firecrawl.dev/api-reference/endpoint/search) に対応します。「設定 → 検索」で各サービスのAPIキーを保存し、既定のサービスを選びます。`web_search` の `provider` で呼び出しごとに明示選択もできます。期間指定はExaでは公開日による絞り込み、FirecrawlではWeb検索の `tbs` を使用します。キーの有無は表示しますが、検索の成功や残量は接続テストしていません。
+Web検索は Brave、Tavily、[Exa](https://exa.ai/docs/reference/search)、[Firecrawl](https://docs.firecrawl.dev/api-reference/endpoint/search)、[RustXNG](https://github.com/sahenjp/RustXNG) に対応します。「設定 → 検索」で既定のサービスを選び、APIキーが必要なサービスはキーを保存します。`web_search` の `provider` で呼び出しごとに明示選択もできます。期間指定はExaでは公開日による絞り込み、FirecrawlではWeb検索の `tbs` を使用します。キーの有無は表示しますが、検索の成功や残量は接続テストしていません。
+
+RustXNGは別途インストールして起動し、設定画面にサーバーのURLを入力します。既定は `http://127.0.0.1:8888` で、APIキーは不要です。複数の検索サイトに並列アクセスするため、利用状況によってはRustXNGを動かすサーバーのIPアドレスが検索サイトからブロックされる可能性があります。
 
 会話のauthorityはSDKのJSONLです。再起動時に実行中runは`interrupted`となり、自動再実行しません。未消費入力も自動再送しません。空sessionの未作成JSONLは正常ですが、materialized会話のJSONLが消失した場合はmissingとして扱います。
 

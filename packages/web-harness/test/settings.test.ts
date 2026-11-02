@@ -117,7 +117,8 @@ describe("Web harness settings", () => {
 		const restored = await SettingsService.open(directory, runtime);
 		expect(restored.get().search).toEqual({
 			defaultProvider: "firecrawl",
-			configured: { brave: true, tavily: true, exa: true, firecrawl: true },
+			rustxngUrl: "http://127.0.0.1:8888",
+			configured: { brave: true, tavily: true, exa: true, firecrawl: true, rustxng: true },
 		});
 		expect(restored.get().teams).toEqual({ maxConcurrentAgents: 1, maxDepth: 3 });
 		expect(restored.getSearchKey("firecrawl")).toBe("private-firecrawl");
@@ -133,7 +134,31 @@ describe("Web harness settings", () => {
 			tavily: true,
 			exa: false,
 			firecrawl: true,
+			rustxng: true,
 		});
+	});
+
+	it("saves and restores a validated RustXNG endpoint without an API key", async () => {
+		const settings = await SettingsService.open(directory, runtime);
+		expect(settings.get().search.rustxngUrl).toBe("http://127.0.0.1:8888");
+		await settings.patch({
+			search: { defaultProvider: "rustxng", rustxngUrl: "http://127.0.0.1:9876/search-service/" },
+		});
+		const restored = await SettingsService.open(directory, runtime);
+		expect(restored.get().search).toMatchObject({
+			defaultProvider: "rustxng",
+			rustxngUrl: "http://127.0.0.1:9876/search-service",
+			configured: { rustxng: true },
+		});
+		for (const rustxngUrl of [
+			"file:///etc/passwd",
+			"http://user:secret@example.com",
+			"http://localhost/?secret=value",
+			"not a URL",
+		]) {
+			await expect(restored.patch({ search: { rustxngUrl } })).rejects.toThrow("RustXNG");
+		}
+		expect(restored.get().search.rustxngUrl).toBe("http://127.0.0.1:9876/search-service");
 	});
 
 	it("validates limits, rejects removed model settings, and returns independent snapshots", async () => {

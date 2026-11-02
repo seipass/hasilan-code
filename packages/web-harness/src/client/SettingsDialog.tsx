@@ -19,13 +19,15 @@ const TABS = [
 	{ id: "environment", label: "環境" },
 ] as const;
 type SettingsTab = (typeof TABS)[number]["id"];
-const SEARCH_PROVIDERS = [
+const SEARCH_KEY_PROVIDERS = [
 	{ id: "brave", label: "Brave" },
 	{ id: "tavily", label: "Tavily" },
 	{ id: "exa", label: "Exa" },
 	{ id: "firecrawl", label: "Firecrawl" },
 ] as const;
+const SEARCH_PROVIDERS = [...SEARCH_KEY_PROVIDERS, { id: "rustxng", label: "RustXNG" }] as const;
 type SearchProviderId = Settings["search"]["defaultProvider"];
+type SearchKeyProviderId = (typeof SEARCH_KEY_PROVIDERS)[number]["id"];
 
 export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgroundChange }: {
 	onClose: () => void;
@@ -43,7 +45,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 	const [loginActive, setLoginActive] = useState(false);
 	const [loadAttempt, setLoadAttempt] = useState(0);
 	const [closing, setClosing] = useState(false);
-	const [searchKeys, setSearchKeys] = useState<Record<SearchProviderId, string>>({ brave: "", tavily: "", exa: "", firecrawl: "" });
+	const [searchKeys, setSearchKeys] = useState<Record<SearchKeyProviderId, string>>({ brave: "", tavily: "", exa: "", firecrawl: "" });
 	const [llmProvider, setLlmProvider] = useState("");
 	const [providerQuery, setProviderQuery] = useState("");
 	const [llmKeys, setLlmKeys] = useState<Record<string, string>>({});
@@ -82,7 +84,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 	const llmKey = llmKeys[llmProvider] ?? "";
 	const hasLlmKey = !!selectedProvider?.apiKey && !!llmKey.trim();
 	const matchingProviders = catalog?.providers.filter((provider) => `${provider.name} ${provider.id}`.toLocaleLowerCase().includes(providerQuery.trim().toLocaleLowerCase())) ?? [];
-	const searchChanged = settings?.search.defaultProvider !== savedSettings?.search.defaultProvider;
+	const searchChanged = settings?.search.defaultProvider !== savedSettings?.search.defaultProvider || (settings?.search.defaultProvider === "rustxng" && settings.search.rustxngUrl !== savedSettings?.search.rustxngUrl);
 	const teamsChanged = settings?.teams.maxConcurrentAgents !== savedSettings?.teams.maxConcurrentAgents || settings?.teams.maxDepth !== savedSettings?.teams.maxDepth;
 	const selectedJev = settings?.jev?.model;
 	const jevProvider = catalog?.providers.find((provider) => provider.id === selectedJev?.provider);
@@ -214,19 +216,21 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 				</section></Presence>
 				<Presence show={tab === "search"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-search-panel`} aria-labelledby={`${tabsId}-search-tab`}>
 					<h3>Web 検索</h3>
-					<p className="settings-state">現在の既定: {SEARCH_PROVIDERS.find((provider) => provider.id === savedSettings?.search.defaultProvider)?.label} · {settings.search.configured[savedSettings?.search.defaultProvider ?? "brave"] ? "キー設定済み" : "キー未設定"}</p>
+					<p className="settings-state">現在の既定: {SEARCH_PROVIDERS.find((provider) => provider.id === savedSettings?.search.defaultProvider)?.label} · {savedSettings?.search.defaultProvider === "rustxng" ? "APIキー不要" : settings.search.configured[savedSettings?.search.defaultProvider ?? "brave"] ? "キー設定済み" : "キー未設定"}</p>
 					<form onSubmit={(event) => { event.preventDefault(); if (!searchChanged) return; const provider = settings.search.defaultProvider; void perform(async () => {
-						await command("/api/settings", { search: { defaultProvider: provider } }, "PATCH");
-						setSavedSettings((current) => current && ({ ...current, search: { ...current.search, defaultProvider: provider } }));
+						const saved = await command<Settings>("/api/settings", { search: { defaultProvider: provider, ...(provider === "rustxng" ? { rustxngUrl: settings.search.rustxngUrl } : {}) } }, "PATCH");
+						setSettings((current) => current && ({ ...current, search: saved.search }));
+						setSavedSettings((current) => current && ({ ...current, search: saved.search }));
 					}, "既定の検索サービスを保存しました。", "既定の検索サービスを保存できませんでした。"); }}>
 						<fieldset disabled={busy} className="settings-section"><legend>既定の検索サービス</legend>
 							<label>プロバイダー<select value={settings.search.defaultProvider} onChange={(event) => { setSettings({ ...settings, search: { ...settings.search, defaultProvider: event.target.value as SearchProviderId } }); setNotice(undefined); }}>{SEARCH_PROVIDERS.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></label>
-							<p className="settings-inline-status" role="status">{searchChanged ? `未保存 · ${SEARCH_PROVIDERS.find((provider) => provider.id === settings.search.defaultProvider)?.label} に切り替えます。` : "変更なし"} {settings.search.configured[settings.search.defaultProvider] ? "キー設定済み" : "検索するには下でキーを保存してください。"}</p>
+							{settings.search.defaultProvider === "rustxng" && <><label>RustXNGの接続先URL<input type="url" required maxLength={2048} value={settings.search.rustxngUrl} onChange={(event) => { setSettings({ ...settings, search: { ...settings.search, rustxngUrl: event.target.value } }); setNotice(undefined); }} /></label><p className="fine-print">RustXNGは別途インストールして起動してください。APIキーは不要です。</p><p className="settings-next-action">RustXNGは複数の検索サイトに並列アクセスします。利用状況によっては、RustXNGを動かすサーバーのIPアドレスが検索サイトから一時的または長期にブロックされる可能性があります。</p></>}
+							<p className="settings-inline-status" role="status">{searchChanged ? "変更は未保存です。" : "変更なし"} {settings.search.defaultProvider === "rustxng" ? "APIキー不要" : settings.search.configured[settings.search.defaultProvider] ? "キー設定済み" : "検索するには下でキーを保存してください。"}</p>
 							<button type="submit" disabled={!searchChanged}>既定の検索サービスを保存</button>
 						</fieldset>
 					</form>
 					<fieldset disabled={busy} className="settings-section"><legend>検索 API キー（サーバーに保存）</legend>
-						{SEARCH_PROVIDERS.map(({ id: provider, label }) => <div className="credential-row" key={provider}>
+						{SEARCH_KEY_PROVIDERS.map(({ id: provider, label }) => <div className="credential-row" key={provider}>
 							<label>{label} · {searchKeys[provider].trim() ? "新しいキーは未保存" : settings.search.configured[provider] ? "保存済み" : "キー未設定"}<input type="password" autoComplete="new-password" spellCheck={false} value={searchKeys[provider]} placeholder="新しい API キー" onChange={(event) => { setSearchKeys({ ...searchKeys, [provider]: event.target.value }); setNotice(undefined); }} /></label>
 							<button type="button" disabled={!searchKeys[provider].trim()} onClick={() => { const key = searchKeys[provider]; void perform(async () => {
 								await command(`/api/credentials/search/${provider}`, { key }, "PUT");

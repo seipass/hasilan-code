@@ -12,8 +12,28 @@ export const searchProviderSchema = Type.Union([
 	Type.Literal("tavily"),
 	Type.Literal("exa"),
 	Type.Literal("firecrawl"),
+	Type.Literal("rustxng"),
 ]);
 export type SearchProviderId = Static<typeof searchProviderSchema>;
+export const DEFAULT_RUSTXNG_URL = "http://127.0.0.1:8888";
+
+function normalizeRustxngUrl(value: string): string {
+	let url: URL;
+	try {
+		url = new URL(value.trim());
+	} catch {
+		throw new Error("RustXNGの接続先にはHTTPまたはHTTPSのURLを指定してください。");
+	}
+	if (
+		(url.protocol !== "http:" && url.protocol !== "https:") ||
+		url.username ||
+		url.password ||
+		url.search ||
+		url.hash
+	)
+		throw new Error("RustXNGの接続先には認証情報・クエリ・フラグメントを含めないでください。");
+	return url.href.replace(/\/$/, "");
+}
 export const settingsPatchSchema = Type.Object(
 	{
 		jev: Type.Optional(
@@ -32,7 +52,13 @@ export const settingsPatchSchema = Type.Object(
 			),
 		),
 		search: Type.Optional(
-			Type.Object({ defaultProvider: Type.Optional(searchProviderSchema) }, { additionalProperties: false }),
+			Type.Object(
+				{
+					defaultProvider: Type.Optional(searchProviderSchema),
+					rustxngUrl: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
+				},
+				{ additionalProperties: false },
+			),
 		),
 		teams: Type.Optional(
 			Type.Object(
@@ -51,7 +77,7 @@ export interface HarnessSettings {
 	jev?: { model?: JevSelection };
 	jevComputer?: { textModel: JevSelection };
 	translation?: { language: string; model?: JevSelection };
-	search: { defaultProvider: SearchProviderId };
+	search: { defaultProvider: SearchProviderId; rustxngUrl?: string };
 	teams: { maxConcurrentAgents: number; maxDepth: number };
 }
 export interface SettingsSnapshot extends HarnessSettings {
@@ -80,7 +106,13 @@ const settingsFileSchema = Type.Object(
 				{ additionalProperties: false },
 			),
 		),
-		search: Type.Object({ defaultProvider: searchProviderSchema }, { additionalProperties: false }),
+		search: Type.Object(
+			{
+				defaultProvider: searchProviderSchema,
+				rustxngUrl: Type.Optional(Type.String({ minLength: 1, maxLength: 2048 })),
+			},
+			{ additionalProperties: false },
+		),
 		teams: Type.Object(
 			{
 				maxConcurrentAgents: Type.Integer({ minimum: 1, maximum: 32 }),
@@ -165,6 +197,7 @@ export class SettingsService {
 			throw new Error("Invalid Web harness settings.json; repair the file before starting");
 		if (savedCredentials !== undefined && !Check(credentialsSchema, savedCredentials))
 			throw new Error("Invalid Web harness credentials.json; repair the file before starting");
+		if (savedSettings?.search.rustxngUrl) normalizeRustxngUrl(savedSettings.search.rustxngUrl);
 		const settings: HarnessSettings =
 			savedSettings === undefined
 				? {
@@ -193,11 +226,13 @@ export class SettingsService {
 			},
 			search: {
 				...this.settings.search,
+				rustxngUrl: this.settings.search.rustxngUrl ?? DEFAULT_RUSTXNG_URL,
 				configured: {
 					brave: Boolean(this.credentials.brave),
 					tavily: Boolean(this.credentials.tavily),
 					exa: Boolean(this.credentials.exa),
 					firecrawl: Boolean(this.credentials.firecrawl),
+					rustxng: true,
 				},
 			},
 			teams: { ...this.settings.teams },
@@ -216,6 +251,8 @@ export class SettingsService {
 		if (!Check(settingsPatchSchema, patch))
 			return Promise.reject(new Error("Invalid settings; concurrency must be 1..32 and depth 1..8"));
 		return this.enqueue(async () => {
+			const rustxngUrl =
+				patch.search?.rustxngUrl === undefined ? undefined : normalizeRustxngUrl(patch.search.rustxngUrl);
 			if (patch.translation && !patch.translation.language.trim()) throw new Error("母国語を入力してください。");
 			if (
 				patch.translation?.model &&
@@ -258,7 +295,7 @@ export class SettingsService {
 						: {}),
 				...(this.settings.jev ? { jev: this.settings.jev } : {}),
 				...(this.settings.jevComputer ? { jevComputer: this.settings.jevComputer } : {}),
-				search: { ...this.settings.search, ...patch.search },
+				search: { ...this.settings.search, ...patch.search, ...(rustxngUrl !== undefined ? { rustxngUrl } : {}) },
 				teams: { ...this.settings.teams, ...patch.teams },
 			};
 			if (patch.jev) {

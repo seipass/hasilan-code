@@ -32,7 +32,9 @@ export async function searchJson(
 		const response = await fetcher(url, { ...init, redirect: "error", signal: combined });
 		if (!response.ok) {
 			publicError = new Error(
-				`${provider} search failed (HTTP ${response.status}); check credentials and quota in Settings`,
+				provider === "rustxng"
+					? `RustXNG search failed (HTTP ${response.status}); check the RustXNG server`
+					: `${provider} search failed (HTTP ${response.status}); check credentials and quota in Settings`,
 			);
 			await response.body?.cancel();
 			throw publicError;
