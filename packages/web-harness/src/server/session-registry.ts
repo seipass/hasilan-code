@@ -941,7 +941,7 @@ export class SessionRegistry {
 		const ordered = [...this.state.sessions].reverse();
 		for (const session of ordered) {
 			if (results.length >= limit) break;
-			let entries;
+			let entries: ReturnType<SessionManager["getEntries"]>;
 			try {
 				entries = this.ensureLive(session.sessionId)?.manager.getEntries() ?? [];
 			} catch {
