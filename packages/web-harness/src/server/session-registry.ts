@@ -434,6 +434,7 @@ export class SessionRegistry {
 	private saveQueue: Promise<void> = Promise.resolve();
 	private mutationQueue: Promise<unknown> = Promise.resolve();
 	private accepting = true;
+	private hydrationTimer?: ReturnType<typeof setTimeout>;
 	constructor(options: RegistryOptions) {
 		this.options = options;
 		this.statePath = join(options.agentDir, "web-harness", "state.json");
@@ -474,16 +475,47 @@ export class SessionRegistry {
 			descriptor.cwd = this.getWorkspaceRoot(descriptor.workspaceId);
 			const materialized = !!descriptor.path && existsSync(descriptor.path);
 			descriptor.availability = descriptor.materialized && !materialized ? "missing" : "ready";
-			if (descriptor.availability === "missing") continue;
-			const manager =
-				materialized && descriptor.path ? SessionManager.open(descriptor.path) : this.newManager(descriptor);
-			if (manager.getSessionId() !== descriptor.sessionId)
-				throw new Error("Conversation ID differs from web-harness state");
-			descriptor.materialized = materialized;
-			descriptor.path = manager.getSessionFile();
-			this.addLive(descriptor, manager);
 		}
 		if (savedModes) await this.persist();
+	}
+	private ensureLive(id: string): LiveSession | undefined {
+		const descriptor = this.descriptor(id);
+		const existing = this.live.get(id);
+		if (existing || descriptor.availability === "missing") return existing;
+		const materialized = !!descriptor.path && existsSync(descriptor.path);
+		if (descriptor.materialized && !materialized) {
+			descriptor.availability = "missing";
+			return undefined;
+		}
+		const manager =
+			materialized && descriptor.path ? SessionManager.open(descriptor.path) : this.newManager(descriptor);
+		if (manager.getSessionId() !== descriptor.sessionId)
+			throw new Error("Conversation ID differs from web-harness state");
+		descriptor.materialized = materialized;
+		descriptor.path = manager.getSessionFile();
+		this.addLive(descriptor, manager);
+		return this.live.get(id);
+	}
+	/** Restore usage and history in the background after the HTTP server is available. */
+	startHistoryHydration(): void {
+		const ids = this.state.sessions.map((session) => session.sessionId);
+		let index = 0;
+		const next = () => {
+			this.hydrationTimer = undefined;
+			if (!this.accepting || index >= ids.length) return;
+			const id = ids[index++];
+			if (this.state.sessions.some((session) => session.sessionId === id) && !this.live.has(id)) {
+				try {
+					if (this.ensureLive(id)) this.changed(id);
+				} catch (error) {
+					console.error("Could not restore conversation history:", error instanceof Error ? error.message : error);
+				}
+			}
+			this.hydrationTimer = setTimeout(next, 50);
+			this.hydrationTimer.unref();
+		};
+		this.hydrationTimer = setTimeout(next, 2_000);
+		this.hydrationTimer.unref();
 	}
 	private newManager(descriptor: SessionDescriptor): SessionManager {
 		const parent = descriptor.parentSessionId ? this.descriptor(descriptor.parentSessionId) : undefined;
@@ -669,15 +701,13 @@ export class SessionRegistry {
 		});
 	}
 	importRecord(sessionId: string, recordId: string): Record<string, unknown> {
-		this.descriptor(sessionId);
-		const entry = this.live.get(sessionId)?.manager.getEntry(recordId);
+		const entry = this.ensureLive(sessionId)?.manager.getEntry(recordId);
 		if (entry?.type !== "custom" || entry.customType !== SESSION_IMPORT_RECORD_TYPE || !importedRecord(entry.data))
 			throw new HarnessError("元の記録が見つかりません。", 404);
 		return entry.data.raw;
 	}
 	importRecords(sessionId: string): Iterable<Record<string, unknown>> {
-		this.descriptor(sessionId);
-		const entries = this.live.get(sessionId)?.manager.getEntries() ?? [];
+		const entries = this.ensureLive(sessionId)?.manager.getEntries() ?? [];
 		return (function* () {
 			for (const entry of entries)
 				if (
@@ -689,8 +719,8 @@ export class SessionRegistry {
 		})();
 	}
 	importAsset(sessionId: string, assetId: string): ImportAsset & { path: string } {
-		this.descriptor(sessionId);
-		const asset = /^[a-f0-9]{64}$/.test(assetId) && this.live.get(sessionId)?.importAssets.get(assetId);
+		const live = this.ensureLive(sessionId);
+		const asset = /^[a-f0-9]{64}$/.test(assetId) && live?.importAssets.get(assetId);
 		if (!asset) throw new HarnessError("添付ファイルが見つかりません。", 404);
 		return { ...asset, path: join(this.options.agentDir, "web-harness", "import-assets", sessionId, assetId) };
 	}
@@ -830,7 +860,7 @@ export class SessionRegistry {
 	/** Transport reads immutable message/tool references; callers must not mutate this view. */
 	projection(id: string): SessionSnapshot {
 		const descriptor = this.descriptor(id);
-		const projection = this.live.get(id)?.projection ?? {
+		const projection = this.ensureLive(id)?.projection ?? {
 			...descriptor,
 			messages: [],
 			toolCalls: [],
@@ -962,7 +992,7 @@ export class SessionRegistry {
 	}
 	private async adapter(id: string): Promise<ExecutionAdapter> {
 		const descriptor = this.descriptor(id);
-		const live = this.live.get(id);
+		const live = this.ensureLive(id);
 		if (!live || descriptor.availability === "missing") throw new HarnessError("Conversation file is missing", 409);
 		if (live.adapter) return live.adapter;
 		if (!live.loading)
@@ -1285,7 +1315,7 @@ export class SessionRegistry {
 		inputKind: "prompt" | "context" = "prompt",
 		attachments?: PromptAttachment[],
 	): Promise<ExecutionOutcome> {
-		const live = this.live.get(id);
+		const live = this.ensureLive(id);
 		if (!live) return { aborted: false, error: "Conversation file is missing" };
 		live.runId = runId;
 		live.finalText = undefined;
@@ -1404,6 +1434,7 @@ export class SessionRegistry {
 	}
 	async close(): Promise<void> {
 		this.accepting = false;
+		clearTimeout(this.hydrationTimer);
 		await Promise.all(
 			[...this.live.values()].map(async (live) => {
 				if (live.adapter) {

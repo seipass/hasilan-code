@@ -444,6 +444,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		},
 	});
 	const launch = await host.listen();
+	registry.startHistoryHydration();
 	const shutdown = async () => {
 		if (shuttingDown) return;
 		shuttingDown = true;
