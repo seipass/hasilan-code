@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeAll, expect, it } from "vitest";
 import { controlMusic, registerMusic, useMusic } from "../src/client/widgets/music.ts";
 
 class AudioFixture extends EventTarget {
@@ -11,6 +11,7 @@ class AudioFixture extends EventTarget {
 	currentTime = 0;
 	private level = 1;
 	private silent = false;
+	getAttribute(name: string) { return name === "src" ? "/api/workspaces/w/file-content?path=track.flac" : null; }
 	get volume() { return this.level; }
 	set volume(value: number) { this.level = value; this.dispatchEvent(new Event("volumechange")); }
 	get muted() { return this.silent; }
@@ -18,6 +19,11 @@ class AudioFixture extends EventTarget {
 	async play() { this.paused = false; this.dispatchEvent(new Event("play")); }
 	pause() { this.paused = true; this.dispatchEvent(new Event("pause")); }
 }
+
+// The module resolves media URLs against the page location.
+beforeAll(() => {
+	if (typeof window === "undefined") Object.assign(globalThis, { window: { location: { href: "http://127.0.0.1:3080/" } } });
+});
 
 function Probe() { return createElement("output", null, JSON.stringify(useMusic())); }
 const cleanup: (() => void)[] = [];

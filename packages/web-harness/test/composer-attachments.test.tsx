@@ -15,6 +15,8 @@ function render(draftKey: string) { return renderToStaticMarkup(createElement(Pr
 
 beforeEach(() => {
 	failRead = false;
+	// Draft persistence posts to the host; this test only covers the attachment lifecycle.
+	vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ saved: true, value: null }) })));
 	vi.stubGlobal("FileReader", class {
 		result: string | null = null;
 		onload?: () => void;
