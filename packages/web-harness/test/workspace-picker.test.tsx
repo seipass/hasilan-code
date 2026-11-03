@@ -13,7 +13,11 @@ it("keeps routing and ordinary send distinct on Windows and macOS, with configur
 	expect(matchesAppKeybinding(event, "composer.routeWorkspace")).toBe(true);
 	expect(matchesAppKeybinding(event, "composer.send")).toBe(false);
 	expect(matchesAppKeybinding({ ...event, ctrlKey: false, metaKey: true }, "composer.routeWorkspace")).toBe(true);
-	expect(matchesAppKeybinding({ ...event, shiftKey: false }, "composer.send")).toBe(true);
+	expect(matchesAppKeybinding({ ...event, shiftKey: false }, "composer.followUp")).toBe(true);
+	expect(matchesAppKeybinding({ ...event, ctrlKey: false, metaKey: true, shiftKey: false }, "composer.followUp")).toBe(true);
+	expect(matchesAppKeybinding({ ...event, shiftKey: false }, "composer.send")).toBe(false);
+	expect(matchesAppKeybinding({ ...event, ctrlKey: false, shiftKey: false }, "composer.send")).toBe(true);
+	expect(matchesAppKeybinding({ ...event, ctrlKey: false }, "composer.send")).toBe(false);
 	expect(matchesAppKeybinding({ ...event, altKey: true }, "composer.routeWorkspace")).toBe(false);
 	const stored = vi.spyOn(preferences, "getItem").mockReturnValue(JSON.stringify({ "composer.routeWorkspace": ["alt+r"] }));
 	expect(matchesAppKeybinding(event, "composer.routeWorkspace")).toBe(false);

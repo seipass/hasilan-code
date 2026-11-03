@@ -70,7 +70,7 @@ describe("shared Web and desktop preferences", () => {
 				"pi-web-model-selection",
 				JSON.stringify({ model: { provider: "commandcode", id: "model" }, thinkingLevel: "max" }),
 			],
-			["pi-web-keybindings", JSON.stringify({ "composer.send": ["alt+enter"] })],
+			["pi-web-keybindings", JSON.stringify({ "composer.send": ["alt+enter"], "composer.followUp": ["alt+f"] })],
 			["auth.json", "must not migrate"],
 		]);
 		const web = new PreferenceStorage(request);

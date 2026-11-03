@@ -84,6 +84,7 @@ const treePreferencesSchema = Type.Object(
 const keybindingsSchema = Type.Object(
 	{
 		"composer.send": Type.Optional(Type.Array(Type.String({ maxLength: 100 }), { maxItems: 20 })),
+		"composer.followUp": Type.Optional(Type.Array(Type.String({ maxLength: 100 }), { maxItems: 20 })),
 		"composer.routeWorkspace": Type.Optional(Type.Array(Type.String({ maxLength: 100 }), { maxItems: 20 })),
 	},
 	{ additionalProperties: false },

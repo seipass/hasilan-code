@@ -1,7 +1,8 @@
 import { preferences } from "./preferences.ts";
 
 export const DEFAULT_APP_KEYBINDINGS = {
-	"composer.send": ["ctrl+enter", "meta+enter"],
+	"composer.send": ["enter"],
+	"composer.followUp": ["ctrl+enter", "meta+enter"],
 	"composer.routeWorkspace": ["ctrl+shift+enter", "meta+shift+enter"],
 } as const;
 export type AppKeybinding = keyof typeof DEFAULT_APP_KEYBINDINGS;
