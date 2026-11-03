@@ -668,3 +668,9 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 .keybinding-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .keybinding-controls kbd { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-sunken); font: 11px/1.4 "UDEV Gothic", monospace; }
 .keybinding-controls button { padding: 4px 9px; font-size: 11px; }
+.storage-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.storage-table { display: grid; gap: 6px; margin: 12px 0; }
+.storage-table > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 11px; border-radius: 8px; background: var(--surface-panel); }
+.storage-table dt { font-size: 12px; color: var(--on-surface-secondary); }
+.storage-table dd { margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.storage-table small { margin-left: 8px; color: var(--on-surface-muted); font-size: 10px; }

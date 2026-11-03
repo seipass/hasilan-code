@@ -20,6 +20,7 @@ export const savedDetailTabsSchema = Type.Object(
 									offset: Type.Integer({ minimum: 1 }),
 									line: Type.Optional(Type.Integer({ minimum: 1 })),
 									mode: Type.Optional(Type.Union([Type.Literal("source"), Type.Literal("rendered")])),
+									readOnly: Type.Optional(Type.Boolean()),
 								},
 								{ additionalProperties: false },
 							),

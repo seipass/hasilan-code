@@ -933,6 +933,10 @@ export class SessionRegistry {
 				.map((input) => this.projectPendingInput(input, currentRun)),
 		};
 	}
+	/** Transcript files referenced by any conversation, for storage accounting. */
+	sessionPaths(): string[] {
+		return this.state.sessions.flatMap((session) => (session.path ? [session.path] : []));
+	}
 	list(workspaceId?: string): Omit<SessionSnapshot, "messages" | "toolCalls" | "activity">[] {
 		return this.state.sessions
 			.filter((entry) => !workspaceId || entry.workspaceId === workspaceId)

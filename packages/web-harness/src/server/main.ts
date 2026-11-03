@@ -40,6 +40,7 @@ import { handleSessionImport } from "./session-import/routes.ts";
 import { SessionImportService } from "./session-import/service.ts";
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
 import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./settings.ts";
+import { readStorageUsage } from "./storage-usage.ts";
 import { TeamManager } from "./team-manager.ts";
 import { TerminalManager } from "./terminal-manager.ts";
 import { textTransformSchema, transformText } from "./text-transform.ts";
@@ -200,6 +201,9 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 				if (url.pathname.startsWith("/api/widgets/")) {
 					if (method !== "GET") throw new HttpError(405, "Method is not allowed");
 					return reply(await widgets.query(url));
+				}
+				if (url.pathname === "/api/storage" && method === "GET") {
+					return reply(await readStorageUsage(agentDir, new Set(registry.sessionPaths())));
 				}
 				if (url.pathname === "/api/account-usage" && method === "GET") {
 					const controller = new AbortController();

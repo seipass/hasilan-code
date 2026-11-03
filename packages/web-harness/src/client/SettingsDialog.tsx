@@ -4,6 +4,7 @@ import { api, command, errorMessage } from "./api.ts";
 import { HomeAppearance } from "./HomeAppearance.tsx";
 import { KeybindingSettings } from "./KeybindingSettings.tsx";
 import { NotificationPreference } from "./NotificationPreference.tsx";
+import { StoragePanel } from "./StoragePanel.tsx";
 import type { HomeBackground } from "./home-background.ts";
 import { Presence } from "./Motion.tsx";
 import { MotionSwap } from "./MotionSwap.tsx";
@@ -217,6 +218,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 				</section></Presence>
 				<Presence show={tab === "usage"}><section className="settings-content" role="tabpanel" id={`${tabsId}-usage-panel`} aria-labelledby={`${tabsId}-usage-tab`}>
 					<AccountUsagePanel />
+					<StoragePanel />
 				</section></Presence>
 				<Presence show={tab === "search"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-search-panel`} aria-labelledby={`${tabsId}-search-tab`}>
 					<h3>Web 検索</h3>

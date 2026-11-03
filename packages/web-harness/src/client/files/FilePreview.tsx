@@ -6,7 +6,14 @@ import { AudioPreview } from "./AudioPreview.tsx";
 import { FileMarkdown, SourceLines } from "./FileRendering.tsx";
 import { FileEditor } from "./FileEditor.tsx";
 
-export interface FileTab { path: string; line?: number; offset: number; mode?: "source" | "rendered" }
+export interface FileTab {
+	path: string;
+	line?: number;
+	offset: number;
+	mode?: "source" | "rendered";
+	/** Set once a viewer reports a file it cannot edit, so the tab can say so. */
+	readOnly?: boolean;
+}
 interface FileView {
 	path: string; revision: string; kind: "text" | "image" | "video" | "audio" | "binary"; audio?: AudioMetadata;
 	lines?: { number: number; text: string; truncated?: boolean }[]; nextOffset?: number; size: number;
@@ -68,6 +75,11 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 	useEffect(() => {
 		if (visible && loaded?.view && file?.line) viewer.current?.querySelector(`[data-line="${file.line}"]`)?.scrollIntoView({ block: "center", inline: "nearest" });
 	}, [loaded?.view, file?.line, visible]);
+	useEffect(() => {
+		if (!file || !loaded?.view) return;
+		const readOnly = loaded.view.kind !== "text" || loaded.view.size > 2 * 1024 * 1024;
+		if (readOnly !== !!file.readOnly) onChange(file.path, { readOnly });
+	}, [file?.path, file?.readOnly, loaded?.view?.kind, loaded?.view?.size]);
 	return <>
 		{output ? <div className="files-view-mode text-transform-header"><strong>{output.operation === "translate" ? "翻訳" : "要約"}</strong><button type="button" onClick={() => { transformController.current?.abort(); setTransformed(undefined); }}>原文を表示</button></div> : markdown && file && <div className="files-view-mode" role="group" aria-label="Markdown の表示方法"><button aria-pressed={rendered} onClick={() => onChange(file.path, { mode: "rendered", line: undefined })}>プレビュー</button><button aria-pressed={!rendered} onClick={() => onChange(file.path, { mode: "source" })}>ソース</button></div>}
 		<div className={`files-viewer${!output && !rendered && loaded?.view?.kind === "text" && loaded.view.size <= 2 * 1024 * 1024 ? " is-editing" : ""}`} id={id} role="tabpanel" aria-labelledby={labelledBy} aria-label={labelledBy ? undefined : "ファイルプレビュー"} ref={viewer} tabIndex={0} aria-busy={output ? !!output.busy : !!file && !loaded}>
