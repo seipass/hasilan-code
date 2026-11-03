@@ -161,6 +161,7 @@ export function App() {
 	useEffect(() => {
 		const keydown = (event: KeyboardEvent) => {
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); }
+			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") { event.preventDefault(); setRightTab("tabs"); setRightOpen(true); window.dispatchEvent(new Event("hasilan:quick-open")); }
 			if (event.key !== "Escape") return;
 			if (modelOpen) setModelOpen(false);
 			// Overlays cover the page below 900px, so Escape is the only pointer-free way out.

@@ -180,6 +180,58 @@ export class WorkspaceFiles {
 			(a, b) => Number(b.kind === "directory") - Number(a.kind === "directory") || a.name.localeCompare(b.name),
 		);
 	}
+	/** Bounded filename search for the quick-open picker; skips heavy and hidden directories. */
+	async search(id: string, query: string, limit = 200): Promise<FileEntry[]> {
+		const root = this.getWorkspaceRoot(id);
+		const needle = query.trim().toLowerCase();
+		if (!needle) return [];
+		const skipped = new Set([
+			"node_modules",
+			".git",
+			".artifacts",
+			"dist",
+			"build",
+			"target",
+			".venv",
+			"__pycache__",
+		]);
+		const found: FileEntry[] = [];
+		let scanned = 0;
+		const walk = async (directory: string, depth: number): Promise<void> => {
+			if (found.length >= limit || scanned > 20_000 || depth > 12) return;
+			let entries;
+			try {
+				entries = await readdir(directory, { withFileTypes: true });
+			} catch {
+				return;
+			}
+			for (const entry of entries) {
+				if (found.length >= limit || scanned > 20_000) return;
+				if (skipped.has(entry.name)) continue;
+				scanned++;
+				const absolute = path.join(directory, entry.name);
+				if (entry.isDirectory()) {
+					await walk(absolute, depth + 1);
+					continue;
+				}
+				if (!entry.isFile() || !entry.name.toLowerCase().includes(needle)) continue;
+				let info;
+				try {
+					info = await lstat(absolute);
+				} catch {
+					continue;
+				}
+				found.push({
+					name: entry.name,
+					path: path.relative(root, absolute).split(path.sep).join("/"),
+					kind: "file",
+					size: info.size,
+				});
+			}
+		};
+		await walk(root, 0);
+		return found.sort((a, b) => a.path.length - b.path.length || a.path.localeCompare(b.path));
+	}
 	async read(id: string, input: string): Promise<FileSnapshot> {
 		const resolved = await this.resolve(id, input);
 		if (!(await stat(resolved.absolute)).isFile()) throw new Error("Path is not a regular file");

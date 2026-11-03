@@ -387,6 +387,13 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 							);
 					}
 					if (parts[3] === "files" && method === "GET") return reply(await files.list(id, path));
+					if (parts[3] === "file-search" && method === "GET") {
+						const query = url.searchParams.get("q") ?? "";
+						if (query.length > 200) throw new HttpError(400, "Search text is too long");
+						return reply(
+							await files.search(id, query, Math.min(500, Number(url.searchParams.get("limit") ?? 200) || 200)),
+						);
+					}
 					if (parts[3] === "file-edit" && parts.length === 4) {
 						if (method === "GET") return reply(await readEditableFile(files, id, path));
 						if (method === "PUT") {
