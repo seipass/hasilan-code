@@ -83,13 +83,16 @@ describe("shared Web and desktop preferences", () => {
 		const desktop = new PreferenceStorage(request);
 		await desktop.initialize();
 		for (const key of [
-			"hasilan-home-background",
 			"hasilan-widgets-v1",
 			"pi-web-draft:new:workspace-1",
 			"pi-web-model-selection",
 			"pi-web-keybindings",
 		])
 			expect(desktop.getItem(key)).toBe(legacy.getItem(key));
+		// The home background is fetched on demand so it does not inflate startup snapshots.
+		expect(desktop.getItem("hasilan-home-background")).toBeNull();
+		await desktop.load("hasilan-home-background");
+		expect(desktop.getItem("hasilan-home-background")).toBe(legacy.getItem("hasilan-home-background"));
 		expect(desktop.getItem("auth.json")).toBeNull();
 	});
 
