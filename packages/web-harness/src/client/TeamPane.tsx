@@ -324,7 +324,8 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 				</div></MotionSwap></MotionSize>
 			</section>;
 	return <section className="team-pane" aria-label="チームの進行状況">
-		<Presence show={agents.length === 0}><div className="team-empty"><h2>この会話のチームはまだありません</h2></div></Presence>
+		<Presence show={!snapshot}><div className="team-empty"><h2>チームの状態を読み込んでいます…</h2></div></Presence>
+		<Presence show={!!snapshot && agents.length === 0}><div className="team-empty"><h2>この会話のチームはまだありません</h2></div></Presence>
 			<Presence show={!!snapshot && agents.length > 0}><div className="motion-contents">
 				<div className="team-view-switch" role="group" aria-label="チームの表示方法">
 					<button type="button" aria-pressed={graphView === "graph"} onClick={() => setGraphView("graph")}>関係図</button>
