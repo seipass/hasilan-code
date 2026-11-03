@@ -47,3 +47,6 @@ plans/
 .pi/settings.json
 collect.sh
 packages/agent/docs/extensions/pi-server-artifact/index.md
+
+# Harness scratch data written into a workspace (attachments, canvas dumps)
+.hasilan-code/

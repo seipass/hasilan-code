@@ -12,6 +12,7 @@ import {
 	rm,
 	stat,
 	unlink,
+	writeFile,
 } from "node:fs/promises";
 import path from "node:path";
 
@@ -121,6 +122,33 @@ export class WorkspaceFiles {
 	}
 	getWorkspaces(): Workspace[] {
 		return [...this.workspaces.values()].map((item) => ({ ...item }));
+	}
+	/**
+	 * Harness artifacts (attachments, canvas dumps) live inside the workspace, so keep them out of
+	 * git status. `.git/info/exclude` avoids editing a tracked .gitignore the user owns.
+	 */
+	async ignoreHarnessDirectory(id: string): Promise<void> {
+		const root = this.getWorkspaceRoot(id);
+		const exclude = path.join(root, ".git", "info", "exclude");
+		const entry = ".hasilan-code/";
+		let existing: string;
+		try {
+			existing = await readFile(exclude, "utf8");
+		} catch (error) {
+			if (!(error instanceof Error) || !("code" in error) || (error.code !== "ENOENT" && error.code !== "ENOTDIR"))
+				return;
+			try {
+				await mkdir(path.dirname(exclude), { recursive: true });
+				await writeFile(exclude, `${entry}\n`, { flag: "wx" });
+			} catch {
+				/* Workspaces without a Git checkout have nothing to exclude. */
+			}
+			return;
+		}
+		const lines = existing.split(/\r?\n/).map((line) => line.trim());
+		if (lines.includes(entry) || lines.includes(".hasilan-code")) return;
+		const separator = existing.length && !existing.endsWith("\n") ? "\n" : "";
+		await writeFile(exclude, `${existing}${separator}${entry}\n`);
 	}
 	getWorkspaceRoot(id: string): string {
 		const workspace = this.workspaces.get(id);

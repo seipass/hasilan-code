@@ -452,6 +452,8 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	});
 	const launch = await host.listen();
 	registry.startHistoryHydration();
+	// Workspaces registered before this rule existed still get the exclude entry.
+	void Promise.allSettled(registry.listWorkspaces().map((workspace) => files.ignoreHarnessDirectory(workspace.id)));
 	const shutdown = async () => {
 		if (shuttingDown) return;
 		shuttingDown = true;

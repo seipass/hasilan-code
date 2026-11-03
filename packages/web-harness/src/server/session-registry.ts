@@ -64,6 +64,7 @@ export interface WorkspaceDirectoryService {
 	register(root: string, preferredId?: string): Promise<WorkspaceDirectory>;
 	getWorkspaceRoot(id: string): string;
 	getWorkspaces(): WorkspaceDirectory[];
+	ignoreHarnessDirectory?(id: string): Promise<void>;
 }
 export interface SessionDescriptor {
 	sessionId: string;
@@ -603,6 +604,7 @@ export class SessionRegistry {
 	async addWorkspace(cwd: string): Promise<WorkspaceDirectory> {
 		return this.mutate(async () => {
 			const workspace = await this.options.workspaceFiles.register(cwd);
+			await this.options.workspaceFiles.ignoreHarnessDirectory?.(workspace.id);
 			if (!this.state.workspaces.some((entry) => entry.id === workspace.id)) this.state.workspaces.push(workspace);
 			await this.persist();
 			this.emit({ type: "workspace_changed", workspaceId: workspace.id });
