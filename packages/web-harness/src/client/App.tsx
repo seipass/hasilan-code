@@ -28,6 +28,7 @@ import { parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
 import { WidgetSpace } from "./widgets/WidgetSpace.tsx";
+import { workspaceLabel } from "./workspace-label.ts";
 import { sendWorkspacePrompt } from "./workspace-send.ts";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 import "./WorkspaceModes.css";
@@ -459,7 +460,7 @@ export function App() {
 						<summary title={entry.path} onClick={(event) => {
 							event.preventDefault();
 							if (!historyQuery.trim()) setExpandedWorkspaces((previous) => ({ ...previous, [entry.workspaceId]: !open }));
-						}}><span className="workspace-name">{entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}</span><button type="button" className="workspace-remove" aria-label="一覧から外す" title="一覧から外す（ファイルは残ります）" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void removeWorkspace(entry.workspaceId); }}>−</button><button type="button" className="workspace-new-conversation" aria-label={`${entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}で新しい会話`} title="このワークスペースで新しい会話" onClick={(event) => { event.preventDefault(); event.stopPropagation(); newConversation(entry.workspaceId); }}>+</button></summary>
+						}}><span className="workspace-name">{workspaceLabel(entry.path, workspaces.map((item) => item.path))}</span><button type="button" className="workspace-remove" aria-label="一覧から外す" title="一覧から外す（ファイルは残ります）" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void removeWorkspace(entry.workspaceId); }}>−</button><button type="button" className="workspace-new-conversation" aria-label={`${entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}で新しい会話`} title="このワークスペースで新しい会話" onClick={(event) => { event.preventDefault(); event.stopPropagation(); newConversation(entry.workspaceId); }}>+</button></summary>
 						<ul className="session-list"><MotionItems items={conversations} itemKey={(summary) => summary.sessionId}>{(summary) => {
 							const title = (summary.title ?? "新しい会話").replace(/\s+/g, " ").slice(0, 90);
 							const status = summary.availability === "missing" ? "missing" : summary.currentRun?.status ?? (summary.latestRun?.status === "failed" || summary.latestRun?.status === "interrupted" ? summary.latestRun.status : "idle");
