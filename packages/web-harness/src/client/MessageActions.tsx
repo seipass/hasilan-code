@@ -46,10 +46,10 @@ export function MessageActions({ message, content, onRetry, onEdit }: {
 	if (!visible) return null;
 	return <div className="message-actions">
 		{text && <button type="button" aria-label={copied === "done" ? "コピーしました" : copied === "error" ? "コピーできません" : "コピー"} title={copied === "done" ? "コピーしました" : "コピー"} onClick={() => { void copy(); }} disabled={!text}>
-			<Icon name={copied === "done" ? "check" : "copy"} size={13} />{copied === "error" ? "コピーできません" : copied === "done" ? "コピーしました" : "コピー"}
+			<Icon name={copied === "done" ? "check" : "copy"} size="control" />{copied === "error" ? "コピーできません" : copied === "done" ? "コピーしました" : "コピー"}
 		</button>}
-		{editable && onEdit && <button type="button" aria-label="入力欄に戻す" title="この依頼を入力欄に戻します" onClick={() => onEdit(editable)}><Icon name="undo" size={13} />入力欄に戻す</button>}
-		{assistant && onRetry && <button type="button" aria-label="最後の依頼を再送" title="同じ依頼をもう一度送ります" onClick={onRetry}><Icon name="retry" size={13} />最後の依頼を再送</button>}
-		{message.importedOrigin?.url && <a href={message.importedOrigin.url} target="_blank" rel="noopener noreferrer"><Icon name="external" size={12} />元の記録</a>}
+		{editable && onEdit && <button type="button" aria-label="入力欄に戻す" title="この依頼を入力欄に戻します" onClick={() => onEdit(editable)}><Icon name="undo" size="control" />入力欄に戻す</button>}
+		{assistant && onRetry && <button type="button" aria-label="最後の依頼を再送" title="同じ依頼をもう一度送ります" onClick={onRetry}><Icon name="retry" size="control" />最後の依頼を再送</button>}
+		{message.importedOrigin?.url && <a href={message.importedOrigin.url} target="_blank" rel="noopener noreferrer"><Icon name="external" size="control" />元の記録</a>}
 	</div>;
 }

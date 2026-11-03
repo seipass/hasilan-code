@@ -51,7 +51,6 @@
 .app-shell[data-home-background="true"] .topbar .quiet-button:hover { background: color-mix(in srgb, var(--surface-hover) 85%, transparent); }
 
 /* One shared boundary keeps the resize handle attached to the docked panel. */
-.sidebar { border-radius: 0 12px 12px 0; }
 .right-panel { --detail-corner: 12px; border-left: 0; border-radius: var(--detail-corner) 0 0 var(--detail-corner); background: transparent; isolation: isolate; box-shadow: none; }
 .right-panel-body.detail-panel-body { border-radius: inherit; }
 /* A single background keeps every detail view at the same opacity. */

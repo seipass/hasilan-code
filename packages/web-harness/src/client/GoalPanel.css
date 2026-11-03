@@ -1,4 +1,5 @@
 .goal-panel { margin: 0 0 10px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-panel); font-size: 12px; min-width: 0; }
+.goal-panel > summary { border-radius: inherit; }
 .goal-panel > summary { display: flex; align-items: center; gap: 10px; padding: 9px 12px; list-style: none; }
 .goal-panel > summary::-webkit-details-marker { display: none; }
 .goal-panel > summary::before {

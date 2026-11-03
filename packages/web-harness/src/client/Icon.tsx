@@ -27,7 +27,7 @@ const paths = {
 	external: "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
 	graph: "M12 4a2 2 0 100 4 2 2 0 000-4zM4 16a2 2 0 100 4 2 2 0 000-4zM20 16a2 2 0 100 4 2 2 0 000-4zM12 8v4M12 12L6 15M12 12l6 3",
 	list: "M4 6h16M4 12h16M4 18h16",
-	gauge: "M4 18a8 8 0 1116 0M12 18l4-5",
+	gauge: "M12 20a8 8 0 110-16 8 8 0 010 16zM12 12l3.5-3.5",
 	copy: "M9 9h10v10H9zM5 15V5h10",
 	undo: "M9 14L4 9l5-5M4 9h9a6 6 0 016 6v4",
 	retry: "M20 11a8 8 0 10-2.5 5.7M20 5v6h-6",
@@ -38,18 +38,26 @@ const paths = {
 
 export type IconName = keyof typeof paths;
 
+/**
+ * One size per control family. Picking sizes per call site produced 13/14/15/17/18/20px
+ * icons inside the same toolbar, which read as uneven stroke weight and rhythm.
+ */
+export const ICON_SIZES = { inline: 14, control: 16, primary: 18, chrome: 20 } as const;
+export type IconSize = keyof typeof ICON_SIZES;
+
 /** Filled shapes need no stroke; everything else uses the shared 1.8px line weight. */
 const filled: ReadonlySet<IconName> = new Set(["stop", "stopAll"]);
 
-export function Icon({ name, size = 16, ...props }: { name: IconName; size?: number } & Omit<SVGProps<SVGSVGElement>, "name">) {
+export function Icon({ name, size = "control", ...props }: { name: IconName; size?: IconSize } & Omit<SVGProps<SVGSVGElement>, "name">) {
+	const box = ICON_SIZES[size];
 	if (filled.has(name))
 		return (
-			<svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true" focusable="false" {...props}>
-				<rect x="7" y="7" width="10" height="10" rx="1.5" />
+			<svg viewBox="0 0 24 24" width={box} height={box} fill="currentColor" aria-hidden="true" focusable="false" data-icon-size={size} {...props}>
+				<rect x="5.5" y="5.5" width="13" height="13" rx="1.6" />
 			</svg>
 		);
 	return (
-		<svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...props}>
+		<svg viewBox="0 0 24 24" width={box} height={box} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" data-icon-size={size} {...props}>
 			<path d={paths[name]} />
 		</svg>
 	);

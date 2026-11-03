@@ -1,7 +1,7 @@
 import type { WidgetKind } from "./state.ts";
 
 export function WidgetIcon({ kind }: { kind: WidgetKind | "edit" }) {
-	return <svg viewBox="0 0 24 24" aria-hidden="true">{
+	return <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">{
 		kind === "weather" ? <><circle cx="9" cy="8" r="3" /><path d="M9 1v1M2 8H1m3-5 1 1m9-1-1 1M8 20h10a4 4 0 1 0-.6-8 5 5 0 0 0-9.6 1A3.5 3.5 0 0 0 8 20" /></> :
 		kind === "usage" ? <><path d="M4 4v16h16M8 16v-4m5 4V6m5 10V9" /></> :
 		kind === "countdown" ? <><path d="M7 3h10M9 3v3l3 5 3-5V3M9 21v-3l3-5 3 5v3M7 21h10" /></> :

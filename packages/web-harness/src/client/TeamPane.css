@@ -126,7 +126,6 @@
 	gap: 5px;
 	padding: 11px 12px;
 	border: 1px solid var(--node-color);
-	border-top: 3px solid var(--node-color);
 	border-radius: 10px;
 	background: var(--surface-panel);
 	box-shadow: 0 4px 12px #0003;

@@ -40,7 +40,7 @@
 .canvas-connections g > .canvas-edge-hit { stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: pointer; }
 .canvas-connections text { fill: var(--on-surface); font-size: 12px; font-family: inherit; stroke: var(--surface-sunken); stroke-width: 5px; paint-order: stroke; stroke-linejoin: round; }
 .canvas-connections > .canvas-connection-preview { fill: none; stroke: var(--primary); stroke-width: 2; stroke-dasharray: 7 5; }
-.canvas-node { position: absolute; display: flex; flex-direction: column; align-items: stretch; gap: 8px; box-sizing: border-box; padding: 15px; text-align: left; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-panel); color: var(--on-surface); box-shadow: 0 4px 14px #0002; cursor: grab; touch-action: none; user-select: none; }
+.canvas-node { position: absolute; display: flex; flex-direction: column; align-items: stretch; gap: 8px; box-sizing: border-box; padding: 15px; text-align: left; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-panel); color: var(--on-surface); box-shadow: 0 4px 14px #0002; cursor: grab; touch-action: none; user-select: none; }
 .canvas-node { transition: left var(--motion-base) var(--motion-ease), top var(--motion-base) var(--motion-ease), padding var(--motion-quick) ease, border-color var(--motion-quick) ease, background-color var(--motion-quick) ease, box-shadow var(--motion-quick) ease; }
 .canvas-viewport[data-dragging="true"] .canvas-node, .canvas-viewport[data-dragging="true"] .canvas-connections path { transition: none; }
 .canvas-node > strong, .canvas-node-description, .canvas-node-footer { animation: motion-label-enter 140ms ease; }

@@ -12,7 +12,7 @@
 	color: var(--on-surface-muted);
 }
 .composer-attach-button:hover { color: var(--on-surface); background: var(--surface-hover); }
-.composer-attach-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.composer-attach-button svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .composer-attachments {
 	display: flex;
 	flex-wrap: wrap;

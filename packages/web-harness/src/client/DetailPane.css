@@ -1,7 +1,7 @@
 .detail-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .detail-views { display: grid; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .detail-views > * { grid-area: 1 / 1; }
-.detail-toolbar { display: flex; align-items: center; flex: none; min-width: 0; min-height: 42px; border-bottom: 1px solid var(--border); background: var(--surface-panel); }
+.detail-toolbar { display: flex; align-items: center; flex: none; min-width: 0; min-height: 42px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-panel); }
 .detail-tab-strip { display: flex; align-items: flex-start; flex: 0 1 auto; min-width: 0; height: 44px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 .detail-tabs { display: flex; flex: none; min-width: 0; }
 .detail-tab { position: relative; display: flex; align-items: center; flex: none; max-width: 240px; min-height: 40px; border-right: 1px solid var(--border-subtle); border-bottom: 2px solid transparent; transition: background-color var(--motion-quick) ease, border-color var(--motion-quick) ease; }
@@ -29,10 +29,10 @@
 .detail-gesture-hint[data-active="true"] { border-color: var(--primary); background: var(--primary-container); color: var(--on-primary-container); }
 .detail-tab-strip button:focus-visible { outline-offset: -2px; }
 .detail-toolbar > .split-actions { margin-left: auto; }
-.detail-panel-actions { display: flex; align-items: center; flex: none; gap: 2px; padding: 0 6px; border-left: 1px solid var(--border-subtle); }
+.detail-panel-actions { display: flex; align-items: center; flex: none; gap: 2px; margin-left: 6px; padding: 0 6px; border-left: 0; }
 .detail-panel-icon { display: grid; place-items: center; width: 32px; height: 32px; padding: 6px; border: 0; background: transparent; color: var(--on-surface-muted); }
 .detail-panel-icon[aria-pressed="true"] { color: var(--primary-hover); background: var(--primary-container); }
-.detail-panel-icon svg, .detail-new-choices svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.detail-panel-icon svg, .detail-new-choices svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .detail-resource-area { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .detail-resource-area[hidden], .detail-auxiliary[hidden] { display: none; }
 .detail-tab-body { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }

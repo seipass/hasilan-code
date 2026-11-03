@@ -13,6 +13,7 @@
 	padding: 0;
 	overflow: hidden;
 	border: 1px solid var(--border);
+	border-bottom: 0;
 	border-radius: 18px 18px 0 0;
 	background: var(--surface-raised);
 	color: var(--on-surface);

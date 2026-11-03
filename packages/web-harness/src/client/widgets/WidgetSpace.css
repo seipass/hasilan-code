@@ -10,8 +10,9 @@
 .widget-chip > span { display: grid; gap: 2px; min-width: 0; }
 .widget-chip-label { font-size: 10px; color: var(--on-surface-muted); white-space: nowrap; }
 .widget-chip strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.4; font-weight: 500; font-variant-numeric: tabular-nums; }
-.widget-chip > svg, .widget-edit > svg, .widget-settings-list svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.widget-chip > svg { color: var(--primary-hover); }
+.widget-chip > svg, .widget-edit > svg, .widget-settings-list svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.widget-chip > svg { flex: none; width: 18px; height: 18px; color: var(--primary-hover); }
+.widget-edit > svg { flex: none; width: 18px; height: 18px; }
 .widget-edit { position: relative; display: grid; place-items: center; flex: none; width: 34px; height: 40px; padding: 7px; border: 0; background: transparent; color: var(--on-surface-muted); }
 .widget-save-error { position: absolute; right: 3px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
 .widget-strip-empty { padding: 8px; font-size: 12px; color: var(--on-surface-muted); white-space: nowrap; }
