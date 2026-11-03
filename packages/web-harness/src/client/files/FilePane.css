@@ -169,3 +169,4 @@
 	.files-tree-toggle { flex: none; min-height: 44px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: var(--surface-panel); color: var(--on-surface); text-align: left; font-size: 13px; }
 	.mobile-sheet .files-tree-entry { min-height: 44px; }
 }
+.files-tree-dirty { flex: none; margin-left: auto; color: var(--warning); font-size: 9px; line-height: 1; }

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { errorMessage } from "./api.ts";
+import { anyDraftDirty } from "./files/file-drafts.ts";
 import { preferences } from "./preferences.ts";
 import "./styles.css";
 import "./GlassSurfaces.css";
@@ -23,6 +24,9 @@ async function start(): Promise<void> {
 }
 window.hasilanFlushPreferences = () => preferences.flush();
 window.addEventListener("pagehide", () => { void preferences.flush().catch(() => undefined); });
+window.addEventListener("beforeunload", (event) => {
+	if (anyDraftDirty()) event.preventDefault();
+});
 window.addEventListener("focus", () => { void preferences.sync().catch(() => undefined); });
 document.addEventListener("visibilitychange", () => { if (document.hidden) void preferences.flush().catch(() => undefined); });
 window.setInterval(() => { if (!document.hidden) void preferences.sync().catch(() => undefined); }, 3000);

@@ -8,15 +8,9 @@ import { tags } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../api.ts";
+import { discardDraft, draftKey, type FileDraft, getDraft, isDraftDirty, setDraft as updateDraft, subscribeDraft } from "./file-drafts.ts";
 import "./FileEditor.css";
 
-interface Draft { text: string; saved: string; revision: string; newline: "\n" | "\r\n" }
-const drafts = new Map<string, Draft>();
-const draftListeners = new Map<string, Set<(draft: Draft) => void>>();
-function updateDraft(key: string, draft: Draft) {
-	drafts.set(key, draft);
-	for (const listener of draftListeners.get(key) ?? []) listener(draft);
-}
 const highlight = syntaxHighlighting(HighlightStyle.define([
 	{ tag: [tags.keyword, tags.operatorKeyword, tags.modifier], color: "#cba6f7" },
 	{ tag: [tags.string, tags.special(tags.string)], color: "#a6e3a1" },
@@ -26,58 +20,54 @@ const highlight = syntaxHighlighting(HighlightStyle.define([
 	{ tag: [tags.comment, tags.meta], color: "#7f849c", fontStyle: "italic" },
 ]));
 
-window.addEventListener("beforeunload", (event) => {
-	if ([...drafts.values()].some((draft) => draft.text !== draft.saved)) event.preventDefault();
-});
-
 export function FileEditor({ workspaceId, path, line }: { workspaceId: string; path: string; line?: number }) {
-	const key = JSON.stringify([workspaceId, path]);
+	const key = draftKey(workspaceId, path);
+	const [dirty, setDirty] = useState(() => isDraftDirty(key));
 	const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/file-edit?path=${encodeURIComponent(path)}`;
-	const [draft, setDraft] = useState<Draft | undefined>(() => drafts.get(key));
+	const [draft, setDraft] = useState(() => getDraft(key));
 	const [error, setError] = useState<string>();
 	const [saving, setSaving] = useState(false);
 	const host = useRef<HTMLDivElement>(null);
 	const editor = useRef<EditorView | undefined>(undefined);
 	const savingRef = useRef(false);
+	const [read, setRead] = useState(0);
 	const saveRef = useRef<() => void>(() => {});
 	useEffect(() => {
-		const listeners = draftListeners.get(key) ?? new Set<(draft: Draft) => void>();
-		const receive = (next: Draft) => {
+		return subscribeDraft(key, (next) => {
 			setDraft(next);
+			setDirty(next.text !== next.saved);
 			const view = editor.current;
 			if (view && view.state.doc.toString() !== next.text) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: next.text } });
-		};
-		listeners.add(receive); draftListeners.set(key, listeners);
-		return () => { listeners.delete(receive); if (!listeners.size) draftListeners.delete(key); };
+		});
 	}, [key]);
 	useEffect(() => {
 		const controller = new AbortController();
 		setError(undefined);
-		const existing = drafts.get(key);
+		const existing = getDraft(key);
 		const unsaved = existing && existing.text !== existing.saved ? existing : undefined;
 		setDraft(unsaved);
 		if (!unsaved) void api<{ text: string; revision: string }>(endpoint, { signal: controller.signal }).then(({ text, revision }) => {
-			if (drafts.get(key) !== existing) { setDraft(drafts.get(key)); return; }
+			if (getDraft(key) !== existing) { setDraft(getDraft(key)); return; }
 			const normalized = text.replace(/\r\n/g, "\n");
-			const value: Draft = { text: normalized, saved: normalized, revision, newline: text.includes("\r\n") ? "\r\n" : "\n" };
+			const value: FileDraft = { text: normalized, saved: normalized, revision, newline: text.includes("\r\n") ? "\r\n" : "\n" };
 			updateDraft(key, value);
 		}).catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
 		return () => controller.abort();
-	}, [endpoint, key]);
+	}, [endpoint, key, read]);
 	async function save() {
-		const current = drafts.get(key);
+		const current = getDraft(key);
 		if (!current || savingRef.current || current.text === current.saved) return;
 		savingRef.current = true; setSaving(true); setError(undefined);
 		try {
 			const { revision } = await api<{ revision: string }>(endpoint, { method: "PUT", body: JSON.stringify({ revision: current.revision, text: current.text.replace(/\n/g, current.newline) }) });
-			const latest = drafts.get(key);
+			const latest = getDraft(key);
 			if (latest) updateDraft(key, { ...latest, revision, saved: current.text });
 		} catch (reason) { setError(errorMessage(reason)); }
 		finally { savingRef.current = false; setSaving(false); }
 	}
 	saveRef.current = () => { void save(); };
 	useEffect(() => {
-		const current = drafts.get(key);
+		const current = getDraft(key);
 		if (!draft || !current || !host.current) return;
 		let disposed = false;
 		const language = new Compartment();
@@ -92,7 +82,7 @@ export function FileEditor({ workspaceId, path, line }: { workspaceId: string; p
 				Prec.highest(keymap.of([{ key: "Mod-s", run: () => { saveRef.current(); return true; } }, { key: "Tab", run: acceptCompletion }, indentWithTab])),
 				EditorView.updateListener.of((update) => {
 					if (!update.docChanged) return;
-					const previous = drafts.get(key);
+					const previous = getDraft(key);
 					if (!previous) return;
 					const text = update.state.doc.toString();
 					if (text !== previous.text) updateDraft(key, { ...previous, text });
@@ -113,7 +103,10 @@ export function FileEditor({ workspaceId, path, line }: { workspaceId: string; p
 		view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: "center" }) });
 	}, [key, !!draft, line]);
 	return <div className="file-editor">
-		<div className="file-editor-toolbar"><span role="status">{saving ? "保存中…" : !draft ? "読み込み中…" : draft.text !== draft.saved ? "未保存" : "保存済み"}</span><button type="button" disabled={!draft || saving || draft.text === draft.saved} onClick={() => { void save(); }}>保存</button></div>
+		<div className="file-editor-toolbar"><span role="status">{saving ? "保存中…" : !draft ? "読み込み中…" : dirty ? "未保存" : "保存済み"}</span><button type="button" disabled={!draft || saving || !dirty} onClick={() => { void save(); }}>保存</button><button type="button" disabled={!draft || saving || !dirty} title="保存せずにファイルの内容を読み直す" onClick={() => {
+			if (!window.confirm("未保存の変更を破棄して、ファイルの内容を読み直しますか？")) return;
+			discardDraft(key); setDraft(undefined); setDirty(false); setRead((value) => value + 1);
+		}}>変更を破棄</button></div>
 		{error && <p className="files-message error" role="alert">{error}</p>}
 		{draft && <div className="file-editor-body" ref={host} />}
 	</div>;

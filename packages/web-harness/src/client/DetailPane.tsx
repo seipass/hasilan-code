@@ -5,6 +5,8 @@ import { api, command, errorMessage } from "./api.ts";
 import { BrowserPane } from "./BrowserPane.tsx";
 import { type DetailTab, detailTabsReducer, emptyDetailTabs } from "./detail-tabs.ts";
 import { restoreDetailTabs, saveDetailTabs } from "./detail-preferences.ts";
+import { useSyncExternalStore } from "react";
+import { discardDraft, draftKey, draftStatusVersion, isDraftDirty, subscribeDraftStatus } from "./files/file-drafts.ts";
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
 import { FilePreview } from "./files/FilePreview.tsx";
 import { nextClientId } from "./ids.ts";
@@ -16,6 +18,7 @@ import { TerminalView, type TerminalViewState } from "./terminal/TerminalPane.ts
 import "./DetailPane.css";
 
 export type DetailView = "tabs" | "team" | "tools";
+
 
 export function DetailPane({ workspaceId, target, browserTarget, refreshToken, visible, view, onViewChange, team, tools }: {
 	workspaceId: string;
@@ -57,6 +60,8 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 	const layoutRef = useRef(layout);
 	layoutRef.current = layout;
 	const mounted = useRef(false);
+	// Drafts live outside React so a tab can show unsaved state while its editor is unmounted.
+	useSyncExternalStore(subscribeDraftStatus, draftStatusVersion, draftStatusVersion);
 	const dismissed = useRef(new Set<string>());
 	const creatingIds = useRef(new Set<string>());
 	const closingIds = useRef(new Set<string>());
@@ -177,6 +182,11 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 	}
 	async function closeTab(tab: DetailTab) {
 		if (closingIds.current.has(tab.id) || creatingIds.current.has(tab.id)) return;
+		if (tab.kind === "file" && tab.file && isDraftDirty(draftKey(workspaceId, tab.file.path))) {
+			const discard = window.confirm(`${tab.file.path} の未保存の変更を破棄して閉じますか？`);
+			if (!discard) return;
+			discardDraft(draftKey(workspaceId, tab.file.path));
+		}
 		if (tab.kind !== "terminal") { dispatch({ type: "remove", id: tab.id }); return; }
 		closingIds.current.add(tab.id);
 		setClosing((previous) => [...previous, tab.id]);
@@ -223,7 +233,7 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 						else if (event.key === "Delete") { event.preventDefault(); void closeTab(tab); return; }
 						if (next === undefined) return;
 						event.preventDefault(); select(layout.tabs[next]); document.getElementById(`${id}-tab-${layout.tabs[next].id}`)?.focus();
-					}}><span className="detail-tab-kind" aria-hidden="true">{tab.kind === "terminal" ? ">_" : tab.kind === "file" ? "▤" : "+"}</span><span className="detail-tab-title">{title(tab)}</span>{tab.kind === "terminal" && tab.summary.status === "exited" && <span className="terminal-tab-exit">終了 {tab.summary.exitCode ?? "?"}</span>}</button>
+					}}><span className="detail-tab-kind" aria-hidden="true">{tab.kind === "terminal" ? ">_" : tab.kind === "file" ? "▤" : "+"}</span><span className="detail-tab-title">{title(tab)}</span>{tab.kind === "file" && tab.file && isDraftDirty(draftKey(workspaceId, tab.file.path)) && <span className="detail-tab-dirty" aria-label="未保存の変更">●</span>}{tab.kind === "terminal" && tab.summary.status === "exited" && <span className="terminal-tab-exit">終了 {tab.summary.exitCode ?? "?"}</span>}</button>
 					<button type="button" className="detail-tab-close" draggable={false} aria-label={`${title(tab)}を閉じる`} disabled={closing.includes(tab.id) || creating.includes(tab.id)} onClick={() => { void closeTab(tab); }}>×</button>
 				</div>; }}</MotionItems>
 			</div></div><div className="detail-tab-add"><button type="button" className="detail-tab-new" aria-label="新しいタブを開く" title="クリックで新しいタブ・下へスライドで端末・右へスライドでファイル" data-gesture={tabGesture} onPointerDown={(event) => {
@@ -256,7 +266,7 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 		</header>
 		<Presence show={!!error}><div className="detail-error" role="alert">{error}{listFailed && <button type="button" onClick={() => { setError(undefined); setListAttempt((value) => value + 1); }}>端末一覧を再取得</button>}<button type="button" aria-label="エラーを閉じる" onClick={() => setError(undefined)}>×</button></div></Presence>
 		<div className="detail-views"><Presence show={view === "tabs"} keepMounted><div className="detail-resource-area">
-			<FilePane workspaceId={workspaceId} activePath={activeFile?.kind === "file" ? activeFile.file?.path : undefined} refreshToken={refreshToken} visible={visible && view === "tabs"} treeVisible={selectedFiles.length > 0} onOpen={openFile}>
+			<FilePane workspaceId={workspaceId} activePath={activeFile?.kind === "file" ? activeFile.file?.path : undefined} refreshToken={refreshToken} visible={visible && view === "tabs"} treeVisible onOpen={openFile}>
 			<MotionSwap identity={bodyIdentity} enabled={!dragging && !modeChanged} className="detail-tab-transition"><SplitLayout preferenceKey={`pi-web-split:${workspaceId}`} mode={layout.mode} label="作業タブ" dragging={!!dragging && layout.tabs.length > 1} onEdgeDrop={(edge) => { if (dragged.current) dispatch({ type: "edge", id: dragged.current, edge }); endDrag(); }}>
 				{layout.tabs.map((tab) => {
 					const selected = layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single");

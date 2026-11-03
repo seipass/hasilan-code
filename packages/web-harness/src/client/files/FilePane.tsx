@@ -1,8 +1,9 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { api, errorMessage } from "../api.ts";
 import { MobileSheet, useMobileLayout } from "../MobileSheet.tsx";
 import { MotionItems, Presence, useChildrenMotion } from "../Motion.tsx";
 import { usePreferenceState } from "../preferences.ts";
+import { draftKey, isDraftDirty, subscribeDraftStatus, draftStatusVersion } from "./file-drafts.ts";
 import { FileIcon } from "./FileIcon.tsx";
 import "./FilePane.css";
 
@@ -25,6 +26,7 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen,
 }) {
 	const [entries, setEntries] = useState<FileEntry[]>();
 	const [error, setError] = useState<string>();
+	useSyncExternalStore(subscribeDraftStatus, draftStatusVersion, draftStatusVersion);
 	useEffect(() => {
 		if (!visible) return;
 		const controller = new AbortController();
@@ -41,7 +43,7 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen,
 			<button className="files-tree-entry" title={entry.path} aria-current={entry.path === activePath ? "true" : undefined} aria-expanded={entry.kind === "directory" ? open.includes(entry.path) : undefined} onClick={() => {
 				if (entry.kind === "directory") onToggle(entry.path);
 				else onOpen(entry.path);
-			}}>{entry.kind === "file" ? <FileIcon name={entry.name} /> : <span className="files-tree-marker" aria-hidden="true">{entry.kind === "directory" ? "▸" : "↗"}</span>}<span>{entry.name}</span></button>
+			}}>{entry.kind === "file" ? <FileIcon name={entry.name} /> : <span className="files-tree-marker" aria-hidden="true">{entry.kind === "directory" ? "▸" : "↗"}</span>}<span>{entry.name}</span>{entry.kind === "file" && isDraftDirty(draftKey(workspaceId, entry.path)) && <span className="files-tree-dirty" aria-label="未保存の変更">●</span>}</button>
 			{entry.kind === "directory" && <div className="files-tree-children" data-open={open.includes(entry.path)} aria-hidden={!open.includes(entry.path)} inert={!open.includes(entry.path)}><div><Directory workspaceId={workspaceId} path={entry.path} refreshKey={refreshKey} activePath={activePath} visible={visible && open.includes(entry.path)} onOpen={onOpen} open={open} onToggle={onToggle} /></div></div>}
 		</li>}</MotionItems>
 	</ul>;
