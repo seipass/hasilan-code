@@ -309,6 +309,13 @@ async function start(): Promise<void> {
 		}, 250);
 		boundsTimer.unref();
 	}
+	// The web UI puts run counts and the conversation name in document.title.
+	window.on("page-title-updated", (event, title) => {
+		event.preventDefault();
+		const label = title.trim() || "Hasilan Code";
+		window.setTitle(label);
+		tray?.setToolTip(label);
+	});
 	const navigate = (event: Electron.Event, url: string) => {
 		try {
 			if (host?.origin && new URL(url).origin === host.origin) return;

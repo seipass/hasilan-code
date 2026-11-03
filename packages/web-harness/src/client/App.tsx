@@ -5,6 +5,7 @@ import type { Goal, GoalAction } from "../shared/goals.ts";
 import { aggregateUsage } from "../shared/usage.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
+import { useAttention } from "./attention.ts";
 import { ChatPane } from "./ChatPane.tsx";
 import { CanvasPane } from "./CanvasPane.tsx";
 import { DetailPane, type DetailView } from "./DetailPane.tsx";
@@ -68,6 +69,7 @@ export function App() {
 	const [historyQuery, setHistoryQuery] = useState("");
 	const [rightTab, setRightTab] = usePreferenceState<DetailView>("pi-web-right-tab", "tabs");
 	const [rightOpen, setRightOpen] = usePreferenceState("pi-web-right-open", false);
+	const [notificationsEnabled, setNotificationsEnabled] = usePreferenceState("pi-web-notifications", false);
 	const [rightWidth, setRightWidth] = usePreferenceState("pi-web-right-width", 660);
 	const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
 	const [fileTarget, setFileTarget] = useState<FileTarget>();
@@ -98,6 +100,13 @@ export function App() {
 	const widgetUsage = sessionId ? session?.usage ?? [] : aggregateUsage(summaries.filter((entry) => entry.workspaceId === workspaceId).map((entry) => entry.usage ?? []));
 	const roots = summaries.filter((entry) => !entry.parentSessionId);
 	const history = roots.filter((entry) => `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
+	useAttention({
+		sessions: summaries,
+		selectedSessionId: sessionId,
+		selectedTitle: session?.title,
+		notificationsEnabled,
+		onSelect: (id) => selectSession(id),
+	});
 	const updateProjection = useCallback((id: string, data: WorkspaceProjection) => setProjections((previous) => ({ ...previous, [id]: data })), []);
 	const filesChanged = useCallback(() => setFilesVersion((value) => value + 1), []);
 	useEffect(() => {

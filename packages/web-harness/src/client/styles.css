@@ -617,3 +617,5 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 .history-session-row:hover .session-menu-button, .history-session-row:focus-within .session-menu-button, .session-menu-button[aria-expanded="true"] { opacity: 1; }
 .session-menu-button:hover { background: var(--surface-hover); color: var(--on-surface); }
 @media (hover: none) { .session-menu-button { opacity: 1; width: 32px; height: 32px; } }
+.settings-toggle { display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
+.settings-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
