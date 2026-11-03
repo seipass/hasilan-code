@@ -50,6 +50,7 @@
 	--border-subtle: #313244;
 	--border: #45475a;
 	--border-strong: #585b70;
+	--chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E");
 	--scroll-thumb: #45475a;
 	--scroll-thumb-hover: #6c7086;
 	color: var(--on-surface); background: var(--surface);
@@ -125,7 +126,15 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .workspace-accordion { min-width: 0; margin-bottom: 6px; }
 .workspace-accordion > summary { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 7px 9px; cursor: pointer; border-radius: 7px; font-size: 12px; color: var(--on-surface-secondary); list-style: none; }
 .workspace-accordion > summary::-webkit-details-marker { display: none; }
-.workspace-accordion > summary::before { content: "›"; flex-shrink: 0; font-size: 17px; width: 10px; line-height: 1; }
+.workspace-accordion > summary::before {
+	content: "";
+	flex: none;
+	width: 12px;
+	height: 12px;
+	background-color: currentColor;
+	mask: var(--chevron) center / contain no-repeat;
+	transition: transform var(--motion-base) var(--motion-ease);
+}
 .workspace-accordion[open] > summary::before { transform: rotate(90deg); }
 .workspace-accordion[data-selected="true"] > summary { background: var(--surface-raised); color: var(--on-surface); }
 .workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -244,7 +253,15 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .context-entry { border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-panel); }
 .context-entry > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; min-width: 0; padding: 10px 12px; list-style: none; font-size: 11px; color: var(--on-surface-muted); }
 .context-entry > summary::-webkit-details-marker { display: none; }
-.context-entry > summary::before { content: "›"; flex: none; font-size: 18px; line-height: 1; transition: transform var(--motion-base) var(--motion-ease); }
+.context-entry > summary::before {
+	content: "";
+	flex: none;
+	width: 12px;
+	height: 12px;
+	background-color: currentColor;
+	mask: var(--chevron) center / contain no-repeat;
+	transition: transform var(--motion-base) var(--motion-ease);
+}
 .context-entry[open] > summary::before { transform: rotate(90deg); }
 .context-entry-label { flex: none; }
 .context-entry-agent { min-width: 0; color: var(--on-surface-secondary); overflow-wrap: anywhere; }
@@ -255,7 +272,15 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .thinking { color: var(--muted); font-size: .85rem; padding: .5rem 0; min-width: 0; }
 .thinking > summary { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 12px; list-style: none; }
 .thinking > summary::-webkit-details-marker { display: none; }
-.thinking > summary::before { content: "›"; font-size: 18px; line-height: 1; transition: transform var(--motion-base) var(--motion-ease); }
+.thinking > summary::before {
+	content: "";
+	flex: none;
+	width: 12px;
+	height: 12px;
+	background-color: currentColor;
+	mask: var(--chevron) center / contain no-repeat;
+	transition: transform var(--motion-base) var(--motion-ease);
+}
 .thinking[open] > summary::before { transform: rotate(90deg); }
 .thinking-title { flex: none; color: var(--on-surface-secondary); }
 .thinking-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--on-surface-muted); }
@@ -325,7 +350,16 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-kind-team { --tool-accent: #fab387; --tool-tint: color-mix(in srgb, #fab387 15%, #1e1e2e); }
 .tool-card > summary { display: flex; align-items: center; gap: 8px; padding: 8px 10px; min-width: 0; list-style: none; font-size: 11px; color: var(--muted); }
 .tool-card > summary::-webkit-details-marker { display: none; }
-.tool-card > summary::after { content: "›"; font-size: 18px; line-height: 1; flex: none; margin-left: 2px; }
+.tool-card > summary::after {
+	content: "";
+	flex: none;
+	width: 12px;
+	height: 12px;
+	margin-left: 2px;
+	background-color: currentColor;
+	mask: var(--chevron) center / contain no-repeat;
+	transition: transform var(--motion-base) var(--motion-ease);
+}
 .tool-card[open] > summary::after { transform: rotate(90deg); }
 .tool-heading { display: flex; flex: 0 1 auto; flex-direction: column; min-width: 0; max-width: 45%; line-height: 1.3; }
 .tool-card > summary strong { color: var(--on-surface-secondary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -677,3 +711,24 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 .history-body-match { display: block; width: 100%; margin-top: 4px; padding: 6px 9px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-panel); color: var(--on-surface-secondary); font-size: 11px; line-height: 1.5; text-align: left; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .history-body-match:hover { background: var(--surface-hover); color: var(--on-surface); }
 .history-body-role { margin-right: 6px; color: var(--on-surface-muted); font-size: 10px; }
+
+/* Icon-bearing controls align the glyph with its label without changing the hit area. */
+.icon-button, .quiet-button, .new-conversation, .history-stop-all, .workspace-add-button,
+.workspace-remove, .workspace-new-conversation, .session-menu-button, .sidebar-bottom button,
+.detail-tab-close, .files-tree-action, .team-focus-close, .stop-button, .send-button,
+.composer-notice > button, .pending-input-actions button, .team-graph-toolbar button,
+.canvas-view-controls button, .browser-toolbar button, .files-tree-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+}
+.icon-button > svg, .quiet-button > svg, .new-conversation > svg, .history-stop-all > svg,
+.workspace-add-button > svg, .workspace-remove > svg, .workspace-new-conversation > svg,
+.session-menu-button > svg, .sidebar-bottom button > svg, .detail-tab-close > svg,
+.files-tree-action > svg, .team-focus-close > svg, .stop-button > svg, .send-button > svg,
+.composer-notice > button > svg, .pending-input-actions button > svg,
+.team-graph-toolbar button > svg, .canvas-view-controls button > svg,
+.browser-toolbar button > svg, .files-tree-toggle > svg { flex: none; }
+.workspace-new-conversation > svg, .workspace-remove > svg { width: 14px; height: 14px; }
+.session-menu-button > svg, .history-stop-all > svg { width: 15px; height: 15px; }

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { ATTACHMENT_LIMITS, type AttachmentUpload } from "../shared/attachments.ts";
 import type { ComposerDestination, ComposerSendResult, ConversationCandidate } from "../shared/workspace-routing.ts";
 import { errorMessage } from "./api.ts";
+import { Icon } from "./Icon.tsx";
 import { matchesAppKeybinding } from "./app-keybindings.ts";
 import type { BrowserAnnotation, BrowserAnnotationDelivery } from "./BrowserPane.tsx";
 import { CommandPicker } from "./CommandPicker.tsx";
@@ -220,20 +221,20 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 						<div className="pending-input-actions">
 							{editing
 								? <>
-									<button type="button" aria-label="変更を保存" title="変更を保存" disabled={disabled || !(editingInput?.text.trim())} onClick={() => { const text = editingInput?.text ?? ""; void mutatePendingInput(pendingInput.inputId, { type: "edit", text }); }}><span aria-hidden="true">✓</span></button>
-									<button type="button" aria-label="編集をキャンセル" title="編集をキャンセル" disabled={mutatingInputId !== undefined} onClick={() => setEditingInput(undefined)}><span aria-hidden="true">×</span></button>
+									<button type="button" aria-label="変更を保存" title="変更を保存" disabled={disabled || !(editingInput?.text.trim())} onClick={() => { const text = editingInput?.text ?? ""; void mutatePendingInput(pendingInput.inputId, { type: "edit", text }); }}><Icon name="check" size={14} /></button>
+									<button type="button" aria-label="編集をキャンセル" title="編集をキャンセル" disabled={mutatingInputId !== undefined} onClick={() => setEditingInput(undefined)}><Icon name="close" size={14} /></button>
 								</>
 								: <>
-									{pendingInput.mode === "followUp" && <button type="button" aria-label="すぐに送信" title="すぐに送信" disabled={disabled} onClick={() => { void mutatePendingInput(pendingInput.inputId, { type: "sendNow" }); }}><span aria-hidden="true">↑</span></button>}
-									<button type="button" aria-label="追加指示を編集" title="追加指示を編集" disabled={disabled} onClick={() => { setError(undefined); setEditingInput({ inputId: pendingInput.inputId, text: pendingInput.text }); }}><span aria-hidden="true">✎</span></button>
-									<button type="button" aria-label="追加指示を削除" title="追加指示を削除" disabled={disabled} onClick={() => { void mutatePendingInput(pendingInput.inputId, { type: "delete" }); }}><span aria-hidden="true">×</span></button>
+									{pendingInput.mode === "followUp" && <button type="button" aria-label="すぐに送信" title="すぐに送信" disabled={disabled} onClick={() => { void mutatePendingInput(pendingInput.inputId, { type: "sendNow" }); }}><Icon name="send" size={14} /></button>}
+									<button type="button" aria-label="追加指示を編集" title="追加指示を編集" disabled={disabled} onClick={() => { setError(undefined); setEditingInput({ inputId: pendingInput.inputId, text: pendingInput.text }); }}><Icon name="pencil" size={14} /></button>
+									<button type="button" aria-label="追加指示を削除" title="追加指示を削除" disabled={disabled} onClick={() => { void mutatePendingInput(pendingInput.inputId, { type: "delete" }); }}><Icon name="close" size={14} /></button>
 								</>}
 						</div>
 					</div>;
 				}}</MotionItems>
 			</div></Presence>
 			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath}>{workspacePath}</code>}</div></Presence>
-			<Presence show={!!notice} collapse><div className="composer-notice" role="status"><span>{notice}</span><button type="button" aria-label="通知を閉じる" title="通知を閉じる" onClick={() => setNotice(undefined)}>×</button></div></Presence>
+			<Presence show={!!notice} collapse><div className="composer-notice" role="status"><span>{notice}</span><button type="button" aria-label="通知を閉じる" title="通知を閉じる" onClick={() => setNotice(undefined)}><Icon name="close" size={13} /></button></div></Presence>
 			<Presence show={!!goalControl}><div className="motion-contents">{goalControl}</div></Presence>
 			<form className={`composer command-picker-anchor${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return;
@@ -245,7 +246,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 				<Presence show={pickerOpen}><div className="motion-contents"><CommandPicker id={pickerId} commands={suggestions} activeIndex={activeCommand} onActive={setCommandIndex} onChoose={chooseCommand} /></div></Presence>
 				<Presence show={workspacePickerOpen}><div className="motion-contents"><CommandPicker id={workspacePickerId} label="送信先の会話" below commands={(workspaceCandidates ?? []).map((candidate) => ({ command: destinationKey(candidate), label: candidate.kind === "session" ? candidate.title : "＋ 新しい会話で開始", description: candidate.kind === "session" ? `${candidate.name}${candidate.updatedAt ? ` · ${new Date(candidate.updatedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""} · ${candidate.path}` : `${candidate.name} · ${candidate.path}` }))} activeIndex={activeWorkspace} onActive={setWorkspaceIndex} disabled={sending || reading} onChoose={(key) => { const candidate = workspaceCandidates?.find((entry) => destinationKey(entry) === key); if (workspacePickerOpen && candidate) void submit(candidate); }} /></div></Presence>
 				<Presence show={attachments.length > 0} collapse><ComposerAttachments attachments={attachments} disabled={sending} onRemove={(id) => { setWorkspaceCandidates(undefined); setNotice(undefined); remove([id]); }} /></Presence>
-				{browserAnnotations.length > 0 && <ul className="browser-annotation-list" aria-label="ブラウザ注釈">{browserAnnotations.map((annotation, index) => <li key={`${annotation.selection.url}:${index}`}><img src={annotation.image} alt="選択箇所のスクリーンショット" /><span><strong>{annotation.selection.title || annotation.selection.url}</strong><small>{annotation.note}</small></span><button type="button" aria-label={`注釈 ${index + 1} を削除`} disabled={sending} onClick={() => setBrowserAnnotations((current) => { const next = current.filter((_, itemIndex) => itemIndex !== index); if (next.length) annotationDrafts.set(draftKey, next); else annotationDrafts.delete(draftKey); return next; })}>×</button></li>)}</ul>}
+				{browserAnnotations.length > 0 && <ul className="browser-annotation-list" aria-label="ブラウザ注釈">{browserAnnotations.map((annotation, index) => <li key={`${annotation.selection.url}:${index}`}><img src={annotation.image} alt="選択箇所のスクリーンショット" /><span><strong>{annotation.selection.title || annotation.selection.url}</strong><small>{annotation.note}</small></span><button type="button" aria-label={`注釈 ${index + 1} を削除`} disabled={sending} onClick={() => setBrowserAnnotations((current) => { const next = current.filter((_, itemIndex) => itemIndex !== index); if (next.length) annotationDrafts.set(draftKey, next); else annotationDrafts.delete(draftKey); return next; })}><Icon name="close" size={13} /></button></li>)}</ul>}
 				<input ref={fileInput} type="file" multiple hidden aria-label="添付ファイルを選択" disabled={sending || reading} onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void attach(files); }} />
 				<label className="sr-only" htmlFor="message">メッセージ</label>
 				<div className="composer-input-row">
@@ -284,9 +285,9 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 				<MotionSize><div className="composer-toolbar">
 					<div className="composer-context"><button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 11-8.4 8.4a5 5 0 0 1-7.1-7.1L13 3.8a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.4a1.6 1.6 0 0 1-2.3-2.3L15 6.2" /></svg></button>{modelControl}</div>
 					<div className="composer-delivery">
-						<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage">{contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit ?? 0)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span>} /></div></Presence>
-						{busy && <button className="stop-button" type="button" aria-label="実行を停止" title="実行を停止" onClick={onStop}><span key="stop" className="motion-label" aria-hidden="true">■</span></button>}
-						<button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Enter で送信 · Shift + Enter で改行 · Ctrl / Cmd + Shift + Enter で送信先を選択" : busy ? "Enter で実行中に指示 · Ctrl / Cmd + Enter で完了後に指示 · Shift + Enter で改行" : "Enter で送信 · Shift + Enter で改行"} disabled={sending || reading || (!text.trim() && !attachments.length && !browserAnnotations.length) || !slashInput && (!connected || session?.availability === "missing")}><span key={sending ? "sending" : "send"} className="motion-label" aria-hidden="true">{sending ? "…" : "↑"}</span></button>
+						<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage"><Icon name="gauge" size={13} />{contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit ?? 0)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span>} /></div></Presence>
+						{busy && <button className="stop-button" type="button" aria-label="実行を停止" title="実行を停止" onClick={onStop}><Icon name="stop" size={14} /></button>}
+						<button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Enter で送信 · Shift + Enter で改行 · Ctrl / Cmd + Shift + Enter で送信先を選択" : busy ? "Enter で実行中に指示 · Ctrl / Cmd + Enter で完了後に指示 · Shift + Enter で改行" : "Enter で送信 · Shift + Enter で改行"} disabled={sending || reading || (!text.trim() && !attachments.length && !browserAnnotations.length) || !slashInput && (!connected || session?.availability === "missing")}>{sending ? <span className="motion-label" aria-hidden="true">…</span> : <Icon name="send" size={17} />}</button>
 					</div>
 				</div></MotionSize>
 			</form>

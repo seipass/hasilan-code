@@ -1,7 +1,15 @@
 .goal-panel { margin: 0 0 10px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-panel); font-size: 12px; min-width: 0; }
 .goal-panel > summary { display: flex; align-items: center; gap: 10px; padding: 9px 12px; list-style: none; }
 .goal-panel > summary::-webkit-details-marker { display: none; }
-.goal-panel > summary::before { content: "›"; font-size: 17px; transition: transform 180ms var(--motion-ease); }
+.goal-panel > summary::before {
+	content: "";
+	flex: none;
+	width: 12px;
+	height: 12px;
+	background-color: currentColor;
+	mask: var(--chevron) center / contain no-repeat;
+	transition: transform var(--motion-base) var(--motion-ease);
+}
 .goal-panel[open] > summary::before { transform: rotate(90deg); }
 .goal-status { margin-left: auto; color: var(--on-surface-muted); }
 .goal-status-active { color: var(--secondary); }

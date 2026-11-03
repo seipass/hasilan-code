@@ -1,6 +1,7 @@
 import { type Ref, useEffect, useRef, useState } from "react";
 import { ATTACHMENT_LIMITS, type DraftAttachment, isDraftAttachments, isVisionImage } from "../shared/attachments.ts";
 import { FileIcon } from "./files/FileIcon.tsx";
+import { Icon } from "./Icon.tsx";
 import { nextClientId } from "./ids.ts";
 import { preferences } from "./preferences.ts";
 import "./ComposerAttachments.css";
@@ -86,7 +87,7 @@ export function ComposerAttachments({ attachments, disabled, onRemove, ref }: {
 				? <img src={`data:${attachment.mimeType};base64,${attachment.data}`} alt={attachment.name} />
 				: <span className="composer-attachment-icon"><FileIcon name={attachment.name} /></span>}
 			<span className="composer-attachment-info"><span title={attachment.name}>{attachment.name}</span><small>{new Intl.NumberFormat("ja-JP", { style: "unit", unit: attachment.size < 1024 * 1024 ? "kilobyte" : "megabyte", maximumFractionDigits: 1 }).format(attachment.size / (attachment.size < 1024 * 1024 ? 1024 : 1024 * 1024))}</small></span>
-			<button type="button" aria-label={`${attachment.name}を取り外す`} title="添付を取り外す" disabled={disabled} onClick={() => onRemove(attachment.id)}>×</button>
+			<button type="button" aria-label={`${attachment.name}を取り外す`} title="添付を取り外す" disabled={disabled} onClick={() => onRemove(attachment.id)}><Icon name="close" size={13} /></button>
 		</li>)}
 	</ul>;
 }

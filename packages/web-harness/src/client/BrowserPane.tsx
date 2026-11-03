@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
+import { Icon } from "./Icon.tsx";
 import "./BrowserPane.css";
 
 export interface BrowserSelection {
@@ -69,9 +70,9 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 	}
 	return <section className="browser-pane" aria-label="ブラウザ">
 		<form className="browser-toolbar" onSubmit={(event) => { event.preventDefault(); navigate(); }}>
-			<button type="button" aria-label="戻る" disabled={!ready} onClick={() => { if (browser.current?.canGoBack()) browser.current.goBack(); }}>‹</button>
-			<button type="button" aria-label="進む" disabled={!ready} onClick={() => { if (browser.current?.canGoForward()) browser.current.goForward(); }}>›</button>
-			<button type="button" aria-label="再読み込み" disabled={!ready} onClick={() => browser.current?.reload()}>↻</button>
+			<button type="button" aria-label="戻る" disabled={!ready} onClick={() => { if (browser.current?.canGoBack()) browser.current.goBack(); }}><Icon name="chevronLeft" size={16} /></button>
+			<button type="button" aria-label="進む" disabled={!ready} onClick={() => { if (browser.current?.canGoForward()) browser.current.goForward(); }}><Icon name="chevronRight" size={16} /></button>
+			<button type="button" aria-label="再読み込み" disabled={!ready} onClick={() => browser.current?.reload()}><Icon name="refresh" size={15} /></button>
 			<input aria-label="アドレス" placeholder="URLを入力" value={address} onChange={(event) => setAddress(event.target.value)} />
 			<button type="submit">開く</button>
 		</form>

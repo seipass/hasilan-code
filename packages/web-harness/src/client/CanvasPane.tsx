@@ -11,6 +11,7 @@ import { nextId } from "../shared/ids.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { useAnimatedView } from "./animated-view.ts";
 import { CARD_HEIGHT, CARD_WIDTH, nextCanvasPosition } from "./canvas-layout.ts";
+import { Icon } from "./Icon.tsx";
 import { MotionItems, Presence } from "./Motion.tsx";
 import "./CanvasPane.css";
 
@@ -325,9 +326,9 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 				<div className="canvas-view-controls" aria-label="表示操作">
 					<input className="canvas-title" aria-label="設計タイトル" value={design.title} maxLength={CANVAS_LIMITS.title} placeholder="設計のタイトル" disabled={disabled} onChange={(event) => edit((current) => ({ ...current, title: event.target.value }))} />
 					<details className="canvas-properties canvas-description"><summary>概要</summary><div><label>目的・概要<textarea rows={4} value={design.description} maxLength={CANVAS_LIMITS.description} disabled={disabled} onChange={(event) => edit((current) => ({ ...current, description: event.target.value }))} /></label></div></details>
-					<button type="button" aria-label="縮小" onClick={() => zoomTo(view.zoom / 1.2)} disabled={view.zoom <= MIN_ZOOM}>−</button>
+					<button type="button" aria-label="縮小" onClick={() => zoomTo(view.zoom / 1.2)} disabled={view.zoom <= MIN_ZOOM}><Icon name="minus" size={14} /></button>
 					<output aria-label="拡大率">{Math.round(view.zoom * 100)}%</output>
-					<button type="button" aria-label="拡大" onClick={() => zoomTo(view.zoom * 1.2)} disabled={view.zoom >= MAX_ZOOM}>＋</button>
+					<button type="button" aria-label="拡大" onClick={() => zoomTo(view.zoom * 1.2)} disabled={view.zoom >= MAX_ZOOM}><Icon name="plus" size={14} /></button>
 					<button type="button" onClick={fitDesign}>全体表示</button>
 					<button className="canvas-add" type="button" onClick={() => addNode()} disabled={disabled}>＋ ノード</button>
 					<Presence show={!!selection}><details className="canvas-properties canvas-selection"><summary>選択項目</summary><div>
