@@ -70,7 +70,7 @@ npm run web
 2. 入力欄から利用するモデルと推論の強度を選びます。
 3. 作業フォルダーを確認し、AI に依頼を送信します。
 
-送信は **Ctrl + Enter**（macOS では **⌘ + Enter**）、Enter は改行です。
+送信は **Enter**、改行は **Shift + Enter** です。実行中は **Enter** で実行中の指示、**Ctrl + Enter**（macOS では **⌘ + Enter**）で完了後の指示を送ります。
 
 別の作業フォルダーを使う場合は、起動時に `--cwd` で指定します。
 
@@ -303,6 +303,6 @@ AI モデルや検索サービスの利用には、各サービスの料金が�
 
 ## ライセンス
 
-本リポジトリは [MIT License](LICENSE) で公開しています。本家 Pi の著作権表示を保持しています。フォントなどの同梱素材には、それぞれのライセンスが適用されます。
+Hasilan Code は [GNU General Public License v3.0 only](LICENSE) で公開しています。本家 Pi に由来するコードには、引き続き [MIT License と著作権表示](LICENSE-PI-MIT) が適用されます。フォントなどの同梱素材には、それぞれのライセンスが適用されます。
 
 配布パッケージにはブラウザー側に組み込む外部ライブラリの通知を`dist/client/THIRD_PARTY_LICENSES.txt`として同梱します。
