@@ -8,6 +8,11 @@ import "./HomeAppearance.css";
 export function useHomeBackground() {
 	const stored = usePreferenceString(HOME_BACKGROUND_KEY);
 	const background = useMemo(() => parseHomeBackground(stored), [stored]);
+	useEffect(() => {
+		// The image is fetched on demand so it does not inflate the startup preference snapshot.
+		if (stored !== null) return;
+		void preferences.load(HOME_BACKGROUND_KEY).catch(() => undefined);
+	}, [stored]);
 	const changeBackground = useCallback((next: HomeBackground | undefined) => {
 		saveHomeBackground(next);
 		void preferences.flush().catch(() => undefined);

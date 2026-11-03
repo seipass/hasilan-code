@@ -406,7 +406,7 @@ export function App() {
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);
 	const homeBackgroundVisible = !!background && !sessionId && mode === "chat";
 	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`} data-home-background={homeBackgroundVisible || undefined}>
-		{workspaces.filter((entry) => entry.workspaceId !== workspaceId).map((entry) => <WorkspaceFeed key={entry.workspaceId} id={entry.workspaceId} onUpdate={updateProjection} onFiles={filesChanged} />)}
+		{workspaces.filter((entry) => entry.workspaceId !== workspaceId && (expandedWorkspaces[entry.workspaceId] ?? false)).map((entry) => <WorkspaceFeed key={entry.workspaceId} id={entry.workspaceId} onUpdate={updateProjection} onFiles={filesChanged} />)}
 		<button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><span aria-hidden="true">{sidebarOpen ? "‹" : "☰"}</span></button>
 		<button className="navigation-scrim" aria-label="履歴を閉じる" title="履歴を閉じる" aria-hidden={!sidebarOpen} inert={!sidebarOpen} tabIndex={-1} onClick={() => setSidebarOpen(false)} />
 		<aside ref={sidebarRef} id="conversation-history" className="sidebar" aria-label="会話の履歴" aria-hidden={!sidebarOpen} inert={!sidebarOpen}>

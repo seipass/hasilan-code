@@ -911,12 +911,16 @@ export class SessionRegistry {
 				const currentRun = runs.find(
 					(run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status),
 				);
+				const latest = runs.at(-1);
+				// Lists render titles and state only; prompts, paths and run bodies come with the page.
+				const { systemPrompt: _systemPrompt, path: _path, ...summary } = descriptor;
 				return structuredClone({
-					...descriptor,
+					...summary,
 					usage: this.live.get(descriptor.sessionId)?.usage.snapshot(),
 					title: descriptor.title ?? runs[0]?.task,
 					currentRun,
-					latestRun: runs.at(-1),
+					// Lists only need the run state; result text is fetched with the session page.
+					latestRun: latest && { ...latest, task: latest.task.slice(0, 200), result: undefined, error: undefined },
 					pendingInput: this.state.pendingInput
 						.filter((input) => input.sessionId === descriptor.sessionId)
 						.map((input) => this.projectPendingInput(input, currentRun)),

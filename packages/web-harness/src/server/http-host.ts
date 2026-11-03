@@ -311,11 +311,24 @@ export class HttpHost {
 				throw new HttpError(403, "Static path is not allowed");
 			const info = await stat(path);
 			if (!info.isFile()) throw new HttpError(404, "Static file not found");
+			// Vite emits content-hashed assets, so a reload can reuse them; the shell stays fresh.
+			const immutable = /-([A-Za-z0-9_-]{8,})\.[a-z0-9]+$/.test(path) && decoded.startsWith("/assets/");
+			// A strong ETag lets the browser revalidate large fonts and the shell instead of refetching.
+			const etag = `"${info.size.toString(16)}-${Math.floor(info.mtimeMs).toString(16)}"`;
+			if (request.headers["if-none-match"] === etag) {
+				response.writeHead(304, {
+					ETag: etag,
+					"Cache-Control": immutable ? "private, max-age=31536000, immutable" : "private, no-cache",
+				});
+				response.end();
+				return;
+			}
 			const bytes = request.method === "HEAD" ? undefined : await readFile(path);
 			response.writeHead(200, {
 				"Content-Type": STATIC_MIME_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream",
 				"Content-Length": info.size,
-				"Cache-Control": "private, no-store",
+				"Cache-Control": immutable ? "private, max-age=31536000, immutable" : "private, no-cache",
+				ETag: etag,
 			});
 			response.end(bytes);
 		} catch (error) {

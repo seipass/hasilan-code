@@ -3,14 +3,14 @@
 
 @font-face {
 	font-family: "UDEV Gothic";
-	src: url("/fonts/UDEVGothic-Regular.ttf") format("truetype");
+	src: url("/fonts/UDEVGothic-Regular.woff2") format("woff2");
 	font-style: normal;
 	font-weight: 400;
 	font-display: swap;
 }
 @font-face {
 	font-family: "UDEV Gothic";
-	src: url("/fonts/UDEVGothic-Bold.ttf") format("truetype");
+	src: url("/fonts/UDEVGothic-Bold.woff2") format("woff2");
 	font-style: normal;
 	font-weight: 700;
 	font-display: swap;

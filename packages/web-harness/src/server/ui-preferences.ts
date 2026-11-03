@@ -12,6 +12,9 @@ import {
 } from "../shared/ui-preferences.ts";
 import { HttpError, readJson, sendJson } from "./http-host.ts";
 
+/** The home background is a base64 image up to ~1.4 MB; sync it like an attachment. */
+const DEFERRED_HOME_BACKGROUND = "hasilan-home-background";
+
 /** One atomic file per key: typing a note never rewrites background images or attachment data. */
 export class UiPreferencesStore {
 	private readonly directory: string;
@@ -46,6 +49,9 @@ export class UiPreferencesStore {
 				throw new Error(`Invalid UI preference filename: ${file}`);
 			store.values.set(entry.key, entry.value);
 			if (entry.key.startsWith("pi-web-attachments:")) store.attachmentVersions.set(entry.key, randomUUID());
+			// Oversized values (home background images) load on demand instead of every startup.
+			if (entry.key.startsWith("pi-web-attachments:") || entry.key === DEFERRED_HOME_BACKGROUND)
+				store.attachmentVersions.set(entry.key, randomUUID());
 		}
 		return store;
 	}
@@ -57,7 +63,10 @@ export class UiPreferencesStore {
 			revision: this.revision,
 			values: Object.fromEntries(
 				[...this.values].filter(
-					([key]) => !key.startsWith("pi-web-attachments:") && (this.versions.get(key) ?? 0) > after,
+					([key]) =>
+						!key.startsWith("pi-web-attachments:") &&
+						key !== DEFERRED_HOME_BACKGROUND &&
+						(this.versions.get(key) ?? 0) > after,
 				),
 			),
 			attachments: Object.fromEntries(this.attachmentVersions),
