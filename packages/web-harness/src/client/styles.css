@@ -638,3 +638,14 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 .quick-open-name { font-size: 13px; }
 .quick-open-path { color: var(--on-surface-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quick-open-empty { margin: 12px 10px; color: var(--on-surface-muted); font-size: 12px; }
+
+/* Settings tabs scroll horizontally on narrow screens; fade the edge to show there is more. */
+.settings-tabs { scrollbar-width: none; mask-image: linear-gradient(to right, #000 92%, transparent); }
+.settings-tabs::-webkit-scrollbar { display: none; }
+.settings-tabs::after { content: ""; flex: none; width: 8px; }
+@media (min-width: 700px) { .settings-tabs { mask-image: none; } }
+.workspace-remove { flex: none; width: 24px; height: 24px; margin: -4px 0 -4px auto; padding: 0; border: 0; background: transparent; color: var(--on-surface-muted); font-size: 14px; opacity: 0; }
+.workspace-accordion > summary:hover .workspace-remove, .workspace-accordion > summary:focus-within .workspace-remove { opacity: 1; }
+.workspace-remove:hover { background: var(--danger-container); color: var(--on-danger-container); }
+.workspace-accordion > summary .workspace-new-conversation { margin-left: 0; }
+@media (hover: none) { .workspace-remove { opacity: 1; width: 30px; height: 30px; } }

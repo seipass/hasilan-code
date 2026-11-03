@@ -611,6 +611,18 @@ export class SessionRegistry {
 			return workspace;
 		});
 	}
+	/** Removes a workspace from the sidebar; conversations and files on disk are retained. */
+	async removeWorkspace(id: string): Promise<void> {
+		await this.mutate(async () => {
+			const exists = this.state.workspaces.some((workspace) => workspace.id === id);
+			if (!exists) return;
+			if (this.state.sessions.some((session) => session.workspaceId === id))
+				throw new HarnessError("会話が残っているワークスペースは外せません。会話を削除してください。", 409);
+			this.state.workspaces = this.state.workspaces.filter((workspace) => workspace.id !== id);
+			await this.persist();
+			this.emit({ type: "workspace_changed", workspaceId: id });
+		});
+	}
 	create(options: {
 		workspaceId: string;
 		parentSessionId?: string;

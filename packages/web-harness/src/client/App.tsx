@@ -114,6 +114,7 @@ export function App() {
 	const workspaceTeam = team?.teams.find((entry) => entry.scope === "workspace");
 	const widgetUsage = sessionId ? session?.usage ?? [] : aggregateUsage(summaries.filter((entry) => entry.workspaceId === workspaceId).map((entry) => entry.usage ?? []));
 	const roots = summaries.filter((entry) => !entry.parentSessionId);
+	// Sidebar search matches titles and workspace paths without scanning message bodies on each keystroke.
 	const history = roots.filter((entry) => `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
 	useAttention({
 		sessions: summaries,
@@ -236,6 +237,21 @@ export function App() {
 		await command(`/api/sessions/${encodeURIComponent(id)}`, { title }, "PATCH");
 		setInitialSessions((previous) => previous.map((entry) => entry.sessionId === id ? { ...entry, title } : entry));
 		setProjections((previous) => Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, { ...value, sessions: value.sessions.map((entry) => entry.sessionId === id ? { ...entry, title } : entry) }])));
+	}
+	async function removeWorkspace(id: string) {
+		const target = workspaces.find((entry) => entry.workspaceId === id);
+		if (!target) return;
+		if (summaries.some((entry) => entry.workspaceId === id)) {
+			setError("会話が残っているワークスペースは一覧から外せません。先に会話を削除してください。");
+			return;
+		}
+		if (!window.confirm(`${target.path} を一覧から外しますか？ファイルは削除しません。`)) return;
+		try {
+			await command(`/api/workspaces/${encodeURIComponent(id)}`, {}, "DELETE");
+			const remaining = workspaces.filter((entry) => entry.workspaceId !== id);
+			setWorkspaces(remaining);
+			if (workspaceId === id) { setWorkspaceId(remaining[0]?.workspaceId); setSessionId(undefined); }
+		} catch (reason) { setError(errorMessage(reason)); }
 	}
 	async function deleteSession(id: string) {
 		const { deletedSessionIds } = await api<{ deletedSessionIds: string[] }>(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -423,7 +439,7 @@ export function App() {
 						<summary title={entry.path} onClick={(event) => {
 							event.preventDefault();
 							if (!historyQuery.trim()) setExpandedWorkspaces((previous) => ({ ...previous, [entry.workspaceId]: !open }));
-						}}><span className="workspace-name">{entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}</span><button type="button" className="workspace-new-conversation" aria-label={`${entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}で新しい会話`} title="このワークスペースで新しい会話" onClick={(event) => { event.preventDefault(); event.stopPropagation(); newConversation(entry.workspaceId); }}>+</button></summary>
+						}}><span className="workspace-name">{entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}</span><button type="button" className="workspace-remove" aria-label="一覧から外す" title="一覧から外す（ファイルは残ります）" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void removeWorkspace(entry.workspaceId); }}>−</button><button type="button" className="workspace-new-conversation" aria-label={`${entry.path.split(/[\\/]/).filter(Boolean).at(-1) ?? entry.path}で新しい会話`} title="このワークスペースで新しい会話" onClick={(event) => { event.preventDefault(); event.stopPropagation(); newConversation(entry.workspaceId); }}>+</button></summary>
 						<ul className="session-list"><MotionItems items={conversations} itemKey={(summary) => summary.sessionId}>{(summary) => {
 							const title = (summary.title ?? "新しい会話").replace(/\s+/g, " ").slice(0, 90);
 							const status = summary.availability === "missing" ? "missing" : summary.currentRun?.status ?? (summary.latestRun?.status === "failed" || summary.latestRun?.status === "interrupted" ? summary.latestRun.status : "idle");

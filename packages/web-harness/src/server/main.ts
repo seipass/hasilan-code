@@ -220,6 +220,10 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 						return reply({ ...workspace, workspaceId: workspace.id }, 201);
 					}
 				}
+				if (parts[1] === "workspaces" && parts[2] && parts.length === 3 && method === "DELETE") {
+					await registry.removeWorkspace(parts[2]);
+					return reply({ removed: true });
+				}
 				if (url.pathname === "/api/workspaces/pick" && method === "POST") {
 					await readJson(request, workspacePickerSchema);
 					if (selectingWorkspace) throw new HttpError(409, "フォルダー選択はすでに開いています。");
