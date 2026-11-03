@@ -5,7 +5,7 @@ import { TeamGestures } from "./team-gestures.ts";
 import { MobileSheet, useMobileLayout } from "./MobileSheet.tsx";
 import { MotionItems, Presence } from "./Motion.tsx";
 import { MotionLabel, MotionSize, MotionSwap } from "./MotionSwap.tsx";
-import { layoutTeamGraph, selectedTeamAgents, teamEdgePath, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH } from "./team-graph.ts";
+import { layoutTeamGraph, selectedTeamAgents, teamEdgePath, TEAM_NODE_HEIGHT, TEAM_NODE_WIDTH, TEAM_READABLE_ZOOM } from "./team-graph.ts";
 import type { Run, RunStatus, SessionSummary, TeamAgent, TeamSnapshot } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import "./TeamPane.css";
@@ -90,7 +90,9 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 	const fitGraph = useCallback((target = graph, smooth = true) => {
 		const element = viewport.current;
 		if (!element || !element.clientWidth || !element.clientHeight) return false;
-		const nextZoom = Math.min(1, (element.clientWidth - 12) / target.width, (element.clientHeight - 12) / target.height);
+		// Do not shrink below the readable floor; large teams pan instead of turning into specks.
+		const fitted = Math.min(1, (element.clientWidth - 12) / target.width, (element.clientHeight - 12) / target.height);
+		const nextZoom = Math.max(TEAM_READABLE_ZOOM, fitted);
 		(smooth ? animateView : setView)({
 			zoom: nextZoom,
 			x: element.clientWidth / 2 - (target.x + target.width / 2) * nextZoom,
@@ -203,7 +205,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 				event.preventDefault();
 				animateView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
 			}}>
-				<div className="team-graph-canvas" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${zoom})` }}>
+				<div className="team-graph-canvas" data-compact={zoom < 0.7 || undefined} style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${zoom})` }}>
 					<svg className="team-graph-edges" aria-hidden="true">
 						<defs><marker id={markerId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 1 1 L 7 4 L 1 7" fill="none" stroke="context-stroke" strokeWidth="1.5" /></marker></defs>
 						<MotionItems items={graph.edges} itemKey={(edge) => edge.id} enabled={false}>{(edge) => <path key={edge.id} className={`team-graph-edge is-${edge.kind}`} d={teamEdgePath(edge)} markerEnd={`url(#${markerId})`} />}</MotionItems>
@@ -258,6 +260,7 @@ function RunDetail({ run, snapshot, focus, onFile, now, onOpen }: {
 export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true, onSelect, onStop, onFile }: TeamPaneProps) {
 	const mobile = useMobileLayout();
 	const [detailsOpen, setDetailsOpen] = useState(false);
+	const [graphView, setGraphView] = useState<"graph" | "list">(() => (typeof window !== "undefined" && window.innerWidth <= 900 ? "list" : "graph"));
 	const [desktopDetailsOpen, setDesktopDetailsOpen] = useState(true);
 	const [focusedId, setFocusedId] = useState<string>();
 	const [now, setNow] = useState(() => Date.now());
@@ -322,7 +325,22 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 			</section>;
 	return <section className="team-pane" aria-label="チームの進行状況">
 		<Presence show={agents.length === 0}><div className="team-empty"><h2>この会話のチームはまだありません</h2></div></Presence>
-			<Presence show={!!snapshot && agents.length > 0}><div className="motion-contents"><MotionSwap identity={roots[0]?.teamId ?? "none"} className="team-graph-swap" enabled={visible}>{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} swarm={swarm} visible={visible} />}</MotionSwap></div></Presence>
+			<Presence show={!!snapshot && agents.length > 0}><div className="motion-contents">
+				<div className="team-view-switch" role="group" aria-label="チームの表示方法">
+					<button type="button" aria-pressed={graphView === "graph"} onClick={() => setGraphView("graph")}>関係図</button>
+					<button type="button" aria-pressed={graphView === "list"} onClick={() => setGraphView("list")}>一覧</button>
+				</div>
+				{graphView === "graph"
+					? <MotionSwap identity={roots[0]?.teamId ?? "none"} className="team-graph-swap" enabled={visible}>{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} swarm={swarm} visible={visible} />}</MotionSwap>
+					: <div className="team-list">{overview}{agents.map((agent) => {
+						const state = status(agent, swarm, managed ? roots[0]?.agentId : undefined);
+						const run = agent.currentRun ?? agent.latestRun;
+						return <button key={agent.agentId} type="button" className="team-list-row" aria-pressed={focused?.agentId === agent.agentId} onClick={() => focusAgent(agent.agentId)}>
+							<span className="team-list-main"><strong>{label(agent)}</strong><span className={`team-map-state status-${state}`}>{AGENT_LABELS[state]}</span></span>
+							<span className="team-list-task">{run ? taskText(run) : "まだ作業はありません"}</span>
+						</button>;
+					})}</div>}
+			</div></Presence>
 			{mobile ? <>
 				<Presence show={!!focused}><button type="button" className="team-focus-trigger" aria-haspopup="dialog" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>{focused && label(focused)}の詳細</button></Presence>
 				<MobileSheet open={detailsOpen && visible && agents.length > 0} side="bottom" title="担当の詳細" onClose={() => setDetailsOpen(false)}>{details}</MobileSheet>

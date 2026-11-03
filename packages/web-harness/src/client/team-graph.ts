@@ -55,6 +55,11 @@ export function selectedTeamAgents(
 	return teamId ? snapshot.agents.filter((agent) => agent.teamId === teamId) : [];
 }
 
+/** Narrower cards stay legible when a wide team would otherwise shrink below readable zoom. */
+export const TEAM_NODE_WIDTH_COMPACT = 132;
+export const TEAM_NODE_HEIGHT_COMPACT = 96;
+export const TEAM_READABLE_ZOOM = 0.45;
+
 /** Each leaf owns a column; parents are centered above their children. */
 export function layoutTeamGraph(agents: TeamAgent[], snapshot: TeamSnapshot) {
 	const byId = new Map(agents.map((agent) => [agent.agentId, agent]));
