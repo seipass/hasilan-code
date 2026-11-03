@@ -30,7 +30,9 @@ import {
 import { parseClaude, parseCodex, parseDeepSeek, parseOhMyPi } from "./jsonl-formats.ts";
 import { parseGrok, parseOpenCode } from "./other-formats.ts";
 
-const HEADER_BYTES = 256 * 1024;
+const HEADER_BYTES = 64 * 1024;
+/** Compressed archives are decoded in memory, so cap the bytes read for a header scan. */
+const COMPRESSED_HEAD_BYTES = 4 * 1024 * 1024;
 const MAX_CANDIDATES = 500;
 const decompress = promisify(zstdDecompress);
 interface CandidateFile {
@@ -93,6 +95,12 @@ function within(root: string, path: string): boolean {
 }
 
 /** Header reads are bounded for discovery; importing never truncates a transcript. */
+async function readHead(file: Awaited<ReturnType<typeof open>>, bytes: number): Promise<Buffer> {
+	const buffer = Buffer.alloc(bytes);
+	const { bytesRead } = await file.read(buffer, 0, bytes, 0);
+	return buffer.subarray(0, bytesRead);
+}
+
 async function readTranscript(path: string, head = false): Promise<string> {
 	if ((await realpath(path)) !== path || (await lstat(path)).isSymbolicLink())
 		throw new HarnessError("履歴の保存先が変更されました。再読み込みしてください。", 409);
@@ -101,7 +109,9 @@ async function readTranscript(path: string, head = false): Promise<string> {
 		const info = await file.stat();
 		if (!info.isFile()) throw new HarnessError("履歴にはファイルを指定してください。");
 		if (/\.(zst|zstd)$/.test(path)) {
-			const source = await file.readFile();
+			// Discovery only needs the header: decompressing a multi-hundred-MB archive to read it
+			// made listing the Codex history take seconds.
+			const source = head ? await readHead(file, Math.min(info.size, COMPRESSED_HEAD_BYTES)) : await file.readFile();
 			const chunks: Buffer[] = [];
 			let offset = 0;
 			let length = 0;
@@ -246,6 +256,7 @@ export class SessionImportService {
 			throw new HarnessError("保存先にはサーバー上の絶対パスを指定してください。");
 		for (const [id, candidate] of this.candidates) if (candidate.expires < Date.now()) this.candidates.delete(id);
 		const warnings: string[] = [];
+		const resolvedWorkspace = workspacePath ? await realpath(workspacePath).catch(() => undefined) : undefined;
 		const codexTitles = request.source === "codex" ? await this.codexTitles(warnings) : undefined;
 		const files: CandidateFile[] = [];
 		let visited = 0;
@@ -325,8 +336,11 @@ export class SessionImportService {
 		}
 		const sorted = [...grouped.values()].sort((a, b) => b.modified - a.modified);
 		const summaries: SessionImportCandidate[] = [];
-		for (const file of sorted) {
-			if (summaries.length > MAX_CANDIDATES) break;
+		// Reading thousands of transcripts one at a time made discovery take seconds; newest files
+		// fill the candidate list first, so the pool stops once it is full.
+		const fileWarnings = new Map<string, string>();
+		const inspect = async (file: CandidateFile): Promise<void> => {
+			if (summaries.length > MAX_CANDIDATES) return;
 			try {
 				let database = false;
 				if (request.source === "opencode") {
@@ -344,7 +358,8 @@ export class SessionImportService {
 					if (!Array.isArray(rows)) throw new Error("Invalid OpenCode session index");
 					for (const raw of rows) {
 						const row = record(raw);
-						if (workspacePath && !(await sameWorkspace(string(row.directory), workspacePath))) continue;
+						if (workspacePath && !(await sameWorkspace(string(row.directory), workspacePath, resolvedWorkspace)))
+							continue;
 						if (summaries.length > MAX_CANDIDATES) break;
 						this.remember(
 							summaries,
@@ -358,7 +373,7 @@ export class SessionImportService {
 							true,
 						);
 					}
-					continue;
+					return;
 				}
 				const head = await readTranscript(file.path, !file.path.endsWith(".json"));
 				let meta: JsonRecord = {};
@@ -375,7 +390,7 @@ export class SessionImportService {
 					const rows = jsonLines(head, [], true);
 					if (request.source === "codex") {
 						meta = record(rows.find((entry) => entry.type === "session_meta")?.payload);
-						if (record(meta.source).subagent) continue;
+						if (record(meta.source).subagent) return;
 					} else if (request.source === "oh-my-pi" || request.source === "deepseek-harness")
 						meta = record(rows.find((entry) => entry.type === "session"));
 					else if (request.source === "claude-code")
@@ -400,13 +415,26 @@ export class SessionImportService {
 						}
 				}
 				if (!string(externalId) && request.source === "grok-build") externalId = basename(dirname(file.path));
-				if (!string(externalId)) continue;
-				if (workspacePath && !(await sameWorkspace(string(cwd), workspacePath))) continue;
+				if (!string(externalId)) return;
+				if (workspacePath && !(await sameWorkspace(string(cwd), workspacePath, resolvedWorkspace))) return;
 				this.remember(summaries, request.source, file, sorted, String(externalId), title, cwd);
 			} catch (error) {
-				warnings.push(`${basename(file.path)}: ${error instanceof Error ? error.message : String(error)}`);
+				fileWarnings.set(
+					file.path,
+					`${basename(file.path)}: ${error instanceof Error ? error.message : String(error)}`,
+				);
 			}
-		}
+		};
+		let next = 0;
+		await Promise.all(
+			Array.from({ length: Math.min(8, sorted.length) }, async () => {
+				while (next < sorted.length && summaries.length <= MAX_CANDIDATES) {
+					const file = sorted[next++];
+					await inspect(file);
+				}
+			}),
+		);
+		for (const message of fileWarnings.values()) warnings.push(message);
 		while (this.candidates.size > 4000) this.candidates.delete(this.candidates.keys().next().value!);
 		if (summaries.length > MAX_CANDIDATES)
 			warnings.push("このワークスペースの最新500件を表示しています。古い会話は保存先を絞って再検索してください。");

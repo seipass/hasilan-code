@@ -14,10 +14,15 @@ export function record(value: unknown): JsonRecord {
 export function string(value: unknown): string | undefined {
 	return typeof value === "string" && value.trim() ? value : undefined;
 }
-export async function sameWorkspace(cwd: string | undefined, workspacePath: string): Promise<boolean> {
+/** realpath is expensive per candidate; discovery reuses one resolved workspace path. */
+export async function sameWorkspace(
+	cwd: string | undefined,
+	workspacePath: string,
+	resolvedWorkspace?: string,
+): Promise<boolean> {
 	if (!cwd || !isAbsolute(cwd)) return false;
 	try {
-		const paths = await Promise.all([realpath(cwd), realpath(workspacePath)]);
+		const paths = await Promise.all([realpath(cwd), resolvedWorkspace ?? realpath(workspacePath)]);
 		const normalized = paths.map((path) =>
 			process.platform === "win32"
 				? path
