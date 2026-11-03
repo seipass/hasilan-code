@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
 import { api, command, errorMessage } from "./api.ts";
 import { HomeAppearance } from "./HomeAppearance.tsx";
+import { KeybindingSettings } from "./KeybindingSettings.tsx";
 import { NotificationPreference } from "./NotificationPreference.tsx";
 import type { HomeBackground } from "./home-background.ts";
 import { Presence } from "./Motion.tsx";
@@ -162,6 +163,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			<Presence show={tab === "appearance"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
 				<HomeAppearance background={homeBackground} onChange={onHomeBackgroundChange} />
 				<NotificationPreference />
+				<KeybindingSettings />
 			</section></Presence>
 			{settings && <>
 				<Presence show={tab === "translation"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-translation-panel`} aria-labelledby={`${tabsId}-translation-tab`}>
