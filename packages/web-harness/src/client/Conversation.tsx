@@ -6,6 +6,7 @@ import { Presence } from "./Motion.tsx";
 import { Content, record } from "./Content.tsx";
 import { observeConversation } from "./conversation-resize.ts";
 import { RUN_LABELS } from "./TeamPane.tsx";
+import { MessageActions } from "./MessageActions.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
 import type { ChatMessage, ToolCall } from "./types.ts";
 import "./Conversation.css";
@@ -28,9 +29,11 @@ interface MessageProps {
 	message: ChatMessage;
 	tools: (ToolCall | undefined)[];
 	onFile: (path: string, line?: number) => void;
+	onRetry?: () => void;
+	onEdit?: (text: string) => void;
 	expansions: Map<string, boolean[]>;
 }
-const Message = memo(function Message({ message, tools, onFile, expansions }: MessageProps) {
+const Message = memo(function Message({ message, tools, onFile, onRetry, onEdit, expansions }: MessageProps) {
 	const element = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		const row = element.current;
@@ -61,11 +64,12 @@ const Message = memo(function Message({ message, tools, onFile, expansions }: Me
 					if (tool?.name === "computer") return null;
 					return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>;
 				})}{message.partial && <span className="streaming-dot" aria-label="応答中" />}</div>
+				{!message.partial && <MessageActions message={message} content={content} onRetry={onRetry} onEdit={onEdit} />}
 			</article>}
 	</div>;
-}, (previous, next) => previous.message === next.message && previous.onFile === next.onFile && previous.expansions === next.expansions && previous.tools.length === next.tools.length && previous.tools.every((tool, index) => tool === next.tools[index]));
+}, (previous, next) => previous.message === next.message && previous.onFile === next.onFile && previous.onRetry === next.onRetry && previous.onEdit === next.onEdit && previous.expansions === next.expansions && previous.tools.length === next.tools.length && previous.tools.every((tool, index) => tool === next.tools[index]));
 
-export const Conversation = memo(function Conversation({ messages: allMessages, tools, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError }: {
+export const Conversation = memo(function Conversation({ messages: allMessages, tools, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError, onRetry, onEdit }: {
 	messages: ChatMessage[];
 	tools: ToolCall[];
 	activeRunId?: string;
@@ -77,6 +81,8 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	followRequest: number;
 	fallback?: string;
 	latestError?: string;
+	onRetry?: (messageId: string) => void;
+	onEdit?: (messageId: string, text: string) => void;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const content = useRef<HTMLDivElement>(null);
@@ -94,6 +100,14 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const [viewport, setViewport] = useState({ top: 0, height: 600 });
 	const [nearBottom, setNearBottom] = useState(true);
 	const rows = useMemo(() => conversationRows(allMessages, tools, activeRunId), [allMessages, tools, activeRunId]);
+	// Retrying only makes sense on the newest reply; older replies cannot be regenerated in place.
+	const lastAssistantId = useMemo(() => {
+		for (let index = rows.length - 1; index >= 0; index--) {
+			const row = rows[index];
+			if (row.kind === "message" && row.message.role === "assistant" && !row.message.partial) return row.message.messageId;
+		}
+		return undefined;
+	}, [rows]);
 	const offsets = useMemo(() => {
 		const result = [0];
 		for (const row of rows) result.push(result[result.length - 1] + (heights.current.get(row.key) ?? (row.kind === "computer" ? 430 : ESTIMATED_HEIGHT)));
@@ -165,7 +179,9 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 				<div className="history-spacer" aria-hidden="true" style={{ height: offsets[start] }} />
 				{rows.slice(start, end).map((row) => row.kind === "computer"
 					? <div key={row.key} className="virtual-message" data-message-id={row.key}><ComputerActivity group={row.group} onFile={openFile} /></div>
-					: <Message key={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current} />)}
+					: <Message key={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current}
+					onRetry={onRetry && row.message.messageId === lastAssistantId ? () => onRetry(row.message.messageId) : undefined}
+					onEdit={onEdit ? (text) => onEdit(row.message.messageId, text) : undefined} />)}
 				<div className="history-spacer" aria-hidden="true" style={{ height: total - offsets[end] }} />
 				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>
 			</div>

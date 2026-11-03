@@ -619,3 +619,11 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 @media (hover: none) { .session-menu-button { opacity: 1; width: 32px; height: 32px; } }
 .settings-toggle { display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
 .settings-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
+
+/* Message actions stay out of the way until the reader hovers or focuses the message. */
+.message-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; opacity: 0; transition: opacity var(--motion-quick) ease; }
+.message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
+.message-actions button, .message-actions a { padding: 3px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--on-surface-muted); font-size: 11px; line-height: 1.6; text-decoration: none; }
+.message-actions button:hover, .message-actions a:hover { background: var(--surface-hover); color: var(--on-surface); }
+.role-user .message-actions { justify-content: flex-end; }
+@media (hover: none) { .message-actions { opacity: 1; } }

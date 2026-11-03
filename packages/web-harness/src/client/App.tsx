@@ -6,6 +6,7 @@ import { aggregateUsage } from "../shared/usage.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { useAttention } from "./attention.ts";
+import { userText } from "./MessageActions.tsx";
 import { ChatPane } from "./ChatPane.tsx";
 import { CanvasPane } from "./CanvasPane.tsx";
 import { DetailPane, type DetailView } from "./DetailPane.tsx";
@@ -297,6 +298,14 @@ export function App() {
 		} finally { commandPending.current = false; }
 	}
 	async function stop(id: string) { try { await command(`/api/sessions/${encodeURIComponent(id)}/abort`, {}); } catch (reason) { setError(errorMessage(reason)); } }
+	/** Re-sends the newest user request as a new turn; the previous reply stays in history. */
+	async function retryLast(): Promise<void> {
+		if (!session || session.currentRun) return;
+		const lastUser = [...session.messages].reverse().find((message) => userText(message));
+		const text = lastUser ? userText(lastUser) : undefined;
+		if (!text) { setError("再送する依頼が見つかりません。"); return; }
+		await command(`/api/sessions/${encodeURIComponent(session.sessionId)}/prompt`, { text, mode: "prompt" });
+	}
 	async function goalAction(action: GoalAction): Promise<Goal | null> {
 		const target = action.op === "create" ? await inputSession() : sessionId;
 		if (!target) {
@@ -405,7 +414,7 @@ export function App() {
 				{canvasOpened && <Presence show={mode === "canvas"} keepMounted><div className="mode-page" inert={mode !== "canvas"}>
 					{workspaceId && <CanvasPane key={workspaceId} workspaceId={workspaceId} destinationControl={<label className="canvas-destination"><span className="sr-only">入力欄に追加する設計の送信先</span><select aria-label="入力欄に追加する設計の送信先" value={canvasTarget} onChange={(event) => setCanvasTarget(event.target.value === "swarm" ? "swarm" : "chat")}><option value="chat">会話</option><option value="swarm">Hyakki-Yako</option></select></label>} onComposeDesign={composeCanvasDesign} onDirtyChange={setCanvasDirty} />}
 				</div></Presence>}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${mode === "canvas" ? " is-surface" : ""}`}><ChatPane loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} goalControl={!session?.parentSessionId && session?.goal && <GoalPanel key={sessionId} goal={session.goal} busy={!!session.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} /></MotionSwap>
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${mode === "canvas" ? " is-surface" : ""}`}><ChatPane loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} goalControl={!session?.parentSessionId && session?.goal && <GoalPanel key={sessionId} goal={session.goal} busy={!!session.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? actualRightWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : -actualRightWidth : undefined }}>

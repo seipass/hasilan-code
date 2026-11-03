@@ -22,7 +22,7 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError }: {
+export function ChatPane({ session, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
 	loading?: boolean;
 	workspacePath?: string;
@@ -45,6 +45,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	onLoadOlder?: () => Promise<void>;
 	historyLoading?: boolean;
 	historyError?: string;
+	onRetry?: () => void;
 }) {
 	const [text, setText] = usePreferenceText(`pi-web-draft:${draftKey}`);
 	const [chatWidth, setChatWidth] = usePreferenceState("pi-web-chat-width", 744);
@@ -188,7 +189,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 		{loading && <div className="conversation conversation-loading" role="status">会話を読み込んでいます…</div>}
 		<Presence show={!!session?.parentSessionId} collapse><div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session?.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div></Presence>
 		<Presence show={session?.availability === "missing"} collapse><div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div></Presence>
-		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} />}
+		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); setNotice("前の依頼を入力欄に戻しました。編集して送信すると新しい依頼になります。"); input.current?.focus(); }} />}
 		<div className="composer-area">
 			<Presence show={pendingInputs.length > 0} collapse><div ref={pendingList} className="pending-input-list" role="list" aria-label="予約中の追加指示">
 				<MotionItems items={pendingInputs} itemKey={(pendingInput) => pendingInput.inputId}>{(pendingInput) => {
