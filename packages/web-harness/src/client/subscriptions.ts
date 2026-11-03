@@ -219,6 +219,7 @@ export function useChannel<T>(
 		data: data?.id === id ? data?.value : undefined,
 		connection,
 		error,
+		dismissError: () => setError(undefined),
 		loadOlder,
 		historyLoading,
 		historyError,

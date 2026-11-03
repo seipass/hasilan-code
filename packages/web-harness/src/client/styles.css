@@ -609,3 +609,11 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 	.composer textarea { font-size: 16px; }
 	.model-compact-search input, .history-search input, .widget-form input, .settings-content input, .settings-content select, .settings-content textarea { font-size: 16px; }
 }
+
+/* Session rows keep a persistent actions button so rename/delete works without right click. */
+.history-session-row { display: flex; align-items: center; min-width: 0; }
+.history-session-row > .session-button { flex: 1; min-width: 0; padding-right: 6px; }
+.session-menu-button { display: grid; place-items: center; flex: none; width: 26px; height: 26px; margin-right: 3px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--on-surface-muted); font-size: 15px; line-height: 1; opacity: 0; }
+.history-session-row:hover .session-menu-button, .history-session-row:focus-within .session-menu-button, .session-menu-button[aria-expanded="true"] { opacity: 1; }
+.session-menu-button:hover { background: var(--surface-hover); color: var(--on-surface); }
+@media (hover: none) { .session-menu-button { opacity: 1; width: 32px; height: 32px; } }
