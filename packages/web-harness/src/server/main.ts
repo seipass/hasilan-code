@@ -202,6 +202,11 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					if (method !== "GET") throw new HttpError(405, "Method is not allowed");
 					return reply(await widgets.query(url));
 				}
+				if (url.pathname === "/api/sessions/search" && method === "GET") {
+					const query = url.searchParams.get("q") ?? "";
+					if (query.length > 200) throw new HttpError(400, "Search text is too long");
+					return reply(registry.searchText(query));
+				}
 				if (url.pathname === "/api/storage" && method === "GET") {
 					return reply(await readStorageUsage(agentDir, new Set(registry.sessionPaths())));
 				}

@@ -82,6 +82,7 @@ export function App() {
 	const [expandedWorkspaces, setExpandedWorkspaces] = usePreferenceState<Record<string, boolean>>("pi-web-expanded-workspaces", {});
 	const [sidebarOpen, setSidebarOpen] = usePreferenceState("pi-web-sidebar-open", () => window.innerWidth >= 900);
 	const [historyQuery, setHistoryQuery] = useState("");
+	const [bodyMatches, setBodyMatches] = useState<{ sessionId: string; snippet: string; role: string }[]>([]);
 	const [rightTab, setRightTab] = usePreferenceState<DetailView>("pi-web-right-tab", "tabs");
 	const [rightOpen, setRightOpen] = usePreferenceState("pi-web-right-open", false);
 	const [notificationsEnabled, setNotificationsEnabled] = usePreferenceState("pi-web-notifications", false);
@@ -116,7 +117,19 @@ export function App() {
 	const runningCount = summaries.filter((entry) => entry.workspaceId === workspaceId && !!entry.currentRun).length;
 	const roots = summaries.filter((entry) => !entry.parentSessionId);
 	// Sidebar search matches titles and workspace paths without scanning message bodies on each keystroke.
-	const history = roots.filter((entry) => `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
+	useEffect(() => {
+		const query = historyQuery.trim();
+		if (query.length < 2) { setBodyMatches([]); return; }
+		const controller = new AbortController();
+		const timer = window.setTimeout(() => {
+			void api<{ sessionId: string; snippet: string; role: string }[]>(`/api/sessions/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+				.then((value) => { if (!controller.signal.aborted) setBodyMatches(value); })
+				.catch(() => { if (!controller.signal.aborted) setBodyMatches([]); });
+		}, 250);
+		return () => { window.clearTimeout(timer); controller.abort(); };
+	}, [historyQuery]);
+	const bodyMatchIds = new Set(bodyMatches.map((match) => match.sessionId));
+	const history = roots.filter((entry) => bodyMatchIds.has(entry.sessionId) || `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
 	useAttention({
 		sessions: summaries,
 		selectedSessionId: sessionId,
@@ -456,6 +469,7 @@ export function App() {
 							};
 							return <li key={summary.sessionId} className="history-session-row"><button className={`session-button ${summary.sessionId === sessionId ? "selected" : ""}`} aria-current={summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); openActions(event.currentTarget, event.clientX || undefined, event.clientY || undefined); }} onKeyDown={(event) => { if (event.key === "F10" && event.shiftKey) { event.preventDefault(); openActions(event.currentTarget); } }} title={title}><span className="session-title">{title}</span>{status !== "idle" && <span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} title={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} />}</button><button type="button" className="session-menu-button" aria-label={`${title}の操作`} title="名前を変更・削除" aria-haspopup="menu" aria-expanded={sessionAction?.session.sessionId === summary.sessionId} onClick={(event) => openActions(event.currentTarget)}><span aria-hidden="true">⋯</span></button></li>;
 						}}</MotionItems></ul><Presence show={conversations.length === 0}><p className="history-empty">{historyQuery ? "一致する会話がありません" : "会話はありません。"}</p></Presence>
+						{bodyMatches.filter((match) => conversations.some((entry) => entry.sessionId === match.sessionId)).slice(0, 6).map((match, index) => <button key={`${match.sessionId}-${index}`} type="button" className="history-body-match" onClick={() => selectSession(match.sessionId)} title={match.snippet}><span className="history-body-role">{match.role === "user" ? "あなた" : "AI"}</span>{match.snippet}</button>)}
 					</details>;
 				}}</MotionItems>
 			</nav>

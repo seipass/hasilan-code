@@ -933,6 +933,44 @@ export class SessionRegistry {
 				.map((input) => this.projectPendingInput(input, currentRun)),
 		};
 	}
+	/** Substring search over user and assistant text, newest conversations first. */
+	searchText(query: string, limit = 50): { sessionId: string; snippet: string; role: string }[] {
+		const needle = query.trim().toLowerCase();
+		if (needle.length < 2) return [];
+		const results: { sessionId: string; snippet: string; role: string }[] = [];
+		const ordered = [...this.state.sessions].reverse();
+		for (const session of ordered) {
+			if (results.length >= limit) break;
+			let entries;
+			try {
+				entries = this.ensureLive(session.sessionId)?.manager.getEntries() ?? [];
+			} catch {
+				continue;
+			}
+			for (const entry of entries) {
+				if (results.length >= limit) break;
+				if (entry.type !== "message") continue;
+				const message = entry.message;
+				if (message.role !== "user" && message.role !== "assistant") continue;
+				const text =
+					typeof message.content === "string"
+						? message.content
+						: message.content
+								.filter((part) => part.type === "text")
+								.map((part) => part.text)
+								.join("\n");
+				const index = text.toLowerCase().indexOf(needle);
+				if (index < 0) continue;
+				const start = Math.max(0, index - 40);
+				results.push({
+					sessionId: session.sessionId,
+					role: message.role,
+					snippet: `${start > 0 ? "…" : ""}${text.slice(start, index + needle.length + 60).replace(/\s+/g, " ")}${index + needle.length + 60 < text.length ? "…" : ""}`,
+				});
+			}
+		}
+		return results;
+	}
 	/** Transcript files referenced by any conversation, for storage accounting. */
 	sessionPaths(): string[] {
 		return this.state.sessions.flatMap((session) => (session.path ? [session.path] : []));
