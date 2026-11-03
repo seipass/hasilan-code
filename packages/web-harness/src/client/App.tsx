@@ -32,6 +32,20 @@ import { sendWorkspacePrompt } from "./workspace-send.ts";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 import "./WorkspaceModes.css";
 
+function sessionFromLocation(): string | undefined {
+	if (typeof location === "undefined") return undefined;
+	const match = /^\/s\/([0-9a-zA-Z-]{1,128})$/.exec(location.pathname);
+	return match?.[1];
+}
+
+/** Keeps the address bar in sync so conversations can be reloaded, bookmarked and shared. */
+function pushSessionUrl(sessionId: string | undefined): void {
+	if (typeof history === "undefined") return;
+	const target = sessionId ? `/s/${encodeURIComponent(sessionId)}` : "/";
+	if (location.pathname === target) return;
+	history.pushState({ sessionId }, "", target);
+}
+
 function WorkspaceFeed({ id, onUpdate, onFiles }: { id: string; onUpdate: (id: string, data: WorkspaceProjection) => void; onFiles: () => void }) {
 	const channel = useChannel<WorkspaceProjection>("workspace", id, onFiles);
 	useEffect(() => { if (channel.data) onUpdate(id, channel.data); }, [id, channel.data, onUpdate]);
@@ -140,7 +154,9 @@ export function App() {
 		Promise.all([api<Workspace[]>("/api/workspaces", { signal: controller.signal }), api<SessionSummary[]>("/api/sessions", { signal: controller.signal })]).then(([folders, sessions]) => {
 			setWorkspaces(folders); setInitialSessions(sessions);
 			const previousSession = preferences.getItem("pi-web-selected-session"); const previousWorkspace = preferences.getItem("pi-web-workspace");
-			const restored = sessions.find((entry) => entry.sessionId === previousSession);
+			// A pasted conversation URL wins over the last browser selection.
+			const urlSession = sessionFromLocation();
+			const restored = sessions.find((entry) => entry.sessionId === (urlSession ?? previousSession));
 			setSessionId(restored?.sessionId);
 			setMode("chat");
 			setWorkspaceId(restored?.workspaceId ?? folders.find((entry) => entry.workspaceId === previousWorkspace)?.workspaceId ?? folders[0]?.workspaceId);
@@ -158,6 +174,22 @@ export function App() {
 		if (sessionId) preferences.setItem("pi-web-selected-session", sessionId); else preferences.removeItem("pi-web-selected-session");
 		preferences.setItem("pi-web-workspace", workspaceId);
 	}, [sessionId, workspaceId]);
+	useEffect(() => { pushSessionUrl(sessionId); }, [sessionId]);
+	useEffect(() => {
+		// Browser back/forward restores the conversation named by the URL instead of leaving the app.
+		const restore = () => {
+			const id = sessionFromLocation();
+			if (!id) { draftSession.current = undefined; setSessionId(undefined); return; }
+			const summary = initialSessions.find((entry) => entry.sessionId === id) ?? Object.values(projections).flatMap((projection) => projection.sessions).find((entry) => entry.sessionId === id);
+			if (!summary) return;
+			setWorkspaceId(summary.workspaceId);
+			setSessionId(summary.sessionId);
+			setMode("chat");
+			setError(undefined);
+		};
+		window.addEventListener("popstate", restore);
+		return () => window.removeEventListener("popstate", restore);
+	}, [initialSessions, projections]);
 	useEffect(() => {
 		const keydown = (event: KeyboardEvent) => {
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); }

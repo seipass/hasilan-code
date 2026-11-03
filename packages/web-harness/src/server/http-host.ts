@@ -303,7 +303,9 @@ export class HttpHost {
 		}
 		try {
 			const root = await realpath(this.options.staticDir);
-			const path = await realpath(resolve(root, `.${decoded === "/" ? "/index.html" : decoded}`));
+			// Conversation URLs are client routes: serve the shell so a reload or shared link works.
+			const clientRoute = /^\/s\/[0-9a-zA-Z-]{1,128}$/.test(decoded);
+			const path = await realpath(resolve(root, `.${decoded === "/" || clientRoute ? "/index.html" : decoded}`));
 			const child = relative(root, path);
 			if (isAbsolute(child) || child === ".." || child.startsWith(`..${sep}`))
 				throw new HttpError(403, "Static path is not allowed");
