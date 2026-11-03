@@ -5,6 +5,7 @@ import { errorMessage } from "./api.ts";
 import { Icon } from "./Icon.tsx";
 import { matchesAppKeybinding } from "./app-keybindings.ts";
 import type { BrowserAnnotation, BrowserAnnotationDelivery } from "./BrowserPane.tsx";
+import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH, clampChatWidth } from "./chat-width.ts";
 import { CommandPicker } from "./CommandPicker.tsx";
 import { ComposerAttachments, useComposerAttachments } from "./ComposerAttachments.tsx";
 import { Conversation } from "./Conversation.tsx";
@@ -121,6 +122,18 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const busy = session?.currentRun !== undefined;
 	const latestRunFallback = session?.messages.length === 0 && session.latestRun?.inputKind !== "context" ? session.latestRun : undefined;
 	const empty = !loading && (!session || (session.messages.length === 0 && !latestRunFallback));
+	const pane = useRef<HTMLElement>(null);
+	const [paneWidth, setPaneWidth] = useState(0);
+	useEffect(() => {
+		const element = pane.current;
+		if (!element) return;
+		const observer = new ResizeObserver(() => setPaneWidth(element.clientWidth));
+		observer.observe(element);
+		setPaneWidth(element.clientWidth);
+		return () => observer.disconnect();
+	}, []);
+	const clampWidth = (value: number) => clampChatWidth(value, paneWidth);
+	const shownWidth = clampWidth(chatWidth);
 	// A fresh conversation should be ready to type in; the sidebar button keeps focus otherwise.
 	useEffect(() => {
 		if (loading || surface || !empty) return;
@@ -195,8 +208,26 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const hasContextLimit = contextLimit !== undefined && contextLimit > 0;
 	const pendingInputs = session?.pendingInput.filter((input) => !input.fromAgentId && !input.completionRunId) ?? [];
 	useLayoutMotion(pendingList, pendingInputs, true, true);
-	return <section className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}`} aria-label="会話" style={{ "--chat-content-width": `${chatWidth}px` } as CSSProperties}>
-		{!surface && !empty && <div className="chat-width-handle" role="separator" tabIndex={0} aria-label="チャットの幅" aria-orientation="vertical" aria-valuemin={320} aria-valuemax={3000} aria-valuenow={chatWidth} title="ドラッグしてチャットの幅を変更" onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); widthDrag.current = { id: event.pointerId, x: event.clientX, width: Math.max(320, Math.min(chatWidth, (event.currentTarget.parentElement?.clientWidth ?? chatWidth + 56) - 56)) }; }} onPointerMove={(event) => { const drag = widthDrag.current; if (drag?.id === event.pointerId) setChatWidth(Math.max(320, Math.min(3000, Math.round(drag.width + 2 * (drag.x - event.clientX))))); }} onPointerUp={(event) => { if (widthDrag.current?.id === event.pointerId) { widthDrag.current = undefined; event.currentTarget.releasePointerCapture(event.pointerId); } }} onLostPointerCapture={() => { widthDrag.current = undefined; }} onDoubleClick={() => setChatWidth(744)} onKeyDown={(event) => { if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return; event.preventDefault(); setChatWidth((width) => Math.max(320, Math.min(3000, width + (event.key === "ArrowLeft" ? 32 : -32)))); }} />}
+	return <section ref={pane} className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}`} aria-label="会話" style={{ "--chat-content-width": `${shownWidth}px` } as CSSProperties}>
+{!surface && !empty && <div className="chat-width-handle" role="separator" tabIndex={0} aria-label="チャットの幅" aria-orientation="vertical" aria-valuemin={CHAT_MIN_WIDTH} aria-valuemax={clampWidth(CHAT_MAX_WIDTH)} aria-valuenow={shownWidth} title="ドラッグしてチャットの幅を変更" onPointerDown={(event) => {
+			if (event.button !== 0) return;
+			event.preventDefault();
+			event.currentTarget.setPointerCapture(event.pointerId);
+			// The handle sits at the pane edge once the content is capped, so store the shown width, not the saved one.
+			widthDrag.current = { id: event.pointerId, x: event.clientX, width: shownWidth };
+		}} onPointerMove={(event) => {
+			const drag = widthDrag.current;
+			if (drag?.id !== event.pointerId) return;
+			// The column is centred, so both edges move: the handle tracks the pointer at 2x the width delta.
+			setChatWidth(clampWidth(drag.width + 2 * (drag.x - event.clientX)));
+		}} onPointerUp={(event) => { if (widthDrag.current?.id === event.pointerId) { widthDrag.current = undefined; event.currentTarget.releasePointerCapture(event.pointerId); } }} onLostPointerCapture={() => { widthDrag.current = undefined; }} onDoubleClick={() => setChatWidth(744)} onKeyDown={(event) => {
+			const step = event.shiftKey ? 96 : 32;
+			if (event.key === "Home") { event.preventDefault(); setChatWidth(clampWidth(CHAT_MIN_WIDTH)); return; }
+			if (event.key === "End") { event.preventDefault(); setChatWidth(clampWidth(Number.POSITIVE_INFINITY)); return; }
+			if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+			event.preventDefault();
+			setChatWidth((width) => clampWidth(width + (event.key === "ArrowLeft" ? step : -step)));
+		}} />}
 		{loading && <div className="conversation conversation-loading" role="status">会話を読み込んでいます…</div>}
 		<Presence show={!!session?.parentSessionId} collapse><div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session?.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div></Presence>
 		<Presence show={session?.availability === "missing"} collapse><div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div></Presence>
