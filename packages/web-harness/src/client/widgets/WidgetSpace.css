@@ -148,10 +148,11 @@
 .widget-music label { margin-top: 18px; }
 .widget-timeline { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: var(--on-surface-muted); font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) {
-	.inspector-open .topbar-leading { display: none; }
-	.topbar-actions.has-widgets { width: 100%; margin-right: 0; padding: 0 0 0 42px; flex: 1; border-radius: 10px; background: var(--glass-panel, var(--surface-panel)); backdrop-filter: var(--glass-filter, blur(24px)); }
-	.widget-chip { max-width: 140px; padding-inline: 7px; }
-	.widget-edit { min-width: 36px; }
+	/* Keep the conversation title readable; the widget strip scrolls instead of hiding it. */
+	.topbar-leading { flex: 0 1 auto; min-width: 0; }
+	.topbar-actions.has-widgets { width: auto; min-width: 0; margin-right: 0; padding: 0; flex: 1 1 auto; border-radius: 10px; background: var(--glass-panel, var(--surface-panel)); backdrop-filter: var(--glass-filter, blur(24px)); }
+	.widget-chip { max-width: 120px; padding-inline: 7px; }
+	.widget-edit { min-width: 40px; min-height: 40px; }
 	.widget-form input, .widget-notes textarea { font-size: 16px; }
 	.widget-settings-list button { width: 40px; height: 44px; }
 }

@@ -597,3 +597,15 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 .badge, .goal-status, .credential-status, .settings-state, .context-usage { transition: color var(--motion-quick) ease, background-color var(--motion-quick) ease; }
 .chat-pane { animation: motion-label-enter 180ms ease; }
 .tool-card.status-running { animation: motion-label-enter 160ms ease; }
+
+/* Touch targets: below 900px keep primary composer and header controls at least 40px. */
+@media (max-width: 900px) {
+	.sidebar-toggle { width: 40px; height: 40px; top: 8px; }
+	.quiet-button { min-height: 40px; min-width: 48px; }
+	.composer-chip, .model-trigger { min-height: 32px; }
+	.composer-attach-button { width: 40px; height: 40px; }
+	.send-button, .stop-button { width: 40px; height: 40px; }
+	.usage-popover-trigger { min-height: 28px; }
+	.composer textarea { font-size: 16px; }
+	.model-compact-search input, .history-search input, .widget-form input, .settings-content input, .settings-content select, .settings-content textarea { font-size: 16px; }
+}

@@ -149,9 +149,16 @@ export function App() {
 		preferences.setItem("pi-web-workspace", workspaceId);
 	}, [sessionId, workspaceId]);
 	useEffect(() => {
-		const keydown = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); } if (event.key === "Escape") setModelOpen(false); };
+		const keydown = (event: KeyboardEvent) => {
+			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); }
+			if (event.key !== "Escape") return;
+			if (modelOpen) setModelOpen(false);
+			// Overlays cover the page below 900px, so Escape is the only pointer-free way out.
+			else if (rightOpen && window.innerWidth < 900) setRightOpen(false);
+			else if (sidebarOpen && window.innerWidth < 900) setSidebarOpen(false);
+		};
 		window.addEventListener("keydown", keydown); return () => window.removeEventListener("keydown", keydown);
-	}, []);
+	}, [modelOpen, rightOpen, sidebarOpen]);
 	function selectSession(id: string) {
 		if (commandPending.current) return;
 		const summary = summaries.find((entry) => entry.sessionId === id);
@@ -350,7 +357,7 @@ export function App() {
 	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`} data-home-background={homeBackgroundVisible || undefined}>
 		{workspaces.filter((entry) => entry.workspaceId !== workspaceId).map((entry) => <WorkspaceFeed key={entry.workspaceId} id={entry.workspaceId} onUpdate={updateProjection} onFiles={filesChanged} />)}
 		<button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><span aria-hidden="true">{sidebarOpen ? "‹" : "☰"}</span></button>
-		<button className="navigation-scrim" aria-label="履歴を閉じる" aria-hidden={!sidebarOpen} inert={!sidebarOpen} onClick={() => setSidebarOpen(false)} />
+		<button className="navigation-scrim" aria-label="履歴を閉じる" title="履歴を閉じる" aria-hidden={!sidebarOpen} inert={!sidebarOpen} tabIndex={-1} onClick={() => setSidebarOpen(false)} />
 		<aside ref={sidebarRef} id="conversation-history" className="sidebar" aria-label="会話の履歴" aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
 			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={() => newConversation()}><img className="brand-symbol" src="/icon.svg" alt="" /></button></div>
 			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><span aria-hidden="true">＋</span>新しい会話</button>
@@ -376,11 +383,11 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}>設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className={`topbar-actions${rightOpen ? " has-widgets" : ""}`} style={{ width: rightOpen && viewport.width > 900 ? `calc(${actualRightWidth}px - var(--desktop-controls-right, 0px))` : undefined }}><WidgetSpace visible={rightOpen} usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className={`topbar-actions${rightOpen ? " has-widgets" : ""}`} style={{ width: rightOpen && viewport.width > 900 ? `calc(${actualRightWidth}px - var(--desktop-controls-right, 0px))` : undefined }}><button ref={rightPanelToggle} className="quiet-button" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}>詳細</button><WidgetSpace visible={rightOpen} usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /></div></header>
 			<HomeBackdrop background={homeBackgroundVisible ? background : undefined} />
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => setError(undefined)}>閉じる</button></div></Presence>
-			<div className="main-layout"><main className="chat-column"><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
+			<div className="main-layout"><main className="chat-column" inert={(rightOpen || sidebarOpen) && viewport.width <= 900}><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
 				<Presence show={!!routedConversation && routedConversation.sessionId === sessionId} collapse><div className="composer-notice" role="status"><span>{routedConversation?.message}</span><button type="button" aria-label="通知を閉じる" onClick={() => setRoutedConversation(undefined)}>×</button></div></Presence>
 				{canvasOpened && <Presence show={mode === "canvas"} keepMounted><div className="mode-page" inert={mode !== "canvas"}>
 					{workspaceId && <CanvasPane key={workspaceId} workspaceId={workspaceId} destinationControl={<label className="canvas-destination"><span className="sr-only">入力欄に追加する設計の送信先</span><select aria-label="入力欄に追加する設計の送信先" value={canvasTarget} onChange={(event) => setCanvasTarget(event.target.value === "swarm" ? "swarm" : "chat")}><option value="chat">会話</option><option value="swarm">Hyakki-Yako</option></select></label>} onComposeDesign={composeCanvasDesign} onDirtyChange={setCanvasDirty} />}
