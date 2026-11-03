@@ -315,6 +315,9 @@ async function start(): Promise<void> {
 		const label = title.trim() || "Hasilan Code";
 		window.setTitle(label);
 		tray?.setToolTip(label);
+		// The web UI prefixes "(n) 実行中" or "(n) 完了"; mirror that count on the dock/taskbar.
+		const pending = /^\((\d+)\)/.exec(label)?.[1];
+		app.setBadgeCount(pending ? Number(pending) : 0);
 	});
 	const navigate = (event: Electron.Event, url: string) => {
 		try {
