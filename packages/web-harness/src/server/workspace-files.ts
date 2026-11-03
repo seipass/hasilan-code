@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { Dirent, Stats } from "node:fs";
 import {
 	type FileHandle,
 	lstat,
@@ -199,7 +200,7 @@ export class WorkspaceFiles {
 		let scanned = 0;
 		const walk = async (directory: string, depth: number): Promise<void> => {
 			if (found.length >= limit || scanned > 20_000 || depth > 12) return;
-			let entries;
+			let entries: Dirent[];
 			try {
 				entries = await readdir(directory, { withFileTypes: true });
 			} catch {
@@ -215,7 +216,7 @@ export class WorkspaceFiles {
 					continue;
 				}
 				if (!entry.isFile() || !entry.name.toLowerCase().includes(needle)) continue;
-				let info;
+				let info: Stats;
 				try {
 					info = await lstat(absolute);
 				} catch {
