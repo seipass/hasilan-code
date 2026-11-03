@@ -530,18 +530,35 @@ export class SessionRegistry {
 		const entries = manager.getEntries();
 		const boundary = imported.boundary ? entries.findIndex((entry) => entry.id === imported.boundary) : -1;
 		const ownEntries = new Set(entries.slice(boundary + 1).map((entry) => entry.id));
-		const context = manager
+		const projected = manager
 			.buildSessionProjection()
-			.entries.filter((entry) => boundary < 0 || !imported.messages.length || ownEntries.has(entry.sourceEntry.id))
-			.flatMap((entry) => entry.messages);
+			.entries.filter((entry) => boundary < 0 || !imported.messages.length || ownEntries.has(entry.sourceEntry.id));
+		const context = projected.flatMap((entry) => entry.messages);
+		// Keep one timestamp per projected message so the conversation can show when it happened.
+		const contextTimestamps = projected.flatMap((entry) => entry.messages.map(() => entry.sourceEntry.timestamp));
+		const contextUsage = projected.flatMap((entry) =>
+			entry.messages.map((message) => {
+				if (message.role !== "assistant" || !("usage" in message) || !message.usage) return undefined;
+				const usage = message.usage;
+				return {
+					input: usage.input,
+					output: usage.output,
+					cacheRead: usage.cacheRead,
+					cacheWrite: usage.cacheWrite,
+					cost: usage.cost?.total ?? 0,
+				};
+			}),
+		);
 		const messages = [
 			...imported.messages,
 			...context
 				.filter((message) => message.role !== "custom" || message.display)
 				.map(
-					(message): ProjectedMessage => ({
+					(message, index): ProjectedMessage => ({
 						messageId: randomUUID(),
 						role: message.role,
+						...(contextTimestamps[index] ? { timestamp: contextTimestamps[index] } : {}),
+						...(contextUsage[index] ? { usage: contextUsage[index] } : {}),
 						content: structuredClone(
 							message.role === "user"
 								? projectAttachmentContent(message.content, descriptor.workspaceId)

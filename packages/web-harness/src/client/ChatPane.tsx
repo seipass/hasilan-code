@@ -120,6 +120,16 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const busy = session?.currentRun !== undefined;
 	const latestRunFallback = session?.messages.length === 0 && session.latestRun?.inputKind !== "context" ? session.latestRun : undefined;
 	const empty = !loading && (!session || (session.messages.length === 0 && !latestRunFallback));
+	// A fresh conversation should be ready to type in; the sidebar button keeps focus otherwise.
+	useEffect(() => {
+		if (loading || surface || !empty) return;
+		const frame = requestAnimationFrame(() => {
+			const active = document.activeElement;
+			if (active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) return;
+			input.current?.focus();
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [draftKey, empty, loading, surface]);
 	useComposerSize(input, text);
 	async function submit(destination?: ComposerDestination, mode: "steer" | "followUp" = "steer") {
 		if ((!text.trim() && !attachments.length && !browserAnnotations.length) || reading || submitting.current || attachmentError || !slashInput && (!connected || session?.availability === "missing")) return;

@@ -113,6 +113,7 @@ export function App() {
 	const selectedAgent = team?.agents.find((agent) => agent.sessionId === sessionId);
 	const workspaceTeam = team?.teams.find((entry) => entry.scope === "workspace");
 	const widgetUsage = sessionId ? session?.usage ?? [] : aggregateUsage(summaries.filter((entry) => entry.workspaceId === workspaceId).map((entry) => entry.usage ?? []));
+	const runningCount = summaries.filter((entry) => entry.workspaceId === workspaceId && !!entry.currentRun).length;
 	const roots = summaries.filter((entry) => !entry.parentSessionId);
 	// Sidebar search matches titles and workspace paths without scanning message bodies on each keystroke.
 	const history = roots.filter((entry) => `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
@@ -332,8 +333,7 @@ export function App() {
 				const target = manager?.sessionId ?? sessionId;
 				if (!target) throw new Error("再開するスウォームがありません。");
 				await command(`/api/sessions/${encodeURIComponent(target)}/swarm/continue`, {});
-				setSessionId(target); setMode("chat"); setRightTab("team");
-				if (window.innerWidth >= 1100) setRightOpen(true);
+				setSessionId(target); setMode("chat"); setRightTab("team"); setRightOpen(true);
 				result = { notice: "スウォームを再開しました。" };
 			} else if (parsed.kind === "goal") {
 				const goal = await goalAction(parsed.action);
@@ -347,6 +347,13 @@ export function App() {
 		} finally { commandPending.current = false; }
 	}
 	async function stop(id: string) { try { await command(`/api/sessions/${encodeURIComponent(id)}/abort`, {}); } catch (reason) { setError(errorMessage(reason)); } }
+	/** Stops every running conversation shown for the current workspace. */
+	async function stopAll(): Promise<void> {
+		const running = summaries.filter((entry) => entry.workspaceId === workspaceId && (entry.currentRun || entry.latestRun?.status === "running"));
+		if (!running.length) return;
+		if (!window.confirm(`実行中の会話 ${running.length}件を停止しますか？`)) return;
+		await Promise.allSettled(running.map((entry) => command(`/api/sessions/${encodeURIComponent(entry.sessionId)}/abort`, {})));
+	}
 	/** Re-sends the newest user request as a new turn; the previous reply stays in history. */
 	async function retryLast(): Promise<void> {
 		if (!session || session.currentRun) return;
@@ -384,7 +391,7 @@ export function App() {
 		setSessionId(result.sessionId);
 		setMode("chat");
 		setRightTab("team");
-		if (window.innerWidth >= 1100) setRightOpen(true);
+		setRightOpen(true);
 	}
 	function composeCanvasDesign(path: string): void {
 		if (commandPending.current) throw new Error("送信が完了してから設計を入力欄に追加してください。");
@@ -430,7 +437,7 @@ export function App() {
 			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><span aria-hidden="true">＋</span>新しい会話</button>
 			<button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" title="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></div>
 			<label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>
-			<div className="history-heading"><span>会話</span><button className="icon-button workspace-add-button" aria-label="ワークスペースを追加" title="フォルダーを選択してワークスペースを追加" disabled={addingWorkspace} onClick={() => { void addWorkspace(); }}>{addingWorkspace ? "…" : "+"}</button></div>
+			<div className="history-heading"><span>会話</span><span className="history-heading-actions"><Presence show={runningCount > 0}><button className="icon-button history-stop-all" aria-label="実行中の会話をすべて停止" title="実行中の会話をすべて停止" onClick={() => { void stopAll(); }}>■</button></Presence><button className="icon-button workspace-add-button" aria-label="ワークスペースを追加" title="フォルダーを選択してワークスペースを追加" disabled={addingWorkspace} onClick={() => { void addWorkspace(); }}>{addingWorkspace ? "…" : "+"}</button></span></div>
 			<nav className="history-navigation" aria-label="ワークスペースと会話">
 				<MotionItems items={workspaces.filter((entry) => !historyQuery.trim() || entry.path.toLowerCase().includes(historyQuery.toLowerCase()) || history.some((item) => item.workspaceId === entry.workspaceId))} itemKey={(entry) => entry.workspaceId}>{(entry) => {
 					const conversations = history.filter((item) => item.workspaceId === entry.workspaceId);

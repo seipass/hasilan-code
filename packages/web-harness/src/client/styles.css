@@ -649,3 +649,14 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 .workspace-remove:hover { background: var(--danger-container); color: var(--on-danger-container); }
 .workspace-accordion > summary .workspace-new-conversation { margin-left: 0; }
 @media (hover: none) { .workspace-remove { opacity: 1; width: 30px; height: 30px; } }
+
+/* Message time and actions share one quiet row under the content. */
+.message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.message-meta > time { color: var(--on-surface-muted); font-size: 10px; }
+.message-meta .message-actions { margin-top: 0; }
+.role-user .message-meta { justify-content: flex-end; }
+.history-heading-actions { display: flex; align-items: center; gap: 4px; }
+.history-stop-all { width: 26px; height: 26px; padding: 0; border: 0; background: transparent; color: var(--warning); font-size: 12px; }
+.history-stop-all:hover { background: var(--warning-container); }
+.message-usage { color: var(--on-surface-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.message-usage { color: var(--on-surface-muted); font-size: 10px; font-variant-numeric: tabular-nums; }

@@ -12,6 +12,10 @@ export interface HistoryMessage {
 	contextInjection?: ContextInjection;
 	importedContext?: boolean;
 	importedOrigin?: ImportedMessageOrigin;
+	/** ISO time from the Pi session entry; absent for live projections before persistence. */
+	timestamp?: string;
+	/** Token and cost totals reported for this assistant turn. */
+	usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
 }
 export interface HistoryTool {
 	key: string;

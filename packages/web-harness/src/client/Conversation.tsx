@@ -12,6 +12,10 @@ import type { ChatMessage, ToolCall } from "./types.ts";
 import "./Conversation.css";
 
 const ESTIMATED_HEIGHT = 220;
+
+function formatTokens(value: number): string {
+	return new Intl.NumberFormat("ja-JP", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
 const OVERSCAN = 600;
 
 function rowAt(offsets: number[], offset: number): number {
@@ -64,7 +68,7 @@ const Message = memo(function Message({ message, tools, onFile, onRetry, onEdit,
 					if (tool?.name === "computer") return null;
 					return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>;
 				})}{message.partial && <span className="streaming-dot" aria-label="応答中" />}</div>
-				{!message.partial && <MessageActions message={message} content={content} onRetry={onRetry} onEdit={onEdit} />}
+				<div className="message-meta">{message.timestamp && Number.isFinite(Date.parse(message.timestamp)) && <time dateTime={message.timestamp}>{new Date(message.timestamp).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>}{message.usage && <span className="message-usage" title="この応答の概算">{`${formatTokens(message.usage.input + message.usage.cacheRead + message.usage.cacheWrite + message.usage.output)} tok · $${message.usage.cost.toFixed(3)}`}</span>}{!message.partial && <MessageActions message={message} content={content} onRetry={onRetry} onEdit={onEdit} />}</div>
 			</article>}
 	</div>;
 }, (previous, next) => previous.message === next.message && previous.onFile === next.onFile && previous.onRetry === next.onRetry && previous.onEdit === next.onEdit && previous.expansions === next.expansions && previous.tools.length === next.tools.length && previous.tools.every((tool, index) => tool === next.tools[index]));
