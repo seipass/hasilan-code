@@ -452,6 +452,18 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-results a, .tool-results strong { display: block; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .tool-result-host { display: block; margin-top: 1px; color: var(--success); font-size: 10px; }
 .tool-results p { margin: 4px 0 0; color: var(--on-surface-secondary); font-size: 11px; line-height: 1.55; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* team: one row per agent, status on the right, long results collapsed. */
+.tool-team-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.tool-team-list > li { padding: 7px 10px; border-radius: 7px; background: color-mix(in srgb, var(--surface-hover) 30%, transparent); }
+.tool-team-list > li[data-failed] { background: var(--danger-container); }
+.tool-team-heading { display: flex; align-items: baseline; gap: 8px; }
+.tool-team-name { min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
+.tool-team-status { margin-left: auto; flex: none; color: var(--on-surface-muted); font-size: 10px; }
+.tool-team-depends { display: block; margin-top: 2px; color: var(--on-surface-muted); font-size: 10px; }
+.tool-team-list p { margin: 4px 0 0; color: var(--on-surface-secondary); font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tool-team-list .tool-section { margin-top: 6px !important; border-top: 0; padding-top: 0; }
+.tool-team-list .tool-section > summary { font-size: 11px; color: var(--on-surface-secondary); }
 .tool-body:empty { display: none; }
 .tool-body > h4 { color: var(--tool-accent); }
 .tool-raw { font-size: 11px; color: var(--muted); padding-top: 7px; }

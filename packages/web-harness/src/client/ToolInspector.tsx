@@ -5,6 +5,7 @@ import { editView } from "./tools/edit.tsx";
 import { readView } from "./tools/read.tsx";
 import { searchView } from "./tools/search.tsx";
 import { shellView } from "./tools/shell.tsx";
+import { teamView } from "./tools/team.tsx";
 import { writeView } from "./tools/write.tsx";
 import { flattenContent, type ToolDetails, type ToolView } from "./tools/tool-view.tsx";
 import type { ToolCall } from "./types.ts";
@@ -73,7 +74,6 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 }) {
 	const result = record(tool.result) ? tool.result : undefined;
 	const details = result && record(result.details) ? result.details : result;
-	const teamProfiles = result && Array.isArray(result.details) ? result.details : undefined;
 	const structured = result && record(result.structuredContent) ? result.structuredContent : undefined;
 	const status = { running: "Running", success: "Success", error: "Error", cancelled: "Cancelled", incomplete: "未完了" }[tool.status];
 	const input = record(tool.input) ? tool.input : undefined;
@@ -95,7 +95,6 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 		: (tool.name === "bash" || tool.name === "terminal") && typeof exitCode === "number" ? `Exit ${exitCode}`
 		: tool.name === "edit" && details && Array.isArray(details.files) ? countLabel(details.files.length, "file")
 		: tool.name === "write" && typeof details?.totalLines === "number" ? countLabel(details.totalLines, "line") : undefined;
-	const teamEntries = details && (Array.isArray(details.tasks) ? details.tasks : Array.isArray(details.agents) ? details.agents : Array.isArray(details.runs) ? details.runs : undefined);
 	const isShell = tool.name === "bash" || tool.name === "terminal";
 	const specialized = ["read", "write", "edit", "bash", "terminal", "browser", "computer", "web_search", "team"].includes(tool.name);
 	const viewDetails: ToolDetails = { input, details, result: structured, text: textContent, content, status: tool.status, onFile };
@@ -113,7 +112,9 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 							? computerView(viewDetails)
 							: tool.name === "web_search"
 								? searchView(viewDetails)
-								: undefined;
+								: tool.name === "team"
+									? teamView(viewDetails)
+									: undefined;
 	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
 		<summary>
 			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
@@ -128,27 +129,16 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 				{typeof result?.sourceRecord === "string" && <a href={result.sourceRecord} target="_blank" rel="noopener noreferrer">元の結果記録</a>}
 			</div>}
 			{filePaths.size > 0 && <div className="file-links">{[...filePaths].map((path) => <button key={path} className="text-link" onClick={() => onFile(path)}>{path}</button>)}</div>}
-
-
-			{tool.name === "edit" && typeof input?.input === "string" && <details className="tool-secondary"><summary>Patch</summary><pre className="tool-code">{input.input}</pre></details>}
 			{view?.meta}
 			{view?.body}
-
-
-			{tool.name === "team" && <>
-				<div className="tool-meta">{typeof input?.action === "string" && <span>{input.action}</span>}{typeof details?.timedOut === "boolean" && <span>{details.timedOut ? "Timed out" : "Completed"}</span>}</div>
-				{Array.isArray(input?.tasks) && <div className="tool-task-list">{input.tasks.map((item: unknown, index) => record(item) ? <article key={index}><strong>{typeof item.name === "string" ? item.name : `Task ${index + 1}`}</strong>{typeof item.task === "string" && <p>{item.task}</p>}{Array.isArray(item.dependsOn) && item.dependsOn.length > 0 && <small>Depends on: {item.dependsOn.join(", ")}</small>}</article> : null)}</div>}
-				{typeof input?.message === "string" && <blockquote className="tool-message">{input.message}</blockquote>}
-			</>}
+			{tool.name === "edit" && typeof input?.input === "string" && <details className="tool-secondary"><summary>Patch</summary><pre className="tool-code">{input.input}</pre></details>}
 			<details className="tool-raw"><summary>Call data</summary><code>{tool.callId}</code><pre>{JSON.stringify(tool.input, null, 2)}</pre></details>
 			{tool.result !== undefined && <>
 				{!view?.handlesResult && <h4>Result {tool.status === "running" ? "(partial)" : "(final)"}</h4>}
 				{tool.status === "error" || tool.status === "cancelled" ? <Content value={content} onFile={onFile} />
 					: tool.name === "web_search" || tool.name === "computer" ? null
 					: tool.name === "browser" ? null
-					: tool.name === "team" && teamEntries ? <div className="tool-task-list">{teamEntries.map((entry: unknown, index) => record(entry) ? <article key={index}><div className="tool-task-heading"><strong>{typeof entry.name === "string" ? entry.name : typeof entry.agentId === "string" ? entry.agentId : `Entry ${index + 1}`}</strong>{typeof entry.status === "string" && <span>{entry.status}</span>}</div>{typeof entry.result === "string" && <p>{entry.result}</p>}{typeof entry.error === "string" && <p className="tool-error">{entry.error}</p>}</article> : null)}</div>
-					: tool.name === "team" && teamProfiles ? <div className="tool-task-list">{teamProfiles.map((entry: unknown, index) => record(entry) ? <article key={index}><strong>{typeof entry.name === "string" ? entry.name : `Entry ${index + 1}`}</strong>{typeof entry.description === "string" && <p>{entry.description}</p>}</article> : null)}</div>
-					: tool.name === "team" && details ? <div className="tool-meta">{typeof details.runId === "string" && <span>Run {details.runId}</span>}{typeof details.disposition === "string" && <span>{details.disposition}</span>}{typeof details.status === "string" && <span>{details.status}</span>}</div>
+					: tool.name === "team" ? null
 					: <Content value={artifact && Array.isArray(content) ? content.filter((part: unknown) => !record(part) || part.type !== "image") : content} onFile={onFile} />}
 				{!specialized && details && <details><summary>Details</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}
 				{specialized && displayDetails && <details className="tool-secondary"><summary>Raw result</summary><pre>{JSON.stringify(displayDetails, null, 2)}</pre></details>}
