@@ -13,17 +13,18 @@ interface FileReport {
  */
 export function editView({ input, details, text }: ToolDetails): ToolView {
 	const files = Array.isArray(details?.files) ? details.files.filter((file): file is FileReport => record(file)) : [];
-	const diff = typeof details?.diff === "string" ? details.diff : text;
+	// A rejected patch returns its error message as the result text, which is not a diff.
+	const source = typeof details?.diff === "string" ? details.diff : text;
+	const diff = /^(?:\+\+\+|@@|diff --git|---)/m.test(source) ? source : "";
+	const rejected = source.trim().length > 0 && diff === "";
 	const added = (diff.match(/^\+(?!\+\+)/gm) ?? []).length;
 	const removed = (diff.match(/^-(?!--)/gm) ?? []).length;
 	const applied = files.filter((file) => file.status === "applied").length;
 	const failed = files.filter((file) => file.status !== "applied");
-	// A rejected patch has no diff: the error text is the whole result, so do not box it twice.
-	const rejected = failed.some((file) => typeof file.error === "string");
-	if (!diff.trim() && rejected) {
+	if (!diff && (rejected || files.length > 0)) {
 		return {
 			meta: <MetaChips items={[files.length > 1 && `${files.length} files`, "rejected"]} />,
-			handlesResult: true,
+			handlesResult: false,
 		};
 	}
 	return {
