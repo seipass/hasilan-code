@@ -393,6 +393,18 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-result-note { flex: none; color: var(--tool-accent); font-size: 10px; white-space: nowrap; }
 .tool-card .badge { flex: none; margin-left: auto; background: transparent; padding: 0; }
 .tool-body { padding: 6px 12px 12px; min-width: 0; font-size: .85rem; }
+
+/* Shell: command block joins the output block so they read as one transcript. */
+.tool-shell { display: grid; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); }
+.tool-shell-command { display: flex; gap: 8px; padding: 8px 11px; background: var(--tool-tint, var(--surface-hover)); font: 12px/1.6 "UDEV Gothic", ui-monospace, monospace; }
+.tool-shell-command > span { flex: none; color: var(--tool-accent); user-select: none; }
+.tool-shell-command > code { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--on-surface); }
+.tool-shell-output { margin: 0; padding: 10px 11px; max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 0; border-radius: 0; background: transparent; font: 12px/1.6 "UDEV Gothic", ui-monospace, monospace; white-space: pre; tab-size: 2; }
+.tool-shell-empty { margin: 0; padding: 10px 11px; color: var(--on-surface-muted); font-size: 11px; }
+.tool-shell[data-failed] { border-color: color-mix(in srgb, var(--danger) 45%, var(--border-subtle)); }
+.tool-shell[data-failed] .tool-shell-command { background: var(--danger-container); }
+.tool-shell[data-failed] .tool-shell-command > span { color: var(--danger); }
+.tool-shell[data-failed] .tool-shell-output { color: color-mix(in srgb, var(--on-surface) 92%, var(--danger)); }
 .tool-body:empty { display: none; }
 .tool-body > h4 { color: var(--tool-accent); }
 .tool-raw { font-size: 11px; color: var(--muted); padding-top: 7px; }

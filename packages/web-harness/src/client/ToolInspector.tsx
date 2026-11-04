@@ -1,4 +1,6 @@
 import { Content, record } from "./Content.tsx";
+import { shellView } from "./tools/shell.tsx";
+import { flattenContent, type ToolDetails, type ToolView } from "./tools/tool-view.tsx";
 import type { ToolCall } from "./types.ts";
 
 const toolVisuals = {
@@ -97,6 +99,8 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const teamEntries = details && (Array.isArray(details.tasks) ? details.tasks : Array.isArray(details.agents) ? details.agents : Array.isArray(details.runs) ? details.runs : undefined);
 	const isShell = tool.name === "bash" || tool.name === "terminal";
 	const specialized = ["read", "write", "edit", "bash", "terminal", "browser", "computer", "web_search", "team"].includes(tool.name);
+	const viewDetails: ToolDetails = { input, details, result: structured, text: textContent, content, status: tool.status, onFile };
+	const view: ToolView | undefined = isShell ? shellView(viewDetails) : undefined;
 	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
 		<summary>
 			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
@@ -104,7 +108,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			{resultNote && <span className="tool-result-note">{resultNote}</span>}
 			<span key={tool.status} className={`badge status-${tool.status} motion-label`}>{status}</span>
 		</summary>
-		<div className="tool-body">
+		<div className="tool-body" data-view={isShell ? "shell" : undefined}>
 			{tool.sourceStatus && <p className="muted">元の状態: {tool.sourceStatus}</p>}
 			{(tool.importedOrigin?.url || typeof result?.sourceRecord === "string") && <div className="imported-record-links">
 				{tool.importedOrigin?.url && <a href={tool.importedOrigin.url} target="_blank" rel="noopener noreferrer">元の呼び出し記録</a>}
@@ -121,10 +125,8 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 				{typeof input?.content === "string" && <><h4>Created content</h4><pre className="tool-code">{input.content}</pre></>}
 			</>}
 			{tool.name === "edit" && typeof input?.input === "string" && <details className="tool-secondary"><summary>Patch</summary><pre className="tool-code">{input.input}</pre></details>}
-			{isShell && <>
-				{typeof input?.command === "string" && <pre className="tool-command"><span aria-hidden="true">$ </span>{input.command}</pre>}
-				<div className="tool-meta">{typeof exitCode === "number" && <span>Exit code {exitCode}</span>}{typeof structured?.wall_time_seconds === "number" && <span>{structured.wall_time_seconds} s</span>}{structured?.truncated === true && <span>Output truncated</span>}</div>
-			</>}
+			{view?.meta}
+			{view?.body}
 			{tool.name === "browser" && <>
 				<div className="tool-meta">{typeof input?.action === "string" && <span>{input.action}</span>}{typeof details?.tabId === "string" && <span>Tab {details.tabId}</span>}{typeof details?.status === "number" && <span>HTTP {details.status}</span>}</div>
 				{typeof input?.selector === "string" && <p className="tool-field"><strong>Target</strong> <code>{input.selector}</code></p>}
@@ -140,7 +142,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			</>}
 			<details className="tool-raw"><summary>Call data</summary><code>{tool.callId}</code><pre>{JSON.stringify(tool.input, null, 2)}</pre></details>
 			{tool.result !== undefined && <>
-				<h4>Result {tool.status === "running" ? "(partial)" : "(final)"}</h4>
+				{!view?.handlesResult && <h4>Result {tool.status === "running" ? "(partial)" : "(final)"}</h4>}
 				{tool.status === "error" || tool.status === "cancelled" ? <Content value={content} onFile={onFile} />
 					: tool.name === "web_search" && searchResults ? <div className="search-results">
 						{searchResults.length === 0 && <p>No results found.</p>}
@@ -171,7 +173,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 					})}</pre>
 					: tool.name === "read" && directoryEntries ? <div className="tool-task-list">{directoryEntries.map((entry: unknown, index) => record(entry) && typeof entry.path === "string" ? <article key={index}><button className="text-link" onClick={() => onFile(entry.path as string)}>{typeof entry.name === "string" ? entry.name : entry.path}</button><span className="tool-entry-kind">{typeof entry.kind === "string" ? entry.kind : ""}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</span></article> : null)}</div>
 					: tool.name === "edit" && textContent ? <><div className="tool-task-list">{Array.isArray(details?.files) && details.files.map((file: unknown, index) => record(file) ? <article key={index}><div className="tool-task-heading"><strong>{typeof file.path === "string" ? file.path : `File ${index + 1}`}</strong><span>{typeof file.status === "string" ? file.status : ""}</span></div>{typeof file.error === "string" && <p className="tool-error">{file.error}</p>}</article> : null)}</div><pre className="hashline-diff">{typeof details?.diff === "string" ? details.diff : textContent}</pre></>
-					: isShell ? <pre className="tool-output">{typeof structured?.output === "string" ? structured.output : textContent}</pre>
+					: isShell ? null
 					: tool.name === "write" && details?.kind === "text" ? null
 					: tool.name === "team" && teamEntries ? <div className="tool-task-list">{teamEntries.map((entry: unknown, index) => record(entry) ? <article key={index}><div className="tool-task-heading"><strong>{typeof entry.name === "string" ? entry.name : typeof entry.agentId === "string" ? entry.agentId : `Entry ${index + 1}`}</strong>{typeof entry.status === "string" && <span>{entry.status}</span>}</div>{typeof entry.result === "string" && <p>{entry.result}</p>}{typeof entry.error === "string" && <p className="tool-error">{entry.error}</p>}</article> : null)}</div>
 					: tool.name === "team" && teamProfiles ? <div className="tool-task-list">{teamProfiles.map((entry: unknown, index) => record(entry) ? <article key={index}><strong>{typeof entry.name === "string" ? entry.name : `Entry ${index + 1}`}</strong>{typeof entry.description === "string" && <p>{entry.description}</p>}</article> : null)}</div>
