@@ -418,6 +418,21 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-file-list > li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 3px 6px; border-radius: 5px; }
 .tool-file-list > li:hover { background: color-mix(in srgb, var(--surface-hover) 45%, transparent); }
 .tool-file-kind { flex: none; color: var(--on-surface-muted); font-size: 10px; }
+
+/* edit: the diff is the payload; added and removed lines carry the only colour. */
+.tool-edit-files { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 2px; }
+.tool-edit-files > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 3px 8px; border-radius: 5px; background: color-mix(in srgb, var(--surface-hover) 30%, transparent); }
+.tool-edit-files > li[data-failed] { background: var(--danger-container); }
+.tool-edit-path { min-width: 0; overflow-wrap: anywhere; font: 11px/1.5 "UDEV Gothic", ui-monospace, monospace; }
+.tool-edit-status { margin-left: auto; color: var(--on-surface-muted); font-size: 10px; }
+.tool-edit-files .tool-error { flex: 1 1 100%; margin: 2px 0 0; font-size: 11px; }
+.tool-diff { margin: 0; max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 8px 0; font: 12px/1.6 "UDEV Gothic", ui-monospace, monospace; }
+.tool-diff > span { display: block; padding: 0 12px; white-space: pre; }
+.tool-diff > span[data-kind="add"] { background: color-mix(in srgb, var(--success) 14%, transparent); color: color-mix(in srgb, var(--on-surface) 70%, var(--success)); }
+.tool-diff > span[data-kind="remove"] { background: color-mix(in srgb, var(--danger) 14%, transparent); color: color-mix(in srgb, var(--on-surface) 70%, var(--danger)); }
+.tool-diff > span[data-kind="hunk"] { color: var(--secondary); background: color-mix(in srgb, var(--secondary) 10%, transparent); }
+.tool-diff > span[data-kind="meta"] { color: var(--on-surface-muted); }
+.tool-empty { margin: 0; padding: 10px 12px; color: var(--on-surface-muted); font-size: 11px; }
 .tool-body:empty { display: none; }
 .tool-body > h4 { color: var(--tool-accent); }
 .tool-raw { font-size: 11px; color: var(--muted); padding-top: 7px; }

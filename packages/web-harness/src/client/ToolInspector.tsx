@@ -1,4 +1,5 @@
 import { Content, record } from "./Content.tsx";
+import { editView } from "./tools/edit.tsx";
 import { readView } from "./tools/read.tsx";
 import { shellView } from "./tools/shell.tsx";
 import { flattenContent, type ToolDetails, type ToolView } from "./tools/tool-view.tsx";
@@ -94,7 +95,13 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const isShell = tool.name === "bash" || tool.name === "terminal";
 	const specialized = ["read", "write", "edit", "bash", "terminal", "browser", "computer", "web_search", "team"].includes(tool.name);
 	const viewDetails: ToolDetails = { input, details, result: structured, text: textContent, content, status: tool.status, onFile };
-	const view: ToolView | undefined = isShell ? shellView(viewDetails) : tool.name === "read" ? readView(viewDetails) : undefined;
+	const view: ToolView | undefined = isShell
+		? shellView(viewDetails)
+		: tool.name === "read"
+			? readView(viewDetails)
+			: tool.name === "edit"
+				? editView(viewDetails)
+				: undefined;
 	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
 		<summary>
 			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
@@ -102,7 +109,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			{resultNote && <span className="tool-result-note">{resultNote}</span>}
 			<span key={tool.status} className={`badge status-${tool.status} motion-label`}>{status}</span>
 		</summary>
-		<div className="tool-body" data-view={isShell ? "shell" : tool.name === "read" ? "read" : undefined}>
+		<div className="tool-body" data-view={isShell ? "shell" : tool.name === "read" ? "read" : tool.name === "edit" ? "edit" : undefined}>
 			{tool.sourceStatus && <p className="muted">元の状態: {tool.sourceStatus}</p>}
 			{(tool.importedOrigin?.url || typeof result?.sourceRecord === "string") && <div className="imported-record-links">
 				{tool.importedOrigin?.url && <a href={tool.importedOrigin.url} target="_blank" rel="noopener noreferrer">元の呼び出し記録</a>}
@@ -157,7 +164,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 						{artifact && <a href={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} target="_blank" rel="noopener noreferrer"><img className="tool-image" src={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} alt="Browser screenshot" /></a>}
 					</div>
 					: tool.name === "read" ? null
-					: tool.name === "edit" && textContent ? <><div className="tool-task-list">{Array.isArray(details?.files) && details.files.map((file: unknown, index) => record(file) ? <article key={index}><div className="tool-task-heading"><strong>{typeof file.path === "string" ? file.path : `File ${index + 1}`}</strong><span>{typeof file.status === "string" ? file.status : ""}</span></div>{typeof file.error === "string" && <p className="tool-error">{file.error}</p>}</article> : null)}</div><pre className="hashline-diff">{typeof details?.diff === "string" ? details.diff : textContent}</pre></>
+					: tool.name === "edit" ? null
 					: isShell ? null
 					: tool.name === "write" && details?.kind === "text" ? null
 					: tool.name === "team" && teamEntries ? <div className="tool-task-list">{teamEntries.map((entry: unknown, index) => record(entry) ? <article key={index}><div className="tool-task-heading"><strong>{typeof entry.name === "string" ? entry.name : typeof entry.agentId === "string" ? entry.agentId : `Entry ${index + 1}`}</strong>{typeof entry.status === "string" && <span>{entry.status}</span>}</div>{typeof entry.result === "string" && <p>{entry.result}</p>}{typeof entry.error === "string" && <p className="tool-error">{entry.error}</p>}</article> : null)}</div>
