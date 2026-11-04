@@ -437,6 +437,12 @@ legend { font-weight: 600; padding: 0 .4rem; }
 /* write: the created file, verbatim. */
 .tool-written { margin: 0; max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 10px 12px; font: 12px/1.6 "UDEV Gothic", ui-monospace, monospace; white-space: pre; tab-size: 2; }
 .tool-written > span { display: block; white-space: pre; min-height: 1.6em; }
+
+/* browser: the screenshot is the evidence, so it leads at a readable size. */
+.tool-shot { display: block; width: fit-content; max-width: 100%; margin: 0 0 8px; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); }
+.tool-shot > img { display: block; width: auto; height: auto; max-width: 100%; max-height: min(42dvh, 420px); object-fit: contain; }
+.tool-page { display: flex; flex-direction: column; gap: 2px; margin: 0 0 6px; font-size: 12px; overflow-wrap: anywhere; }
+.tool-page-url { color: var(--on-surface-muted); font-size: 10px; }
 .tool-body:empty { display: none; }
 .tool-body > h4 { color: var(--tool-accent); }
 .tool-raw { font-size: 11px; color: var(--muted); padding-top: 7px; }
