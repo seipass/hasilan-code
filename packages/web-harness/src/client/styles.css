@@ -405,6 +405,19 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-shell[data-failed] .tool-shell-command { background: var(--danger-container); }
 .tool-shell[data-failed] .tool-shell-command > span { color: var(--danger); }
 .tool-shell[data-failed] .tool-shell-output { color: color-mix(in srgb, var(--on-surface) 92%, var(--danger)); }
+
+/* read: line numbers are the affordance, so they get a fixed gutter and hover state. */
+.tool-read { max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 8px 0; font: 12px/1.65 "UDEV Gothic", ui-monospace, monospace; }
+.tool-read-line { display: flex; gap: 10px; padding: 0 12px 0 0; white-space: pre; }
+.tool-read-line:hover { background: color-mix(in srgb, var(--surface-hover) 40%, transparent); }
+.tool-read-line > code { min-width: 0; padding-right: 8px; font: inherit; color: var(--on-surface); }
+.tool-read-number { flex: none; width: 4.2rem; padding: 0 10px 0 8px; border: 0; background: transparent; color: var(--on-surface-muted); font: inherit; text-align: right; cursor: pointer; user-select: none; }
+.tool-read-number:hover { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.tool-read[data-numbered] .tool-read-line > code { white-space: pre; }
+.tool-file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.tool-file-list > li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 3px 6px; border-radius: 5px; }
+.tool-file-list > li:hover { background: color-mix(in srgb, var(--surface-hover) 45%, transparent); }
+.tool-file-kind { flex: none; color: var(--on-surface-muted); font-size: 10px; }
 .tool-body:empty { display: none; }
 .tool-body > h4 { color: var(--tool-accent); }
 .tool-raw { font-size: 11px; color: var(--muted); padding-top: 7px; }

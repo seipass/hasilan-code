@@ -1,4 +1,5 @@
 import { Content, record } from "./Content.tsx";
+import { readView } from "./tools/read.tsx";
 import { shellView } from "./tools/shell.tsx";
 import { flattenContent, type ToolDetails, type ToolView } from "./tools/tool-view.tsx";
 import type { ToolCall } from "./types.ts";
@@ -84,13 +85,6 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const content = tool.name === "write" ? writeResultContent(originalContent) : originalContent;
 	const displayDetails = tool.name === "write" && details && "content" in details ? { ...details, content: writeResultContent(details.content) } : details;
 	const textContent = Array.isArray(content) ? content.map((part: unknown) => record(part) && part.type === "text" && typeof part.text === "string" ? part.text : "").join("\n") : typeof content === "string" ? content : "";
-	let directoryEntries: unknown[] | undefined;
-	if (tool.name === "read" && details?.kind === "directory") {
-		try {
-			const parsed: unknown = JSON.parse(textContent);
-			if (Array.isArray(parsed)) directoryEntries = parsed;
-		} catch { /* Retain the original result when the listing is not valid JSON. */ }
-	}
 	const exitCode = structured?.exit_code;
 	const resultNote = tool.name === "web_search" && searchResults ? countLabel(searchResults.length, "result")
 		: (tool.name === "bash" || tool.name === "terminal") && typeof exitCode === "number" ? `Exit ${exitCode}`
@@ -100,7 +94,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const isShell = tool.name === "bash" || tool.name === "terminal";
 	const specialized = ["read", "write", "edit", "bash", "terminal", "browser", "computer", "web_search", "team"].includes(tool.name);
 	const viewDetails: ToolDetails = { input, details, result: structured, text: textContent, content, status: tool.status, onFile };
-	const view: ToolView | undefined = isShell ? shellView(viewDetails) : undefined;
+	const view: ToolView | undefined = isShell ? shellView(viewDetails) : tool.name === "read" ? readView(viewDetails) : undefined;
 	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
 		<summary>
 			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
@@ -108,18 +102,14 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			{resultNote && <span className="tool-result-note">{resultNote}</span>}
 			<span key={tool.status} className={`badge status-${tool.status} motion-label`}>{status}</span>
 		</summary>
-		<div className="tool-body" data-view={isShell ? "shell" : undefined}>
+		<div className="tool-body" data-view={isShell ? "shell" : tool.name === "read" ? "read" : undefined}>
 			{tool.sourceStatus && <p className="muted">元の状態: {tool.sourceStatus}</p>}
 			{(tool.importedOrigin?.url || typeof result?.sourceRecord === "string") && <div className="imported-record-links">
 				{tool.importedOrigin?.url && <a href={tool.importedOrigin.url} target="_blank" rel="noopener noreferrer">元の呼び出し記録</a>}
 				{typeof result?.sourceRecord === "string" && <a href={result.sourceRecord} target="_blank" rel="noopener noreferrer">元の結果記録</a>}
 			</div>}
 			{filePaths.size > 0 && <div className="file-links">{[...filePaths].map((path) => <button key={path} className="text-link" onClick={() => onFile(path)}>{path}</button>)}</div>}
-			{tool.name === "read" && <div className="tool-meta">
-				{typeof details?.tag === "string" && <span>Revision {details.tag}</span>}
-				{typeof details?.totalLines === "number" && <span>{countLabel(details.totalLines, "line")} total</span>}
-				{typeof details?.kind === "string" && <span>{details.kind}</span>}
-			</div>}
+
 			{tool.name === "write" && <>
 				<div className="tool-meta"><span>New file</span>{typeof details?.tag === "string" && <span>Revision {details.tag}</span>}{typeof details?.totalLines === "number" && <span>{countLabel(details.totalLines, "line")}</span>}</div>
 				{typeof input?.content === "string" && <><h4>Created content</h4><pre className="tool-code">{input.content}</pre></>}
@@ -166,12 +156,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 						{"value" in details && <pre className="tool-code">{JSON.stringify(details.value, null, 2)}</pre>}
 						{artifact && <a href={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} target="_blank" rel="noopener noreferrer"><img className="tool-image" src={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} alt="Browser screenshot" /></a>}
 					</div>
-					: tool.name === "read" && details?.kind === "text" && typeof details.path === "string" ? <pre className="hashline-read">{textContent.split("\n").map((line, index) => {
-						const match = /^(\d+):(.*)$/.exec(line);
-						const path = typeof details.path === "string" ? details.path : "";
-						return <span key={index} className="hashline-output-line">{match ? <><button className="text-link" onClick={() => onFile(path, Number(match[1]))}>{match[1]}</button><code>:{match[2]}</code></> : <code>{line}</code>}</span>;
-					})}</pre>
-					: tool.name === "read" && directoryEntries ? <div className="tool-task-list">{directoryEntries.map((entry: unknown, index) => record(entry) && typeof entry.path === "string" ? <article key={index}><button className="text-link" onClick={() => onFile(entry.path as string)}>{typeof entry.name === "string" ? entry.name : entry.path}</button><span className="tool-entry-kind">{typeof entry.kind === "string" ? entry.kind : ""}{typeof entry.size === "number" ? ` · ${entry.size} B` : ""}</span></article> : null)}</div>
+					: tool.name === "read" ? null
 					: tool.name === "edit" && textContent ? <><div className="tool-task-list">{Array.isArray(details?.files) && details.files.map((file: unknown, index) => record(file) ? <article key={index}><div className="tool-task-heading"><strong>{typeof file.path === "string" ? file.path : `File ${index + 1}`}</strong><span>{typeof file.status === "string" ? file.status : ""}</span></div>{typeof file.error === "string" && <p className="tool-error">{file.error}</p>}</article> : null)}</div><pre className="hashline-diff">{typeof details?.diff === "string" ? details.diff : textContent}</pre></>
 					: isShell ? null
 					: tool.name === "write" && details?.kind === "text" ? null
