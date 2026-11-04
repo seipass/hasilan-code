@@ -2,6 +2,7 @@ import { Content, record } from "./Content.tsx";
 import { editView } from "./tools/edit.tsx";
 import { readView } from "./tools/read.tsx";
 import { shellView } from "./tools/shell.tsx";
+import { writeView } from "./tools/write.tsx";
 import { flattenContent, type ToolDetails, type ToolView } from "./tools/tool-view.tsx";
 import type { ToolCall } from "./types.ts";
 
@@ -101,7 +102,9 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			? readView(viewDetails)
 			: tool.name === "edit"
 				? editView(viewDetails)
-				: undefined;
+				: tool.name === "write"
+					? writeView(viewDetails)
+					: undefined;
 	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
 		<summary>
 			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
@@ -109,7 +112,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			{resultNote && <span className="tool-result-note">{resultNote}</span>}
 			<span key={tool.status} className={`badge status-${tool.status} motion-label`}>{status}</span>
 		</summary>
-		<div className="tool-body" data-view={isShell ? "shell" : tool.name === "read" ? "read" : tool.name === "edit" ? "edit" : undefined}>
+		<div className="tool-body" data-view={isShell ? "shell" : tool.name === "read" ? "read" : tool.name === "edit" || tool.name === "write" ? tool.name : undefined}>
 			{tool.sourceStatus && <p className="muted">元の状態: {tool.sourceStatus}</p>}
 			{(tool.importedOrigin?.url || typeof result?.sourceRecord === "string") && <div className="imported-record-links">
 				{tool.importedOrigin?.url && <a href={tool.importedOrigin.url} target="_blank" rel="noopener noreferrer">元の呼び出し記録</a>}
@@ -117,10 +120,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			</div>}
 			{filePaths.size > 0 && <div className="file-links">{[...filePaths].map((path) => <button key={path} className="text-link" onClick={() => onFile(path)}>{path}</button>)}</div>}
 
-			{tool.name === "write" && <>
-				<div className="tool-meta"><span>New file</span>{typeof details?.tag === "string" && <span>Revision {details.tag}</span>}{typeof details?.totalLines === "number" && <span>{countLabel(details.totalLines, "line")}</span>}</div>
-				{typeof input?.content === "string" && <><h4>Created content</h4><pre className="tool-code">{input.content}</pre></>}
-			</>}
+
 			{tool.name === "edit" && typeof input?.input === "string" && <details className="tool-secondary"><summary>Patch</summary><pre className="tool-code">{input.input}</pre></details>}
 			{view?.meta}
 			{view?.body}
@@ -166,7 +166,6 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 					: tool.name === "read" ? null
 					: tool.name === "edit" ? null
 					: isShell ? null
-					: tool.name === "write" && details?.kind === "text" ? null
 					: tool.name === "team" && teamEntries ? <div className="tool-task-list">{teamEntries.map((entry: unknown, index) => record(entry) ? <article key={index}><div className="tool-task-heading"><strong>{typeof entry.name === "string" ? entry.name : typeof entry.agentId === "string" ? entry.agentId : `Entry ${index + 1}`}</strong>{typeof entry.status === "string" && <span>{entry.status}</span>}</div>{typeof entry.result === "string" && <p>{entry.result}</p>}{typeof entry.error === "string" && <p className="tool-error">{entry.error}</p>}</article> : null)}</div>
 					: tool.name === "team" && teamProfiles ? <div className="tool-task-list">{teamProfiles.map((entry: unknown, index) => record(entry) ? <article key={index}><strong>{typeof entry.name === "string" ? entry.name : `Entry ${index + 1}`}</strong>{typeof entry.description === "string" && <p>{entry.description}</p>}</article> : null)}</div>
 					: tool.name === "team" && details ? <div className="tool-meta">{typeof details.runId === "string" && <span>Run {details.runId}</span>}{typeof details.disposition === "string" && <span>{details.disposition}</span>}{typeof details.status === "string" && <span>{details.status}</span>}</div>
