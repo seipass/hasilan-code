@@ -117,30 +117,30 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 				{typeof details?.kind === "string" && <span>{details.kind}</span>}
 			</div>}
 			{tool.name === "write" && <>
-				<div className="tool-meta"><span>New file</span>{typeof details?.tag === "string" && <span>Revision {details.tag}</span>}{typeof details?.totalLines === "number" && <span>{countLabel(details.totalLines, "line")}</span>}</div>
-				{typeof input?.content === "string" && <><h4>Created content</h4><pre className="tool-code">{input.content}</pre></>}
+				<div className="tool-meta"><span>新規ファイル</span>{typeof details?.tag === "string" && <span>Revision {details.tag}</span>}{typeof details?.totalLines === "number" && <span>{countLabel(details.totalLines, "line")}</span>}</div>
+				{typeof input?.content === "string" && <><h4>作成した内容</h4><pre className="tool-code">{input.content}</pre></>}
 			</>}
-			{tool.name === "edit" && typeof input?.input === "string" && <details className="tool-secondary"><summary>Patch</summary><pre className="tool-code">{input.input}</pre></details>}
+			{tool.name === "edit" && typeof input?.input === "string" && <details className="tool-secondary tool-section"><summary>パッチ</summary><pre className="tool-code">{input.input}</pre></details>}
 			{isShell && <>
 				{typeof input?.command === "string" && <pre className="tool-command"><span aria-hidden="true">$ </span>{input.command}</pre>}
-				<div className="tool-meta">{typeof exitCode === "number" && <span>Exit code {exitCode}</span>}{typeof structured?.wall_time_seconds === "number" && <span>{structured.wall_time_seconds} s</span>}{structured?.truncated === true && <span>Output truncated</span>}</div>
+				<div className="tool-meta">{typeof exitCode === "number" && <span>終了コード {exitCode}</span>}{typeof structured?.wall_time_seconds === "number" && <span>{structured.wall_time_seconds} s</span>}{structured?.truncated === true && <span>出力を省略</span>}</div>
 			</>}
 			{tool.name === "browser" && <>
-				<div className="tool-meta">{typeof input?.action === "string" && <span>{input.action}</span>}{typeof details?.tabId === "string" && <span>Tab {details.tabId}</span>}{typeof details?.status === "number" && <span>HTTP {details.status}</span>}</div>
-				{typeof input?.selector === "string" && <p className="tool-field"><strong>Target</strong> <code>{input.selector}</code></p>}
-				{typeof input?.key === "string" && <p className="tool-field"><strong>Key</strong> <kbd>{input.key}</kbd></p>}
-				{typeof input?.value === "string" && <p className="tool-field"><strong>Input</strong> <code>{input.value}</code></p>}
-				{typeof input?.expression === "string" && <details className="tool-secondary"><summary>JavaScript source</summary><pre className="tool-code">{input.expression}</pre></details>}
+				<div className="tool-meta">{typeof input?.action === "string" && <span>{input.action}</span>}{typeof details?.tabId === "string" && <span>タブ {details.tabId}</span>}{typeof details?.status === "number" && <span>HTTP {details.status}</span>}</div>
+				{typeof input?.selector === "string" && <p className="tool-field"><strong>対象</strong> <code>{input.selector}</code></p>}
+				{typeof input?.key === "string" && <p className="tool-field"><strong>キー</strong> <kbd>{input.key}</kbd></p>}
+				{typeof input?.value === "string" && <p className="tool-field"><strong>入力</strong> <code>{input.value}</code></p>}
+				{typeof input?.expression === "string" && <details className="tool-secondary tool-section"><summary>JavaScript</summary><pre className="tool-code">{input.expression}</pre></details>}
 			</>}
-			{tool.name === "web_search" && <div className="tool-meta">{typeof input?.provider === "string" && <span>{input.provider}</span>}{typeof details?.provider === "string" && !input?.provider && <span>{details.provider}</span>}{typeof input?.timeRange === "string" && <span>Period: {input.timeRange}</span>}{typeof input?.limit === "number" && <span>Limit: {countLabel(input.limit, "result")}</span>}</div>}
+			{tool.name === "web_search" && <div className="tool-meta">{typeof input?.provider === "string" && <span>{input.provider}</span>}{typeof details?.provider === "string" && !input?.provider && <span>{details.provider}</span>}{typeof input?.timeRange === "string" && <span>期間: {input.timeRange}</span>}{typeof input?.limit === "number" && <span>件数: {input.limit}</span>}</div>}
 			{tool.name === "team" && <>
-				<div className="tool-meta">{typeof input?.action === "string" && <span>{input.action}</span>}{typeof details?.timedOut === "boolean" && <span>{details.timedOut ? "Timed out" : "Completed"}</span>}</div>
+				<div className="tool-meta">{typeof input?.action === "string" && <span>{input.action}</span>}{typeof details?.timedOut === "boolean" && <span>{details.timedOut ? "時間切れ" : "完了"}</span>}</div>
 				{Array.isArray(input?.tasks) && <div className="tool-task-list">{input.tasks.map((item: unknown, index) => record(item) ? <article key={index}><strong>{typeof item.name === "string" ? item.name : `Task ${index + 1}`}</strong>{typeof item.task === "string" && <p>{item.task}</p>}{Array.isArray(item.dependsOn) && item.dependsOn.length > 0 && <small>Depends on: {item.dependsOn.join(", ")}</small>}</article> : null)}</div>}
 				{typeof input?.message === "string" && <blockquote className="tool-message">{input.message}</blockquote>}
 			</>}
-			<details className="tool-raw"><summary>Call data</summary><code>{tool.callId}</code><pre>{JSON.stringify(tool.input, null, 2)}</pre></details>
+			<details className="tool-raw tool-section"><summary><span>呼び出し内容</span><small>{tool.callId.slice(0, 8)}</small></summary><pre>{JSON.stringify(tool.input, null, 2)}</pre></details>
 			{tool.result !== undefined && <>
-				<h4>Result {tool.status === "running" ? "(partial)" : "(final)"}</h4>
+				<div className="tool-result-heading"><h4>結果</h4>{tool.status === "running" && <span className="tool-result-partial">実行中</span>}</div>
 				{tool.status === "error" || tool.status === "cancelled" ? <Content value={content} onFile={onFile} />
 					: tool.name === "web_search" && searchResults ? <div className="search-results">
 						{searchResults.length === 0 && <p>No results found.</p>}
@@ -160,7 +160,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 						{typeof details.title === "string" && <strong>{details.title}</strong>}
 						{Array.isArray(details.tabs) && <div className="tool-task-list">{details.tabs.map((tab: unknown, index) => record(tab) ? <article key={index}><strong>{typeof tab.title === "string" ? tab.title : `Tab ${index + 1}`}</strong>{typeof tab.url === "string" && <p>{tab.url}</p>}</article> : null)}</div>}
 						{typeof details.text === "string" && <pre className="tool-code">{details.text}</pre>}
-						{Array.isArray(details.candidates) && <details className="tool-secondary"><summary>Interactive elements ({details.candidates.length})</summary><div className="tool-task-list">{details.candidates.map((candidate: unknown, index) => record(candidate) ? <article key={index}><code>{typeof candidate.selector === "string" ? candidate.selector : ""}</code> {typeof candidate.name === "string" && candidate.name ? candidate.name : typeof candidate.text === "string" ? candidate.text : ""}</article> : null)}</div></details>}
+						{Array.isArray(details.candidates) && <details className="tool-secondary tool-section"><summary>操作できる要素 {details.candidates.length}</summary><div className="tool-task-list">{details.candidates.map((candidate: unknown, index) => record(candidate) ? <article key={index}><code>{typeof candidate.selector === "string" ? candidate.selector : ""}</code> {typeof candidate.name === "string" && candidate.name ? candidate.name : typeof candidate.text === "string" ? candidate.text : ""}</article> : null)}</div></details>}
 						{"value" in details && <pre className="tool-code">{JSON.stringify(details.value, null, 2)}</pre>}
 						{artifact && <a href={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} target="_blank" rel="noopener noreferrer"><img className="tool-image" src={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} alt="Browser screenshot" /></a>}
 					</div>
@@ -177,8 +177,8 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 					: tool.name === "team" && teamProfiles ? <div className="tool-task-list">{teamProfiles.map((entry: unknown, index) => record(entry) ? <article key={index}><strong>{typeof entry.name === "string" ? entry.name : `Entry ${index + 1}`}</strong>{typeof entry.description === "string" && <p>{entry.description}</p>}</article> : null)}</div>
 					: tool.name === "team" && details ? <div className="tool-meta">{typeof details.runId === "string" && <span>Run {details.runId}</span>}{typeof details.disposition === "string" && <span>{details.disposition}</span>}{typeof details.status === "string" && <span>{details.status}</span>}</div>
 					: <Content value={artifact && Array.isArray(content) ? content.filter((part: unknown) => !record(part) || part.type !== "image") : content} onFile={onFile} />}
-				{!specialized && details && <details><summary>Details</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}
-				{specialized && displayDetails && <details className="tool-secondary"><summary>Raw result</summary><pre>{JSON.stringify(displayDetails, null, 2)}</pre></details>}
+				{!specialized && details && <details className="tool-secondary tool-section"><summary>詳細</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}
+				{specialized && displayDetails && <details className="tool-secondary tool-section"><summary>生の結果</summary><pre>{JSON.stringify(displayDetails, null, 2)}</pre></details>}
 			</>}
 		</div>
 	</details>;

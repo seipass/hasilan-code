@@ -392,7 +392,26 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-card .tool-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: var(--on-surface-secondary); font-size: 11px; }
 .tool-result-note { flex: none; color: var(--tool-accent); font-size: 10px; white-space: nowrap; }
 .tool-card .badge { flex: none; margin-left: auto; background: transparent; padding: 0; }
-.tool-body { padding: 6px 12px 12px; min-width: 0; font-size: .85rem; }
+/* Opened tool cards: one vertical rhythm, collapsible sections read as sections,
+   and long output scrolls inside the card instead of stretching the conversation. */
+.tool-body { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px; min-width: 0; font-size: .85rem; }
+.tool-body > * { margin: 0; }
+.tool-result-heading { display: flex; align-items: baseline; gap: 8px; }
+.tool-result-heading h4, .tool-body > h4 { margin: 4px 0 0; color: var(--tool-accent); font-size: 11px; font-weight: 600; letter-spacing: .02em; }
+.tool-result-partial { color: var(--on-surface-muted); font-size: 10px; }
+.tool-body pre, .tool-body .tool-output, .tool-body .tool-code, .tool-body .hashline-read, .tool-body .hashline-diff {
+	max-height: min(45dvh, 420px); overflow: auto; overscroll-behavior: contain;
+	padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken);
+	font: 12px/1.6 "UDEV Gothic", ui-monospace, monospace; white-space: pre; overflow-wrap: normal; tab-size: 2;
+}
+.tool-body .tool-code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tool-section { border-top: 1px solid var(--border-subtle); padding-top: 8px; margin: 0 !important; }
+.tool-section > summary { display: flex; align-items: center; gap: 8px; padding: 2px 0; color: var(--on-surface-muted); font-size: 11px; list-style: none; cursor: pointer; }
+.tool-section > summary::-webkit-details-marker { display: none; }
+.tool-section > summary::before { content: ""; flex: none; width: 10px; height: 10px; background-color: currentColor; mask: var(--chevron) center / contain no-repeat; transition: transform var(--motion-base) var(--motion-ease); }
+.tool-section[open] > summary::before { transform: rotate(90deg); }
+.tool-section > summary small { color: var(--on-surface-muted); font-size: 10px; opacity: .8; }
+.tool-section > pre { margin-top: 8px; }
 .tool-body:empty { display: none; }
 .tool-body > h4 { color: var(--tool-accent); }
 .tool-raw { font-size: 11px; color: var(--muted); padding-top: 7px; }
