@@ -1,7 +1,9 @@
 import { Content, record } from "./Content.tsx";
 import { browserView } from "./tools/browser.tsx";
+import { computerView } from "./tools/computer.tsx";
 import { editView } from "./tools/edit.tsx";
 import { readView } from "./tools/read.tsx";
+import { searchView } from "./tools/search.tsx";
 import { shellView } from "./tools/shell.tsx";
 import { writeView } from "./tools/write.tsx";
 import { flattenContent, type ToolDetails, type ToolView } from "./tools/tool-view.tsx";
@@ -107,7 +109,11 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 					? writeView(viewDetails)
 					: tool.name === "browser"
 						? browserView(viewDetails)
-						: undefined;
+						: tool.name === "computer"
+							? computerView(viewDetails)
+							: tool.name === "web_search"
+								? searchView(viewDetails)
+								: undefined;
 	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
 		<summary>
 			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
@@ -128,7 +134,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			{view?.meta}
 			{view?.body}
 
-			{tool.name === "web_search" && <div className="tool-meta">{typeof input?.provider === "string" && <span>{input.provider}</span>}{typeof details?.provider === "string" && !input?.provider && <span>{details.provider}</span>}{typeof input?.timeRange === "string" && <span>Period: {input.timeRange}</span>}{typeof input?.limit === "number" && <span>Limit: {countLabel(input.limit, "result")}</span>}</div>}
+
 			{tool.name === "team" && <>
 				<div className="tool-meta">{typeof input?.action === "string" && <span>{input.action}</span>}{typeof details?.timedOut === "boolean" && <span>{details.timedOut ? "Timed out" : "Completed"}</span>}</div>
 				{Array.isArray(input?.tasks) && <div className="tool-task-list">{input.tasks.map((item: unknown, index) => record(item) ? <article key={index}><strong>{typeof item.name === "string" ? item.name : `Task ${index + 1}`}</strong>{typeof item.task === "string" && <p>{item.task}</p>}{Array.isArray(item.dependsOn) && item.dependsOn.length > 0 && <small>Depends on: {item.dependsOn.join(", ")}</small>}</article> : null)}</div>}
@@ -138,19 +144,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			{tool.result !== undefined && <>
 				{!view?.handlesResult && <h4>Result {tool.status === "running" ? "(partial)" : "(final)"}</h4>}
 				{tool.status === "error" || tool.status === "cancelled" ? <Content value={content} onFile={onFile} />
-					: tool.name === "web_search" && searchResults ? <div className="search-results">
-						{searchResults.length === 0 && <p>No results found.</p>}
-						{searchResults.map((item, index) => record(item) ? <article key={index}>
-							{typeof item.url === "string" && /^https?:\/\//i.test(item.url) ? <a href={item.url} target="_blank" rel="noopener noreferrer">{typeof item.title === "string" ? item.title : item.url}</a> : <strong>{typeof item.title === "string" ? item.title : "Result"}</strong>}
-							{typeof item.url === "string" && <p className="muted">{item.url}</p>}
-							{typeof item.snippet === "string" && <p>{item.snippet}</p>}
-						</article> : null)}
-					</div>
-					: tool.name === "computer" && details ? <div className="browser-result">
-						<div className="tool-meta">{typeof details.monitor === "number" && <span>Monitor {details.monitor}</span>}{typeof details.width === "number" && typeof details.height === "number" && <span>{details.width} × {details.height}</span>}{details.released === true && <span>操作権を解放しました</span>}</div>
-						{Array.isArray(details.screens) && <div className="tool-task-list">{details.screens.map((screen: unknown, index) => record(screen) ? <article key={index}><strong>Monitor {typeof screen.index === "number" ? screen.index : index + 1}</strong><p>{String(screen.width)} × {String(screen.height)}</p></article> : null)}</div>}
-						{artifact && <a href={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} target="_blank" rel="noopener noreferrer"><img className="tool-image" src={`/api/artifacts/${encodeURIComponent(artifact.id as string)}`} alt="デスクトップのスクリーンショット" /></a>}
-					</div>
+					: tool.name === "web_search" || tool.name === "computer" ? null
 					: tool.name === "browser" ? null
 					: tool.name === "team" && teamEntries ? <div className="tool-task-list">{teamEntries.map((entry: unknown, index) => record(entry) ? <article key={index}><div className="tool-task-heading"><strong>{typeof entry.name === "string" ? entry.name : typeof entry.agentId === "string" ? entry.agentId : `Entry ${index + 1}`}</strong>{typeof entry.status === "string" && <span>{entry.status}</span>}</div>{typeof entry.result === "string" && <p>{entry.result}</p>}{typeof entry.error === "string" && <p className="tool-error">{entry.error}</p>}</article> : null)}</div>
 					: tool.name === "team" && teamProfiles ? <div className="tool-task-list">{teamProfiles.map((entry: unknown, index) => record(entry) ? <article key={index}><strong>{typeof entry.name === "string" ? entry.name : `Entry ${index + 1}`}</strong>{typeof entry.description === "string" && <p>{entry.description}</p>}</article> : null)}</div>
