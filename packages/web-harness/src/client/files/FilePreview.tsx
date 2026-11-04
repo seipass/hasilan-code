@@ -5,6 +5,7 @@ import { mediaReady, Presence } from "../Motion.tsx";
 import { AudioPreview } from "./AudioPreview.tsx";
 import { FileMarkdown, SourceLines } from "./FileRendering.tsx";
 import { FileEditor } from "./FileEditor.tsx";
+import { ImagePreview } from "./ImagePreview.tsx";
 
 export interface FileTab {
 	path: string;
@@ -15,7 +16,7 @@ export interface FileTab {
 	readOnly?: boolean;
 }
 interface FileView {
-	path: string; revision: string; kind: "text" | "image" | "video" | "audio" | "binary"; audio?: AudioMetadata;
+	path: string; revision: string; kind: "text" | "image" | "video" | "audio" | "binary"; audio?: AudioMetadata; mime?: string;
 	lines?: { number: number; text: string; truncated?: boolean }[]; nextOffset?: number; size: number;
 }
 export function FilePreview({ workspaceId, file, visible, refreshKey, id, labelledBy, onOpen, onChange, transformRequest, onTransformHandled }: {
@@ -98,7 +99,13 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 					{loaded.view.lines?.some((line) => line.truncated) && <p className="files-message warning">64 KiB の表示上限を超える行は先頭のみ表示しています。省略された行: {loaded.view.lines.filter((line) => line.truncated).map((line) => line.number).join(", ")}</p>}
 					{loaded.view.nextOffset && <div className="files-page"><button onClick={() => onChange(file.path, { offset: loaded.view!.nextOffset! })}>次の行 ({loaded.view.nextOffset}〜)</button></div>}
 				</>}
-				{loaded.view.kind === "image" && <img className="files-image" alt={loaded.view.path} onLoad={(event) => mediaReady(event.currentTarget)} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} />}
+				{loaded.view.kind === "image" && <ImagePreview
+					path={loaded.view.path}
+					size={loaded.view.size}
+					mime={loaded.view.mime}
+					revision={loaded.view.revision}
+					src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`}
+				/>}
 				{loaded.view.kind === "video" && <div className="files-video-preview"><video className="files-video" controls playsInline preload="metadata" onLoadedData={(event) => mediaReady(event.currentTarget)} aria-label={loaded.view.path} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} onError={() => setResult((current) => current?.key === loaded.key ? { ...current, error: "動画を再生できません。ファイルの破損、またはブラウザー非対応のコーデックを確認してください。" } : current)}>お使いのブラウザーは動画再生に対応していません。</video></div>}
 				{loaded.view.kind === "audio" && <AudioPreview path={loaded.view.path} metadata={loaded.view.audio} visible={visible} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} />}
 				{loaded.view.kind === "binary" && <p className="files-message">バイナリファイル</p>}
