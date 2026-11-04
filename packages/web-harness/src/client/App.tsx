@@ -177,7 +177,8 @@ export function App() {
 			setSessionId(restored?.sessionId);
 			setMode("chat");
 			setWorkspaceId(restored?.workspaceId ?? folders.find((entry) => entry.workspaceId === previousWorkspace)?.workspaceId ?? folders[0]?.workspaceId);
-		}).catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
+			setBootstrapped(true);
+		}).catch((reason: unknown) => { if (!controller.signal.aborted) { setError(errorMessage(reason)); setBootstrapped(true); } });
 		return () => controller.abort();
 	}, []);
 	useEffect(() => {
@@ -191,7 +192,10 @@ export function App() {
 		if (sessionId) preferences.setItem("pi-web-selected-session", sessionId); else preferences.removeItem("pi-web-selected-session");
 		preferences.setItem("pi-web-workspace", workspaceId);
 	}, [sessionId, workspaceId]);
-	useEffect(() => { pushSessionUrl(sessionId); }, [sessionId]);
+	// Only rewrite the address bar after the first restore, otherwise a deep link is replaced
+	// by "/" before the session is known.
+	const [bootstrapped, setBootstrapped] = useState(false);
+	useEffect(() => { if (bootstrapped) pushSessionUrl(sessionId); }, [sessionId, bootstrapped]);
 	useEffect(() => {
 		// Browser back/forward restores the conversation named by the URL instead of leaving the app.
 		const restore = () => {

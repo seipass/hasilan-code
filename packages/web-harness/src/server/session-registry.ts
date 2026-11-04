@@ -175,6 +175,32 @@ interface LiveSession {
 	/** Implementation grants retained while the manager uses a read-only orchestration loadout. */
 	delegatedTools?: string[];
 }
+/** Live messages carry epoch milliseconds; the projection stores ISO strings like saved history. */
+function liveTimestamp(message: { timestamp?: number | string }): { timestamp?: string } {
+	const value = message.timestamp;
+	if (value === undefined) return {};
+	const date = typeof value === "number" ? new Date(value) : new Date(value);
+	return Number.isFinite(date.getTime()) ? { timestamp: date.toISOString() } : {};
+}
+
+/** Token and cost totals of one live assistant message, when the provider reported them. */
+function liveUsage(message: {
+	role?: string;
+	usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; cost?: { total?: number } };
+}): { usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number } } {
+	if (message.role !== "assistant" || !message.usage) return {};
+	const usage = message.usage;
+	return {
+		usage: {
+			input: usage.input ?? 0,
+			output: usage.output ?? 0,
+			cacheRead: usage.cacheRead ?? 0,
+			cacheWrite: usage.cacheWrite ?? 0,
+			cost: usage.cost?.total ?? 0,
+		},
+	};
+}
+
 export interface ExecutionOutcome {
 	aborted: boolean;
 	result?: string;
@@ -1326,6 +1352,10 @@ export class SessionRegistry {
 				),
 				partial: event.type !== "message_end",
 				runId: live.runId,
+				// The live projection needs the same metadata as a reloaded page, otherwise the
+				// timestamp and per-turn cost only appear after navigating away and back.
+				...liveTimestamp(event.message),
+				...liveUsage(event.message),
 				...(event.message.role === "custom" &&
 				event.message.customType === CONTEXT_INJECTION_CUSTOM_TYPE &&
 				isContextInjection(event.message.details)

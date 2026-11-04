@@ -682,9 +682,9 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 .settings-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
 
 /* Message actions stay out of the way until the reader hovers or focuses the message. */
-.message-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; margin-top: 8px; opacity: 0; transition: opacity var(--motion-quick) ease; }
+.message-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; margin-top: 8px; opacity: 0; transition: opacity var(--motion-quick) ease; }
 .message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
-.message-actions button, .message-actions a { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--on-surface-muted); font-size: 11px; line-height: 1.6; text-decoration: none; }
+.message-actions button, .message-actions a { display: inline-flex; align-items: center; gap: 5px; padding: 1px 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--on-surface-muted); font-size: 11px; line-height: 1.5; text-decoration: none; }
 .message-actions button > svg { flex: none; opacity: .85; }
 .message-actions button:hover, .message-actions a:hover { background: var(--surface-hover); color: var(--on-surface); }
 .role-user .message-actions { justify-content: flex-end; }
@@ -716,13 +716,19 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 /* Message time and actions share one quiet row under the content. */
 /* Time and actions share one row so the buttons sit next to the timestamp, not alone at the
    content edge. Messages without a timestamp start the row at its alignment edge instead. */
-.message-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-height: 0; margin-top: 6px; }
+/* Time and token cost belong together under the text; the buttons sit at the far edge.
+   They were spread left / middle / right, which read as three unrelated items. */
+.message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 0; margin-top: 6px; font-size: 10px; }
 .message-meta:empty { display: none; }
-.message-meta > time { flex: none; margin-right: auto; color: var(--on-surface-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-.message-meta .message-actions { margin-top: 0; flex: none; }
-.role-user .message-meta > time { margin-left: auto; margin-right: 0; }
-.message:not(:hover):not(:focus-within) .message-meta > time { opacity: .55; transition: opacity var(--motion-quick) ease; }
-.message:hover .message-meta > time, .message:focus-within .message-meta > time { opacity: 1; }
+.message-meta > time { flex: none; color: var(--on-surface-muted); font-variant-numeric: tabular-nums; }
+.message-meta > .message-usage { flex: none; }
+.message-meta .message-actions { margin-top: 0; margin-left: auto; flex: none; }
+.role-user .message-meta { justify-content: flex-end; }
+.role-user .message-meta .message-actions { margin-left: 0; }
+/* Metadata fades until the message is under the pointer, so it never competes with the text. */
+.message-meta > time, .message-meta > .message-usage { opacity: .6; transition: opacity var(--motion-quick) ease; }
+.message:hover .message-meta > time, .message:hover .message-meta > .message-usage,
+.message:focus-within .message-meta > time, .message:focus-within .message-meta > .message-usage { opacity: 1; }
 .history-heading-actions { display: flex; align-items: center; gap: 4px; }
 .history-stop-all { width: 26px; height: 26px; padding: 0; border: 0; background: transparent; color: var(--warning); font-size: 12px; }
 .history-stop-all:hover { background: var(--warning-container); }
