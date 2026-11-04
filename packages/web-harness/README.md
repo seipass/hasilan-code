@@ -74,6 +74,8 @@ Windowsのnode-pty native installが失敗する場合、Python 3.11/3.12、Visu
 - 閉じた「思考」には推論の先頭を一行で表示し、開くと全文を読めます。通常テキストは [Gen Interface JP](https://gen.typesetting.jp/)（npm版0.8.0）、コード・ファイルソース・端末は [UDEV Gothic](https://github.com/yuru7/udev-gothic)（v2.2.0）を使用します。両書体はホストから配信し、外部CDNは必要ありません。UDEV Gothicのライセンスは `public/fonts/UDEVGothic-LICENSE.txt` です。
 - 左サイドバーの表示文字と、閉じたツール呼び出し・思考の見出しは文字選択の対象外です。検索欄と、開いたアコーディオンの本文は引き続き選択できます。
 
+枠線の扱い: 外枠はダイアログ・カード・ポップオーバーなど面の境界だけに使い、内側の区切りは背景色の差で表します。表は行ごとの下罫線と列の縦罫線のみ、見出しには下線を付けません。
+
 操作アイコンは共通のSVGセット（`src/client/Icon.tsx`）と、折りたたみの共通ケア（`--chevron`）を使います。文字記号（`×` `↑` `■` `☰`）は書体によって字形が変わるため使いません。アイコンだけのボタンには必ず `aria-label` を付けます。`Icon` を使わない素の `<svg>` には必ず `width`/`height` を指定します（未指定だと `viewBox` の寸法で描画されます）。
 
 画面・タブ・起動ログの名称は `Hasilan Code`。npmパッケージ名は `hasilan-code`。ロゴとfaviconは `public/icon.svg` を共有し、配色は `src/client/styles.css` の指定パレットを使います。

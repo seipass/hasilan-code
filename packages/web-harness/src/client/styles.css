@@ -72,7 +72,7 @@
 }
 body { margin: 0; }
 button, input, textarea, select { font: inherit; }
-button { color: inherit; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 8px; padding: .5rem .8rem; cursor: pointer; }
+button { color: inherit; background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: 8px; padding: .5rem .8rem; cursor: pointer; }
 button:hover:not(:disabled) { background: var(--surface-hover); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -80,7 +80,9 @@ a, .text-link { color: var(--secondary); }
 a:hover, .text-link:hover { color: var(--secondary-hover); }
 a { overflow-wrap: anywhere; }
 .text-link { border: 0; background: none; padding: 0; text-align: left; text-decoration: underline; overflow-wrap: anywhere; }
-input, textarea, select { border: 1px solid var(--border); color: inherit; background: var(--surface-raised); border-radius: 7px; padding: .65rem .75rem; min-width: 0; }
+input, textarea, select { border: 1px solid var(--border-subtle); color: inherit; background: var(--surface-raised); border-radius: 7px; padding: .65rem .75rem; min-width: 0; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { border-color: var(--border); }
+input[type="search"], input[type="text"]:not([class]) { background: var(--surface-panel); }
 label { display: flex; flex-direction: column; gap: .5rem; }
 h1 { font-size: 1.75rem; margin: 0; font-weight: 550; letter-spacing: -.04em; }
 h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
@@ -95,7 +97,8 @@ summary { cursor: pointer; }
 .sidebar input { user-select: text; }
 .tool-card:not([open]) > summary,
 .thinking > summary { user-select: none; }
-fieldset { border: 1px solid var(--border); border-radius: 10px; margin: 1rem 0; padding: 1rem; display: grid; gap: .85rem; min-width: 0; }
+fieldset { border: 1px solid var(--border-subtle); border-radius: 10px; margin: 1rem 0; padding: 1rem; display: grid; gap: .85rem; min-width: 0; }
+.settings-section fieldset, fieldset.settings-section { border: 0; margin: 0; padding: 0; }
 legend { font-weight: 600; padding: 0 .4rem; }
 .muted, .fine-print, .revision { color: var(--muted); }
 .fine-print, .revision { font-size: .8rem; line-height: 1.65; }
@@ -157,7 +160,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .status-failed, .status-error, .status-missing { color: var(--danger); }
 .status-cancelled, .status-interrupted, .status-cancelling { color: var(--warning); }
 .status-idle { color: var(--muted); }
-.sidebar-bottom { padding-top: 14px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.sidebar-bottom { padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
 .sidebar-bottom button { border: 0; background: transparent; padding: 7px 10px; font-size: 12px; }
 .navigation-scrim { display: none; }
 .workspace-surface { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -248,7 +251,10 @@ legend { font-weight: 600; padding: 0 .4rem; }
    Draw a short, centered divider instead so it separates sections without drawing a box. */
 .message hr { width: 100%; height: 1px; margin: 26px 0; border: 0; background: linear-gradient(to right, transparent, var(--border) 12%, var(--border) 88%, transparent); opacity: .8; }
 .role-user .message hr { opacity: .5; }
-.message h1, .message h2 { margin-top: 1.6em; }
+.message h1, .message h2 { margin-top: 1.6em; border-bottom: 0; padding-bottom: 0; }
+.message h3, .message h4 { margin-top: 1.3em; }
+.message h1 { font-size: 1.35rem; letter-spacing: -.01em; }
+.message h2 { font-size: 1.15rem; }
 .message h1 + hr, .message h2 + hr { margin-top: 12px; }
 .message hr + h1, .message hr + h2 { margin-top: 22px; }
 .message hr + hr { display: none; }
@@ -260,7 +266,14 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .markdown-table-scroll:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .message .markdown-table-scroll table { width: max-content; min-width: 100%; border-collapse: collapse; overflow-wrap: normal; }
 .message .markdown-table-scroll th, .message .markdown-table-scroll td { min-width: 7rem; max-width: 36rem; }
-.message td, .message th { border: 1px solid var(--border); padding: .4rem; }
+/* A full grid made every cell a box; rows now read from a single rule and the
+   outer edge carries the frame. */
+.message .markdown-table-scroll table { border-collapse: collapse; }
+.message td, .message th { border: 0; border-bottom: 1px solid var(--border-subtle); padding: .45rem .7rem; }
+.message thead th { border-bottom: 1px solid var(--border); color: var(--on-surface-secondary); font-weight: 600; }
+.message tbody tr:last-child td, .message tbody tr:last-child th { border-bottom: 0; }
+.message th + th, .message td + td { border-left: 1px solid var(--border-subtle); }
+.message tbody tr:hover { background: color-mix(in srgb, var(--surface-hover) 40%, transparent); }
 .message blockquote { border-left: 3px solid var(--border-strong); padding-left: .85rem; margin-left: 0; color: var(--muted); }
 .context-entry { border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-panel); }
 .context-entry > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; min-width: 0; padding: 10px 12px; list-style: none; font-size: 11px; color: var(--on-surface-muted); }
@@ -309,7 +322,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .right-panel-body.detail-panel-body { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .badge { display: inline-block; border-radius: 4px; padding: .15rem .35rem; font-size: .7rem; line-height: 1.4; background: var(--surface-hover); white-space: normal; }
 .team-pane { min-width: 0; max-width: 760px; margin: 0 auto; display: grid; gap: 14px; }
-.team-overview, .team-focus { min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised); }
+.team-overview, .team-focus { min-width: 0; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-raised); }
 .team-overview { padding: 16px; }
 .team-overview h2 { margin: 5px 0 9px; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
 .team-overview p { margin: 0; color: var(--on-surface-secondary); font-size: 12px; line-height: 1.7; }
@@ -352,7 +365,8 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .team-message-form textarea { width: 100%; min-height: 72px; resize: vertical; font-size: 12px; }
 .team-message-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
 .team-message-success { color: var(--success); }
-.tool-card { --tool-accent: var(--on-surface-muted); --tool-tint: var(--surface-hover); color: inherit; border: 1px solid var(--border-subtle); border-radius: 8px; margin: 8px 0; overflow: hidden; background: var(--surface-raised); min-width: 0; }
+.tool-card { --tool-accent: var(--on-surface-muted); --tool-tint: var(--surface-hover); color: inherit; border: 1px solid var(--border-subtle); border-radius: 8px; margin: 0 0 6px; overflow: hidden; background: color-mix(in srgb, var(--surface-raised) 70%, transparent); min-width: 0; }
+.tool-card:last-child { margin-bottom: 8px; }
 .tool-kind-file { --tool-accent: var(--secondary); --tool-tint: var(--secondary-container); }
 .tool-kind-edit { --tool-accent: var(--primary); --tool-tint: var(--primary-container); }
 .tool-kind-write { --tool-accent: var(--success); --tool-tint: var(--success-container); }
@@ -419,28 +433,28 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .hashline-output-line code { font-size: inherit; }
 .hashline-read, .hashline-diff { white-space: pre; overflow-wrap: normal; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 24px; background: #11111bb3; backdrop-filter: blur(3px); }
-.settings-dialog { width: min(760px, 100%); max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid var(--border); border-radius: 18px; padding: 24px; background: var(--surface-raised); box-shadow: 0 25px 85px #11111b80; }
+.settings-dialog { width: min(760px, 100%); max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid var(--border-subtle); border-radius: 18px; padding: 24px; background: var(--surface-raised); box-shadow: 0 25px 85px #11111b80; }
 .settings-dialog .panel-heading { display: flex; align-items: center; justify-content: space-between; }
 .settings-dialog .panel-heading h2 { margin: 0; font-size: 19px; }
-.settings-tabs { display: flex; gap: 5px; padding: 14px 0 10px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.settings-tabs { display: flex; gap: 5px; padding: 14px 0 10px; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
 .settings-tabs button { border: 0; background: transparent; font-size: 13px; padding: 9px 15px; color: var(--muted); white-space: nowrap; }
 .settings-tabs [aria-selected="true"] { background: var(--primary-container); color: var(--accent); }
 .settings-content { padding-top: 18px; font-size: 14px; line-height: 1.55; }
 .settings-content[hidden] { display: none; }
 .settings-content > h3 { margin: 0 0 5px; font-size: 17px; }
 .settings-content > p { color: var(--on-surface-secondary); margin: 5px 0 15px; }
-.settings-section { background: var(--surface-panel); }
+.settings-section { padding: 14px 16px; border: 0; border-radius: 10px; background: var(--surface-panel); }
 .settings-section h4 { margin-top: 0; }
-.settings-provider-section { display: grid; gap: 12px; margin: 0 0 14px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+.settings-provider-section { display: grid; gap: 12px; margin: 0 0 14px; padding: 16px; border: 1px solid var(--border-subtle); border-radius: 10px; min-width: 0; }
 .settings-provider-section > h4, .settings-provider-section > p { margin: 0; }
 .settings-provider-section label { min-width: 0; }
 .settings-provider-section select, .settings-provider-section input { width: 100%; }
 .settings-next-action { color: var(--on-surface-secondary); background: var(--surface-hover); border-radius: 8px; padding: 10px 12px; margin: 6px 0; font-size: 13px; }
 .settings-inline-status, .settings-field-help { color: var(--on-surface-secondary); font-size: 12px; margin: 3px 0; }
 .settings-state { display: inline-block; border-radius: 6px; background: var(--surface-hover); padding: 3px 7px; font-size: 12px; }
-.settings-reconnect { border-top: 1px solid var(--border); padding-top: 10px; }
+.settings-reconnect { border-top: 1px solid var(--border-subtle); padding-top: 10px; }
 .settings-reconnect > summary { color: var(--on-surface-secondary); font-size: 13px; }
-.settings-key-entry { display: grid; gap: 10px; padding: 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-panel); }
+.settings-key-entry { display: grid; gap: 10px; padding: 13px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-panel); }
 .settings-key-entry .fine-print, .settings-reconnect .fine-print { margin: 0; }
 .settings-reconnect::details-content { display: grid; gap: 10px; }
 .settings-reconnect > summary { margin-bottom: 8px; }
@@ -615,7 +629,7 @@ button, .workspace-accordion > summary, .panel-resize::after {
 	transition: border-color var(--motion-base) ease, background-color var(--motion-base) ease, box-shadow var(--motion-base) ease;
 }
 .tool-card:hover, .agent-card:hover { border-color: var(--border-strong); }
-.tool-card[open] { border-color: var(--border-strong); box-shadow: 0 8px 24px #11111b36; }
+.tool-card[open] { border-color: var(--border); box-shadow: 0 8px 24px #11111b36; }
 .settings-tabs button {
 	transition: color var(--motion-base) ease, background-color var(--motion-base) ease, opacity var(--motion-quick) ease;
 }

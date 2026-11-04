@@ -136,7 +136,7 @@
 .files-tree-message[data-motion-exit="true"] { position: absolute; inset: 0 0 auto; pointer-events: none; }
 .files-markdown { max-width: 960px; margin: 0 auto; padding: 22px 24px 36px; line-height: 1.75; font-size: 14px; overflow-wrap: anywhere; }
 .files-markdown > :first-child { margin-top: 0; }
-.files-markdown h1, .files-markdown h2 { padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+.files-markdown h1, .files-markdown h2 { padding-bottom: 0; border-bottom: 0; }
 .files-markdown h1 { font-size: 1.85em; }
 .files-markdown h2 { font-size: 1.45em; }
 .files-markdown h3 { font-size: 1.2em; }

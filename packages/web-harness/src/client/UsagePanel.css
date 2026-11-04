@@ -12,7 +12,7 @@
 .usage-panel[open] > summary::before { transform: rotate(90deg); }
 .usage-panel > summary > span:first-child { margin-right: auto; }
 .usage-panel > summary > span:last-child { font-variant-numeric: tabular-nums; }
-.usage-panel-body { padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); }
+.usage-panel-body { padding: 4px 2px; }
 .usage-panel-body p { margin: 4px 0 8px; }
 .usage-data-slot { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
 .usage-data-slot > * { grid-area: 1 / 1; min-width: 0; }
