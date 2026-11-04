@@ -180,7 +180,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 			{overview}
 			<div className="team-graph-controls">
 		<div className="team-graph-toolbar" role="group" aria-label="関係図の表示">
-			<div className="team-graph-zoom"><button type="button" aria-label="関係図を縮小" disabled={zoom <= 0.01} onClick={() => zoomTo(zoom / 1.2)}><Icon name="minus" size={14} /></button><output aria-label="関係図の拡大率">{Math.round(zoom * 100)}%</output><button type="button" aria-label="関係図を拡大" disabled={zoom >= 2} onClick={() => zoomTo(zoom * 1.2)}><Icon name="plus" size={14} /></button></div>
+			<div className="team-graph-zoom"><button type="button" aria-label="関係図を縮小" disabled={zoom <= 0.01} onClick={() => zoomTo(zoom / 1.2)}><Icon name="minus" size="inline" /></button><output aria-label="関係図の拡大率">{Math.round(zoom * 100)}%</output><button type="button" aria-label="関係図を拡大" disabled={zoom >= 2} onClick={() => zoomTo(zoom * 1.2)}><Icon name="plus" size="inline" /></button></div>
 			<button type="button" onClick={() => zoomTo(1)}>等倍</button>
 			<button type="button" onClick={() => fitGraph()}>全体表示</button>
 			<button type="button" disabled={!focused} onClick={() => { if (focused) centerNode(focused.x, focused.y); }}>選択へ</button>
@@ -247,7 +247,7 @@ function RunDetail({ run, snapshot, focus, onFile, now, onOpen }: {
 	const owner = snapshot.agents.find((agent) => agent.agentId === transferred?.agentId);
 	return <div className="team-run-detail">
 		<div className="team-run-meta"><span className={`team-map-state status-${run.status}`}><MotionLabel value={run.handoffToRunId ? "引き継ぎ済み" : run.status === "completed" ? "作業完了" : RUN_LABELS[run.status]} /></span>{elapsed(run, now) && <span><MotionLabel value={`${run.settledAt ? "所要" : "経過"} ${elapsed(run, now)}`} /></span>}</div>
-		<div className="team-task-heading"><h4>{run.settledAt ? "作業内容" : "担当していること"}</h4><button type="button" className="text-link" onClick={onOpen}>会話を開く <Icon name="external" size={12} /></button></div>
+		<div className="team-task-heading"><h4>{run.settledAt ? "作業内容" : "担当していること"}</h4><button type="button" className="text-link" onClick={onOpen}>会話を開く <Icon name="external" size="inline" /></button></div>
 		<MotionSwap identity={taskText(run)}><p className="team-run-task">{taskText(run)}</p></MotionSwap>
 		<MotionSwap identity={owner?.agentId ?? "none"}>{owner ? <p className="team-dependency">引き継ぎ先: <button type="button" className="text-link" onClick={() => focus(owner.agentId)}>{label(owner)}</button></p> : null}</MotionSwap>
 		<Presence show={run.status === "waiting"}><div className="team-dependency"><strong>結果を待っている相手</strong><ul><MotionItems items={waiting ?? []} itemKey={(entry) => entry.id}>{({ id, agent, state }) => <li key={id}>
@@ -317,10 +317,10 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	const summary = [`${managed ? "担当者" : "子の担当"} ${managed ? specialists.length : workers.length}人`, ...(managed && helpers > 0 ? [`補助 ${helpers}人`] : []), `作業中 ${counts.running}`, `結果待ち ${counts.waiting}`, `開始待ち ${counts.queued}`, managed ? `指示待ち ${counts.ready}` : `完了 ${counts.completed}`, ...(counts.cancelled > 0 ? [`中止 ${counts.cancelled}`] : []), ...(counts.stopping > 0 ? [`停止中 ${counts.stopping}`] : [])].join(" · ");
 	const overview = <header className="team-overview"><MotionSize><MotionSwap identity={situation}><h2 role="status">{situation}</h2></MotionSwap><MotionSwap identity={summary}><p>{summary}</p></MotionSwap><Presence show={problems > 0}><strong className="team-attention"><MotionLabel value={`確認が必要な作業 ${problems}件`} /></strong></Presence><UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></MotionSize></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
-				{!mobile && <button type="button" className="team-focus-close" aria-label="担当の詳細を閉じる" onClick={() => setDesktopDetailsOpen(false)}><Icon name="close" size={14} /></button>}
+				{!mobile && <button type="button" className="team-focus-close" aria-label="担当の詳細を閉じる" onClick={() => setDesktopDetailsOpen(false)}><Icon name="close" size="inline" /></button>}
 				<MotionSize><MotionSwap identity={detailId} enabled={visible}><div key={detailId} className="team-focus-content">
 				<Presence show={!!focused.responsibility}><section className="team-responsibility"><h4>担当範囲</h4><MotionSwap identity={focused.responsibility ?? ""}><p>{focused.responsibility}</p></MotionSwap></section></Presence>
-				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} onOpen={() => { setDetailsOpen(false); onSelect(focused.sessionId); }} /> : <p className="team-inline-note">まだ作業はありません。<button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く <Icon name="external" size={12} /></button></p>}
+				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} onOpen={() => { setDetailsOpen(false); onSelect(focused.sessionId); }} /> : <p className="team-inline-note">まだ作業はありません。<button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く <Icon name="external" size="inline" /></button></p>}
 				<Presence show={!!focused.currentRun}><div className="team-focus-actions"><button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button></div></Presence>
 				</div></MotionSwap></MotionSize>
 			</section>;

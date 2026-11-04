@@ -9,9 +9,9 @@ export type SplitEdge = "left" | "right" | "top" | "bottom";
 
 export function SplitActions({ label, mode, onChange }: { label: string; mode: SplitMode; onChange: (mode: SplitMode) => void }) {
 	return <div className="split-actions" role="group" aria-label={`${label}の表示操作`}>
-		<button type="button" aria-label={`${label}を左右に分割`} title="左右に分割" aria-pressed={mode === "columns"} onClick={() => onChange("columns")}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" /><path d="M10 4v12" /></svg></button>
-		<button type="button" aria-label={`${label}を上下に分割`} title="上下に分割" aria-pressed={mode === "rows"} onClick={() => onChange("rows")}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" /><path d="M3 10h14" /></svg></button>
-		{mode !== "single" && <button type="button" aria-label={`${label}の分割を統合`} title="分割を統合" onClick={() => onChange("single")}><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" /><path d="m6 8 2 2-2 2m8-4-2 2 2 2" /></svg></button>}
+		<button type="button" aria-label={`${label}を左右に分割`} title="左右に分割" aria-pressed={mode === "columns"} onClick={() => onChange("columns")}><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" /><path d="M10 4v12" /></svg></button>
+		<button type="button" aria-label={`${label}を上下に分割`} title="上下に分割" aria-pressed={mode === "rows"} onClick={() => onChange("rows")}><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" /><path d="M3 10h14" /></svg></button>
+		{mode !== "single" && <button type="button" aria-label={`${label}の分割を統合`} title="分割を統合" onClick={() => onChange("single")}><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" /><path d="m6 8 2 2-2 2m8-4-2 2 2 2" /></svg></button>}
 	</div>;
 }
 
