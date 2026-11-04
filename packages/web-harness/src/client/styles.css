@@ -691,9 +691,10 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 @media (hover: none) { .message-actions { opacity: 1; } }
 
 /* Quick open: filename fuzzy search over the workspace. */
-.quick-open { width: min(640px, calc(100vw - 32px)); max-height: min(70dvh, 560px); padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised); color: var(--on-surface); box-shadow: 0 24px 70px #11111b99; }
+.quick-open { width: min(640px, calc(100vw - 32px)); max-height: min(70dvh, 560px); padding: 0; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-raised); color: var(--on-surface); box-shadow: 0 24px 70px #11111b99; }
 .quick-open::backdrop { background: #11111b66; }
 .quick-open-input { width: 100%; padding: 14px 16px; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: transparent; font-size: 14px; }
+.quick-open-input:focus-visible { outline: none; border-bottom-color: var(--primary); }
 .quick-open-results { display: flex; flex-direction: column; max-height: min(58dvh, 460px); overflow-y: auto; padding: 6px; }
 .quick-open-results button { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
 .quick-open-results button[aria-selected="true"] { background: var(--primary-container); }
@@ -728,12 +729,12 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 .message-usage { color: var(--on-surface-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .message-usage { color: var(--on-surface-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .keybinding-list { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
-.keybinding-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 9px; }
+.keybinding-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 9px; background: color-mix(in srgb, var(--surface-raised) 55%, transparent); }
 .keybinding-row > div:first-child { display: grid; gap: 2px; min-width: 0; }
 .keybinding-row strong { font-size: 13px; }
 .keybinding-row span, .keybinding-row .fine-print { color: var(--on-surface-muted); font-size: 11px; line-height: 1.5; }
 .keybinding-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.keybinding-controls kbd { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-sunken); font: 11px/1.4 "UDEV Gothic", monospace; }
+.keybinding-controls kbd { padding: 4px 8px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface-sunken); font: 11px/1.4 "UDEV Gothic", monospace; }
 .keybinding-controls button { padding: 4px 9px; font-size: 11px; }
 .storage-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .storage-table { display: grid; gap: 6px; margin: 12px 0; }

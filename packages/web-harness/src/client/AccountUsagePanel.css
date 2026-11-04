@@ -10,7 +10,8 @@
 .account-usage-plan { color: var(--muted); overflow-wrap: anywhere; }
 .account-usage-account { color: var(--muted); overflow-wrap: anywhere; }
 .account-usage-card dl { margin: 16px 0; }
-.account-usage-metric { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr); gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
+.account-usage-metric { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr); gap: 14px; padding: 12px 0; border-top: 1px solid var(--border-subtle); }
+.account-usage-metric:first-of-type { border-top: 0; }
 .account-usage-metric dt { color: var(--on-surface); }
 .account-usage-metric dd { margin: 0; min-width: 0; }
 .account-usage-percent { display: block; font-variant-numeric: tabular-nums; }

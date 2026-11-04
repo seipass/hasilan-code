@@ -1,4 +1,4 @@
-.session-import-dialog { flex-direction: column; width: min(100% - 32px, 980px); height: min(88dvh, 800px); max-height: 100dvh; padding: 0; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface-panel); color: var(--on-surface); }
+.session-import-dialog { flex-direction: column; width: min(100% - 32px, 980px); height: min(88dvh, 800px); max-height: 100dvh; padding: 0; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-panel); color: var(--on-surface); }
 .session-import-dialog[open] { display: flex; }
 .session-import-dialog::backdrop { background: #11111bb3; }
 .session-import-heading { display: flex; flex: none; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 20px 12px; }
