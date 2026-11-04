@@ -1,4 +1,4 @@
-:is(.session-context-menu, .detail-context-menu) { position: fixed; display: grid; min-width: 150px; max-width: calc(100vw - 16px); padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: 0 8px 28px #0006; user-select: none; }
+:is(.session-context-menu, .detail-context-menu) { position: fixed; display: grid; min-width: 150px; max-width: calc(100vw - 16px); padding: 5px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-raised); box-shadow: 0 8px 28px #0006; user-select: none; }
 :is(.session-context-menu, .detail-context-menu) button { border: 0; padding: 6px 12px; background: transparent; font-size: 12px; text-align: left; }
 .session-context-menu { z-index: 18; min-width: 170px; }
 .session-context-menu button:focus-visible { outline-offset: -2px; }

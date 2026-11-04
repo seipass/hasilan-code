@@ -31,7 +31,7 @@
 	min-width: 0;
 	max-width: 100%;
 	padding: 5px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--border-subtle);
 	border-radius: 10px;
 	background: color-mix(in srgb, var(--surface-panel) 45%, transparent);
 }

@@ -7,13 +7,13 @@
 .browser-content { display: flex; flex: 1; min-height: 0; min-width: 0; background: white; }
 .browser-webview { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .browser-error { margin: 0; padding: 6px; color: var(--danger); font-size: 12px; }
-.browser-comment { display: grid; flex: none; gap: 8px; padding: 10px; border-top: 1px solid var(--border); background: var(--surface-panel); }
+.browser-comment { display: grid; flex: none; gap: 8px; padding: 10px; border-top: 1px solid var(--border-subtle); background: var(--surface-panel); }
 .browser-comment label { gap: 4px; font-size: 12px; }
 .browser-comment textarea { min-height: 58px; resize: vertical; }
 .browser-comment > div { display: flex; justify-content: flex-end; gap: 6px; }
 .browser-comment button { font-size: 12px; }
 .browser-annotation-list { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0 0 8px; padding: 0; }
-.browser-annotation-list li { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 260px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-panel); }
+.browser-annotation-list li { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 260px; padding: 4px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-panel); }
 .browser-annotation-list img { width: 44px; height: 38px; object-fit: cover; border-radius: 6px; }
 .browser-annotation-list span { display: grid; min-width: 0; gap: 2px; font-size: 11px; }
 .browser-annotation-list strong, .browser-annotation-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

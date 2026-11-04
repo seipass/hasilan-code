@@ -1,4 +1,4 @@
-.computer-activity { min-width: 0; margin: 8px 0 28px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface-panel); animation: motion-label-enter 160ms ease; }
+.computer-activity { min-width: 0; margin: 8px 0 28px; border: 1px solid var(--border-subtle); border-radius: 12px; overflow: hidden; background: var(--surface-panel); animation: motion-label-enter 160ms ease; }
 .computer-activity-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; }
 .computer-activity-header > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-width: 0; }
 .computer-activity-header strong { font-size: 12px; font-weight: 600; }

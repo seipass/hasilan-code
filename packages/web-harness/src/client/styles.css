@@ -314,7 +314,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .run-error p { margin: 6px 0; }
 .run-error > strong, .run-error > details > summary { user-select: none; }
 .back-to-bottom { position: absolute; bottom: 190px; align-self: center; z-index: 2; font-size: 11px; border-radius: 20px; box-shadow: 0 3px 12px #11111b66; }
-.right-panel { display: flex; flex-direction: column; flex-shrink: 0; min-width: 0; min-height: 0; border-left: 1px solid var(--border); background: var(--surface-panel); transform: translateX(0); visibility: visible; transition: margin-right var(--sidebar-motion) var(--motion-ease), transform var(--sidebar-motion) var(--motion-ease), visibility 0s; }
+.right-panel { display: flex; flex-direction: column; flex-shrink: 0; min-width: 0; min-height: 0; border-left: 1px solid var(--border-subtle); background: var(--surface-panel); transform: translateX(0); visibility: visible; transition: margin-right var(--sidebar-motion) var(--motion-ease), transform var(--sidebar-motion) var(--motion-ease), visibility 0s; }
 .app-shell:not(.inspector-open) .right-panel { visibility: hidden; pointer-events: none; transition-delay: 0s, 0s, var(--sidebar-motion); }
 .detail-resize-slot { display: flex; flex-shrink: 0; width: 8px; overflow: hidden; transition: width var(--sidebar-motion) var(--motion-ease); }
 .app-shell:not(.inspector-open) .detail-resize-slot { width: 0; pointer-events: none; }
