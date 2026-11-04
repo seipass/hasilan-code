@@ -134,12 +134,13 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			{tool.name === "edit" && typeof input?.input === "string" && <details className="tool-secondary"><summary>Patch</summary><pre className="tool-code">{input.input}</pre></details>}
 			<details className="tool-raw"><summary>Call data</summary><code>{tool.callId}</code><pre>{JSON.stringify(tool.input, null, 2)}</pre></details>
 			{tool.result !== undefined && <>
-				{!view?.handlesResult && <h4>Result {tool.status === "running" ? "(partial)" : "(final)"}</h4>}
-				{tool.status === "error" || tool.status === "cancelled" ? <Content value={content} onFile={onFile} />
-					: tool.name === "web_search" || tool.name === "computer" ? null
-					: tool.name === "browser" ? null
-					: tool.name === "team" ? null
-					: <Content value={artifact && Array.isArray(content) ? content.filter((part: unknown) => !record(part) || part.type !== "image") : content} onFile={onFile} />}
+				{tool.status === "error" || tool.status === "cancelled"
+					? <Content value={content} onFile={onFile} />
+					: view?.handlesResult ? null
+						: <>
+							<h4>Result {tool.status === "running" ? "(partial)" : "(final)"}</h4>
+							<Content value={artifact && Array.isArray(content) ? content.filter((part: unknown) => !record(part) || part.type !== "image") : content} onFile={onFile} />
+						</>}
 				{!specialized && details && <details><summary>Details</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}
 				{specialized && displayDetails && <details className="tool-secondary"><summary>Raw result</summary><pre>{JSON.stringify(displayDetails, null, 2)}</pre></details>}
 			</>}
