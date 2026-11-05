@@ -1203,7 +1203,9 @@ export class SessionRegistry {
 							retry: { enabled: descriptor.goal?.status === "active" || activeSwarm ? false : retryEnabled },
 						});
 						if (activeSwarm || manager) {
-							live.delegatedTools ??= session.getActiveToolNames();
+							// The active set can already be restricted here: a resumed transcript restores
+							// the manager's loadout, so capture what the session registered instead.
+							live.delegatedTools ??= session.getAllTools().map((tool) => tool.name);
 							session.setActiveToolsByName(
 								[
 									...live.delegatedTools.filter((name) =>

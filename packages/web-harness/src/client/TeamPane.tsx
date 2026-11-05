@@ -230,6 +230,11 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 	</section>;
 }
 
+/** Node/undici report an aborted run as "This operation was aborted"; the UI says what happened. */
+function runErrorLabel(error: string | undefined): string {
+	return error && /abort/i.test(error) ? "中止されました" : (error ?? "");
+}
+
 function RunDetail({ run, snapshot, focus, onFile, now, onOpen }: {
 	run: Run;
 	snapshot: TeamSnapshot;
@@ -253,7 +258,7 @@ function RunDetail({ run, snapshot, focus, onFile, now, onOpen }: {
 		<Presence show={run.status === "waiting"}><div className="team-dependency"><strong>結果を待っている相手</strong><ul><MotionItems items={waiting ?? []} itemKey={(entry) => entry.id}>{({ id, agent, state }) => <li key={id}>
 			{agent ? <button className="text-link" type="button" onClick={() => focus(agent.agentId)}>{label(agent)}</button> : "不明な担当"}<span> · <MotionLabel value={state ? RUN_LABELS[state] : "状態不明"} /></span>
 		</li>}</MotionItems></ul><Presence show={!waiting?.length}><p>子の結果を待っています。</p></Presence></div></Presence>
-		<Presence show={!!run.error}><div className="team-run-error"><strong>失敗・中断の理由</strong><MotionSwap identity={run.error ?? ""}><p>{run.error}</p></MotionSwap></div></Presence>
+		<Presence show={!!run.error}><div className="team-run-error"><strong>失敗・中断の理由</strong><MotionSwap identity={run.error ?? ""}><p>{runErrorLabel(run.error)}</p></MotionSwap></div></Presence>
 		<Presence show={run.result !== undefined}><div className="team-run-result"><strong>作業の結果</strong><MotionSwap identity={firstLine ?? ""}><p>{firstLine || "本文は空です"}</p></MotionSwap><details><summary>結果の全文を読む</summary><div className="team-result-content"><Content value={run.result} onFile={onFile} /></div></details></div></Presence>
 	</div>;
 }

@@ -1217,7 +1217,13 @@ export class TeamManager {
 		return tasks.map((task) => {
 			if (!task.profile) return task;
 			const profile = profiles.find((entry) => entry.name === task.profile);
-			if (!profile) throw new HarnessError(`Unknown agent profile: ${task.profile}`, 400);
+			if (!profile)
+				throw new HarnessError(
+					profiles.length
+						? `Unknown agent profile: ${task.profile} (available: ${profiles.map((entry) => entry.name).join(", ")})`
+						: 'No agent profiles are configured; omit "profile"',
+					400,
+				);
 			if (task.tools && profile.tools && task.tools.some((tool) => !profile.tools?.includes(tool)))
 				throw new HarnessError(`Child tools must be a subset of profile ${profile.name}`, 400);
 			return {
