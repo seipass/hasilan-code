@@ -482,7 +482,8 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-card .tool-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: var(--on-surface-secondary); font-size: var(--text-xs); }
 .tool-result-note { flex: none; color: var(--tool-accent); font-size: var(--text-xs); white-space: nowrap; }
 .tool-card .badge { flex: none; margin-left: auto; background: transparent; padding: 0; }
-.tool-body { padding: 6px 12px 12px; min-width: 0; font-size: var(--text-sm); }
+.tool-body { padding: 6px 12px 12px; min-width: 0; font-size: var(--text-sm); line-height: var(--leading-normal); }
+.tool-body :is(p, li) { line-height: var(--leading-normal); }
 
 /* Shell: command block joins the output block so they read as one transcript. */
 .tool-shell { display: grid; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); }
@@ -591,6 +592,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-field { margin: 7px 0; overflow-wrap: anywhere; }
 .tool-field strong { color: var(--tool-accent); }
 .tool-secondary, .tool-raw { margin: 9px 0; color: var(--on-surface-muted); }
+.tool-secondary > pre, .tool-raw > pre { color: var(--on-surface-secondary); }
 .tool-secondary > summary, .tool-raw > summary { cursor: pointer; }
 .tool-secondary pre, .tool-raw pre { max-height: 350px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tool-task-list { display: grid; gap: 7px; margin: 9px 0; }
