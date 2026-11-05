@@ -27,7 +27,6 @@ export function trackVisualViewport(): () => void {
 		if (viewport.scale > 1.01) return;
 		const height = Math.round(viewport.height);
 		root.style.setProperty("--visual-viewport-height", `${height}px`);
-		root.dataset.keyboard = height < window.innerHeight - 80 ? "true" : "false";
 	};
 
 	const schedule = () => {
@@ -59,6 +58,5 @@ export function trackVisualViewport(): () => void {
 		document.removeEventListener("focusin", schedule);
 		document.removeEventListener("focusout", onFocusOut);
 		root.style.removeProperty("--visual-viewport-height");
-		delete root.dataset.keyboard;
 	};
 }

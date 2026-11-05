@@ -212,3 +212,15 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 @media (max-width: 520px) {
 	html body .chat-pane.is-empty .composer-area { margin-top: auto; margin-bottom: 0; }
 }
+
+/* Controls that only appear while a run is busy, or inside tool previews, were
+   still 22-30 px squares. */
+@media (pointer: coarse) {
+	html body .composer-notice > button,
+	html body .pending-input-actions button,
+	html body .browser-toolbar button,
+	html body .team-graph-toolbar button,
+	html body .canvas-view-controls button { min-width: 44px; min-height: 44px; }
+	html body .composer-notice > button { width: 44px; height: 44px; }
+	html body .pending-input-edit { font-size: 16px; }
+}
