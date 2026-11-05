@@ -196,11 +196,15 @@ export function App() {
 	// by "/" before the session is known.
 	const [bootstrapped, setBootstrapped] = useState(false);
 	useEffect(() => { if (bootstrapped) pushSessionUrl(sessionId); }, [sessionId, bootstrapped]);
+	const sessionForBack = useRef(sessionId);
+	sessionForBack.current = sessionId;
 	useEffect(() => {
 		// Browser back/forward restores the conversation named by the URL instead of leaving the app.
 		const restore = () => {
 			const id = sessionFromLocation();
 			if (!id) { draftSession.current = undefined; setSessionId(undefined); return; }
+			// An overlay guard pops an entry with the same URL; keep canvas and scroll state.
+			if (id === sessionForBack.current) return;
 			const summary = initialSessions.find((entry) => entry.sessionId === id) ?? Object.values(projections).flatMap((projection) => projection.sessions).find((entry) => entry.sessionId === id);
 			if (!summary) return;
 			setWorkspaceId(summary.workspaceId);
