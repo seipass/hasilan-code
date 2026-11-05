@@ -205,3 +205,10 @@ html {
    iOS must not inflate text when the device turns to landscape. */
 html, body { overscroll-behavior-y: contain; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* An empty conversation centres its composer on a tall desktop window. On a phone
+   that puts the field under the middle of the screen and away from the thumb, so
+   the empty state keeps the bottom position every other state uses. */
+@media (max-width: 520px) {
+	html body .chat-pane.is-empty .composer-area { margin-top: auto; margin-bottom: 0; }
+}
