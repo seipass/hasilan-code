@@ -223,6 +223,61 @@ export function App() {
 		};
 		window.addEventListener("keydown", keydown); return () => window.removeEventListener("keydown", keydown);
 	}, [modelOpen, rightOpen, sidebarOpen]);
+	// Android's back button must close one overlay instead of leaving the app. While any
+	// overlay is open we hold one extra history entry with the same URL; popping it closes
+	// the top overlay (settings, a dialog, the model sheet, then the panel and the drawer).
+	// The entry is dropped again when the last overlay closes through the UI, so a normal
+	// back press still leaves the conversation exactly once.
+	const narrowViewport = viewport.width <= 900;
+	const overlayCount = (sessionAction ? 1 : 0) + (importOpen ? 1 : 0) + (settingsOpen ? 1 : 0) + (modelOpen ? 1 : 0) + (narrowViewport && rightOpen ? 1 : 0) + (narrowViewport && sidebarOpen ? 1 : 0);
+	const backGuard = useRef(false);
+	const overlayOpen = useRef(false);
+	overlayOpen.current = overlayCount > 0;
+	const closeTopOverlay = useRef<() => boolean>(() => false);
+	useEffect(() => {
+		closeTopOverlay.current = () => {
+			if (sessionAction) { closeSessionAction(); return true; }
+			if (importOpen) { setImportOpen(false); return true; }
+			if (settingsOpen) { setSettingsOpen(false); return true; }
+			if (modelOpen) { setModelOpen(false); return true; }
+			if (narrowViewport && rightOpen) { setRightOpen(false); return true; }
+			if (narrowViewport && sidebarOpen) { setSidebarOpen(false); return true; }
+			return false;
+		};
+	});
+	useEffect(() => {
+		const rearm = () => {
+			if (backGuard.current) return;
+			if (overlayOpen.current || document.querySelector("dialog[open]")) {
+				window.history.pushState({ ...window.history.state, piOverlay: true }, "");
+				backGuard.current = true;
+			}
+		};
+		const onPop = () => {
+			if (!backGuard.current) return;
+			backGuard.current = false;
+			// A sheet in the top layer sits above the panel or drawer that owns it, so it
+			// closes first and the guard stays armed for whatever is still open below.
+			const sheet = [...document.querySelectorAll<HTMLDialogElement>("dialog[open]")].pop();
+			if (sheet) {
+				sheet.dispatchEvent(new Event("cancel", { cancelable: true }));
+				requestAnimationFrame(rearm);
+				return;
+			}
+			closeTopOverlay.current();
+		};
+		window.addEventListener("popstate", onPop);
+		return () => window.removeEventListener("popstate", onPop);
+	}, []);
+	useEffect(() => {
+		if (overlayCount > 0 && !backGuard.current) {
+			window.history.pushState({ ...window.history.state, piOverlay: true }, "");
+			backGuard.current = true;
+		} else if (overlayCount === 0 && backGuard.current) {
+			backGuard.current = false;
+			if (window.history.state?.piOverlay) window.history.back();
+		}
+	}, [overlayCount]);
 	function selectSession(id: string) {
 		if (commandPending.current) return;
 		const summary = summaries.find((entry) => entry.sessionId === id);

@@ -224,3 +224,11 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 	html body .composer-notice > button { width: 44px; height: 44px; }
 	html body .pending-input-edit { font-size: 16px; }
 }
+
+/* The jump-to-latest pill and the load-older button appear only after scrolling,
+   so they were missed by the fixed-control sweep. */
+@media (pointer: coarse) {
+	html body .back-to-bottom { min-height: 44px; padding: 0 18px; }
+	html body .history-control { height: auto; min-height: 44px; }
+	html body .history-control button { min-height: 44px; padding: 0 12px; }
+}
