@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { MetaChips, type ToolDetails, type ToolView } from "./tool-view.tsx";
 import { record } from "../Content.tsx";
+import { highlightLines, languageForPath } from "../highlight.tsx";
 
 interface DirectoryEntry {
 	name?: unknown;
@@ -61,20 +63,34 @@ export function readView({ input, details, text, onFile }: ToolDetails): ToolVie
 				]}
 			/>
 		),
-		body: (
-			<div className="tool-read" data-numbered={numbered || undefined}>
-				{lines.map((line, index) => {
-					const match = /^(\d+):(.*)$/.exec(line);
-					if (!match) return <div key={index} className="tool-read-line"><code>{line}</code></div>;
-					return (
-						<div key={index} className="tool-read-line">
-							<button type="button" className="tool-read-number" onClick={() => onFile(path, Number(match[1]))} title={`Open ${path} at line ${match[1]}`}>{match[1]}</button>
-							<code>{match[2]}</code>
-						</div>
-					);
-				})}
-			</div>
-		),
+		body: <ReadBody path={path} lines={lines} numbered={numbered} onFile={onFile} />,
 		handlesResult: true,
 	};
+}
+
+/**
+ * The lines keep their gutter, but the code itself is highlighted with the language of
+ * the path so a read card reads like the file rather than like a log. Hooks live in a
+ * component because the card can render before its result arrives.
+ */
+function ReadBody({ path, lines, numbered, onFile }: {
+	path: string; lines: string[]; numbered: boolean; onFile: (path: string, line?: number) => void;
+}) {
+	const rows = useMemo(() => lines.map((line) => {
+		const match = /^(\d+):(.*)$/.exec(line);
+		return { number: match?.[1], code: match ? match[2] : line };
+	}), [lines]);
+	const highlighted = useMemo(() => highlightLines(rows.map((row) => row.code).join("\n"), languageForPath(path)), [rows, path]);
+	return (
+		<div className="tool-read files-highlight" data-numbered={numbered || undefined}>
+			{rows.map((row, index) => row.number === undefined
+				? <div key={index} className="tool-read-line"><code>{highlighted[index]}</code></div>
+				: (
+					<div key={index} className="tool-read-line">
+						<button type="button" className="tool-read-number" onClick={() => onFile(path, Number(row.number))} title={`Open ${path} at line ${row.number}`}>{row.number}</button>
+						<code>{highlighted[index]}</code>
+					</div>
+				))}
+		</div>
+	);
 }

@@ -52,6 +52,12 @@
 	--border-strong: #585b70;
 	--chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E");
 	--scroll-thumb: #45475a;
+	/* Code surfaces share one family, size and rhythm so the viewer and tool cards match. */
+	--font-code: "UDEV Gothic", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--text-code: 12.5px;
+	--leading-code: 1.7;
+	--leading-diff: 1.62;
+	--tab-code: 2;
 	--scroll-thumb-hover: #6c7086;
 	color: var(--on-surface); background: var(--surface);
 	--panel: var(--surface-panel); --muted: var(--on-surface-muted); --accent: var(--primary);
@@ -407,12 +413,27 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-shell[data-failed] .tool-shell-output { color: color-mix(in srgb, var(--on-surface) 92%, var(--danger)); }
 
 /* read: line numbers are the affordance, so they get a fixed gutter and hover state. */
-.tool-read { max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 8px 0; font: 12px/1.65 "UDEV Gothic", ui-monospace, monospace; }
+/* Syntax palette: one set of token colors for the file viewer, markdown fences and
+   tool cards, tuned for long reading rather than maximum contrast per token. */
+.hljs-comment, .hljs-quote { color: #6c7086; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: #cba6f7; }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute { color: #a6e3a1; }
+.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-link { color: #fab387; }
+.hljs-title, .hljs-title.function_, .hljs-section, .hljs-selector-class, .hljs-selector-id { color: #89b4fa; }
+.hljs-title.class_, .hljs-type, .hljs-built_in, .hljs-selector-attr { color: #f9e2af; }
+.hljs-attr, .hljs-property, .hljs-variable, .hljs-template-variable, .hljs-params { color: #94e2d5; }
+.hljs-meta, .hljs-meta .hljs-keyword, .hljs-deletion { color: #f38ba8; }
+.hljs-tag, .hljs-name, .hljs-selector-pseudo { color: #cba6f7; }
+.hljs-subst, .hljs-punctuation { color: var(--on-surface-secondary); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+
+.tool-read { max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 10px 0; font-family: var(--font-code); font-size: var(--text-code); line-height: var(--leading-code); tab-size: var(--tab-code); }
 .tool-read-line { display: flex; gap: 10px; padding: 0 12px 0 0; white-space: pre; }
 .tool-read-line:hover { background: color-mix(in srgb, var(--surface-hover) 40%, transparent); }
 .tool-read-line > code { min-width: 0; padding-right: 8px; font: inherit; color: var(--on-surface); }
-.tool-read-number { flex: none; width: 4.2rem; padding: 0 10px 0 8px; border: 0; background: transparent; color: var(--on-surface-muted); font: inherit; text-align: right; cursor: pointer; user-select: none; }
-.tool-read-number:hover { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.tool-read-number { flex: none; width: 4.6rem; padding: 0 12px 0 8px; border: 0; background: transparent; color: var(--on-surface-muted); font: inherit; font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; cursor: pointer; user-select: none; opacity: .75; }
+.tool-read-number:hover { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); opacity: 1; }
 .tool-read[data-numbered] .tool-read-line > code { white-space: pre; }
 .tool-file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
 .tool-file-list > li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 3px 6px; border-radius: 5px; }
@@ -426,8 +447,9 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-edit-path { min-width: 0; overflow-wrap: anywhere; font: 11px/1.5 "UDEV Gothic", ui-monospace, monospace; }
 .tool-edit-status { margin-left: auto; color: var(--on-surface-muted); font-size: 10px; }
 .tool-edit-files .tool-error { flex: 1 1 100%; margin: 2px 0 0; font-size: 11px; }
-.tool-diff { margin: 0; max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 8px 0; font: 12px/1.6 "UDEV Gothic", ui-monospace, monospace; }
-.tool-diff > span { display: block; padding: 0 12px; white-space: pre; }
+.tool-diff { margin: 0; max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 10px 0; font-family: var(--font-code); font-size: var(--text-code); line-height: var(--leading-diff); tab-size: var(--tab-code); }
+.tool-diff > span { display: block; padding: 0 14px; white-space: pre; }
+.tool-diff-marker { display: inline-block; width: 1ch; margin-right: 6px; color: var(--on-surface-muted); }
 .tool-diff > span[data-kind="add"] { background: color-mix(in srgb, var(--success) 14%, transparent); color: color-mix(in srgb, var(--on-surface) 70%, var(--success)); }
 .tool-diff > span[data-kind="remove"] { background: color-mix(in srgb, var(--danger) 14%, transparent); color: color-mix(in srgb, var(--on-surface) 70%, var(--danger)); }
 .tool-diff > span[data-kind="hunk"] { color: var(--secondary); background: color-mix(in srgb, var(--secondary) 10%, transparent); }
@@ -435,8 +457,8 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-empty { margin: 0; padding: 10px 12px; color: var(--on-surface-muted); font-size: 11px; }
 
 /* write: the created file, verbatim. */
-.tool-written { margin: 0; max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 10px 12px; font: 12px/1.6 "UDEV Gothic", ui-monospace, monospace; white-space: pre; tab-size: 2; }
-.tool-written > span { display: block; white-space: pre; min-height: 1.6em; }
+.tool-written { margin: 0; max-height: min(45dvh, 460px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); padding: 12px 14px; font-family: var(--font-code); font-size: var(--text-code); line-height: var(--leading-code); white-space: pre; tab-size: var(--tab-code); }
+.tool-written > span { display: block; white-space: pre; min-height: 1lh; }
 
 /* browser: the screenshot is the evidence, so it leads at a readable size. */
 .tool-shot { display: block; width: fit-content; max-width: 100%; margin: 0 0 8px; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; background: var(--surface-sunken); }
@@ -477,7 +499,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .search-results p { margin: .3rem 0; }
 .tool-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin: 7px 0; color: var(--on-surface-muted); font-size: 11px; }
 .tool-meta span { padding: 3px 7px; border-radius: 5px; background: var(--tool-tint); overflow-wrap: anywhere; }
-.tool-command, .tool-output, .tool-code { max-height: 350px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 "UDEV Gothic", ui-monospace, monospace; }
+.tool-command, .tool-output, .tool-code { max-height: 350px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-code); font-size: var(--text-code); line-height: 1.6; tab-size: var(--tab-code); }
 .tool-command { padding: 10px; border-radius: 6px 6px 0 0; margin: 7px 0 0; background: var(--tool-tint); color: var(--on-surface); }
 .tool-command span { color: var(--tool-accent); }
 .tool-output { padding: 10px; border-radius: 0 0 6px 6px; margin: 0; background: var(--surface-panel); }

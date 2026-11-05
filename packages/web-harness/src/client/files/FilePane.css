@@ -171,15 +171,7 @@
 .files-markdown th { background: var(--surface-raised); }
 .files-markdown hr { width: 100%; height: 1px; margin: 24px 0; border: 0; background: linear-gradient(to right, transparent, var(--border) 12%, var(--border) 88%, transparent); opacity: .8; }
 .files-markdown hr + hr { display: none; }
-.files-highlight .hljs-keyword, .files-highlight .hljs-selector-tag, .files-highlight .hljs-literal { color: #cba6f7; }
-.files-highlight .hljs-string, .files-highlight .hljs-regexp, .files-highlight .hljs-addition { color: #a6e3a1; }
-.files-highlight .hljs-number, .files-highlight .hljs-symbol, .files-highlight .hljs-bullet { color: #fab387; }
-.files-highlight .hljs-title, .files-highlight .hljs-section, .files-highlight .hljs-selector-class, .files-highlight .hljs-selector-id { color: #89b4fa; }
-.files-highlight .hljs-comment, .files-highlight .hljs-quote { color: #7f849c; font-style: italic; }
-.files-highlight .hljs-attr, .files-highlight .hljs-attribute, .files-highlight .hljs-type, .files-highlight .hljs-built_in { color: #94e2d5; }
-.files-highlight .hljs-meta, .files-highlight .hljs-deletion { color: #f38ba8; }
-.files-highlight .hljs-emphasis { font-style: italic; }
-.files-highlight .hljs-strong { font-weight: 700; }
+
 @media (prefers-reduced-motion: reduce) {
 	.files-content { animation: none; }
 	.files-tab, .files-view-mode button, .files-tree-entry, .files-tree-marker, .files-tree-children { transition: none; }

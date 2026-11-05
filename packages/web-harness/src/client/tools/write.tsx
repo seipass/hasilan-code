@@ -1,8 +1,10 @@
+import { useMemo } from "react";
+import { highlightLines, languageForPath } from "../highlight.tsx";
 import { MetaChips, type ToolDetails, type ToolView } from "./tool-view.tsx";
 
 /**
- * write: the file it created is the answer. The new content is shown verbatim with a
- * language-less code block; snapshot facts become chips instead of badge rows.
+ * write: the file it created is the answer, so the content is shown verbatim with the
+ * language of the path. Snapshot facts become chips instead of badge rows.
  */
 export function writeView({ input, details }: ToolDetails): ToolView {
 	const path = typeof input?.path === "string" ? input.path : undefined;
@@ -18,13 +20,17 @@ export function writeView({ input, details }: ToolDetails): ToolView {
 				]}
 			/>
 		),
-		body: content === undefined
-			? undefined
-			: (
-				<pre className="tool-written">{content.split("\n").map((line, index) => (
-					<span key={index}>{line}{"\n"}</span>
-				))}</pre>
-			),
+		body: content === undefined ? undefined : <WrittenBody path={path} content={content} />,
 		handlesResult: true,
 	};
+}
+
+function WrittenBody({ path, content }: { path?: string; content: string }) {
+	const language = languageForPath(path);
+	const lines = useMemo(() => highlightLines(content, language), [content, language]);
+	return (
+		<pre className="tool-written files-highlight">{lines.map((line, index) => (
+			<span key={index}>{line}{"\n"}</span>
+		))}</pre>
+	);
 }

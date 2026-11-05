@@ -11,13 +11,18 @@ import { api, errorMessage } from "../api.ts";
 import { discardDraft, draftKey, type FileDraft, getDraft, isDraftDirty, setDraft as updateDraft, subscribeDraft } from "./file-drafts.ts";
 import "./FileEditor.css";
 
+// The same tokens as the syntax palette in styles.css, so a file reads identically in
+// the editor, in the read card and in a diff.
 const highlight = syntaxHighlighting(HighlightStyle.define([
-	{ tag: [tags.keyword, tags.operatorKeyword, tags.modifier], color: "#cba6f7" },
-	{ tag: [tags.string, tags.special(tags.string)], color: "#a6e3a1" },
-	{ tag: [tags.number, tags.bool, tags.null], color: "#fab387" },
-	{ tag: [tags.typeName, tags.className, tags.function(tags.variableName)], color: "#89b4fa" },
-	{ tag: [tags.propertyName, tags.attributeName, tags.tagName], color: "#94e2d5" },
-	{ tag: [tags.comment, tags.meta], color: "#7f849c", fontStyle: "italic" },
+	{ tag: [tags.keyword, tags.operatorKeyword, tags.modifier, tags.docComment], color: "#cba6f7" },
+	{ tag: [tags.string, tags.special(tags.string), tags.regexp, tags.attributeValue], color: "#a6e3a1" },
+	{ tag: [tags.number, tags.bool, tags.null, tags.standard(tags.name)], color: "#fab387" },
+	{ tag: [tags.typeName, tags.className, tags.function(tags.variableName), tags.definition(tags.variableName)], color: "#89b4fa" },
+	{ tag: [tags.propertyName, tags.attributeName, tags.tagName, tags.variableName], color: "#94e2d5" },
+	{ tag: [tags.labelName], color: "#f9e2af" },
+	{ tag: [tags.comment, tags.blockComment, tags.lineComment], color: "#6c7086", fontStyle: "italic" },
+	{ tag: [tags.meta, tags.processingInstruction], color: "#f38ba8" },
+	{ tag: [tags.invalid], color: "#f38ba8", textDecoration: "underline" },
 ]));
 
 export function FileEditor({ workspaceId, path, line }: { workspaceId: string; path: string; line?: number }) {

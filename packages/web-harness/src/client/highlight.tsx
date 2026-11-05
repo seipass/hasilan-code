@@ -55,6 +55,8 @@ export function languageForPath(path: string | undefined): string | undefined {
  * enters the inert document; no parsed node is inserted into the live DOM.
  */
 export function highlightLines(text: string, language?: string, auto = false): ReactNode[][] {
+	// Without a DOM (server rendering, tests) the text still has to come back intact.
+	if (typeof DOMParser === "undefined") return text.split("\n").map((line) => [line]);
 	if ((!language || !highlighter.getLanguage(language)) && !auto) return text.split("\n").map((line) => [line]);
 	const result = language && highlighter.getLanguage(language)
 		? highlighter.highlight(text, { language, ignoreIllegals: true })
