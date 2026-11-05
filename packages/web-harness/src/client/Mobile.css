@@ -69,7 +69,13 @@ html {
 	html body .session-import-trigger,
 	html body .sidebar-bottom button,
 	html body .settings-content select,
-	html body .settings-content input { min-height: 44px; }
+	html body .settings-content input,
+	html body .files-tree-filter,
+	html body .history-search input,
+	html body .quick-open-input,
+	html body .model-compact-search input,
+	html body .session-import-dialog input,
+	html body .session-import-dialog select { min-height: 44px; }
 
 	html body .sidebar-toggle,
 	html body .quiet-button,
@@ -159,8 +165,9 @@ html {
 	}
 	html body .settings-dialog .panel-heading { flex: none; padding: 10px 16px 6px; }
 	html body .settings-dialog .panel-heading button { min-width: 64px; min-height: 44px; }
-	html body .settings-tabs { flex: none; padding: 0 12px 6px; border-bottom: 1px solid var(--border-subtle); }
-	html body .settings-tabs button { min-height: 44px; }
+	html body .settings-tabs { flex: none; padding: 0 24px 6px 12px; border-bottom: 1px solid var(--border-subtle); scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent); }
+	html body .settings-tabs::-webkit-scrollbar { display: none; }
+	html body .settings-tabs button { min-height: 44px; scroll-margin-inline: 24px; }
 	html body .settings-panels { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 16px calc(20px + env(safe-area-inset-bottom)); }
 	html body .settings-content { padding-top: 14px; }
 	html body .settings-dialog > .error,
@@ -169,3 +176,32 @@ html {
 }
 
 
+
+/* The composer is the most used control on a phone, so it gets one toolbar row and
+   less empty chrome instead of wrapping the model chip onto a second line. */
+@media (max-width: 520px) {
+	html body .composer-area { padding: 10px 14px max(14px, calc(8px + env(safe-area-inset-bottom))); }
+	html body .composer { padding: 12px 9px 9px; }
+	html body .composer-toolbar { flex-wrap: nowrap; gap: 6px; padding-top: 6px; }
+	html body .composer-chip { max-width: 118px; }
+	html body .composer-delivery { flex: none; gap: 4px; }
+	html body .composer-usage { max-width: 120px; }
+}
+
+/* Long-pressing a control should not start a text selection on a phone. Message
+   text, code and links keep the native selection and callout menus. */
+@media (pointer: coarse) {
+	html body button,
+	html body summary,
+	html body [role="tab"] { -webkit-user-select: none; user-select: none; }
+}
+
+/* Code keeps more of the 390 px for itself: the line-number gutter shrinks. */
+@media (max-width: 520px) {
+	html body .file-editor-body .cm-lineNumbers .cm-gutterElement { min-width: 2.6rem; padding: 0 7px 0 6px; }
+}
+
+/* App-like shell: a phone must not reload the page on an accidental pull, and
+   iOS must not inflate text when the device turns to landscape. */
+html, body { overscroll-behavior-y: contain; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

@@ -11,8 +11,10 @@ export function trackVisualViewport(): () => void {
 
 	const typing = () => {
 		const active = document.activeElement;
-		return active instanceof HTMLElement
-			&& (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+		return (
+			active instanceof HTMLElement &&
+			(active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)
+		);
 	};
 
 	const update = () => {
@@ -36,7 +38,9 @@ export function trackVisualViewport(): () => void {
 		});
 	};
 
-	const onFocusOut = () => { window.setTimeout(schedule, 60); };
+	const onFocusOut = () => {
+		window.setTimeout(schedule, 60);
+	};
 
 	update();
 	viewport?.addEventListener("resize", schedule);

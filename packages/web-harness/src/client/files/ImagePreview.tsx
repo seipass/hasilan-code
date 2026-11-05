@@ -50,6 +50,7 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 	const lastTap = useRef<{ time: number; x: number; y: number } | undefined>(undefined);
 	const downs = useRef(new Map<number, { x: number; y: number }>());
 	const [panning, setPanning] = useState(false);
+	const coarsePointer = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 	const interactable = zoom.scale > 1;
 
 	// A new file must not inherit the previous zoom state, and a cached image finishes
@@ -251,7 +252,7 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 			{natural && <span>{natural.width} × {natural.height}</span>}
 			<span>{formatBytes(size)}</span>
 			{mime && <span>{mime.replace("image/", "").toUpperCase()}</span>}
-			{natural && zoom.scale === 1 && natural.width > 600 && <span className="image-viewer-hint">ダブルクリックで拡大</span>}
+			{natural && zoom.scale === 1 && natural.width > 600 && <span className="image-viewer-hint">{coarsePointer ? "ダブルタップで拡大" : "ダブルクリックで拡大"}</span>}
 		</p>
 	</div>;
 }

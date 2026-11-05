@@ -134,6 +134,12 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 		<div className="settings-actions"><button type="submit" disabled={busy || loginActive || !hasLlmKey}>{busy ? "保存中…" : "API キーを保存"}</button></div>
 	</form>;
 
+	// On a phone the tab list scrolls; keep the selected category visible when it changes.
+	useEffect(() => {
+		const index = TABS.findIndex((entry) => entry.id === tab);
+		tabRefs.current[index]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+	}, [tab]);
+
 	return <div className="dialog-backdrop" data-closing={closing} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
 		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onTransitionEnd={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity") onClose(); }} onTransitionCancel={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) onClose(); }} onKeyDown={(event) => {
 			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); requestClose(); }
