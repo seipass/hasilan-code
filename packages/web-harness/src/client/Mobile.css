@@ -1,0 +1,171 @@
+/*
+ * Phone and touch behaviour. Everything here is additive: the desktop layout is
+ * untouched, and the rules only apply when the pointer is coarse or the viewport is
+ * phone sized.
+ */
+
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+/* Taps should feel immediate: no 300 ms double-tap wait, no grey flash, and a
+   visible press state instead of a hover state that a finger can never produce. */
+@media (pointer: coarse) {
+	html { -webkit-tap-highlight-color: transparent; }
+	button, a, summary, label, select, [role="button"] { touch-action: manipulation; }
+
+	button:active:not(:disabled),
+	summary:active,
+	[role="button"]:active,
+	a:active { opacity: .78; }
+
+	/* 44 px is the smallest target that a thumb hits reliably. Applying it here keeps
+	   the visual density of the desktop layout while giving touch real hit areas. */
+	html body .topbar button,
+	html body .topbar a,
+	html body .sidebar-toggle,
+	html body .quiet-button,
+	html body .message-actions button,
+	html body .message-actions a,
+	html body .composer-attach-button,
+	html body .send-button,
+	html body .stop-button,
+	html body .composer-chip,
+	html body .model-trigger,
+	html body .usage-popover-trigger,
+	html body .detail-tab-strip .detail-tab,
+	html body .detail-tab-strip .detail-tab-close,
+	html body .detail-tab-strip .detail-tab-new,
+	html body .detail-tab-strip .detail-panel-icon,
+	html body .detail-toolbar button,
+	html body .file-editor-toolbar button,
+	html body .files-view-mode button,
+	html body .files-tree-entry,
+	html body .files-tree-action,
+	html body .files-tree-marker,
+	html body .files-tree-toggle,
+	html body .files-tab,
+	html body .files-tab-close,
+	html body .files-page button,
+	html body .image-viewer-toolbar button,
+	html body .image-viewer-open,
+	html body .settings-tabs button,
+	html body .settings-content button,
+	html body .settings-content summary,
+	html body .session-button,
+	html body .session-menu-button,
+	html body .workspace-accordion > summary,
+	html body .workspace-new-conversation,
+	html body .workspace-remove,
+	html body .history-control,
+	html body .history-heading-actions button,
+	html body .model-picker-option,
+	html body .command-picker button,
+	html body .tool-card > summary,
+	html body .detail-file-empty button,
+	html body .brand,
+	html body .new-conversation,
+	html body .session-import-trigger,
+	html body .sidebar-bottom button,
+	html body .settings-content select,
+	html body .settings-content input { min-height: 44px; }
+
+	html body .sidebar-toggle,
+	html body .quiet-button,
+	html body .composer-attach-button,
+	html body .send-button,
+	html body .stop-button,
+	html body .message-actions button,
+	html body .session-menu-button,
+	html body .workspace-new-conversation,
+	html body .workspace-remove,
+	html body .detail-tab-strip .detail-tab-close,
+	html body .detail-tab-strip .detail-tab-new,
+	html body .files-tree-action,
+	html body .files-tab-close,
+	html body .image-viewer-toolbar button,
+	html body .history-heading-actions button,
+	html body .brand,
+	html body .new-conversation,
+	html body .session-import-trigger,
+	html body .detail-tab-new,
+	html body .detail-panel-icon,
+	html body .split-actions button,
+	html body .file-editor-toolbar button { min-width: 44px; }
+
+	html body .message-actions button,
+	html body .message-actions a { justify-content: center; padding: 0 8px; }
+	html body .sidebar-toggle { display: grid; place-items: center; }
+	/* Split controls only appeared on hover; touch has no hover at all. */
+	html body .split-actions { opacity: 1; }
+	html body .split-actions button { min-height: 44px; }
+}
+
+/* Keep scrolling inside the panel that was touched instead of chaining to the page. */
+.conversation,
+.sidebar,
+.right-panel-body,
+.detail-tab-body,
+.settings-dialog,
+.command-picker,
+.model-picker-results,
+.quick-open-results { overscroll-behavior: contain; }
+
+/* iOS shows the page behind the keyboard unless the layout viewport is resized. The
+   app shell follows the visual viewport while a field is focused. */
+@media (max-width: 900px) {
+	.app-shell { height: var(--visual-viewport-height, 100dvh); }
+}
+
+/* Notches and the home indicator. */
+@supports (padding: env(safe-area-inset-top)) {
+	@media (max-width: 900px) {
+		.topbar { height: calc(56px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+		.sidebar { padding-top: calc(18px + env(safe-area-inset-top)); padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+		.sidebar-toggle { top: calc(12px + env(safe-area-inset-top)); }
+		.right-panel { inset: calc(56px + env(safe-area-inset-top)) 0 env(safe-area-inset-bottom); }
+		.composer-area { padding-bottom: max(16px, calc(10px + env(safe-area-inset-bottom))); }
+		.dialog-backdrop { padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+		.files-viewer,
+		.right-panel-body { scroll-padding-bottom: env(safe-area-inset-bottom); }
+	}
+}
+
+/* Phones in landscape have very little height; give the conversation the pixels back. */
+@media (max-width: 900px) and (max-height: 500px) {
+	.topbar { height: 48px; }
+	.sidebar-toggle { top: 8px; }
+	.composer-area { padding-top: 6px; padding-bottom: 8px; }
+	.composer { padding-top: 10px; padding-bottom: 8px; }
+	.composer textarea { min-height: 38px; }
+	.detail-tab-strip { min-height: 40px; }
+}
+
+/* Settings becomes a real sheet on phones: fixed header, scrolling body, no rounded
+   dialog floating over a keyboard. */
+@media (max-width: 520px) {
+	html body .dialog-backdrop { padding: 0; }
+	html body .settings-dialog {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		height: 100dvh;
+		max-height: 100dvh;
+		overflow: hidden;
+		border: 0;
+		border-radius: 0;
+		padding: env(safe-area-inset-top) 0 0;
+	}
+	html body .settings-dialog .panel-heading { flex: none; padding: 10px 16px 6px; }
+	html body .settings-dialog .panel-heading button { min-width: 64px; min-height: 44px; }
+	html body .settings-tabs { flex: none; padding: 0 12px 6px; border-bottom: 1px solid var(--border-subtle); }
+	html body .settings-tabs button { min-height: 44px; }
+	html body .settings-panels { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 16px calc(20px + env(safe-area-inset-bottom)); }
+	html body .settings-content { padding-top: 14px; }
+	html body .settings-dialog > .error,
+	html body .settings-dialog > .settings-notice,
+	html body .settings-dialog > p[role="status"] { flex: none; margin: 8px 16px; }
+}
+
+

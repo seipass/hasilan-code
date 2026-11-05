@@ -4,9 +4,11 @@ import { App } from "./App.tsx";
 import { errorMessage } from "./api.ts";
 import { anyDraftDirty } from "./files/file-drafts.ts";
 import { preferences } from "./preferences.ts";
+import { trackVisualViewport } from "./visual-viewport.ts";
 import "./styles.css";
 import "./GlassSurfaces.css";
 import "./CornerRadius.css";
+import "./Mobile.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Application root is missing");
@@ -31,6 +33,7 @@ window.addEventListener("focus", () => { void preferences.sync().catch(() => und
 document.addEventListener("visibilitychange", () => { if (document.hidden) void preferences.flush().catch(() => undefined); });
 window.setInterval(() => { if (!document.hidden) void preferences.sync().catch(() => undefined); }, 3000);
 void start();
+trackVisualViewport();
 
 declare global {
 	interface Window { hasilanFlushPreferences?: () => Promise<void> }

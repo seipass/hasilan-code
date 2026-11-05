@@ -304,6 +304,12 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 							if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") { event.preventDefault(); chooseCommand(suggestions[activeCommand].command); return; }
 						}
 						if (matchesAppKeybinding(event, "composer.send")) { event.preventDefault(); if (!event.repeat) void submit(); return; }
+					}} onFocus={() => {
+						// Focusing the composer opens the keyboard; keep the newest message visible.
+						const scroller = input.current?.closest(".chat-pane")?.querySelector<HTMLElement>(".conversation");
+						if (!scroller) return;
+						if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 240) return;
+						window.setTimeout(() => { scroller.scrollTop = scroller.scrollHeight; }, 320);
 					}} onPaste={(event) => {
 						const files = Array.from(event.clipboardData.files);
 						if (!files.length) return;
