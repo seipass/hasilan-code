@@ -46,9 +46,6 @@
 	--leading-snug: 1.45;
 	--leading-normal: 1.6;
 	--leading-prose: 1.8;
-	/* 48 full-width characters fill the 744 px message column instead of leaving a
-	   180 px empty gutter, so prose lines up with the tool cards and the composer. */
-	--measure-prose: 48em;
 	--measure-code: 100%;
 	--primary: #cba6f7;
 	--primary-hover: #b4befe;
@@ -308,7 +305,6 @@ legend { font-weight: 600; padding: 0 .4rem; }
    line and `text-wrap: pretty` avoids a one-character last line. Phrase-aware breaking
    (auto-phrase) was removed: it left 40-150 px of unused space at the end of every line. */
 .message-content {
-	max-width: var(--measure-prose);
 	font-size: var(--text-base);
 	line-height: var(--leading-prose);
 	line-break: strict;

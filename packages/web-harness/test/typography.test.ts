@@ -24,12 +24,6 @@ it("sizes prose from the shared scale instead of raw pixels", () => {
 	expect(styles).toMatch(/\.message-content \{[\s\S]*?line-height: var\(--leading-prose\)/);
 });
 
-// A 744px column held ~49 Japanese characters; 48em fills it instead of leaving a wide gutter.
-it("bounds the reading measure", () => {
-	expect(styles).toContain("--measure-prose: 48em;");
-	expect(styles).toMatch(/\.message-content \{[\s\S]*?max-width: var\(--measure-prose\)/);
-});
-
 // Japanese typesetting was limited to overflow-wrap, which splits Latin words mid-word.
 it("applies Japanese line-breaking rules to prose", () => {
 	expect(styles).toMatch(/\.message-content \{[\s\S]*?line-break: strict/);
