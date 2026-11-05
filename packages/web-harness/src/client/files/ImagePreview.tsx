@@ -18,6 +18,18 @@ function formatBytes(bytes: number) {
 }
 
 /**
+ * A drag that outruns the image would leave an empty pane with no clue how to get back,
+ * so the translation stops where the image still meets the pane: edges stay covered when
+ * the image is larger than the pane, and the image stays inside it when it is smaller.
+ */
+function bounded(zoom: Zoom, box?: { width: number; height: number }, size?: { width: number; height: number }): Zoom {
+	if (!box || !size) return zoom;
+	const limitX = Math.abs(size.width * zoom.scale - box.width) / 2;
+	const limitY = Math.abs(size.height * zoom.scale - box.height) / 2;
+	return { scale: zoom.scale, x: Math.max(-limitX, Math.min(limitX, zoom.x)), y: Math.max(-limitY, Math.min(limitY, zoom.y)) };
+}
+
+/**
  * Image viewer with the affordances a screenshot actually needs: the whole image is
  * visible first, then zoom, pan, pixel-accurate inspection on click, and a way out to
  * the raw file. Zoom anchors on the pointer so the pixel under the cursor stays put.
@@ -48,8 +60,24 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 		if (element && ready) setNatural({ width: element.naturalWidth, height: element.naturalHeight });
 	}, [path, revision]);
 
+	// The pane box without its padding, plus the image's laid-out (unscaled) size.
+	const measure = useCallback(() => {
+		const element = stage.current;
+		const picture = image.current;
+		if (!element || !picture) return {};
+		const style = getComputedStyle(element);
+		return {
+			box: {
+				width: element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+				height: element.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom),
+			},
+			size: { width: picture.offsetWidth, height: picture.offsetHeight },
+		};
+	}, []);
+
 	const apply = useCallback((next: number, anchor?: { x: number; y: number }) => {
 		const rect = stage.current?.getBoundingClientRect();
+		const metrics = measure();
 		setZoom((current) => {
 			if (!rect) return { ...current, scale: next };
 			// Keep the point under the anchor fixed while the scale changes.
@@ -58,9 +86,21 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 			const ax = anchor ? anchor.x - rect.left : rect.width / 2;
 			const ay = anchor ? anchor.y - rect.top : rect.height / 2;
 			const ratio = next / current.scale;
-			return { scale: next, x: originX + (ax - originX) * ratio - rect.width / 2, y: originY + (ay - originY) * ratio - rect.height / 2 };
+			return bounded({ scale: next, x: originX + (ax - originX) * ratio - rect.width / 2, y: originY + (ay - originY) * ratio - rect.height / 2 }, metrics.box, metrics.size);
 		});
-	}, []);
+	}, [measure]);
+
+	// A wider pane or a window resize changes how much of the image fits, so re-clamp.
+	useEffect(() => {
+		const element = stage.current;
+		if (!element) return;
+		const observer = new ResizeObserver(() => {
+			const metrics = measure();
+			setZoom((current) => bounded(current, metrics.box, metrics.size));
+		});
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [measure]);
 
 	const step = (direction: 1 | -1) => {
 		const index = STEPS.findIndex((value) => value >= zoom.scale - 0.001);
@@ -106,8 +146,10 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 				setPanning(true);
 			}}
 			onPointerMove={(event) => {
-				if (drag.current?.pointerId !== event.pointerId) return;
-				setZoom((current) => ({ ...current, x: drag.current!.x + event.clientX - drag.current!.startX, y: drag.current!.y + event.clientY - drag.current!.startY }));
+				const active = drag.current;
+				if (active?.pointerId !== event.pointerId) return;
+				const metrics = measure();
+				setZoom((current) => bounded({ ...current, x: active.x + event.clientX - active.startX, y: active.y + event.clientY - active.startY }, metrics.box, metrics.size));
 			}}
 			onPointerUp={(event) => {
 				if (drag.current?.pointerId !== event.pointerId) return;
@@ -122,7 +164,8 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 				else if (event.key === "0") { event.preventDefault(); setZoom({ scale: 1, x: 0, y: 0 }); }
 				else if (interactable && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
 					event.preventDefault();
-					setZoom((current) => ({ ...current, x: current.x + (event.key === "ArrowLeft" ? 40 : event.key === "ArrowRight" ? -40 : 0), y: current.y + (event.key === "ArrowUp" ? 40 : event.key === "ArrowDown" ? -40 : 0) }));
+					const metrics = measure();
+					setZoom((current) => bounded({ ...current, x: current.x + (event.key === "ArrowLeft" ? 40 : event.key === "ArrowRight" ? -40 : 0), y: current.y + (event.key === "ArrowUp" ? 40 : event.key === "ArrowDown" ? -40 : 0) }, metrics.box, metrics.size));
 				}
 			}}
 		>
