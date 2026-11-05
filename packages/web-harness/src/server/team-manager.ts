@@ -1942,14 +1942,15 @@ export class TeamManager {
 							const swarm = this.registry.descriptor(sessionId).swarm;
 							const agent = this.agentForSession(sessionId);
 							const current = this.current(agent);
-							if (
-								agent.parentAgentId ||
-								swarm?.status !== "active" ||
-								!current ||
-								this.runtime.get(current.runId)?.swarmId !== swarm.id
-							)
+							if (agent.parentAgentId || !swarm || !current)
 								throw new HarnessError("No active Hyakki-Yako root run", 409);
 							if (!params.reason.trim()) throw new HarnessError("Swarm completion or block requires a reason");
+							// A plain user prompt to the root is not tagged with the swarm id but still speaks
+							// for it. Blocking an already blocked swarm is a no-op rather than an error.
+							if (swarm.status !== "active") {
+								if (params.op === "block" && swarm.status === "blocked") return structuredClone(swarm);
+								throw new HarnessError("Hyakki-Yako is not active", 409);
+							}
 							if (params.op === "complete") {
 								const descendants = this.registry.state.agents.filter((child) =>
 									this.ancestor(agent.agentId, child),
