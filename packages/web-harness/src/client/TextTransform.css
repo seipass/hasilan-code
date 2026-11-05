@@ -1,9 +1,9 @@
 .thinking-actions { display: inline-flex; gap: 3px; flex: none; }
 .thinking:not([open]) .thinking-actions { display: none; }
-.thinking-actions button { padding: 2px 5px; min-width: 24px; font-size: 12px; line-height: 1.2; }
+.thinking-actions button { padding: 2px 5px; min-width: 24px; font-size: var(--text-sm); line-height: var(--leading-tight); }
 .thinking-actions svg { display: block; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .text-transform-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .text-transform-result { padding: 12px 16px; overflow-wrap: anywhere; }
-.text-transform-header button { font-size: 12px; }
+.text-transform-header button { font-size: var(--text-sm); }
 .detail-context-menu { z-index: 500; }
 .detail-context-menu button:hover, .detail-context-menu button:focus-visible { background: var(--surface-hover); }

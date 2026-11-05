@@ -25,7 +25,7 @@
 .split-drop-preview[data-edge="right"] { inset: 0 0 0 50%; }
 .split-drop-preview[data-edge="top"] { inset: 0 0 50% 0; }
 .split-drop-preview[data-edge="bottom"] { inset: 50% 0 0 0; }
-.split-drop-preview span { padding: 7px 12px; border-radius: 5px; background: var(--surface-panel); color: var(--on-surface); font-size: 12px; }
+.split-drop-preview span { padding: 7px 12px; border-radius: 5px; background: var(--surface-panel); color: var(--on-surface); font-size: var(--text-sm); }
 @keyframes split-drop-enter { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .split-actions { transition: none; } .split-drop-preview { animation: none; } }
 .split-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }

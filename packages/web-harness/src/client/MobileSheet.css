@@ -31,7 +31,7 @@
 	.mobile-sheet[open]::backdrop { opacity: 0; }
 }
 .mobile-sheet-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); }
-.mobile-sheet-heading h2 { margin: 0; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+.mobile-sheet-heading h2 { margin: 0; min-width: 0; font-size: var(--text-lg); overflow-wrap: anywhere; }
 .mobile-sheet-heading button { min-width: 64px; min-height: 44px; flex: none; }
 .mobile-sheet-actions { display: flex; align-items: center; flex: none; gap: 8px; }
 .mobile-sheet-content { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: env(safe-area-inset-bottom, 0px); }

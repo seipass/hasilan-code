@@ -8,11 +8,11 @@
 .command-picker-option { --command-color: var(--primary-hover); display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; text-align: left; background: transparent; transition: background 100ms ease, border-color 100ms ease; }
 .command-picker-option[aria-selected="true"], .command-picker-option:hover { border-color: color-mix(in srgb, var(--command-color) 30%, transparent); background: color-mix(in srgb, var(--command-color) 9%, var(--surface-raised)); }
 .command-picker-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.command-picker-title { color: var(--on-surface); font-weight: 600; font-size: 12px; line-height: 1.4; }
-.command-picker-description { color: var(--on-surface-muted); font-size: 11px; line-height: 1.5; }
+.command-picker-title { color: var(--on-surface); font-weight: 600; font-size: var(--text-sm); line-height: var(--leading-snug); }
+.command-picker-description { color: var(--on-surface-muted); font-size: var(--text-xs); line-height: var(--leading-normal); }
 .command-picker-enter { flex: none; width: 16px; color: var(--command-color); opacity: 0; transform: translateX(-4px); transition: opacity var(--motion-quick) ease, transform var(--motion-quick) var(--motion-ease); }
 .command-picker-option[aria-selected="true"] .command-picker-enter { opacity: 1; transform: translateX(0); }
-.command-picker-empty { display: grid; gap: 7px; padding: 24px 12px; font-size: 12px; }
+.command-picker-empty { display: grid; gap: 7px; padding: 24px 12px; font-size: var(--text-sm); }
 .command-picker-empty span { color: var(--on-surface-muted); }
 @media (max-width: 600px) { .command-picker-option { padding-inline: 7px; } }
 @media (prefers-reduced-motion: reduce) { .command-picker-option { transition: none; } }

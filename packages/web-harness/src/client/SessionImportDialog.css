@@ -5,37 +5,37 @@
 .session-import-heading h2 { margin: 0; }
 .session-import-heading > div { min-width: 0; }
 .session-import-heading > button { flex: none; white-space: nowrap; }
-.session-import-heading code { display: block; margin-top: 4px; font-size: 12px; overflow-wrap: anywhere; }
-.session-import-source { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 0 20px 12px; font-size: 12px; }
+.session-import-heading code { display: block; margin-top: 4px; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.session-import-source { display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; gap: 12px; align-items: end; padding: 0 20px 12px; font-size: var(--text-sm); }
 .session-import-source button { min-height: 36px; }
-.session-import-paths { flex: none; margin: 0; padding: 0 20px 12px; color: var(--on-surface-muted); font-size: 11px; overflow-wrap: anywhere; }
-.session-import-warnings { flex: none; max-height: 100px; overflow: auto; margin: 0 20px 12px; color: var(--warning); font-size: 12px; }
+.session-import-paths { flex: none; margin: 0; padding: 0 20px 12px; color: var(--on-surface-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.session-import-warnings { flex: none; max-height: 100px; overflow: auto; margin: 0 20px 12px; color: var(--warning); font-size: var(--text-sm); }
 .session-import-body { display: grid; flex: 1; grid-template-columns: minmax(220px, 36%) minmax(0, 1fr); min-height: 0; background: color-mix(in srgb, var(--surface-sunken) 32%, transparent); }
 .session-import-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .session-import-list > label { padding: 12px; }
-.session-import-list input { width: 100%; font-size: 12px; }
+.session-import-list input { width: 100%; font-size: var(--text-sm); }
 .session-import-candidates { flex: 1; overflow: auto; min-height: 0; padding: 0 6px 6px; }
 .session-import-candidates > button { display: grid; gap: 5px; width: 100%; margin-bottom: 4px; padding: 12px; border: 1px solid transparent; text-align: left; background: transparent; }
 .session-import-candidates > [aria-selected="true"] { background: var(--primary-container); }
-.session-import-candidates strong { font-weight: 600; font-size: 12px; overflow-wrap: anywhere; }
-.session-import-candidates span, .session-import-candidates time { color: var(--on-surface-muted); font-size: 11px; overflow-wrap: anywhere; }
-.session-import-candidates > p { margin: 12px; color: var(--on-surface-muted); font-size: 12px; }
+.session-import-candidates strong { font-weight: 600; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.session-import-candidates span, .session-import-candidates time { color: var(--on-surface-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.session-import-candidates > p { margin: 12px; color: var(--on-surface-muted); font-size: var(--text-sm); }
 .session-import-preview { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; padding: 16px 20px; min-width: 0; min-height: 0; overflow: auto; }
 .session-import-preview > * { grid-area: 1 / 1; min-width: 0; margin-top: 0; }
 .session-import-preview h3 { margin-top: 0; overflow-wrap: anywhere; }
-.session-import-empty { color: var(--on-surface-muted); font-size: 13px; }
+.session-import-empty { color: var(--on-surface-muted); font-size: var(--text-md); }
 .session-import-message { margin-top: 16px; }
-.session-import-message > span { color: var(--on-surface-muted); font-size: 11px; }
-.session-import-message .message-content { font-size: 12px; line-height: 1.7; }
+.session-import-message > span { color: var(--on-surface-muted); font-size: var(--text-xs); }
+.session-import-message .message-content { font-size: var(--text-sm); line-height: var(--leading-code); }
 .session-import-message pre { max-height: 240px; overflow: auto; }
-.session-import-warning { color: var(--warning); font-size: 12px; }
-.session-import-error { flex: none; margin: 0; padding: 8px 20px; color: var(--danger); font-size: 12px; overflow-wrap: anywhere; }
+.session-import-warning { color: var(--warning); font-size: var(--text-sm); }
+.session-import-error { flex: none; margin: 0; padding: 8px 20px; color: var(--danger); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .session-import-preview .session-import-error { padding-inline: 0; }
 .session-import-actions { display: flex; flex: none; justify-content: flex-end; padding: 14px 20px; }
-.session-import-actions > button { flex: none; border-color: var(--primary); background: var(--primary-container); font-size: 12px; }
+.session-import-actions > button { flex: none; border-color: var(--primary); background: var(--primary-container); font-size: var(--text-sm); }
 @media (max-width: 600px) {
 	.session-import-dialog { width: 100%; max-width: none; height: 100dvh; margin: 0; border-radius: 0; }
-	.session-import-dialog input, .session-import-dialog select { min-height: 44px; font-size: 16px; }
+	.session-import-dialog input, .session-import-dialog select { min-height: 44px; font-size: var(--text-lg); }
 	.session-import-heading { padding: 16px 12px 12px; }
 	.session-import-source { grid-template-columns: minmax(0, 1fr) auto; padding-inline: 12px; }
 	.session-import-source label:first-child { grid-column: 1 / -1; }

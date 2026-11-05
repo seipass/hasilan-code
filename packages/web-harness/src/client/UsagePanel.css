@@ -1,4 +1,4 @@
-.usage-panel { margin: 8px 0; font-size: 11px; color: var(--on-surface-secondary); }
+.usage-panel { margin: 8px 0; font-size: var(--text-xs); color: var(--on-surface-secondary); }
 .usage-panel > summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; cursor: pointer; padding: 5px 0; }
 .usage-panel > summary::before {
 	content: "";
@@ -17,14 +17,14 @@
 .usage-data-slot { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
 .usage-data-slot > * { grid-area: 1 / 1; min-width: 0; }
 .usage-table-scroll { max-width: 100%; max-height: min(32vh, 280px); overflow: auto; overscroll-behavior: contain; }
-.usage-table-scroll table { width: 100%; border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+.usage-table-scroll table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); white-space: nowrap; }
 .usage-table-scroll tbody { position: relative; }
 .usage-table-scroll th, .usage-table-scroll td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; }
 .usage-table-scroll th:nth-child(-n+2), .usage-table-scroll td:nth-child(-n+2) { text-align: left; }
 .usage-provider { color: var(--on-surface-muted); }
 
 .usage-popover { position: relative; flex: none; margin: 0; }
-.usage-popover-trigger { display: inline-flex; align-items: center; gap: 4px; max-width: 190px; min-height: 28px; padding: 4px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--on-surface-secondary); font: inherit; font-size: 11px; line-height: 1.5; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.usage-popover-trigger { display: inline-flex; align-items: center; gap: 4px; max-width: 190px; min-height: 28px; padding: 4px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--on-surface-secondary); font: inherit; font-size: var(--text-xs); line-height: var(--leading-normal); text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .usage-popover-trigger > svg { flex: none; }
 .context-usage-percent { display: none; font-variant-numeric: tabular-nums; }
 .usage-popover-trigger:hover { background: var(--surface-hover); color: var(--on-surface-secondary); }
@@ -35,7 +35,7 @@
 @starting-style {
 	.usage-popover-content:not([hidden]) { opacity: 0; transform: translateY(6px) scale(.985); }
 }
-.usage-popover-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px 0; font-size: 12px; }
-.usage-popover-header button { flex: none; padding: 4px 8px; border: 0; background: transparent; color: var(--on-surface-muted); font-size: 11px; }
+.usage-popover-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px 0; font-size: var(--text-sm); }
+.usage-popover-header button { flex: none; padding: 4px 8px; border: 0; background: transparent; color: var(--on-surface-muted); font-size: var(--text-xs); }
 .usage-popover-header button:hover { background: var(--surface-hover); color: var(--on-surface); }
 .usage-popover-content > .usage-panel-body { border: 0; border-radius: 0; background: transparent; }

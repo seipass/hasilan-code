@@ -46,8 +46,8 @@
 	pointer-events: auto;
 }
 
-.team-graph-top .team-overview h2 { margin-top: 0; font-size: 14px; }
-.team-graph-top .team-overview p { font-size: 11px; }
+.team-graph-top .team-overview h2 { margin-top: 0; font-size: var(--text-base); }
+.team-graph-top .team-overview p { font-size: var(--text-xs); }
 .team-graph-controls {
 	flex: 0 1 300px;
 	max-width: 100%;
@@ -74,7 +74,7 @@
 }
 
 .team-focus > .motion-size { display: flex; flex-direction: column; justify-content: flex-end; }
-.team-focus-close { position: sticky; top: 0; float: right; z-index: 3; width: 28px; height: 28px; margin: -8px -8px 0 8px; padding: 0; border: 0; background: var(--surface-raised); font-size: 18px; }
+.team-focus-close { position: sticky; top: 0; float: right; z-index: 3; width: 28px; height: 28px; margin: -8px -8px 0 8px; padding: 0; border: 0; background: var(--surface-raised); font-size: var(--text-xl); }
 .team-focus-reopen { position: absolute; right: 12px; bottom: 12px; z-index: 2; padding: 7px 12px; background: var(--surface-raised); }
 .team-focus > .motion-size > div { flex: none; }
 
@@ -89,10 +89,10 @@
 	padding: 8px;
 }
 
-.team-graph-toolbar button { min-height: 30px; padding: 4px 8px; font-size: 11px; }
+.team-graph-toolbar button { min-height: 30px; padding: 4px 8px; font-size: var(--text-xs); }
 .team-graph-zoom { display: flex; align-items: center; gap: 3px; margin-right: auto; }
-.team-graph-zoom button { min-width: 30px; font-size: 14px; }
-.team-graph-zoom output { min-width: 40px; text-align: center; font-size: 11px; color: var(--on-surface-secondary); font-variant-numeric: tabular-nums; }
+.team-graph-zoom button { min-width: 30px; font-size: var(--text-base); }
+.team-graph-zoom output { min-width: 40px; text-align: center; font-size: var(--text-xs); color: var(--on-surface-secondary); font-variant-numeric: tabular-nums; }
 
 .team-graph-viewport {
 	position: absolute;
@@ -149,14 +149,14 @@
 .team-graph-node.is-selected:hover:not(:disabled) { background: var(--primary-container); }
 .team-graph-node:focus-visible { outline: 3px solid var(--on-primary-container); outline-offset: 4px; z-index: 1; }
 
-.team-graph-node-role { display: flex; justify-content: space-between; gap: 6px; color: var(--on-surface-muted); font-size: 10px; line-height: 16px; }
+.team-graph-node-role { display: flex; justify-content: space-between; gap: 6px; color: var(--on-surface-muted); font-size: var(--text-xs); line-height: 16px; }
 .team-graph-node.is-root .team-graph-node-role { color: var(--on-primary-container); }
 .team-graph-node-role > span { color: var(--on-primary-container); }
-.team-graph-node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; line-height: 22px; }
-.team-graph-node-task { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: var(--on-surface-secondary); font-size: 11px; line-height: 1.55; }
+.team-graph-node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-base); font-weight: 600; line-height: 22px; }
+.team-graph-node-task { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: var(--on-surface-secondary); font-size: var(--text-xs); line-height: var(--leading-normal); }
 .team-node-task-swap { min-height: 0; overflow: hidden; }
 .team-graph-node-footer { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-width: 0; }
-.team-graph-node-wait { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warning); font-size: 10px; }
+.team-graph-node-wait { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warning); font-size: var(--text-xs); }
 .team-pane .team-map-state.status-queued { color: var(--on-secondary-container); background: var(--secondary-container); }
 .team-pane .team-map-state.status-ready { color: var(--on-surface-secondary); background: var(--surface-hover); }
 .team-member-state { display: inline-block; margin-top: 8px; }
@@ -165,7 +165,7 @@
 .team-pane .team-map-state.status-coordinating { color: var(--on-secondary-container); background: var(--secondary-container); }
 .team-pane .team-map-state.status-paused, .team-pane .team-map-state.status-blocked { color: var(--on-warning-container); background: var(--warning-container); }
 
-.team-graph-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 0 8px 8px; color: var(--on-surface-muted); font-size: 10px; }
+.team-graph-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 0 8px 8px; color: var(--on-surface-muted); font-size: var(--text-xs); }
 .team-graph-legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .team-graph-line { width: 22px; height: 0; border-top: 2px solid var(--on-surface-muted); }
 .team-graph-line.is-waiting { border-top-color: var(--warning); border-top-style: dashed; }
@@ -178,13 +178,13 @@
 .team-graph-node-footer > [data-motion-exit="true"] { position: absolute; right: 0; }
 .team-task-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 16px; }
 .team-task-heading h4 { margin-top: 0; }
-.team-task-heading .text-link { flex: none; font-size: 12px; }
+.team-task-heading .text-link { flex: none; font-size: var(--text-sm); }
 .team-focus-actions { border-top: 0; }
 .team-focus-actions:empty { display: none; }
 
 .team-responsibility { margin-block: 12px; padding-block: 10px; border-block: 1px solid var(--border-subtle); }
-.team-responsibility h4 { margin: 0 0 6px; font-size: 11px; color: var(--on-surface-muted); }
-.team-responsibility p { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+.team-responsibility h4 { margin: 0 0 6px; font-size: var(--text-xs); color: var(--on-surface-muted); }
+.team-responsibility p { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-sm); line-height: var(--leading-normal); }
 @container (max-width: 540px) {
 	.team-graph-top > .team-overview { flex-basis: 100%; max-width: none; }
 	.team-graph-controls { flex-basis: 100%; }
@@ -199,16 +199,16 @@
 /* Readable at a glance: hide task previews when zoomed out and offer a list view. */
 .team-graph-canvas[data-compact] .team-graph-node { grid-template-rows: 14px 20px; padding: 6px 8px; gap: 2px; }
 .team-graph-canvas[data-compact] .team-node-task-swap, .team-graph-canvas[data-compact] .team-graph-node-footer { display: none; }
-.team-graph-canvas[data-compact] .team-graph-node-name { font-size: 12px; }
-.team-graph-canvas[data-compact] .team-graph-node-role { font-size: 9px; }
+.team-graph-canvas[data-compact] .team-graph-node-name { font-size: var(--text-sm); }
+.team-graph-canvas[data-compact] .team-graph-node-role { font-size: var(--text-2xs); }
 /* The graph fills the pane, so the switch floats above it. */
 .team-view-switch { position: absolute; top: 8px; left: 8px; z-index: 3; display: flex; gap: 4px; border-radius: 9px; background: var(--surface-panel); }
 .team-list { position: absolute; inset: 44px 0 0; overflow-y: auto; padding: 8px 12px 16px; }
-.team-view-switch button { padding: 4px 10px; border: 1px solid transparent; background: transparent; color: var(--on-surface-muted); font-size: 11px; }
+.team-view-switch button { padding: 4px 10px; border: 1px solid transparent; background: transparent; color: var(--on-surface-muted); font-size: var(--text-xs); }
 .team-view-switch button[aria-pressed="true"] { background: var(--primary-container); color: var(--on-surface); border-color: var(--primary); }
 .team-list { display: flex; flex-direction: column; gap: 6px; }
 .team-list > .team-overview { margin-bottom: 10px; }
 .team-list-row { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 9px; background: var(--surface-raised); text-align: left; }
 .team-list-row[aria-pressed="true"] { border-color: var(--primary); }
-.team-list-main { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
-.team-list-task { color: var(--on-surface-muted); font-size: 11px; line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.team-list-main { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--text-md); }
+.team-list-task { color: var(--on-surface-muted); font-size: var(--text-xs); line-height: var(--leading-normal); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
