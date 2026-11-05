@@ -209,6 +209,23 @@ function coerceWithJsonSchema(value: unknown, schema: JsonSchemaObject): unknown
 	}
 
 	const schemaTypes = getSchemaTypes(schema);
+	// Weaker models send arrays and objects as their JSON text, and TypeBox's Value.Convert
+	// does not parse those back. Only accept a parse that produces the declared kind.
+	if (
+		typeof nextValue === "string" &&
+		!schemaTypes.includes("string") &&
+		(schemaTypes.includes("array") || schemaTypes.includes("object"))
+	) {
+		try {
+			const parsed = JSON.parse(nextValue) as unknown;
+			const matchesKind = schemaTypes.includes("array")
+				? Array.isArray(parsed)
+				: typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
+			if (matchesKind) nextValue = parsed;
+		} catch {
+			// Not JSON. Leave it for the validator to report against the received value.
+		}
+	}
 	const matchesUnionMember =
 		schemaTypes.length > 1 && schemaTypes.some((schemaType) => matchesJsonType(nextValue, schemaType));
 	if (schemaTypes.length > 0 && !matchesUnionMember) {
@@ -339,6 +356,14 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 
 	if (validator.Check(args)) {
 		return args;
+	}
+
+	// TypeBox schemas normally rely on Value.Convert, which leaves serialized arrays and
+	// objects untouched (and does not descend into unions). Retry with the schema walker
+	// so a stringified "tasks": "[{...}]" still validates.
+	const coercedArgs = coerceWithJsonSchema(args, tool.parameters as JsonSchemaObject);
+	if (validator.Check(coercedArgs)) {
+		return coercedArgs;
 	}
 
 	const errors =

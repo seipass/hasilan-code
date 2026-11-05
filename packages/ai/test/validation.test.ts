@@ -90,6 +90,16 @@ describe("validateToolArguments", () => {
 				input: "1",
 				expected: 1,
 			},
+			{
+				schema: { type: "array", items: { type: "string" } } as Tool["parameters"],
+				input: '["a","b"]',
+				expected: ["a", "b"],
+			},
+			{
+				schema: { type: "object", properties: { a: { type: "string" } } } as Tool["parameters"],
+				input: '{"a":"b"}',
+				expected: { a: "b" },
+			},
 		];
 
 		for (const testCase of passingCases) {
@@ -207,6 +217,48 @@ describe("validateToolArguments", () => {
 			expect(() => validateToolArguments(tool, toolCall)).toThrow("Validation failed");
 		}
 	});
+	it("coerces JSON-encoded arrays and objects inside TypeBox unions", () => {
+		const tool: Tool = {
+			name: "team",
+			description: "Team",
+			parameters: Type.Union([
+				Type.Object({
+					action: Type.Literal("spawn"),
+					tasks: Type.Array(Type.Object({ name: Type.String(), tools: Type.Optional(Type.Array(Type.String())) })),
+				}),
+				Type.Object({
+					action: Type.Literal("wait"),
+					agentIds: Type.Array(Type.String()),
+					timeoutMs: Type.Optional(Type.Integer()),
+				}),
+			]),
+		};
+		const call = (args: Record<string, unknown>): ToolCall => ({
+			type: "toolCall",
+			id: "team-1",
+			name: "team",
+			arguments: args as ToolCall["arguments"],
+		});
+
+		expect(
+			validateToolArguments(
+				tool,
+				call({ action: "spawn", tasks: JSON.stringify([{ name: "recon", tools: JSON.stringify(["read"]) }]) }),
+			),
+		).toEqual({ action: "spawn", tasks: [{ name: "recon", tools: ["read"] }] });
+		expect(
+			validateToolArguments(tool, call({ action: "wait", agentIds: JSON.stringify(["a1"]), timeoutMs: "0" })),
+		).toEqual({
+			action: "wait",
+			agentIds: ["a1"],
+			timeoutMs: 0,
+		});
+		expect(() => validateToolArguments(tool, call({ action: "spawn", tasks: "not json" }))).toThrow("must be array");
+		expect(() =>
+			validateToolArguments(tool, call({ action: "spawn", tasks: JSON.stringify({ name: "recon" }) })),
+		).toThrow("must be array");
+	});
+
 	// #10897
 	it("reports malformed arguments JSON instead of validating empty arguments", () => {
 		const tool: Tool = {
