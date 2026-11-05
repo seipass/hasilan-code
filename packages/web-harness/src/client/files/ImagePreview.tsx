@@ -45,6 +45,10 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 	const stage = useRef<HTMLDivElement>(null);
 	const image = useRef<HTMLImageElement>(null);
 	const drag = useRef<{ pointerId: number; startX: number; startY: number; x: number; y: number } | undefined>(undefined);
+	const pointers = useRef(new Map<number, { x: number; y: number }>());
+	const pinch = useRef<{ distance: number; scale: number; x: number; y: number; midX: number; midY: number } | undefined>(undefined);
+	const lastTap = useRef<{ time: number; x: number; y: number } | undefined>(undefined);
+	const downs = useRef(new Map<number, { x: number; y: number }>());
 	const [panning, setPanning] = useState(false);
 	const interactable = zoom.scale > 1;
 
@@ -138,26 +142,83 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 			tabIndex={0}
 			role="img"
 			aria-label={`${path}（${Math.round(zoom.scale * 100)} パーセント）`}
-			onDoubleClick={() => setZoom({ scale: zoom.scale > 1 ? 1 : 2, x: 0, y: 0 })}
 			onPointerDown={(event) => {
-				if (!interactable || event.button !== 0) return;
+				if (event.pointerType === "mouse" && event.button !== 0) return;
 				event.currentTarget.setPointerCapture(event.pointerId);
-				drag.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: zoom.x, y: zoom.y };
-				setPanning(true);
+				pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+				downs.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+				if (pointers.current.size === 1) {
+					drag.current = interactable ? { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: zoom.x, y: zoom.y } : undefined;
+					setPanning(interactable);
+					return;
+				}
+				if (pointers.current.size === 2) {
+					// Two fingers: pinch to zoom around their midpoint and pan with it.
+					const [a, b] = [...pointers.current.values()];
+					pinch.current = {
+						distance: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+						scale: zoom.scale,
+						x: zoom.x,
+						y: zoom.y,
+						midX: (a.x + b.x) / 2,
+						midY: (a.y + b.y) / 2,
+					};
+					drag.current = undefined;
+					setPanning(true);
+				}
 			}}
 			onPointerMove={(event) => {
+				if (!pointers.current.has(event.pointerId)) return;
+				pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+				const metrics = measure();
+				const start = pinch.current;
+				if (start && pointers.current.size >= 2) {
+					const rect = stage.current?.getBoundingClientRect();
+					if (!rect) return;
+					const [a, b] = [...pointers.current.values()];
+					const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+					const next = Math.min(MAX_SCALE, Math.max(STEPS[0], start.scale * (Math.hypot(a.x - b.x, a.y - b.y) / start.distance)));
+					// Keep the content under the starting midpoint under the moving midpoint.
+					const centerX = rect.left + rect.width / 2;
+					const centerY = rect.top + rect.height / 2;
+					const contentX = (start.midX - centerX - start.x) / start.scale;
+					const contentY = (start.midY - centerY - start.y) / start.scale;
+					setZoom(bounded({ scale: next, x: mid.x - centerX - contentX * next, y: mid.y - centerY - contentY * next }, metrics.box, metrics.size));
+					return;
+				}
 				const active = drag.current;
 				if (active?.pointerId !== event.pointerId) return;
-				const metrics = measure();
 				setZoom((current) => bounded({ ...current, x: active.x + event.clientX - active.startX, y: active.y + event.clientY - active.startY }, metrics.box, metrics.size));
 			}}
 			onPointerUp={(event) => {
-				if (drag.current?.pointerId !== event.pointerId) return;
-				event.currentTarget.releasePointerCapture(event.pointerId);
-				drag.current = undefined;
-				setPanning(false);
+				const start = downs.current.get(event.pointerId);
+				downs.current.delete(event.pointerId);
+				const moved = !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12;
+				pointers.current.delete(event.pointerId);
+				if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+				if (pointers.current.size < 2) pinch.current = undefined;
+				if (pointers.current.size === 0) {
+					drag.current = undefined;
+					setPanning(false);
+				} else {
+					const [id] = [...pointers.current.keys()];
+					const point = pointers.current.get(id)!;
+					drag.current = { pointerId: id, startX: point.x, startY: point.y, x: zoom.x, y: zoom.y };
+				}
+				// One double-tap path for mouse and touch: dblclick fires a second time on
+				// touch after these handlers, which used to zoom in twice.
+				if (!moved) {
+					const last = lastTap.current;
+					const now = Date.now();
+					if (last && now - last.time < 320 && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 26) {
+						lastTap.current = undefined;
+						setZoom((current) => current.scale > 1 ? { scale: 1, x: 0, y: 0 } : { scale: 2, x: 0, y: 0 });
+					} else {
+						lastTap.current = { time: now, x: event.clientX, y: event.clientY };
+					}
+				}
 			}}
-			onLostPointerCapture={() => { drag.current = undefined; setPanning(false); }}
+			onLostPointerCapture={() => { pointers.current.clear(); downs.current.clear(); pinch.current = undefined; drag.current = undefined; setPanning(false); }}
 			onKeyDown={(event) => {
 				if (event.key === "+" || event.key === "=") { event.preventDefault(); step(1); }
 				else if (event.key === "-") { event.preventDefault(); step(-1); }

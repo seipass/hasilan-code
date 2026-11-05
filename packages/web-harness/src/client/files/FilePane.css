@@ -81,7 +81,7 @@
 .image-viewer-open:hover { background: var(--surface-hover); }
 .image-viewer-scale { min-width: 52px; justify-content: center; font-variant-numeric: tabular-nums; }
 .image-viewer-divider { flex: 1; }
-.image-viewer-stage { position: relative; display: grid; place-items: center; flex: 1; min-height: 0; overflow: hidden; padding: 16px; outline: none; }
+.image-viewer-stage { position: relative; display: grid; place-items: center; flex: 1; min-height: 0; overflow: hidden; padding: 16px; outline: none; touch-action: none; user-select: none; }
 .image-viewer-stage[data-interactable] { cursor: grab; }
 .image-viewer-stage[data-panning] { cursor: grabbing; }
 .image-viewer-stage:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
