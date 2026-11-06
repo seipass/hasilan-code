@@ -15,7 +15,7 @@
 .detail-tab > [aria-selected="true"] { color: var(--on-surface); }
 .detail-tab-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .detail-tab-dirty { flex: none; color: var(--warning); font-size: var(--text-2xs); line-height: 1; }
-.detail-tab-readonly { flex: none; padding: 1px 4px; border-radius: 4px; background: var(--surface-hover); color: var(--on-surface-muted); font-size: var(--text-xs); }
+.detail-tab-title[data-read-only="true"] { font-style: italic; }
 .detail-tab-kind { flex: none; color: var(--on-surface-muted); font-family: var(--font-code); font-size: var(--text-xs); }
 .detail-tab-close, .detail-tab-new { display: grid; place-items: center; flex: none; width: 28px; height: 28px; margin: 0 4px; padding: 0; border: 0; background: transparent; color: var(--on-surface-muted); font-size: var(--text-xl); }
 .detail-tab-new { margin: 0 7px; }
