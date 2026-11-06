@@ -137,6 +137,7 @@ export async function packHasilan({ root, out, tag, skipBuild = false }) {
 		for (const name of ["dist", "bin", "README.md"])
 			cpSync(join(sourceDirectory, name), join(application, name), { recursive: true });
 		cpSync(join(root, "LICENSE"), join(application, "LICENSE"));
+		cpSync(join(root, "LICENSE-PI-MIT"), join(application, "LICENSE-PI-MIT"));
 		// TypeScript selects an exact-version platform executable at installation time.
 		const manifest = {
 			...sourceManifest,
