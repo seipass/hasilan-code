@@ -20,11 +20,33 @@ export async function readAccountUsage(
 					const check = await runtime.checkAuth(provider.id, { signal: operationSignal });
 					const resolved = await runtime.getAuth(provider.id, { signal: operationSignal });
 					if (!check || !resolved) throw new AccountUsageError("認証が設定されていません。");
-					const usage = await reader({
-						auth: { ...resolved.auth, baseUrl: resolved.auth.baseUrl ?? provider.baseUrl },
-						authType: check.type,
-						signal: operationSignal,
-					});
+					const read = (auth: typeof resolved.auth) =>
+						reader({
+							auth: { ...auth, baseUrl: auth.baseUrl ?? provider.baseUrl },
+							authType: check.type,
+							signal: operationSignal,
+						});
+					let usage: Awaited<ReturnType<typeof reader>>;
+					try {
+						usage = await read(resolved.auth);
+					} catch (error) {
+						if (check.type !== "oauth" || !(error instanceof AccountUsageError) || error.status !== 401)
+							throw error;
+						const reauth = new AccountUsageError(
+							"使用量の認証を更新できませんでした。設定のプロバイダーからアカウントを再接続してください。",
+						);
+						try {
+							const refreshed = await runtime.getAuth(provider.id, {
+								signal: operationSignal,
+								rejectedOAuthAccessToken: resolved.auth.apiKey,
+							});
+							if (!refreshed?.auth.apiKey || refreshed.auth.apiKey === resolved.auth.apiKey) throw reauth;
+							usage = await read(refreshed.auth);
+						} catch (retryError) {
+							if (retryError instanceof AccountUsageError && retryError.status !== 401) throw retryError;
+							throw reauth;
+						}
+					}
 					operationSignal.throwIfAborted();
 					return {
 						provider: provider.id,

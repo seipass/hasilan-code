@@ -32,4 +32,11 @@ export interface AccountUsageContext {
 export type AccountUsageReader = (context: AccountUsageContext) => Promise<AccountUsage | undefined>;
 
 /** Only deliberately public errors may be included in the settings response. */
-export class AccountUsageError extends Error {}
+export class AccountUsageError extends Error {
+	readonly status?: number;
+
+	constructor(message: string, status?: number) {
+		super(message);
+		this.status = status;
+	}
+}

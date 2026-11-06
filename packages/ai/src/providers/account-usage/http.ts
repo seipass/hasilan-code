@@ -8,7 +8,7 @@ export async function usageJson(
 	const response = await (context.fetch ?? fetch)(url, { headers, signal: context.signal, redirect: "error" });
 	if (!response.ok) {
 		await response.body?.cancel();
-		throw new AccountUsageError(`使用量APIがHTTP ${response.status}を返しました。`);
+		throw new AccountUsageError(`使用量APIがHTTP ${response.status}を返しました。`, response.status);
 	}
 	if (!response.body) throw new AccountUsageError("使用量APIの応答が空です。");
 	const reader = response.body.getReader();

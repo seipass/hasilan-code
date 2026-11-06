@@ -131,6 +131,8 @@ export interface ModelRuntimeAuthOverrides extends AuthOperationOptions {
 	env?: Record<string, string>;
 	/** Require this much remaining OAuth-token validity; defaults to five minutes. */
 	minOAuthValidityMs?: number;
+	/** Refresh if this rejected access token is still current. */
+	rejectedOAuthAccessToken?: string;
 }
 
 export type CredentialSynchronizationOperation =
