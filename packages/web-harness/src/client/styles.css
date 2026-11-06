@@ -225,7 +225,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .topbar-leading { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .sidebar-toggle { position: fixed; top: 15px; left: 25px; z-index: 13; }
 .sidebar-closed .topbar-leading { padding-left: 46px; }
-.page-title { color: var(--on-surface-muted); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page-title { color: var(--on-surface-muted); font-size: var(--text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-actions { display: flex; gap: 7px; flex-shrink: 0; }
 .quiet-button { border: 0; background: transparent; padding: 7px 10px; color: var(--muted); font-size: var(--text-sm); }
 .quiet-button.active { background: var(--primary-container); color: var(--accent); }
