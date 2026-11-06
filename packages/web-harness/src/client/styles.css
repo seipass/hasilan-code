@@ -395,7 +395,8 @@ legend { font-weight: 600; padding: 0 .4rem; }
 }
 .thinking[open] > summary::before { transform: rotate(90deg); }
 .thinking-title { flex: none; color: var(--on-surface-secondary); }
-.thinking-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--on-surface-muted); }
+.thinking-preview { display: flex; justify-content: flex-end; min-width: 0; overflow: hidden; color: var(--on-surface-muted); }
+.thinking-preview > span { flex: none; white-space: nowrap; }
 .thinking[open] .thinking-preview { display: none; }
 .run-error { border-left: 2px solid var(--danger); padding: 8px 15px; color: var(--danger); font-size: var(--text-sm); margin-bottom: 24px; overflow-wrap: anywhere; }
 .run-error p { margin: 6px 0; }
