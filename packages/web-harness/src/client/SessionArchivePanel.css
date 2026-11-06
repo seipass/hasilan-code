@@ -1,0 +1,4 @@
+.session-archive-list { display: grid; gap: 8px; list-style: none; padding: 0; }
+.session-archive-list li { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.session-archive-list small { color: var(--on-surface-muted); }
+.session-archive-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }

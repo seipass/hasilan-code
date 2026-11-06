@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseClaude } from "../src/server/session-import/jsonl-formats.ts";
 import { SessionRegistry } from "../src/server/session-registry.ts";
@@ -64,6 +64,24 @@ describe("conversation management", () => {
 		await state.restart();
 		expect(state.registry.list()).toEqual([]);
 		expect(() => state.registry.page(session.sessionId)).toThrow("Session not found");
+		const file = basename(session.path!);
+		expect(await state.registry.listSessionArchive()).toEqual([
+			expect.objectContaining({ file, title: "新しい会話名" }),
+		]);
+		await state.registry.changeArchivedSession(file, "restore");
+		expect(state.registry.page(session.sessionId).title).toBe("新しい会話名");
+		expect(await state.registry.listSessionArchive()).toEqual([]);
+		await expect(state.registry.changeArchivedSession(file, "delete")).rejects.toThrow("使用中の会話");
+		expect(await readFile(session.path!)).toEqual(original);
+
+		await state.registry.deleteSession(session.sessionId);
+		delete state.registry.state.archiveMetadata;
+		await state.registry.persist();
+		await state.restart();
+		expect(await state.registry.listSessionArchive()).toEqual([expect.objectContaining({ file })]);
+		await expect(state.registry.changeArchivedSession(`../${file}`, "delete")).rejects.toThrow("見つかりません");
+		await state.registry.changeArchivedSession(file, "delete");
+		await expect(readFile(session.path!)).rejects.toMatchObject({ code: "ENOENT" });
 	});
 	it("removes the selected root's whole team without affecting other conversations", async () => {
 		const state = await fixture();

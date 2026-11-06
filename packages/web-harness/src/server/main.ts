@@ -207,6 +207,12 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					if (query.length > 200) throw new HttpError(400, "Search text is too long");
 					return reply(registry.searchText(query));
 				}
+				if (url.pathname === "/api/session-archive" && method === "GET")
+					return reply(await registry.listSessionArchive());
+				if (parts[1] === "session-archive" && parts.length === 3 && (method === "POST" || method === "DELETE")) {
+					await registry.changeArchivedSession(parts[2], method === "POST" ? "restore" : "delete");
+					return reply({ ok: true });
+				}
 				if (url.pathname === "/api/storage" && method === "GET") {
 					return reply(await readStorageUsage(agentDir, new Set(registry.sessionPaths())));
 				}

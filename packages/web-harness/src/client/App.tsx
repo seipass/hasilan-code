@@ -572,7 +572,11 @@ export function App() {
 					</div>
 				</aside>
 			</div>
-		</div>{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} />}
+		</div>{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} onSessionRestored={async () => {
+			const [folders, sessions] = await Promise.all([api<Workspace[]>("/api/workspaces"), api<SessionSummary[]>("/api/sessions")]);
+			setWorkspaces(folders);
+			setInitialSessions(sessions);
+		}} />}
 		<Presence show={!!sessionAction}><div className="motion-contents">{sessionAction && <SessionActions key={sessionAction.session.sessionId} target={sessionAction} onClose={closeSessionAction} onRename={renameSession} onDelete={deleteSession} canMoveUp={actionIndex > 0} canMoveDown={actionIndex >= 0 && actionIndex < actionOrder.length - 1} onMove={(direction) => {
 			const destination = actionIndex + direction;
 			if (!actionSession || actionIndex < 0 || destination < 0 || destination >= actionOrder.length) return;

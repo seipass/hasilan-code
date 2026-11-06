@@ -43,7 +43,7 @@ export function StoragePanel() {
 			<div><dt>画面の設定・下書き</dt><dd>{size(usage.preferences)}</dd></div>
 			<div><dt>引き継いだ素材</dt><dd>{size(usage.imports)}</dd></div>
 		</dl>}
-		{usage && usage.orphans > 0 && <p className="fine-print">アプリから削除した会話の記録が {usage.orphans.toLocaleString("ja-JP")} ファイル、{size(usage.orphanBytes)} 残っています。会話を削除しても記録ファイルは残る仕様です。</p>}
+		{usage && usage.orphans > 0 && <p className="fine-print">アプリから削除した会話の記録が {usage.orphans.toLocaleString("ja-JP")} ファイル、{size(usage.orphanBytes)} 残っています。設定の「アーカイブ」で復元または完全に削除できます。</p>}
 		{usage && usage.orphans === 0 && <p className="fine-print">アプリから削除した会話の記録はありません。</p>}
 		<p className="fine-print">この画面は集計のみです。ファイルは削除しません。</p>
 	</div>;

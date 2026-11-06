@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { SessionArchivePanel } from "./SessionArchivePanel.tsx";
 import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
 import { api, command, errorMessage } from "./api.ts";
 import { HomeAppearance } from "./HomeAppearance.tsx";
@@ -15,6 +16,7 @@ import type { ModelCatalog, Settings } from "./types.ts";
 const TABS = [
 	{ id: "providers", label: "プロバイダー" },
 	{ id: "usage", label: "使用量" },
+	{ id: "archive", label: "アーカイブ" },
 	{ id: "search", label: "検索" },
 	{ id: "agents", label: "エージェント" },
 	{ id: "translation", label: "翻訳・要約" },
@@ -32,8 +34,9 @@ const SEARCH_PROVIDERS = [...SEARCH_KEY_PROVIDERS, { id: "rustxng", label: "Rust
 type SearchProviderId = Settings["search"]["defaultProvider"];
 type SearchKeyProviderId = (typeof SEARCH_KEY_PROVIDERS)[number]["id"];
 
-export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgroundChange }: {
+export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgroundChange, onSessionRestored }: {
 	onClose: () => void;
+	onSessionRestored?: () => Promise<void>;
 	onSaved: () => void;
 	homeBackground?: HomeBackground;
 	onHomeBackgroundChange: (next: HomeBackground | undefined) => void;
@@ -169,6 +172,9 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			<Presence show={!!notice} collapse><p className="settings-notice" role="status">{notice}</p></Presence>
 			<Presence show={!settings && !error} collapse><p role="status">設定を読み込み中…</p></Presence>
 			<div className="settings-panels">
+			<Presence show={tab === "archive"}><section className="settings-content" role="tabpanel" id={`${tabsId}-archive-panel`} aria-labelledby={`${tabsId}-archive-tab`}>
+				<SessionArchivePanel onRestored={onSessionRestored} />
+			</section></Presence>
 			<Presence show={tab === "appearance"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
 				<HomeAppearance background={homeBackground} onChange={onHomeBackgroundChange} />
 				<NotificationPreference />

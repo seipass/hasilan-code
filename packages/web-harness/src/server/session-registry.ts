@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, open, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import type { AgentMessage, ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { clampThinkingLevel, getSupportedThinkingLevels, type ImageContent } from "@hasilan-code/pi-ai";
 import {
@@ -27,6 +27,7 @@ import {
 import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal } from "../shared/goals.ts";
 import { nextId } from "../shared/ids.ts";
+import type { ArchivedSession } from "../shared/session-archive.ts";
 import {
 	HistoryCursorError,
 	type HistoryMessage,
@@ -46,6 +47,7 @@ import type { ModelUsage } from "../shared/usage.ts";
 import { createHarnessSettings } from "./config.ts";
 import { projectAttachmentContent } from "./prompt-attachments.ts";
 import { appendRuntimeContext } from "./runtime-context.ts";
+import { listArchivedSessions, readArchivedSession, transcriptPathKey } from "./session-archive.ts";
 import { sameWorkspace } from "./session-import/common.ts";
 import { importedRecord, storeImport } from "./session-import/persistence.ts";
 import { type ImportAsset, projectImport } from "./session-import/projection.ts";
@@ -113,6 +115,7 @@ export interface SessionSnapshot extends SessionDescriptor {
 export interface HarnessState {
 	schemaVersion: 1;
 	workspaces: WorkspaceDirectory[];
+	archiveMetadata?: Record<string, Pick<SessionDescriptor, "title" | "model" | "thinkingLevel">>;
 	sessions: SessionDescriptor[];
 	teams: TeamRecord[];
 	agents: AgentRecord[];
@@ -838,6 +841,66 @@ export class SessionRegistry {
 			this.changed(id);
 		});
 	}
+	private archiveDirectory(): string {
+		return join(this.options.agentDir, "web-harness", "sessions");
+	}
+	async listSessionArchive(): Promise<ArchivedSession[]> {
+		const entries = await listArchivedSessions(this.archiveDirectory(), this.sessionPaths());
+		return entries.map((entry) => ({
+			...entry,
+			title: this.state.archiveMetadata?.[entry.file]?.title ?? entry.title,
+		}));
+	}
+	async changeArchivedSession(file: string, action: "restore" | "delete"): Promise<void> {
+		await this.mutate(async () => {
+			if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
+			const entry = await readArchivedSession(this.archiveDirectory(), file);
+			if (!entry) throw new HarnessError("アーカイブが見つかりません。", 404);
+			const path = join(this.archiveDirectory(), entry.file);
+			const key = transcriptPathKey(path);
+			if (this.sessionPaths().some((active) => transcriptPathKey(active) === key))
+				throw new HarnessError("使用中の会話です。", 409);
+			if (action === "delete") {
+				await unlink(path);
+				if (this.state.archiveMetadata?.[file]) {
+					delete this.state.archiveMetadata[file];
+					await this.persist();
+				}
+				return;
+			}
+			if (this.state.sessions.some((session) => session.sessionId === entry.sessionId))
+				throw new HarnessError("同じIDの会話がすでにあります。", 409);
+			if (!isAbsolute(entry.cwd)) throw new HarnessError("元の作業フォルダーを特定できません。", 409);
+			let workspace: WorkspaceDirectory;
+			try {
+				workspace = await this.options.workspaceFiles.register(entry.cwd);
+			} catch {
+				throw new HarnessError("元の作業フォルダーを開けません。", 409);
+			}
+			const metadata = this.state.archiveMetadata?.[file];
+			const descriptor: SessionDescriptor = {
+				sessionId: entry.sessionId,
+				workspaceId: workspace.id,
+				cwd: workspace.path,
+				path,
+				materialized: true,
+				availability: "ready",
+				title: metadata?.title ?? entry.title,
+				model: metadata?.model,
+				thinkingLevel: metadata?.thinkingLevel,
+			};
+			this.state.sessions.push(descriptor);
+			if (this.state.archiveMetadata) delete this.state.archiveMetadata[file];
+			try {
+				await this.persist();
+			} catch (error) {
+				this.state.sessions.pop();
+				if (metadata && this.state.archiveMetadata) this.state.archiveMetadata[file] = metadata;
+				throw error;
+			}
+			this.emit({ type: "workspace_changed", workspaceId: workspace.id });
+		});
+	}
 	/** Remove the app's conversation tree, retaining the underlying SDK history files. */
 	async deleteSession(id: string): Promise<string[]> {
 		return this.mutate(async () => {
@@ -880,7 +943,17 @@ export class SessionRegistry {
 				agents: this.state.agents,
 				runs: this.state.runs,
 				pendingInput: this.state.pendingInput,
+				archiveMetadata: this.state.archiveMetadata,
 			};
+			this.state.archiveMetadata = { ...previous.archiveMetadata };
+			for (const session of previous.sessions) {
+				if (!ids.has(session.sessionId) || !session.path || !session.materialized) continue;
+				this.state.archiveMetadata[basename(session.path)] = {
+					title: session.title,
+					model: session.model,
+					thinkingLevel: session.thinkingLevel,
+				};
+			}
 			this.state.sessions = previous.sessions.filter((session) => !ids.has(session.sessionId));
 			this.state.teams = previous.teams.filter((team) => !agents.has(team.rootAgentId));
 			this.state.agents = previous.agents.filter((agent) => !agents.has(agent.agentId));
