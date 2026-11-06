@@ -1,4 +1,14 @@
 .virtual-conversation { overflow-anchor: none; }
+.turn-activity, .turn-activity-waiting { margin: 0 0 12px; color: var(--on-surface-muted); font-size: var(--text-sm); }
+.turn-activity > summary { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px; cursor: pointer; list-style: none; }
+.turn-activity > summary::-webkit-details-marker { display: none; }
+.turn-activity > summary::before { content: ""; width: 12px; height: 12px; flex: none; background-color: currentColor; mask: var(--chevron) center / contain no-repeat; }
+.turn-activity[open] > summary::before { transform: rotate(90deg); }
+.turn-activity > summary > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.turn-activity[data-active="true"] > summary, .turn-activity-waiting { color: var(--on-surface-secondary); }
+.turn-activity-waiting { padding: 5px 6px; }
+.turn-activity-items { padding-inline-start: 12px; border-inline-start: 1px solid var(--border-subtle); }
+.turn-activity-items .message { margin-bottom: 8px; }
 .virtual-message { display: flow-root; min-width: 0; }
 .virtual-conversation .virtual-message .message:last-child { animation: none; }
 /* Reduced-motion's global duration must not start a height transition on geometry spacers. */

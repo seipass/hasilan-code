@@ -8,6 +8,8 @@ import { observeConversation } from "./conversation-resize.ts";
 import { RUN_LABELS } from "./TeamPane.tsx";
 import { MessageActions } from "./MessageActions.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
+import { type TurnActivity, turnActivityLabel, turnActivityRows } from "./turn-activity.ts";
+import { usePreferenceState } from "./preferences.ts";
 import type { ChatMessage, ToolCall } from "./types.ts";
 import "./Conversation.css";
 
@@ -37,6 +39,8 @@ function hasAssistantText(message: ChatMessage): boolean {
 }
 
 interface MessageProps {
+	rowKey: string;
+	grouped?: boolean;
 	message: ChatMessage;
 	tools: (ToolCall | undefined)[];
 	onFile: (path: string, line?: number) => void;
@@ -44,24 +48,24 @@ interface MessageProps {
 	onEdit?: (text: string) => void;
 	expansions: Map<string, boolean[]>;
 }
-const Message = memo(function Message({ message, tools, onFile, onRetry, onEdit, expansions }: MessageProps) {
+const Message = memo(function Message({ rowKey, grouped, message, tools, onFile, onRetry, onEdit, expansions }: MessageProps) {
 	const element = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		const row = element.current;
 		if (!row) return;
-		const saved = expansions.get(message.messageId);
+		const saved = expansions.get(rowKey);
 		if (saved) row.querySelectorAll("details").forEach((details, index) => { details.open = saved[index] ?? details.open; });
-		const remember = () => expansions.set(message.messageId, [...row.querySelectorAll("details")].map((details) => details.open));
+		const remember = () => expansions.set(rowKey, [...row.querySelectorAll("details")].map((details) => details.open));
 		row.addEventListener("toggle", remember, true);
 		return () => row.removeEventListener("toggle", remember, true);
-	}, [message.messageId, expansions]);
+	}, [rowKey, expansions]);
 	const injection = message.contextInjection;
 	const parts: unknown[] = Array.isArray(message.content) ? message.content : [];
 	const lastPart = Array.isArray(message.content) ? parts.at(-1) : message.content;
 	const activeThinking = message.role === "assistant" && message.partial && record(lastPart) && lastPart.type === "thinking";
 	const calls = parts.filter((part) => record(part) && part.type === "toolCall");
 	const content = calls.length ? parts.filter((part) => !record(part) || part.type !== "toolCall") : message.content;
-	return <div ref={element} className="virtual-message" data-message-id={message.messageId}>
+	return <div ref={element} className={grouped ? undefined : "virtual-message"} data-message-id={grouped ? undefined : rowKey}>
 		{injection ? <details className="message context-entry">
 			<summary><span className="context-entry-label">コンテキスト</span><span className="context-entry-agent">{injection.source.agentName}</span>{injection.source.status && <span className={`badge status-${injection.source.status}`}>{RUN_LABELS[injection.source.status]}</span>}</summary>
 			<div className="context-entry-body"><div className="message-content"><Content value={injection.content} onFile={onFile} /></div>
@@ -83,6 +87,8 @@ const Message = memo(function Message({ message, tools, onFile, onRetry, onEdit,
 			</article>}
 	</div>;
 }, (previous, next) =>
+	previous.rowKey === next.rowKey &&
+	previous.grouped === next.grouped &&
 	previous.message === next.message &&
 	previous.message.timestamp === next.message.timestamp &&
 	previous.message.usage === next.message.usage &&
@@ -92,6 +98,31 @@ const Message = memo(function Message({ message, tools, onFile, onRetry, onEdit,
 	previous.expansions === next.expansions &&
 	previous.tools.length === next.tools.length &&
 	previous.tools.every((tool, index) => tool === next.tools[index]));
+
+function ActivityBlock({ block, onFile, expansions, opened }: {
+	block: TurnActivity;
+	onFile: MessageProps["onFile"];
+	expansions: MessageProps["expansions"];
+	opened: Set<string>;
+}) {
+	const [open, setOpen] = useState(() => opened.has(block.key));
+	const label = turnActivityLabel(block);
+	return <div className="virtual-message" data-message-id={block.key}>
+		{block.items.length === 0 ? <p className="turn-activity-waiting" role="status">{label}</p> :
+			<details className="turn-activity" data-active={block.active} open={open} onToggle={(event) => {
+				if (event.target !== event.currentTarget) return;
+				const next = event.currentTarget.open;
+				if (next) opened.add(block.key);
+				else opened.delete(block.key);
+				setOpen(next);
+			}}>
+				<summary><span role={block.active ? "status" : undefined}>{label}</span></summary>
+				{open && <div className="turn-activity-items">{block.items.map((row) =>
+					<Message key={row.key} rowKey={row.key} grouped message={row.message} tools={row.tools} onFile={onFile} expansions={expansions} />,
+				)}</div>}
+			</details>}
+	</div>;
+}
 
 export const Conversation = memo(function Conversation({ messages: allMessages, tools, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError, onRetry, onEdit }: {
 	messages: ChatMessage[];
@@ -112,6 +143,8 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const rowsStart = useRef<HTMLDivElement>(null);
 	const heights = useRef(new Map<string, number>());
 	const expansions = useRef(new Map<string, boolean[]>());
+	const openedActivity = useRef(new Set<string>());
+	const [activityBeta] = usePreferenceState("pi-web-beta-turn-activity", false);
 	const anchor = useRef<{ id: string; offset: number } | undefined>(undefined);
 	const following = useRef(true);
 	const programmaticTop = useRef(-1);
@@ -123,18 +156,21 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const [measureVersion, setMeasureVersion] = useState(0);
 	const [viewport, setViewport] = useState({ top: 0, height: 600 });
 	const [nearBottom, setNearBottom] = useState(true);
-	const rows = useMemo(() => conversationRows(allMessages, tools, activeRunId), [allMessages, tools, activeRunId]);
+	const rows = useMemo(() => {
+		const items = conversationRows(allMessages, tools, activeRunId);
+		return activityBeta ? turnActivityRows(items, activeRunId) : items;
+	}, [allMessages, tools, activeRunId, activityBeta]);
 	// Retrying only makes sense on the newest reply; older replies cannot be regenerated in place.
-	const lastAssistantId = useMemo(() => {
+	const lastAssistantKey = useMemo(() => {
 		for (let index = rows.length - 1; index >= 0; index--) {
 			const row = rows[index];
-			if (row.kind === "message" && hasAssistantText(row.message)) return row.message.messageId;
+			if (row.kind === "message" && hasAssistantText(row.message)) return row.key;
 		}
 		return undefined;
 	}, [rows]);
 	const offsets = useMemo(() => {
 		const result = [0];
-		for (const row of rows) result.push(result[result.length - 1] + (heights.current.get(row.key) ?? (row.kind === "computer" ? 430 : ESTIMATED_HEIGHT)));
+		for (const row of rows) result.push(result[result.length - 1] + (heights.current.get(row.key) ?? (row.kind === "computer" ? 430 : row.kind === "activity" ? 42 : ESTIMATED_HEIGHT)));
 		return result;
 	}, [rows, measureVersion]);
 	const total = offsets[offsets.length - 1];
@@ -157,7 +193,12 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 		else if (anchor.current) {
 			const index = rows.findIndex((row) => row.key === anchor.current?.id);
 			if (index >= 0) element.scrollTop = origin.current + offsets[index] + anchor.current.offset;
-			else { following.current = true; element.scrollTop = element.scrollHeight; setNearBottom(true); }
+			else {
+				const previousKey = anchor.current.id;
+				const regrouped = rows.findIndex((row) => row.kind === "activity" && row.items.some((item) => item.key === previousKey || `activity:${item.key}` === previousKey));
+				if (regrouped >= 0) element.scrollTop = origin.current + offsets[regrouped];
+				else { following.current = true; element.scrollTop = element.scrollHeight; setNearBottom(true); }
+			}
 		}
 		programmaticTop.current = element.scrollTop;
 		updateViewport();
@@ -204,8 +245,9 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 				<div ref={rowsStart} className="history-spacer" aria-hidden="true" style={{ height: offsets[start] }} />
 				{rows.slice(start, end).map((row) => row.kind === "computer"
 					? <div key={row.key} className="virtual-message" data-message-id={row.key}><ComputerActivity group={row.group} onFile={openFile} /></div>
-					: <Message key={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current}
-					onRetry={onRetry && row.message.messageId === lastAssistantId ? () => onRetry(row.message.messageId) : undefined}
+					: row.kind === "activity" ? <ActivityBlock key={row.key} block={row} onFile={openFile} expansions={expansions.current} opened={openedActivity.current} />
+					: <Message key={row.key} rowKey={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current}
+					onRetry={onRetry && row.key === lastAssistantKey ? () => onRetry(row.message.messageId) : undefined}
 					onEdit={onEdit ? (text) => onEdit(row.message.messageId, text) : undefined} />)}
 				<div className="history-spacer" aria-hidden="true" style={{ height: total - offsets[end] }} />
 				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>

@@ -108,6 +108,7 @@ export function uiPreferenceLimit(key: string): number | undefined {
 			"pi-web-right-width",
 			"pi-web-chat-width",
 			"pi-web-notifications",
+			"pi-web-beta-turn-activity",
 		].includes(key)
 	)
 		return 4096;
@@ -126,7 +127,12 @@ export function validUiPreference(key: string, value: unknown): value is string 
 	if (key.startsWith("pi-web-draft:") || key === "pi-web-selected-session" || key === "pi-web-workspace") return true;
 	try {
 		const parsed: unknown = JSON.parse(value);
-		if (key === "pi-web-sidebar-open" || key === "pi-web-right-open" || key === "pi-web-notifications")
+		if (
+			key === "pi-web-sidebar-open" ||
+			key === "pi-web-right-open" ||
+			key === "pi-web-notifications" ||
+			key === "pi-web-beta-turn-activity"
+		)
 			return typeof parsed === "boolean";
 		if (key === "pi-web-right-width") return typeof parsed === "number" && parsed >= 320 && parsed <= 10_000;
 		if (key === "pi-web-chat-width") return typeof parsed === "number" && parsed >= 320 && parsed <= 3000;

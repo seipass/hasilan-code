@@ -4,6 +4,7 @@ import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
 import { api, command, errorMessage } from "./api.ts";
 import { HomeAppearance } from "./HomeAppearance.tsx";
 import { KeybindingSettings } from "./KeybindingSettings.tsx";
+import { usePreferenceState } from "./preferences.ts";
 import { NotificationPreference } from "./NotificationPreference.tsx";
 import { StoragePanel } from "./StoragePanel.tsx";
 import type { HomeBackground } from "./home-background.ts";
@@ -22,6 +23,7 @@ const TABS = [
 	{ id: "translation", label: "翻訳・要約" },
 	{ id: "appearance", label: "外観" },
 	{ id: "environment", label: "環境" },
+	{ id: "beta", label: "ベータ" },
 ] as const;
 type SettingsTab = (typeof TABS)[number]["id"];
 const SEARCH_KEY_PROVIDERS = [
@@ -33,6 +35,17 @@ const SEARCH_KEY_PROVIDERS = [
 const SEARCH_PROVIDERS = [...SEARCH_KEY_PROVIDERS, { id: "rustxng", label: "RustXNG" }] as const;
 type SearchProviderId = Settings["search"]["defaultProvider"];
 type SearchKeyProviderId = (typeof SEARCH_KEY_PROVIDERS)[number]["id"];
+
+function BetaSettings() {
+	const [enabled, setEnabled] = usePreferenceState("pi-web-beta-turn-activity", false);
+	return <>
+		<h3>ベータ機能</h3>
+		<div className="settings-section">
+			<label className="settings-toggle"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.currentTarget.checked)} /><span>チャットに AI の作業状況を表示する</span></label>
+			<p className="fine-print">AI が今している操作を表示します。作業の区切りで思考とツールの履歴をまとめ、開いて確認できます。</p>
+		</div>
+	</>;
+}
 
 export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgroundChange, onSessionRestored }: {
 	onClose: () => void;
@@ -172,6 +185,9 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			<Presence show={!!notice} collapse><p className="settings-notice" role="status">{notice}</p></Presence>
 			<Presence show={!settings && !error} collapse><p role="status">設定を読み込み中…</p></Presence>
 			<div className="settings-panels">
+			<Presence show={tab === "beta"}><section className="settings-content" role="tabpanel" id={`${tabsId}-beta-panel`} aria-labelledby={`${tabsId}-beta-tab`}>
+				<BetaSettings />
+			</section></Presence>
 			<Presence show={tab === "archive"}><section className="settings-content" role="tabpanel" id={`${tabsId}-archive-panel`} aria-labelledby={`${tabsId}-archive-tab`}>
 				<SessionArchivePanel onRestored={onSessionRestored} />
 			</section></Presence>
