@@ -323,7 +323,10 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					}
 					if (method === "PATCH") return reply(await settings.patch(await readJson(request, settingsPatchSchema)));
 				}
-				if (url.pathname === "/api/models" && method === "GET") return reply(settings.getModels());
+				if (url.pathname === "/api/models" && method === "GET") {
+					await settings.refreshModelsIfStale();
+					return reply(settings.getModels());
+				}
 				if (url.pathname === "/api/text-transform" && method === "POST") {
 					const input = await readJson(request, textTransformSchema, 512 * 1024);
 					const controller = new AbortController();

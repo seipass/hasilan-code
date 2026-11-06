@@ -93,7 +93,7 @@ export interface ModelCatalog {
 export type SettingsModelRuntime = Pick<
 	ModelRuntime,
 	"getProviders" | "getModels" | "getModelsOfType" | "hasConfiguredAuth" | "saveApiKey"
->;
+> & { refresh?: ModelRuntime["refresh"] };
 
 const settingsFileSchema = Type.Object(
 	{
@@ -338,6 +338,18 @@ export class SettingsService {
 			await saveJson(join(this.directory, "credentials.json"), { schemaVersion: 1, search: next });
 			this.credentials = next;
 		});
+	}
+
+	private lastModelRefresh = 0;
+	/** Dynamic provider catalogs change without a release; refresh them at most once per interval. */
+	async refreshModelsIfStale(maxAgeMs = 5 * 60_000): Promise<void> {
+		if (Date.now() - this.lastModelRefresh < maxAgeMs) return;
+		this.lastModelRefresh = Date.now();
+		try {
+			await this.modelRuntime.refresh?.();
+		} catch {
+			// Keep the last known catalog; the generated baseline still works.
+		}
 	}
 
 	getModels(): ModelCatalog {
