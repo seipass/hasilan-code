@@ -88,7 +88,6 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const artifact = details && record(details.artifact) && typeof details.artifact.id === "string" ? details.artifact : undefined;
 	const originalContent = result && "content" in result ? result.content : tool.result;
 	const content = tool.name === "write" ? writeResultContent(originalContent) : originalContent;
-	const displayDetails = tool.name === "write" && details && "content" in details ? { ...details, content: writeResultContent(details.content) } : details;
 	const textContent = Array.isArray(content) ? content.map((part: unknown) => record(part) && part.type === "text" && typeof part.text === "string" ? part.text : "").join("\n") : typeof content === "string" ? content : "";
 	const exitCode = structured?.exit_code;
 	const resultNote = tool.name === "web_search" && searchResults ? countLabel(searchResults.length, "result")
@@ -132,7 +131,6 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 			{view?.meta}
 			{view?.body}
 			{tool.name === "edit" && typeof input?.input === "string" && <details className="tool-secondary"><summary>Patch</summary><pre className="tool-code">{input.input}</pre></details>}
-			<details className="tool-raw"><summary>Call data</summary><code>{tool.callId}</code><pre>{JSON.stringify(tool.input, null, 2)}</pre></details>
 			{tool.result !== undefined && <>
 				{tool.status === "error" || tool.status === "cancelled"
 					? <Content value={content} onFile={onFile} />
@@ -142,7 +140,6 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 							<Content value={artifact && Array.isArray(content) ? content.filter((part: unknown) => !record(part) || part.type !== "image") : content} onFile={onFile} />
 						</>}
 				{!specialized && details && <details><summary>Details</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}
-				{specialized && displayDetails && <details className="tool-secondary"><summary>Raw result</summary><pre>{JSON.stringify(displayDetails, null, 2)}</pre></details>}
 			</>}
 		</div>
 	</details>;
