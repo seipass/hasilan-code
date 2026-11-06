@@ -84,7 +84,7 @@ createRoot(document.getElementById("root")).render(<><FilePreview workspaceId="w
 			.getByRole("option", { name: /existingName/ })
 			.first()
 			.click();
-		await editor.press("Control+s");
+		await editor.press("ControlOrMeta+s");
 		await expect
 			.poll(() => saved)
 			.toEqual({ revision: "a".repeat(64), text: "const existingName = 1;\r\nexistingName" });
