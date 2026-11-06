@@ -151,11 +151,12 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
 		}}>
 			<header className="panel-heading"><h2 id={titleId}>設定</h2><button type="button" disabled={busy || closing} onClick={requestClose} aria-label="設定を閉じる">閉じる</button></header>
-			<div className="settings-tabs" role="tablist" aria-label="設定のカテゴリ" onKeyDown={(event) => {
+			<div className="settings-layout">
+			<div className="settings-tabs" role="tablist" aria-label="設定のカテゴリ" aria-orientation="vertical" onKeyDown={(event) => {
 				const index = TABS.findIndex((entry) => entry.id === tab);
 				let next: number;
-				if (event.key === "ArrowRight") next = (index + 1) % TABS.length;
-				else if (event.key === "ArrowLeft") next = (index + TABS.length - 1) % TABS.length;
+				if (event.key === "ArrowDown") next = (index + 1) % TABS.length;
+				else if (event.key === "ArrowUp") next = (index + TABS.length - 1) % TABS.length;
 				else if (event.key === "Home") next = 0;
 				else if (event.key === "End") next = TABS.length - 1;
 				else return;
@@ -163,6 +164,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			}}>
 				{TABS.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => { if (tab !== entry.id) setTab(entry.id); }}>{entry.label}</button>)}
 			</div>
+			<div className="settings-main">
 			<Presence show={!!error} collapse><div className="error" role="alert"><p>{error}</p>{!settings && <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>再読み込み</button>}</div></Presence>
 			<Presence show={!!notice} collapse><p className="settings-notice" role="status">{notice}</p></Presence>
 			<Presence show={!settings && !error} collapse><p role="status">設定を読み込み中…</p></Presence>
@@ -338,6 +340,8 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 					</section>
 				</section></Presence>
 			</>}
+			</div>
+			</div>
 			</div>
 		</section>
 	</div>;

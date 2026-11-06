@@ -19,7 +19,20 @@
 	transform: translateY(6px) scale(.99);
 	animation: none;
 }
-.settings-dialog > .panel-heading, .settings-dialog > .settings-tabs { flex: none; }
+.settings-dialog > .panel-heading { flex: none; }
+.settings-layout { display: flex; flex: 1; min-height: 0; gap: clamp(8px, 2vw, 20px); margin-top: 14px; }
+.settings-main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.settings-dialog .settings-layout .settings-tabs {
+	flex: 0 0 auto;
+	flex-direction: column;
+	overflow: auto;
+	padding: 0 clamp(4px, 1vw, 12px) 0 0;
+	border: 0;
+	border-right: 1px solid var(--border-subtle);
+	mask-image: none;
+}
+.settings-layout .settings-tabs::after { display: none; }
+.settings-layout .settings-tabs button { text-align: left; padding-inline: clamp(6px, 1vw, 12px); }
 .settings-panels { position: relative; display: grid; flex: 1; min-width: 0; min-height: 0; }
 .settings-panels > .settings-content {
 	grid-area: 1 / 1;
@@ -36,14 +49,14 @@
 .settings-tabs [role="tab"]::after {
 	content: "";
 	position: absolute;
-	inset: auto 8px 0;
-	height: 2px;
+	inset: 6px auto 6px 0;
+	width: 2px;
 	border-radius: 2px;
 	background: var(--primary);
-	transform: scaleX(0);
+	transform: scaleY(0);
 	transition: transform 160ms var(--motion-ease);
 }
-.settings-tabs [role="tab"][aria-selected="true"]::after { transform: scaleX(1); }
+.settings-tabs [role="tab"][aria-selected="true"]::after { transform: scaleY(1); }
 @starting-style {
 	.dialog-backdrop:has(> .settings-dialog) { background-color: #11111b00; }
 	.settings-dialog.settings-dialog { opacity: 0; transform: translateY(10px) scale(.985); }
