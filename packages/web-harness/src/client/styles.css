@@ -220,7 +220,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .sidebar-bottom { padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between; }
 .sidebar-bottom button { border: 0; background: transparent; padding: 7px 10px; font-size: var(--text-sm); }
 .navigation-scrim { display: none; }
-.workspace-surface { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.workspace-surface { display: flex; flex-direction: column; flex: 1; min-width: 0; container-type: inline-size; }
 .topbar { display: flex; justify-content: space-between; align-items: center; gap: 20px; height: 62px; padding: 0 25px; flex-shrink: 0; }
 .topbar-leading { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .sidebar-toggle { position: fixed; top: 15px; left: 25px; z-index: 13; }
