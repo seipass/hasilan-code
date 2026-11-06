@@ -29,6 +29,13 @@ function rowAt(offsets: number[], offset: number): number {
 	return Math.min(low, offsets.length - 2);
 }
 
+function hasAssistantText(message: ChatMessage): boolean {
+	if (message.role !== "assistant" || message.partial) return false;
+	const { content } = message;
+	return typeof content === "string" ? Boolean(content.trim()) : Array.isArray(content)
+		&& content.some((part) => record(part) && part.type === "text" && typeof part.text === "string" && part.text.trim());
+}
+
 interface MessageProps {
 	message: ChatMessage;
 	tools: (ToolCall | undefined)[];
@@ -68,10 +75,10 @@ const Message = memo(function Message({ message, tools, onFile, onRetry, onEdit,
 					if (tool?.name === "computer") return null;
 					return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>;
 				})}{message.partial && <span className="streaming-dot" aria-label="応答中" />}</div>
-				{message.role === "assistant" && <div className="message-meta">
+				{hasAssistantText(message) && <div className="message-meta">
 					{message.timestamp && Number.isFinite(Date.parse(message.timestamp)) && <time dateTime={message.timestamp}>{new Date(message.timestamp).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>}
 					{message.usage && <span className="message-usage" title="この応答の概算">{`${formatTokens(message.usage.input + message.usage.cacheRead + message.usage.cacheWrite + message.usage.output)} tok · $${message.usage.cost.toFixed(3)}`}</span>}
-					{!message.partial && <MessageActions message={message} content={content} onRetry={onRetry} onEdit={onEdit} />}
+					<MessageActions message={message} content={content} onRetry={onRetry} onEdit={onEdit} />
 				</div>}
 			</article>}
 	</div>;
@@ -121,7 +128,7 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const lastAssistantId = useMemo(() => {
 		for (let index = rows.length - 1; index >= 0; index--) {
 			const row = rows[index];
-			if (row.kind === "message" && row.message.role === "assistant" && !row.message.partial) return row.message.messageId;
+			if (row.kind === "message" && hasAssistantText(row.message)) return row.message.messageId;
 		}
 		return undefined;
 	}, [rows]);
