@@ -109,7 +109,7 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	onEdit?: (messageId: string, text: string) => void;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
-	const content = useRef<HTMLDivElement>(null);
+	const rowsStart = useRef<HTMLDivElement>(null);
 	const heights = useRef(new Map<string, number>());
 	const expansions = useRef(new Map<string, boolean[]>());
 	const anchor = useRef<{ id: string; offset: number } | undefined>(undefined);
@@ -139,11 +139,11 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	}, [rows, measureVersion]);
 	const total = offsets[offsets.length - 1];
 	const topInset = history?.before || loading || error ? 40 : 0;
-	const top = following.current ? Math.max(0, total - viewport.height) : Math.max(0, viewport.top - origin.current - topInset);
+	const top = following.current ? Math.max(0, total - viewport.height) : Math.max(0, viewport.top - origin.current);
 	const start = Math.max(0, rowAt(offsets, Math.max(0, top - OVERSCAN)));
 	const end = Math.min(rows.length, rowAt(offsets, top + viewport.height + OVERSCAN) + 1);
-	const geometry = useRef({ rows, offsets, topInset });
-	geometry.current = { rows, offsets, topInset };
+	const geometry = useRef({ rows, offsets });
+	geometry.current = { rows, offsets };
 	const updateViewport = useCallback(() => {
 		const element = scroller.current;
 		if (!element) return;
@@ -152,16 +152,16 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	useLayoutEffect(() => {
 		const element = scroller.current;
 		if (!element) return;
-		if (content.current) origin.current = content.current.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
+		if (rowsStart.current) origin.current = rowsStart.current.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
 		if (following.current) element.scrollTop = element.scrollHeight;
 		else if (anchor.current) {
 			const index = rows.findIndex((row) => row.key === anchor.current?.id);
-			if (index >= 0) element.scrollTop = origin.current + topInset + offsets[index] + anchor.current.offset;
+			if (index >= 0) element.scrollTop = origin.current + offsets[index] + anchor.current.offset;
 			else { following.current = true; element.scrollTop = element.scrollHeight; setNearBottom(true); }
 		}
 		programmaticTop.current = element.scrollTop;
 		updateViewport();
-	}, [rows, offsets, topInset, viewport.height, updateViewport]);
+	}, [rows, offsets, topInset, fallback, viewport.height, updateViewport]);
 	useLayoutEffect(() => {
 		const element = scroller.current;
 		if (!element) return;
@@ -185,22 +185,23 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 		<div className="conversation virtual-conversation" ref={scroller} onScroll={() => {
 			const element = scroller.current;
 			if (!element) return;
-			if (Math.abs(element.scrollTop - programmaticTop.current) > 1) {
-				following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-				setNearBottom(following.current);
-			}
+			if (Math.abs(element.scrollTop - programmaticTop.current) <= 1) return;
+			programmaticTop.current = -1;
+			const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
+			following.current = remaining <= 2;
+			setNearBottom(remaining < 80);
 			const current = geometry.current;
-			const y = element.scrollTop - origin.current - current.topInset;
+			const y = element.scrollTop - origin.current;
 			const index = Math.max(0, rowAt(current.offsets, Math.max(0, y)));
 			const row = current.rows[index];
 			if (row) anchor.current = { id: row.key, offset: y - current.offsets[index] };
 			updateViewport();
 			if (element.scrollTop < 160 && history?.before && !loading && !error) void onLoadOlder?.();
 		}}>
-			<div className="conversation-content" ref={content}>
+			<div className="conversation-content">
 				{topInset > 0 && <div className="history-control" aria-live="polite">{error ? <><span>{error}</span><button type="button" onClick={() => { void onLoadOlder?.(); }}>再試行</button></> : loading ? "過去のメッセージを読み込んでいます…" : <button type="button" onClick={() => { void onLoadOlder?.(); }}>過去のメッセージを読み込む</button>}</div>}
 				{fallback && <article className="message role-user"><div className="message-content"><Content value={fallback} onFile={openFile} /></div></article>}
-				<div className="history-spacer" aria-hidden="true" style={{ height: offsets[start] }} />
+				<div ref={rowsStart} className="history-spacer" aria-hidden="true" style={{ height: offsets[start] }} />
 				{rows.slice(start, end).map((row) => row.kind === "computer"
 					? <div key={row.key} className="virtual-message" data-message-id={row.key}><ComputerActivity group={row.group} onFile={openFile} /></div>
 					: <Message key={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current}
