@@ -1153,6 +1153,9 @@ export function createProvider<TApi extends Api = Api>(input: CreateProviderOpti
 					const fetched = await fetchModels(context);
 					if (context.signal.aborted) return;
 					const refreshed = fetched.filter(hasKnownModelType);
+					// An empty overlay must not replace the stored list: a transient failure would
+					// persist "no models" and hide the whole provider until the next release.
+					if (refreshed.length === 0) return;
 					await context.publish({
 						persist: { models: refreshed, checkedAt: Date.now() },
 						update: () => {

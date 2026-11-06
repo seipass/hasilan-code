@@ -346,7 +346,8 @@ export class SettingsService {
 		if (Date.now() - this.lastModelRefresh < maxAgeMs) return;
 		this.lastModelRefresh = Date.now();
 		try {
-			await this.modelRuntime.refresh?.();
+			// Force: an earlier empty/failed publication must not suppress the next attempt.
+			await this.modelRuntime.refresh?.({ force: true });
 		} catch {
 			// Keep the last known catalog; the generated baseline still works.
 		}

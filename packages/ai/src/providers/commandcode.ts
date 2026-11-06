@@ -10,10 +10,21 @@ import { COMMANDCODE_CLASSIFIER_MODELS, COMMANDCODE_MODELS } from "./commandcode
 /** Command Code's public listing is authoritative: new models appear without a rebuild. */
 async function fetchCommandCodeModels(context: { allowNetwork: boolean; signal: AbortSignal }) {
 	if (!context.allowNetwork) return [];
-	const response = await fetch("https://api.commandcode.ai/provider/v1/models", {
-		signal: AbortSignal.any([context.signal, AbortSignal.timeout(8_000)]),
-	});
-	if (!response.ok) return [];
+	let response: Response;
+	try {
+		response = await fetch("https://api.commandcode.ai/provider/v1/models", {
+			signal: AbortSignal.any([context.signal, AbortSignal.timeout(8_000)]),
+		});
+	} catch (error) {
+		console.warn("[commandcode] model discovery failed:", error instanceof Error ? error.message : error);
+		throw error;
+	}
+	// Throw instead of returning []: the runtime keeps the previous overlay and the generated
+	// baseline, whereas an empty result would be persisted and hide every model.
+	if (!response.ok) {
+		console.warn(`[commandcode] model discovery returned ${response.status}`);
+		throw new Error(`Command Code model list returned ${response.status}`);
+	}
 	const listing = (await response.json()) as {
 		data?: { id?: string; name?: string; context_length?: number; supported_endpoints?: string[] }[];
 	};
