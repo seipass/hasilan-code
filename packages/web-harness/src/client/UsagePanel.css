@@ -38,4 +38,12 @@
 .usage-popover-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px 0; font-size: var(--text-sm); }
 .usage-popover-header button { flex: none; padding: 4px 8px; border: 0; background: transparent; color: var(--on-surface-muted); font-size: var(--text-xs); }
 .usage-popover-header button:hover { background: var(--surface-hover); color: var(--on-surface); }
-.usage-popover-content > .usage-panel-body { border: 0; border-radius: 0; background: transparent; }
+.usage-popover-content > .usage-panel-body { padding: 8px 12px 12px; border: 0; border-radius: 0; background: transparent; }
+.usage-totals { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.usage-totals > div { flex: 1; min-width: max-content; padding: 8px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; }
+.usage-totals dt, .usage-totals small { color: var(--on-surface-muted); font-size: var(--text-xs); }
+.usage-totals dd { margin: 2px 0 0; font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+.usage-totals small { margin-inline-start: 8px; }
+.usage-popover-content .usage-table-scroll th, .usage-popover-content .usage-table-scroll td { padding-inline: 5px; }
+.usage-popover-content .usage-table-scroll td:nth-child(2) { min-width: 7rem; white-space: normal; overflow-wrap: anywhere; }
+.usage-popover-content .usage-table-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface-raised); }

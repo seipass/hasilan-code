@@ -73,6 +73,10 @@ export function UsagePanel({ title, groups, trigger }: {
 	}, [isPopover, open]);
 	const body = <MotionSize>
 		<p>{tokens.format(total.responses)}応答 · 失敗・中止 {tokens.format(total.failures)}件{total.auxiliary > 0 && ` · 補助処理 ${tokens.format(total.auxiliary)}記録`}</p>
+		{isPopover && rows.length > 0 && <dl className="usage-totals">
+			<div><dt>キャッシュヒット率</dt><dd>{percent === null ? "—" : `${percent.toFixed(1)}%`}</dd></div>
+			<div><dt>概算費用</dt><dd>{money.format(total.cost)}{unpriced && <small>一部未計測</small>}</dd></div>
+		</dl>}
 		<div className="usage-data-slot"><Presence show={rows.length > 0}><div className="usage-table-scroll" tabIndex={0} role="region" aria-label={`${title}のモデル別集計`}>
 			<table><thead><tr><th scope="col">担当</th><th scope="col">モデル</th><th scope="col">ヒット率</th><th scope="col">未キャッシュ入力</th><th scope="col">読取</th><th scope="col">書込</th><th scope="col">出力</th><th scope="col">概算USD</th></tr></thead>
 				<tbody><MotionItems items={rows} itemKey={(row) => row.id}>{({ id, label, usage }) => {
