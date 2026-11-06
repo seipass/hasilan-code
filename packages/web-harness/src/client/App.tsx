@@ -81,6 +81,7 @@ export function App() {
 	const closeSessionAction = useCallback(() => setSessionAction(undefined), []);
 	const [modelOpen, setModelOpen] = useState(false);
 	const [addingWorkspace, setAddingWorkspace] = useState(false);
+	const [sessionOrder, setSessionOrder] = usePreferenceState<Record<string, string[]>>("pi-web-session-order", {});
 	const [expandedWorkspaces, setExpandedWorkspaces] = usePreferenceState<Record<string, boolean>>("pi-web-expanded-workspaces", {});
 	const [sidebarOpen, setSidebarOpen] = usePreferenceState("pi-web-sidebar-open", () => window.innerWidth >= 900);
 	const [historyQuery, setHistoryQuery] = useState("");
@@ -131,7 +132,17 @@ export function App() {
 		return () => { window.clearTimeout(timer); controller.abort(); };
 	}, [historyQuery]);
 	const bodyMatchIds = new Set(bodyMatches.map((match) => match.sessionId));
-	const history = roots.filter((entry) => bodyMatchIds.has(entry.sessionId) || `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase())).sort((a, b) => Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? "")));
+	const orderedRoots = [...roots].sort((a, b) => {
+		if (a.workspaceId !== b.workspaceId) return a.workspaceId.localeCompare(b.workspaceId);
+		const order = sessionOrder[a.workspaceId];
+		const customOrder = (order?.indexOf(a.sessionId) ?? -1) - (order?.indexOf(b.sessionId) ?? -1);
+		if (customOrder) return customOrder;
+		return Number(!!b.currentRun) - Number(!!a.currentRun) || String(b.latestRun?.startedAt ?? "").localeCompare(String(a.latestRun?.startedAt ?? ""));
+	});
+	const history = orderedRoots.filter((entry) => bodyMatchIds.has(entry.sessionId) || `${entry.title ?? ""} ${workspaces.find((item) => item.workspaceId === entry.workspaceId)?.path ?? ""}`.toLowerCase().includes(historyQuery.toLowerCase()));
+	const actionSession = sessionAction?.session;
+	const actionOrder = actionSession ? orderedRoots.filter((entry) => entry.workspaceId === actionSession.workspaceId).map((entry) => entry.sessionId) : [];
+	const actionIndex = actionOrder.indexOf(actionSession?.sessionId ?? "");
 	useAttention({
 		sessions: summaries,
 		selectedSessionId: sessionId,
@@ -532,7 +543,7 @@ export function App() {
 								const bounds = button.getBoundingClientRect();
 								setSessionAction({ session: summary, opener: button, x: x ?? bounds.right - 8, y: y ?? bounds.bottom });
 							};
-							return <li key={summary.sessionId} className="history-session-row"><button className={`session-button ${summary.sessionId === sessionId ? "selected" : ""}`} aria-current={summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); openActions(event.currentTarget, event.clientX || undefined, event.clientY || undefined); }} onKeyDown={(event) => { if (event.key === "F10" && event.shiftKey) { event.preventDefault(); openActions(event.currentTarget); } }} title={title}><span className="session-title">{title}</span>{status !== "idle" && <span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} title={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} />}</button><button type="button" className="session-menu-button" aria-label={`${title}の操作`} title="名前を変更・削除" aria-haspopup="menu" aria-expanded={sessionAction?.session.sessionId === summary.sessionId} onClick={(event) => openActions(event.currentTarget)}><Icon name="more" size="control" /></button></li>;
+							return <li key={summary.sessionId} className="history-session-row"><button className={`session-button ${summary.sessionId === sessionId ? "selected" : ""}`} aria-current={summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); openActions(event.currentTarget, event.clientX || undefined, event.clientY || undefined); }} onKeyDown={(event) => { if (event.key === "F10" && event.shiftKey) { event.preventDefault(); openActions(event.currentTarget); } }} title={title}><span className="session-title">{title}</span>{status !== "idle" && <span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} title={status === "missing" ? "履歴が見つかりません" : RUN_LABELS[status]} />}</button><button type="button" className="session-menu-button" aria-label={`${title}の操作`} title="会話の操作" aria-haspopup="menu" aria-expanded={sessionAction?.session.sessionId === summary.sessionId} onClick={(event) => openActions(event.currentTarget)}><Icon name="more" size="control" /></button></li>;
 						}}</MotionItems></ul><Presence show={conversations.length === 0}><p className="history-empty">{historyQuery ? "一致する会話がありません" : "会話はありません。"}</p></Presence>
 						{bodyMatches.filter((match) => conversations.some((entry) => entry.sessionId === match.sessionId)).slice(0, 6).map((match, index) => <button key={`${match.sessionId}-${index}`} type="button" className="history-body-match" onClick={() => selectSession(match.sessionId)} title={match.snippet}><span className="history-body-role">{match.role === "user" ? "あなた" : "AI"}</span>{match.snippet}</button>)}
 					</details>;
@@ -561,7 +572,15 @@ export function App() {
 				</aside>
 			</div>
 		</div>{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} />}
-		<Presence show={!!sessionAction}><div className="motion-contents">{sessionAction && <SessionActions key={sessionAction.session.sessionId} target={sessionAction} onClose={closeSessionAction} onRename={renameSession} onDelete={deleteSession} />}</div></Presence>
+		<Presence show={!!sessionAction}><div className="motion-contents">{sessionAction && <SessionActions key={sessionAction.session.sessionId} target={sessionAction} onClose={closeSessionAction} onRename={renameSession} onDelete={deleteSession} canMoveUp={actionIndex > 0} canMoveDown={actionIndex >= 0 && actionIndex < actionOrder.length - 1} onMove={(direction) => {
+			const destination = actionIndex + direction;
+			if (!actionSession || actionIndex < 0 || destination < 0 || destination >= actionOrder.length) return;
+			const nextOrder = [...actionOrder];
+			nextOrder.splice(actionIndex, 1);
+			nextOrder.splice(destination, 0, actionSession.sessionId);
+			setSessionOrder((previous) => ({ ...previous, [actionSession.workspaceId]: nextOrder }));
+			closeSessionAction();
+		}} />}</div></Presence>
 		<Presence show={importOpen && !!workspace}><div className="motion-contents">{workspace && <SessionImportDialog key={workspace.workspaceId} workspace={workspace} model={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onFile={openFile} onClose={() => setImportOpen(false)} onImported={(imported, folder) => {
 			setWorkspaces((previous) => previous.some((entry) => entry.workspaceId === folder.workspaceId) ? previous : [...previous, folder]);
 			setInitialSessions((previous) => [...previous.filter((entry) => entry.sessionId !== imported.sessionId), imported]);

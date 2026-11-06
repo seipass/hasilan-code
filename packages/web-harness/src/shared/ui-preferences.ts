@@ -97,7 +97,7 @@ export function uiPreferenceLimit(key: string): number | undefined {
 	if (key === "hasilan-home-background") return 1_402_000;
 	if (key === "hasilan-widgets-v1") return 500_000;
 	if (["pi-web-model-selection", "pi-web-keybindings", "pi-web-expanded-workspaces"].includes(key)) return 64_000;
-	if (key === "pi-web-music") return 500_000;
+	if (key === "pi-web-music" || key === "pi-web-session-order") return 500_000;
 	if (
 		[
 			"pi-web-selected-session",
@@ -132,6 +132,7 @@ export function validUiPreference(key: string, value: unknown): value is string 
 		if (key === "pi-web-right-tab") return parsed === "tabs" || parsed === "team" || parsed === "tools";
 		if (key === "pi-web-model-selection") return Check(modelSelectionSchema, parsed);
 		if (key === "pi-web-expanded-workspaces") return Check(Type.Record(Type.String(), Type.Boolean()), parsed);
+		if (key === "pi-web-session-order") return Check(Type.Record(Type.String(), Type.Array(Type.String())), parsed);
 		if (key === "pi-web-keybindings") return Check(keybindingsSchema, parsed);
 		if (key.startsWith("pi-web-tree:")) return Check(treePreferencesSchema, parsed);
 		if (key.startsWith("pi-web-tabs:")) return Check(savedDetailTabsSchema, parsed);

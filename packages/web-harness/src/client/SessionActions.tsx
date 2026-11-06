@@ -11,9 +11,12 @@ export interface SessionActionTarget {
 	opener: HTMLButtonElement;
 }
 
-export function SessionActions({ target, onClose, onRename, onDelete }: {
+export function SessionActions({ target, onClose, onRename, onDelete, canMoveUp, canMoveDown, onMove }: {
 	target: SessionActionTarget;
 	onClose: () => void;
+	canMoveUp: boolean;
+	canMoveDown: boolean;
+	onMove: (direction: -1 | 1) => void;
 	onRename: (id: string, title: string) => Promise<void>;
 	onDelete: (id: string) => Promise<void>;
 }) {
@@ -77,6 +80,8 @@ export function SessionActions({ target, onClose, onRename, onDelete }: {
 		buttons[event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
 	}}>
 		<button type="button" role="menuitem" onClick={() => setAction("rename")}>名前を変更</button>
+		{canMoveUp && <button type="button" role="menuitem" onClick={() => onMove(-1)}>上へ移動</button>}
+		{canMoveDown && <button type="button" role="menuitem" onClick={() => onMove(1)}>下へ移動</button>}
 		<button type="button" role="menuitem" className="danger" onClick={() => setAction("delete")}>削除</button>
 	</div></Presence></>;
 }
