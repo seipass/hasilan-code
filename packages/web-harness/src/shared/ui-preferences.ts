@@ -111,6 +111,7 @@ export function uiPreferenceLimit(key: string): number | undefined {
 		].includes(key)
 	)
 		return 4096;
+	if (/^pi-web-dismissed-goal:[a-zA-Z0-9_-]+$/.test(key)) return 128;
 	if (/^pi-web-draft:(?:new:)?[a-zA-Z0-9_-]+$/.test(key)) return 1_000_000;
 	if (/^pi-web-attachments:(?:new:)?[a-zA-Z0-9_-]+$/.test(key)) return ATTACHMENT_LIMITS.requestBytes - 4096;
 	if (/^pi-web-(?:tabs|tree|split):[a-zA-Z0-9_-]+$/.test(key)) return 500_000;
@@ -129,6 +130,8 @@ export function validUiPreference(key: string, value: unknown): value is string 
 			return typeof parsed === "boolean";
 		if (key === "pi-web-right-width") return typeof parsed === "number" && parsed >= 320 && parsed <= 10_000;
 		if (key === "pi-web-chat-width") return typeof parsed === "number" && parsed >= 320 && parsed <= 3000;
+		if (key.startsWith("pi-web-dismissed-goal:"))
+			return parsed === null || (typeof parsed === "string" && /^[a-f0-9]{16}$/.test(parsed));
 		if (key === "pi-web-right-tab") return parsed === "tabs" || parsed === "team" || parsed === "tools";
 		if (key === "pi-web-model-selection") return Check(modelSelectionSchema, parsed);
 		if (key === "pi-web-expanded-workspaces") return Check(Type.Record(Type.String(), Type.Boolean()), parsed);

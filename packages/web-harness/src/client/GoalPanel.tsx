@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { Goal, GoalAction } from "../shared/goals.ts";
 import { errorMessage } from "./api.ts";
+import { Icon } from "./Icon.tsx";
 import { Presence } from "./Motion.tsx";
 import "./GoalPanel.css";
 
@@ -12,12 +13,13 @@ const STATUS_LABELS: Record<Goal["status"], string> = {
 	dropped: "終了",
 };
 
-export function GoalPanel({ goal, busy, connected, unavailable, onAction }: {
+export function GoalPanel({ goal, busy, connected, unavailable, onAction, onDismiss }: {
 	goal: Goal;
 	busy: boolean;
 	connected: boolean;
 	unavailable: boolean;
 	onAction: (action: GoalAction) => Promise<void>;
+	onDismiss: () => void;
 }) {
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string>();
@@ -33,7 +35,8 @@ export function GoalPanel({ goal, busy, connected, unavailable, onAction }: {
 		catch (reason) { setError(errorMessage(reason)); }
 		finally { acting.current = false; setPending(false); }
 	}
-	return <details className="goal-panel">
+	return <div className="goal-panel-slot">
+	<details className="goal-panel">
 		<summary><span>Goal</span><span key={goal.status} className={`goal-status goal-status-${goal.status} motion-label`} role="status">{STATUS_LABELS[goal.status]}</span></summary>
 		<div className="goal-panel-body">
 			<div className="goal-current">
@@ -47,5 +50,7 @@ export function GoalPanel({ goal, busy, connected, unavailable, onAction }: {
 			</div></Presence>
 			<Presence show={!!error}><p className="error" role="alert">{error}</p></Presence>
 		</div>
-	</details>;
+	</details>
+	{goal.status === "complete" && <button type="button" className="goal-dismiss" aria-label="達成済みの Goal を閉じる" onClick={onDismiss}><Icon name="close" size="inline" /></button>}
+	</div>;
 }
