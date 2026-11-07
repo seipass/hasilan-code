@@ -8,28 +8,49 @@ export function TabGestureHints({ left, top, active }: {
 }) {
 	const id = useId();
 	const svg = useRef<SVGSVGElement>(null);
-	const position = useRef({ x: 32, y: 32, tailX: 32, tailY: 32 });
+	const position = useRef({ head: 0, headVelocity: 0, tail: 0, tailVelocity: 0 });
 	useEffect(() => {
 		const element = svg.current;
 		if (!element) return;
 		const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-		const target = { x: active === "file" ? 102 : 32, y: active === "terminal" ? 102 : 32 };
-		// Changing branches passes through the plus instead of cutting across empty space.
-		let throughOrigin = (target.x === 32 && position.current.x > 33) || (target.y === 32 && position.current.y > 33);
+		const target = active === "file" ? 1 : active === "terminal" ? -1 : 0;
+		const head = element.querySelector('[data-selection="head"]');
+		const tail = element.querySelector('[data-selection="tail"]');
+		const bridge = element.querySelector('[data-selection="bridge"]');
+		const icons = element.querySelectorAll<SVGGElement>(".detail-gesture-hint");
 		let frame = 0;
 		let previous = performance.now();
 		const draw = (now: number) => {
-			const amount = reduced ? 1 : 1 - Math.exp(-Math.min(now - previous, 32) / 48);
+			const elapsed = Math.min(now - previous, 50) / 1000;
 			previous = now;
 			const current = position.current;
-			if (reduced || Math.abs(current.x - 32) + Math.abs(current.y - 32) < 1) throughOrigin = false;
-			current.x += ((throughOrigin ? 32 : target.x) - current.x) * amount;
-			current.y += ((throughOrigin ? 32 : target.y) - current.y) * amount;
-			current.tailX += (current.x - current.tailX) * amount;
-			current.tailY += (current.y - current.tailY) * amount;
-			element.querySelector('[data-selection="head"]')?.setAttribute("transform", `translate(${current.x} ${current.y})`);
-			element.querySelector('[data-selection="tail"]')?.setAttribute("transform", `translate(${current.tailX} ${current.tailY})`);
-			if (Math.abs(target.x - current.tailX) + Math.abs(target.y - current.tailY) > .01) frame = requestAnimationFrame(draw);
+			// Exact critically damped springs retain velocity when the direction changes.
+			// One path coordinate crosses the plus continuously, with no stop at its center.
+			const headDecay = Math.exp(-22 * elapsed);
+			const headOffset = current.head - target;
+			const headImpulse = current.headVelocity + 22 * headOffset;
+			current.head = reduced ? target : target + (headOffset + headImpulse * elapsed) * headDecay;
+			current.headVelocity = reduced ? 0 : (current.headVelocity - 22 * headImpulse * elapsed) * headDecay;
+			const tailDecay = Math.exp(-19 * elapsed);
+			const tailOffset = current.tail - current.head;
+			const tailImpulse = current.tailVelocity + 19 * tailOffset;
+			current.tail = reduced ? target : current.head + (tailOffset + tailImpulse * elapsed) * tailDecay;
+			current.tailVelocity = reduced ? 0 : (current.tailVelocity - 19 * tailImpulse * elapsed) * tailDecay;
+			const headX = 32 + Math.max(0, current.head) * 70;
+			const headY = 32 + Math.max(0, -current.head) * 70;
+			const tailX = 32 + Math.max(0, current.tail) * 70;
+			const tailY = 32 + Math.max(0, -current.tail) * 70;
+			head?.setAttribute("transform", `translate(${headX} ${headY})`);
+			tail?.setAttribute("transform", `translate(${tailX} ${tailY})`);
+			bridge?.setAttribute("d", `M${headX} ${headY}${current.head * current.tail < 0 ? "L32 32" : ""}L${tailX} ${tailY}`);
+			for (const icon of icons) {
+				const iconX = icon.dataset.part === "file" ? 102 : 32;
+				const iconY = icon.dataset.part === "terminal" ? 102 : 32;
+				const distance = Math.min(Math.hypot(headX - iconX, headY - iconY), Math.hypot(tailX - iconX, tailY - iconY));
+				const coverage = Math.max(0, Math.min(1, (31 - distance) / 14));
+				icon.style.stroke = `color-mix(in srgb, var(--surface) ${coverage * 100}%, var(--on-surface-secondary))`;
+			}
+			if (Math.abs(target - current.tail) + Math.abs(current.headVelocity) + Math.abs(current.tailVelocity) > .001) frame = requestAnimationFrame(draw);
 		};
 		frame = requestAnimationFrame(draw);
 		return () => cancelAnimationFrame(frame);
@@ -45,6 +66,7 @@ export function TabGestureHints({ left, top, active }: {
 				<path d="M32 20Q67 38 102 20V44Q67 26 32 44ZM20 32Q38 67 20 102H44Q26 67 44 32Z" />
 			</g>
 			<g clipPath={`url(#${id}-clip)`}><g className="detail-gesture-selection" filter={`url(#${id})`}>
+				<path data-selection="bridge" fill="none" stroke="var(--on-surface)" strokeWidth="32" strokeLinecap="round" strokeLinejoin="round" />
 				<circle data-selection="head" transform="translate(32 32)" r="23" />
 				<circle data-selection="tail" transform="translate(32 32)" r="18" />
 			</g></g>
