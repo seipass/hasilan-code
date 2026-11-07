@@ -1,3 +1,4 @@
+import { Select } from "./Select.tsx";
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { useEffect, useId, useRef, useState } from "react";
 import { SESSION_IMPORT_SOURCES, type SessionDiscovery, type SessionImportPreview, type SessionImportSource } from "../shared/session-import.ts";
@@ -80,7 +81,7 @@ export function SessionImportDialog({ workspace, model, thinkingLevel, onClose, 
 	}}>
 		<header className="session-import-heading"><div><h2 id={titleId}>セッションを引き継ぐ</h2><code>{workspace.path}</code></div><button type="button" disabled={busy} onClick={onClose} aria-label="セッション引き継ぎを閉じる">閉じる</button></header>
 		<form className="session-import-source" onSubmit={(event) => { event.preventDefault(); setRequestPath(path.trim()); setAttempt((value) => value + 1); }}>
-			<label>ハーネス<select value={source} disabled={busy} onChange={(event) => { setSource(event.target.value as SessionImportSource); setPath(""); setRequestPath(""); setQuery(""); }}>{SESSION_IMPORT_SOURCES.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label>
+			<label>ハーネス<Select value={source} disabled={busy} onChange={(value) => { setSource(value as SessionImportSource); setPath(""); setRequestPath(""); setQuery(""); }}>{SESSION_IMPORT_SOURCES.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</Select></label>
 			<label>履歴ファイル<input value={path} disabled={busy} onChange={(event) => setPath(event.target.value)} placeholder="自動検出 · フォルダーまたは履歴ファイルの絶対パス" /></label>
 			<button type="submit" disabled={busy || loading}>{loading ? "検索中…" : "再読み込み"}</button>
 		</form>

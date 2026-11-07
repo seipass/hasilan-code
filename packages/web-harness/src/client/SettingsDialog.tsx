@@ -1,3 +1,4 @@
+import { Select } from "./Select.tsx";
 import { animationsEnabled } from "./motion-policy.ts";
 import { useEffect, useId, useRef, useState } from "react";
 import { SessionArchivePanel } from "./SessionArchivePanel.tsx";
@@ -208,13 +209,13 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 					}, "翻訳・要約の設定を保存しました。", "設定を保存できませんでした。"); }}>
 						<fieldset disabled={busy} className="settings-section"><legend>出力の設定</legend>
 							<label>母国語<input required maxLength={80} value={settings.translation.language} onChange={(event) => { setSettings({ ...settings, translation: { ...settings.translation, language: event.target.value } }); setNotice(undefined); }} /></label>
-							<label>翻訳・要約モデル<select value={translationModelAvailable && translationModel ? JSON.stringify([translationModel.provider, translationModel.id]) : ""} onChange={(event) => {
-								const model = catalog?.models.find((entry) => catalog.providers.some((provider) => provider.id === entry.provider && provider.configured === true) && JSON.stringify([entry.provider, entry.id]) === event.target.value);
+							<label>翻訳・要約モデル<Select value={translationModelAvailable && translationModel ? JSON.stringify([translationModel.provider, translationModel.id]) : ""} onChange={(value) => {
+								const model = catalog?.models.find((entry) => catalog.providers.some((provider) => provider.id === entry.provider && provider.configured === true) && JSON.stringify([entry.provider, entry.id]) === value);
 								setSettings({ ...settings, translation: { ...settings.translation, model: model ? { provider: model.provider, id: model.id } : undefined } }); setNotice(undefined);
 							}}><option value="">選択してください</option>{catalog?.providers.filter((provider) => provider.configured === true).map((provider) => {
 								const models = catalog.models.filter((model) => model.provider === provider.id);
 								return models.length ? <optgroup key={provider.id} label={provider.name}>{models.map((model) => <option key={`${model.provider}/${model.id}`} value={JSON.stringify([model.provider, model.id])}>{model.name ?? model.id}</option>)}</optgroup> : null;
-							})}</select></label>
+							})}</Select></label>
 							{translationModel && !translationModelAvailable && <p className="settings-inline-status">保存済みのモデルは利用できません。プロバイダーの認証を確認するか、別のモデルを選択してください。</p>}
 							<p className="fine-print">翻訳・要約を押したときに対象の内容を選択したモデルへ送信します。ファイルや会話の原文は変更しません。</p>
 							<button type="submit" disabled={!translationChanged || !settings.translation.language.trim()}>設定を保存</button>
@@ -255,7 +256,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 						setSavedSettings((current) => current && ({ ...current, search: saved.search }));
 					}, "既定の検索サービスを保存しました。", "既定の検索サービスを保存できませんでした。"); }}>
 						<fieldset disabled={busy} className="settings-section"><legend>既定の検索サービス</legend>
-							<label>プロバイダー<select value={settings.search.defaultProvider} onChange={(event) => { setSettings({ ...settings, search: { ...settings.search, defaultProvider: event.target.value as SearchProviderId } }); setNotice(undefined); }}>{SEARCH_PROVIDERS.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></label>
+							<label>プロバイダー<Select value={settings.search.defaultProvider} onChange={(value) => { setSettings({ ...settings, search: { ...settings.search, defaultProvider: value as SearchProviderId } }); setNotice(undefined); }}>{SEARCH_PROVIDERS.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</Select></label>
 							{settings.search.defaultProvider === "rustxng" && <><label>RustXNGの接続先URL<input type="url" required maxLength={2048} value={settings.search.rustxngUrl} onChange={(event) => { setSettings({ ...settings, search: { ...settings.search, rustxngUrl: event.target.value } }); setNotice(undefined); }} /></label><p className="fine-print">RustXNGは別途インストールして起動してください。APIキーは不要です。</p><p className="settings-next-action">RustXNGは複数の検索サイトに並列アクセスします。利用状況によっては、RustXNGを動かすサーバーのIPアドレスが検索サイトから一時的または長期にブロックされる可能性があります。</p></>}
 							<p className="settings-inline-status" role="status">{searchChanged ? "変更は未保存です。" : "変更なし"} {settings.search.defaultProvider === "rustxng" ? "APIキー不要" : settings.search.configured[settings.search.defaultProvider] ? "キー設定済み" : "検索するには下でキーを保存してください。"}</p>
 							<button type="submit" disabled={!searchChanged}>既定の検索サービスを保存</button>
@@ -289,17 +290,17 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 					}}>
 						<fieldset disabled={busy} className="settings-section"><legend>判断モデルの接続先</legend>
 							<p>ホームで Ctrl / Cmd + Shift + Enter を押すと、作業内容からワークスペースと新規・既存の会話を選びます。曖昧な場合は入力欄の下に候補を表示します。既存の会話は履歴とモデル設定を引き継いで続行します。</p>
-							<label>判断モデルのプロバイダー<select value={selectedJev?.provider ?? ""} onChange={(event) => {
-								const provider = event.target.value;
+							<label>判断モデルのプロバイダー<Select value={selectedJev?.provider ?? ""} onChange={(value) => {
+								const provider = value;
 								const first = catalog?.classifiers?.find((model) => model.provider === provider);
 								setSettings((current) => current && ({ ...current, jev: { configured: !!catalog?.providers.find((entry) => entry.id === provider)?.configured, ...(first ? { model: { provider, id: first.id } } : {}) } }));
 								setNotice(undefined);
-							}}><option value="">選択してください</option>{selectedJev && !jevProviders.some((provider) => provider.id === selectedJev.provider) && <option value={selectedJev.provider}>{selectedJev.provider}（利用不可）</option>}{jevProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.configured ? "認証設定あり" : "未認証"}</option>)}</select></label>
-							<label>判断モデル<select value={selectedJev?.id ?? ""} disabled={!jevModels.length} onChange={(event) => {
+							}}><option value="">選択してください</option>{selectedJev && !jevProviders.some((provider) => provider.id === selectedJev.provider) && <option value={selectedJev.provider}>{selectedJev.provider}（利用不可）</option>}{jevProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.configured ? "認証設定あり" : "未認証"}</option>)}</Select></label>
+							<label>判断モデル<Select value={selectedJev?.id ?? ""} disabled={!jevModels.length} onChange={(value) => {
 								if (!selectedJev) return;
-								setSettings({ ...settings, jev: { ...settings.jev, configured: !!jevProvider?.configured, model: { provider: selectedJev.provider, id: event.target.value } } });
+								setSettings({ ...settings, jev: { ...settings.jev, configured: !!jevProvider?.configured, model: { provider: selectedJev.provider, id: value } } });
 								setNotice(undefined);
-							}}>{!selectedJev && <option value="">プロバイダーを選択してください</option>}{selectedJev && !jevModels.some((model) => model.id === selectedJev.id) && <option value={selectedJev.id}>{selectedJev.id}（利用不可）</option>}{jevModels.map((model) => <option key={model.id} value={model.id}>{model.name ?? model.id} · {model.id}</option>)}</select></label>
+							}}>{!selectedJev && <option value="">プロバイダーを選択してください</option>}{selectedJev && !jevModels.some((model) => model.id === selectedJev.id) && <option value={selectedJev.id}>{selectedJev.id}（利用不可）</option>}{jevModels.map((model) => <option key={model.id} value={model.id}>{model.name ?? model.id} · {model.id}</option>)}</Select></label>
 							<p className="settings-inline-status" role="status">{jevChanged ? "未保存 · " : ""}{selectedJev ? jevProvider?.configured ? "認証設定あり" : "プロバイダーの認証が必要です。" : "モデル未選択"}</p>
 							<p className="fine-print">「プロバイダー」で設定した認証を共用します。</p>
 							<p className="fine-print">本文・添付の名前と種類・登録フォルダーの概要・会話タイトルと直近の依頼・結果の抜粋を選択した判断モデルに送信します。添付ファイル本体は送信しません。</p>
@@ -319,14 +320,14 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 						<fieldset disabled={busy} className="settings-section"><legend>入力する文章の生成</legend>
 							<p>判断モデルが操作を選び、文章を作る必要があるときだけこのモデルを使います。指定された文字はそのまま入力します。</p>
 							<p className="fine-print">Computer Useでは画面や操作候補を選択した判断モデルの接続先に送信します。</p>
-							<label>文章生成モデル<select value={textModel ? JSON.stringify([textModel.provider, textModel.id]) : ""} onChange={(event) => {
-								const selected = catalog?.models.find((model) => JSON.stringify([model.provider, model.id]) === event.target.value);
+							<label>文章生成モデル<Select value={textModel ? JSON.stringify([textModel.provider, textModel.id]) : ""} onChange={(value) => {
+								const selected = catalog?.models.find((model) => JSON.stringify([model.provider, model.id]) === value);
 								setSettings((current) => current && ({ ...current, jevComputer: selected ? { textModel: { provider: selected.provider, id: selected.id } } : undefined }));
 								setNotice(undefined);
 							}}><option value="">選択してください</option>{textModel && !catalog?.models.some((model) => model.provider === textModel.provider && model.id === textModel.id) && <option value={JSON.stringify([textModel.provider, textModel.id])}>{textModel.provider} / {textModel.id}（利用不可）</option>}{catalog?.providers.map((provider) => {
 								const models = catalog.models.filter((model) => model.provider === provider.id);
 								return models.length ? <optgroup key={provider.id} label={provider.name}>{models.map((model) => <option key={`${model.provider}/${model.id}`} value={JSON.stringify([model.provider, model.id])}>{model.name ?? model.id}</option>)}</optgroup> : null;
-							})}</select></label>
+							})}</Select></label>
 							<p className="settings-inline-status">{textModelChanged ? "未保存 · " : ""}{textModel ? catalog?.providers.find((provider) => provider.id === textModel.provider)?.configured ? "認証設定あり" : "プロバイダーの認証が必要です。" : "文章生成モデル未選択"}</p>
 							<button type="submit" disabled={!textModelChanged}>文章生成モデルを保存</button>
 						</fieldset>

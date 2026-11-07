@@ -1,3 +1,4 @@
+import { Select } from "./Select.tsx";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Presence, useContentMotion } from "./Motion.tsx";
 import type { ModelCatalog } from "./types.ts";
@@ -104,10 +105,10 @@ export function ModelPicker({ catalog, value, onChange, disabled = false, autoFo
 		<legend id={labelId} className={autoFocus ? "sr-only" : undefined}>モデルを選択</legend>
 		<div className="model-picker-filters">
 			{catalog && catalog.providers.length > 1 && <label htmlFor={providerId}>プロバイダー
-				<select id={providerId} value={provider} onChange={(event) => setProvider(event.target.value)}>
+				<Select id={providerId} value={provider} onChange={(value) => setProvider(value)}>
 					<option value="">すべてのプロバイダー</option>
 					{catalog.providers.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{entry.configured === true ? " · 設定済み" : entry.configured === false ? " · 未接続" : ""}</option>)}
-				</select>
+				</Select>
 			</label>}
 			<label htmlFor={searchId}>モデルを検索
 				<input ref={search} id={searchId} type="search" role="combobox" aria-autocomplete="list" aria-expanded={!!catalog && matches.length > 0} aria-controls={resultsId} aria-activedescendant={matches.length ? `${resultsId}-${activeIndex}` : undefined} autoComplete="off" placeholder="名前・モデルIDで絞り込む" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => {

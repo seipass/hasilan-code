@@ -68,7 +68,8 @@ it("shows the RustXNG warning and saves its endpoint without an API key", async 
 		await page.getByRole("tab", { name: "検索" }).click();
 		await expect.poll(() => page.locator("body").innerText()).toContain("Web 検索");
 		const section = page.locator('section[role="tabpanel"][id$="-search-panel"]');
-		await section.locator("select").selectOption("rustxng");
+		await section.getByRole("combobox", { name: "プロバイダー", exact: true }).click();
+		await page.getByRole("option", { name: "RustXNG", exact: true }).click();
 		await expect.poll(() => section.getByText(/IPアドレスが検索サイトから/).count()).toBe(1);
 		await expect.poll(() => section.getByLabel("RustXNGの接続先URL").inputValue()).toBe("http://127.0.0.1:8888");
 		await section.getByLabel("RustXNGの接続先URL").fill("http://127.0.0.1:9898");

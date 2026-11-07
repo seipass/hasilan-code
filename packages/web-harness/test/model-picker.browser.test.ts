@@ -94,9 +94,11 @@ it.each([true, false])(
 				await page.getByLabel("接続済みのみ").check();
 				await expect.poll(() => count.textContent()).toContain("400 件");
 				await page.getByLabel("接続済みのみ").uncheck();
-				await page.locator(".model-picker-filters select").selectOption("other");
+				await page.getByRole("combobox", { name: "プロバイダー", exact: true }).click();
+				await page.getByRole("option", { name: "Disconnected · 未接続", exact: true }).click();
 				await expect.poll(() => count.textContent()).toContain("100 件");
-				await page.locator(".model-picker-filters select").selectOption("");
+				await page.getByRole("combobox", { name: "プロバイダー", exact: true }).click();
+				await page.getByRole("option", { name: "すべてのプロバイダー", exact: true }).click();
 			}
 			await search.fill("Alpha 000");
 			await expect.poll(() => options.count()).toBe(5);
