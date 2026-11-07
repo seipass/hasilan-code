@@ -16,6 +16,7 @@ import { COMPOSER_COMMANDS } from "./slash-command.ts";
 import type { PendingInputAction, SessionDetail } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { useComposerSize } from "./use-composer-size.ts";
+import { workspaceLabel } from "./workspace-label.ts";
 import "./ChatWidth.css";
 
 function destinationKey(candidate: ConversationCandidate): string {
@@ -266,7 +267,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 					</div>;
 				}}</MotionItems>
 			</div></Presence>
-			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath}>{workspacePath}</code>}</div></Presence>
+			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath} aria-label={workspacePath}>{workspaceLabel(workspacePath, [])}</code>}</div></Presence>
 			<Presence show={!!notice} collapse><div className="composer-notice" role="status"><span>{notice}</span><button type="button" aria-label="通知を閉じる" title="通知を閉じる" onClick={() => setNotice(undefined)}><Icon name="close" size="inline" /></button></div></Presence>
 			<Presence show={!!goalControl}><div className="motion-contents">{goalControl}</div></Presence>
 			<form className={`composer command-picker-anchor${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
