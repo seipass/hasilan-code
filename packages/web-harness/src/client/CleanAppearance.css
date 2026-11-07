@@ -12,11 +12,11 @@
 	--text-2xl: 19px;
 	--text-3xl: 22px;
 	--text-4xl: 28px;
-	--text-code: 12px;
+	--text-code: 13px;
 	--leading-normal: 1.384615;
 	--leading-prose: 1.428571;
-	--leading-code: 1.666667;
-	--leading-diff: 1.666667;
+	--leading-code: 1.538462;
+	--leading-diff: 1.538462;
 	--text-reading: 14px;
 	--text-control: 13px;
 	--surface: #141414;
@@ -65,14 +65,15 @@
 .message-content > :first-child, .files-markdown > :first-child { margin-top: 0; }
 .message-content > :last-child, .files-markdown > :last-child { margin-bottom: 0; }
 .message-content strong { font-weight: 600; }
+.message-content :is(pre, pre code), .files-markdown :is(pre, pre code) { font-size: 12px; line-height: 20px; }
 .message-meta, .message-usage { font-size: var(--text-xs); line-height: 16px; }
 .thinking, .thinking > summary, .turn-activity, .turn-activity-waiting,
 .context-entry > summary, .tool-card > summary, .tool-card .tool-summary { font-size: var(--text-control); line-height: 18px; letter-spacing: -.005em; }
 .composer textarea { font-size: var(--text-reading); line-height: 20px; letter-spacing: -.005em; }
 .composer-workspace { font-size: var(--text-xs); line-height: 16px; }
 .settings-content, .settings-content label, .settings-tabs button { font-size: var(--text-control); line-height: 18px; letter-spacing: -.005em; }
-.settings-content > h3 { font-size: 15px; line-height: 22px; }
-.settings-content h4 { font-size: 14px; line-height: 20px; }
+.settings-content > h3 { font-size: 24px; line-height: 32px; }
+.settings-content h4 { font-size: 15px; line-height: 22px; }
 .model-picker-option strong, .widget-chip strong { font-weight: 400; }
 .history-heading, .model-group-heading, .widget-chip-label, .tool-meta, .fine-print, .revision { font-size: var(--text-xs); line-height: 16px; }
 .workspace-accordion > summary, .session-button, .new-conversation, .sidebar-bottom button,
@@ -84,6 +85,14 @@
 .team-run-task, .team-graph-node-name { font-size: var(--text-control); line-height: 18px; }
 .model-trigger-thinking { font-size: var(--text-control); line-height: 18px; }
 .badge { font-size: var(--text-2xs); line-height: 14px; letter-spacing: .01em; }
+.quick-open-input { font-size: 17px; line-height: 26px; }
+.quick-open-name, .session-context-menu button, .detail-context-menu button,
+.files-view-mode button, .detail-new-tab h2, .detail-new-choices button,
+.browser-toolbar :is(input, button), .file-editor-toolbar,
+.settings-content legend { font-size: 13px; line-height: 18px; letter-spacing: -.005em; }
+.quick-open-path, .history-search kbd, .file-editor-toolbar button,
+.image-viewer-meta, .terminal-status, .settings-content .fine-print,
+.model-menu-thinking > h3, .model-menu-models > h3 { font-size: 12px; line-height: 16px; }
 
 /* A quiet sidebar, with one consistent selection treatment. */
 .sidebar { border-radius: 0 10px 10px 0; }
@@ -167,7 +176,7 @@ button, input, textarea, select { border-radius: 7px; }
 .model-group-heading { font-weight: 400; }
 .model-selected-mark { color: var(--on-surface); }
 .settings-dialog.settings-dialog { border-color: var(--border); border-radius: 14px; box-shadow: 0 20px 60px #0005; }
-.settings-dialog .panel-heading h2 { font-size: var(--text-xl); }
+.settings-dialog .panel-heading h2 { font-size: 17px; line-height: 26px; letter-spacing: -.01em; }
 .settings-dialog .settings-layout .settings-tabs { border-right: 0; gap: 0; }
 .settings-layout .settings-tabs button { min-height: 30px; border-radius: 6px; padding: 6px 8px; }
 .settings-tabs [aria-selected="true"] { background: var(--surface-hover); color: var(--on-surface); }
@@ -208,9 +217,6 @@ button, input, textarea, select { border-radius: 7px; }
 	.composer-input-row, .composer textarea { min-height: 44px; }
 	.composer-toolbar { min-height: 24px; }
 	.composer-chip { min-height: 24px; padding: 4px 5px; font-size: var(--text-xs); line-height: 16px; }
-}
-@media (max-width: 900px) {
-	.composer textarea { font-size: 16px; }
 }
 @media (max-width: 600px) {
 	.session-import-dialog { border-radius: 0; }
