@@ -44,8 +44,8 @@ interface MessageProps {
 	message: ChatMessage;
 	tools: (ToolCall | undefined)[];
 	onFile: (path: string, line?: number) => void;
-	onRetry?: () => void;
-	onEdit?: (text: string) => void;
+	onRetry?: (messageId: string) => void;
+	onEdit?: (messageId: string, text: string) => void;
 	expansions: Map<string, boolean[]>;
 }
 const Message = memo(function Message({ rowKey, grouped, message, tools, onFile, onRetry, onEdit, expansions }: MessageProps) {
@@ -82,7 +82,7 @@ const Message = memo(function Message({ rowKey, grouped, message, tools, onFile,
 				{hasAssistantText(message) && <div className="message-meta">
 					{message.timestamp && Number.isFinite(Date.parse(message.timestamp)) && <time dateTime={message.timestamp}>{new Date(message.timestamp).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>}
 					{message.usage && <span className="message-usage" title="この応答の概算">{`${formatTokens(message.usage.input + message.usage.cacheRead + message.usage.cacheWrite + message.usage.output)} tok · $${message.usage.cost.toFixed(3)}`}</span>}
-					<MessageActions message={message} content={content} onRetry={onRetry} onEdit={onEdit} />
+					<MessageActions message={message} content={content} onRetry={onRetry ? () => onRetry(message.messageId) : undefined} onEdit={onEdit ? (text) => onEdit(message.messageId, text) : undefined} />
 				</div>}
 			</article>}
 	</div>;
@@ -153,6 +153,10 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const fileCallback = useRef(onFile);
 	fileCallback.current = onFile;
 	const openFile = useCallback((path: string, line?: number) => fileCallback.current(path, line), []);
+	const actionCallbacks = useRef({ onRetry, onEdit });
+	actionCallbacks.current = { onRetry, onEdit };
+	const retryMessage = useCallback((messageId: string) => actionCallbacks.current.onRetry?.(messageId), []);
+	const editMessage = useCallback((messageId: string, text: string) => actionCallbacks.current.onEdit?.(messageId, text), []);
 	const [measureVersion, setMeasureVersion] = useState(0);
 	const [viewport, setViewport] = useState({ top: 0, height: 600 });
 	const [nearBottom, setNearBottom] = useState(true);
@@ -247,8 +251,8 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 					? <div key={row.key} className="virtual-message" data-message-id={row.key}><ComputerActivity group={row.group} onFile={openFile} /></div>
 					: row.kind === "activity" ? <ActivityBlock key={row.key} block={row} onFile={openFile} expansions={expansions.current} opened={openedActivity.current} />
 					: <Message key={row.key} rowKey={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current}
-					onRetry={onRetry && row.key === lastAssistantKey ? () => onRetry(row.message.messageId) : undefined}
-					onEdit={onEdit ? (text) => onEdit(row.message.messageId, text) : undefined} />)}
+						onRetry={onRetry && row.key === lastAssistantKey ? retryMessage : undefined}
+						onEdit={onEdit ? editMessage : undefined} />)}
 				<div className="history-spacer" aria-hidden="true" style={{ height: total - offsets[end] }} />
 				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>
 			</div>
