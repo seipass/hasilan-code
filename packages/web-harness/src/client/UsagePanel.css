@@ -60,9 +60,9 @@
 .usage-model-list { border-top: 1px solid var(--border); }
 .usage-model { border-bottom: 1px solid var(--border-subtle); }
 .usage-model:last-child { border-bottom: 0; }
-.usage-model > summary { display: flex; align-items: center; gap: 12px; padding: 12px 0; list-style: none; }
+.usage-model > summary { display: flex; align-items: center; gap: 12px; padding: 7px 0; list-style: none; }
 .usage-model > summary::-webkit-details-marker { display: none; }
-.usage-model-identity { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.usage-model-identity { display: grid; flex: 1; min-width: 0; gap: 1px; }
 .usage-model-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--on-surface); font-size: 13px; line-height: 18px; font-weight: 400; }
 .usage-model-identity > span { color: var(--on-surface-muted); font-size: 11px; line-height: 14px; }
 .usage-model-cost { color: var(--on-surface); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -73,3 +73,10 @@
 .usage-model-metrics dd { margin: 4px 0 0; color: var(--on-surface); font-size: 13px; line-height: 18px; font-variant-numeric: tabular-nums; }
 .usage-model .usage-model-id { color: var(--on-surface-muted); margin: 8px 0 12px; font-size: 11px; overflow-wrap: anywhere; }
 @media (max-width: 420px) { .usage-model-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.composer-usage-slot .usage-popover-trigger { justify-content: center; width: 28px; height: 28px; min-height: 28px; padding: 4px; }
+.context-usage { position: relative; display: grid; place-items: center; width: 20px; height: 20px; }
+.context-usage-ring { display: block; width: 20px; height: 20px; transform: rotate(-90deg); fill: none; stroke-width: 1.8; }
+.context-usage-ring circle:first-child { stroke: var(--border-strong); }
+.context-usage-ring circle:last-child { stroke: var(--on-surface-secondary); }
+.context-usage-tooltip { display: none; position: absolute; bottom: calc(100% + 10px); right: -4px; z-index: 10; width: max-content; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--on-surface); font-size: 12px; line-height: 16px; white-space: nowrap; box-shadow: 0 4px 12px #0004; pointer-events: none; }
+.usage-popover-trigger:hover .context-usage-tooltip, .usage-popover-trigger:focus-visible .context-usage-tooltip { display: block; }

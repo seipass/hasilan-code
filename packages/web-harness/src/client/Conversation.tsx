@@ -11,6 +11,7 @@ import { ToolCard } from "./ToolInspector.tsx";
 import { type TurnActivity, turnActivityLabel, turnActivityRows } from "./turn-activity.ts";
 import { usePreferenceState } from "./preferences.ts";
 import type { ChatMessage, ToolCall } from "./types.ts";
+import { Icon } from "./Icon.tsx";
 import "./Conversation.css";
 
 const ESTIMATED_HEIGHT = 220;
@@ -257,6 +258,6 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>
 			</div>
 		</div>
-		<Presence show={!nearBottom}><button className="back-to-bottom" onClick={() => { following.current = true; setNearBottom(true); if (scroller.current) { scroller.current.scrollTop = scroller.current.scrollHeight; programmaticTop.current = scroller.current.scrollTop; } updateViewport(); }}>最新のメッセージへ ↓</button></Presence>
+		<Presence show={!nearBottom}><button className="back-to-bottom" aria-label="最新のメッセージへ" title="最新のメッセージへ" onClick={() => { following.current = true; setNearBottom(true); if (scroller.current) { scroller.current.scrollTop = scroller.current.scrollHeight; programmaticTop.current = scroller.current.scrollTop; } updateViewport(); }}><Icon name="send" style={{ transform: "rotate(180deg)" }} /></button></Presence>
 	</>;
 });
