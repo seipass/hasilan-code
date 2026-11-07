@@ -7,6 +7,20 @@
 .turn-activity > summary > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .turn-activity[data-active="true"] > summary, .turn-activity-waiting { color: var(--on-surface-secondary); }
 .turn-activity-waiting { padding: 5px 6px; }
+@media (prefers-reduced-motion: no-preference) {
+	.turn-activity[data-active="true"] > summary > .turn-activity-label,
+	.turn-activity-waiting > .turn-activity-label {
+		background-image: linear-gradient(110deg, var(--on-surface-muted) 35%, var(--on-surface) 50%, var(--on-surface-muted) 65%);
+		background-size: 250% 100%;
+		background-clip: text;
+		-webkit-text-fill-color: transparent;
+		animation: turn-activity-shimmer 2s linear infinite;
+	}
+}
+@keyframes turn-activity-shimmer {
+	from { background-position: 150% 0; }
+	to { background-position: -50% 0; }
+}
 .turn-activity-items { padding-inline-start: 12px; border-inline-start: 1px solid var(--border-subtle); }
 .turn-activity-items .message { margin-bottom: 8px; }
 .virtual-message { display: flow-root; min-width: 0; }

@@ -108,7 +108,7 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 	const [open, setOpen] = useState(() => opened.has(block.key));
 	const label = turnActivityLabel(block);
 	return <div className="virtual-message" data-message-id={block.key}>
-		{block.items.length === 0 ? <p className="turn-activity-waiting" role="status">{label}</p> :
+		{block.items.length === 0 ? <p className="turn-activity-waiting" role="status"><span className="turn-activity-label">{label}</span></p> :
 			<details className="turn-activity" data-active={block.active} open={open} onToggle={(event) => {
 				if (event.target !== event.currentTarget) return;
 				const next = event.currentTarget.open;
@@ -116,7 +116,7 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 				else opened.delete(block.key);
 				setOpen(next);
 			}}>
-				<summary><span role={block.active ? "status" : undefined}>{label}</span></summary>
+				<summary><span className="turn-activity-label" role={block.active ? "status" : undefined}>{label}</span></summary>
 				{open && <div className="turn-activity-items">{block.items.map((row) =>
 					<Message key={row.key} rowKey={row.key} grouped message={row.message} tools={row.tools} onFile={onFile} expansions={expansions} />,
 				)}</div>}
