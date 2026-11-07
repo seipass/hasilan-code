@@ -13,8 +13,8 @@
 	--text-3xl: 22px;
 	--text-4xl: 28px;
 	--text-code: 12px;
-	--leading-normal: 1.538462;
-	--leading-prose: 1.571429;
+	--leading-normal: 1.384615;
+	--leading-prose: 1.428571;
 	--leading-code: 1.666667;
 	--leading-diff: 1.666667;
 	--text-reading: 14px;
@@ -51,36 +51,39 @@
 	--glass-filter: blur(24px);
 }
 
-/* Three reading levels: prose, controls, then supporting metadata. */
-.message-content, .files-markdown { font-size: var(--text-reading); line-height: 22px; }
+/* Devin's default prose-ds and text-11 through text-15 type scales, in CSS pixels. */
+.message-content, .files-markdown { font-size: var(--text-reading); line-height: 20px; letter-spacing: -.005em; }
 .message-content p, .files-markdown p { line-height: inherit; margin-block: .85em; }
+.message-content :is(ul, ol, li), .files-markdown :is(ul, ol, li) { line-height: 20px; }
 .message h1, .files-markdown h1 { font-size: 22px; line-height: 28px; }
 .message h2, .files-markdown h2 { font-size: 19px; line-height: 27px; }
 .message h3, .files-markdown h3 { font-size: 17px; line-height: 26px; }
 .message h4, .files-markdown h4 { font-size: 15px; line-height: 22px; }
 .message h5, .files-markdown h5 { font-size: 13px; line-height: 18px; }
 .message h6, .files-markdown h6 { font-size: 12px; line-height: 16px; }
-.message :is(h1, h2, h3, h4, h5, h6), .files-markdown :is(h1, h2, h3, h4, h5, h6) { margin-block: 1.25em .5em; }
+.message :is(h1, h2, h3, h4, h5, h6), .files-markdown :is(h1, h2, h3, h4, h5, h6) { margin-block: 1.25em .5em; font-weight: 600; }
 .message-content > :first-child, .files-markdown > :first-child { margin-top: 0; }
 .message-content > :last-child, .files-markdown > :last-child { margin-bottom: 0; }
 .message-content strong { font-weight: 600; }
 .message-meta, .message-usage { font-size: var(--text-xs); line-height: 16px; }
 .thinking, .thinking > summary, .turn-activity, .turn-activity-waiting,
-.context-entry > summary, .tool-card > summary, .tool-card .tool-summary { font-size: var(--text-control); line-height: 1.6; }
-.composer textarea { font-size: var(--text-reading); line-height: 22px; }
+.context-entry > summary, .tool-card > summary, .tool-card .tool-summary { font-size: var(--text-control); line-height: 18px; letter-spacing: -.005em; }
+.composer textarea { font-size: var(--text-reading); line-height: 20px; letter-spacing: -.005em; }
 .composer-workspace { font-size: var(--text-xs); line-height: 16px; }
-.settings-content, .settings-content label, .settings-tabs button { font-size: var(--text-control); line-height: 1.6; }
+.settings-content, .settings-content label, .settings-tabs button { font-size: var(--text-control); line-height: 18px; letter-spacing: -.005em; }
 .settings-content > h3 { font-size: 15px; line-height: 22px; }
-.settings-content h4 { font-size: 14px; line-height: 1.5; }
+.settings-content h4 { font-size: 14px; line-height: 20px; }
 .model-picker-option strong, .widget-chip strong { font-weight: 400; }
 .history-heading, .model-group-heading, .widget-chip-label, .tool-meta, .fine-print, .revision { font-size: var(--text-xs); line-height: 16px; }
 .workspace-accordion > summary, .session-button, .new-conversation, .sidebar-bottom button,
 .page-title, .quiet-button, .detail-tab > [role="tab"], .files-tree-entry,
 .model-picker-option, .model-picker-option strong, .command-picker-title,
-.settings-content :is(input, select, textarea, button), .widget-chip strong { font-size: var(--text-control); line-height: 20px; }
+.settings-content :is(input, select, textarea, button), .widget-chip strong { font-size: var(--text-control); line-height: 18px; letter-spacing: -.005em; }
 .model-picker-option > span, .command-picker-description, .tool-result-note { font-size: var(--text-xs); line-height: 16px; }
-.tool-body { font-size: var(--text-control); line-height: 20px; }
-.team-run-task, .team-graph-node-name { font-size: var(--text-control); line-height: 20px; }
+.tool-body { font-size: var(--text-control); line-height: 18px; }
+.team-run-task, .team-graph-node-name { font-size: var(--text-control); line-height: 18px; }
+.model-trigger-thinking { font-size: var(--text-control); line-height: 18px; }
+.badge { font-size: var(--text-2xs); line-height: 14px; letter-spacing: .01em; }
 
 /* A quiet sidebar, with one consistent selection treatment. */
 .sidebar { border-radius: 0 10px 10px 0; }
