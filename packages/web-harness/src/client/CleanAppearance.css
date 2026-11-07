@@ -1,0 +1,138 @@
+/* Neutral application chrome. Semantic status and code colors keep their meaning. */
+:root {
+	--surface: #141414;
+	--surface-sunken: #111111;
+	--surface-panel: #191919;
+	--surface-raised: #202020;
+	--surface-hover: #2a2a2a;
+	--surface-inverse: #e8e8e8;
+	--on-surface: #e8e8e8;
+	--on-surface-secondary: #b5b5b5;
+	--on-surface-muted: #929292;
+	--on-surface-inverse: #141414;
+	--primary: #e8e8e8;
+	--primary-hover: #ffffff;
+	--primary-container: #2d2d2d;
+	--on-primary: #171717;
+	--on-primary-container: #ededed;
+	--secondary: #9bbcf0;
+	--secondary-hover: #c0d6f6;
+	--secondary-container: #242c38;
+	--on-secondary-container: #c0d6f6;
+	--success-container: #1c2b23;
+	--warning-container: #302a1f;
+	--danger-container: #321f24;
+	--border-subtle: #ffffff0d;
+	--border: #ffffff17;
+	--border-strong: #ffffff29;
+	--scroll-thumb: #ffffff24;
+	--scroll-thumb-hover: #ffffff3d;
+	--glass-surface: color-mix(in srgb, var(--surface-raised) 90%, transparent);
+	--glass-panel: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+	--glass-filter: blur(24px);
+}
+
+/* A quiet sidebar, with one consistent selection treatment. */
+.sidebar { border-radius: 0 10px 10px 0; }
+.sidebar-brand { margin-bottom: 16px; }
+.new-conversation { justify-content: flex-start; gap: 9px; border-radius: 7px; background: var(--surface-hover); font-weight: 400; }
+.new-conversation > span { color: var(--on-surface-secondary); }
+.history-search { margin-block: 14px 20px; }
+.history-search input { font-size: var(--text-md); }
+.workspace-accordion { margin-bottom: 3px; }
+.workspace-accordion > summary, .session-button { border-radius: 6px; font-size: var(--text-md); }
+.workspace-accordion[data-selected="true"] > summary { background: transparent; }
+.workspace-accordion > summary:hover { background: var(--surface-hover); }
+.session-button { padding-block: 8px; }
+.session-button.selected { background: var(--surface-hover); }
+.sidebar-bottom { border-color: transparent; }
+.page-title { color: var(--on-surface-secondary); }
+.quiet-button { border-radius: 6px; }
+
+/* The composer is the main elevated surface; secondary controls stay flat. */
+.composer { border-color: var(--border); border-radius: 16px; box-shadow: none; padding: 16px 16px 12px; }
+.composer textarea::placeholder { color: var(--on-surface-muted); }
+.composer-heading { padding-bottom: 12px; }
+.composer-identity { font-size: var(--text-base); }
+.composer-workspace { opacity: .8; }
+.composer-chip { border-radius: 6px; font-size: var(--text-sm); font-weight: 400; }
+.send-button, .stop-button { border-radius: 50%; }
+.send-button:disabled { background: var(--border-strong); }
+.new-conversation:hover:not(:disabled), .send-button:hover:not(:disabled), .stop-button:hover:not(:disabled),
+.new-conversation:active:not(:disabled), .send-button:active:not(:disabled), .stop-button:active:not(:disabled),
+.session-button:hover:not(.selected) { transform: none; }
+
+/* Reading surfaces use spacing and tone instead of a stack of outlined cards. */
+.role-user .message-content { background: var(--surface-hover); border-radius: 14px; }
+.tool-card, .tool-card[open] { border-color: transparent; background: transparent; border-radius: 8px; box-shadow: none; }
+.tool-card:hover { border-color: transparent; background: color-mix(in srgb, var(--surface-hover) 35%, transparent); }
+.tool-card > summary { padding: 7px 8px; font-size: var(--text-sm); }
+.tool-card > summary strong { font-weight: 400; }
+.tool-card .tool-summary { color: var(--on-surface-muted); }
+.tool-result-note { color: var(--on-surface-muted); }
+.tool-card .badge.status-success { color: var(--on-surface-muted); }
+.tool-body { padding-inline: 8px; }
+.tool-meta span { background: var(--surface-hover); }
+.tool-shell-command { background: var(--surface-raised); }
+.context-entry { border-color: transparent; background: transparent; border-radius: 8px; }
+.context-entry > summary { padding: 8px; }
+.context-entry[open] { background: color-mix(in srgb, var(--surface-panel) 70%, transparent); }
+.context-entry-body { border-top: 0; }
+.thinking-title { color: var(--on-surface-muted); }
+.message hr { background: var(--border-subtle); opacity: 1; }
+.back-to-bottom { background: var(--surface-raised); border-color: var(--border); box-shadow: 0 2px 8px #0003; }
+
+/* Shared menus and settings: a single outer edge, quieter inner sections. */
+button, input, textarea, select { border-radius: 7px; }
+:is(.session-context-menu, .detail-context-menu, .command-picker, .usage-popover-content, .composer-popover, .quick-open) {
+	border-color: var(--border);
+	border-radius: 10px;
+	box-shadow: 0 12px 36px #0005;
+}
+.command-picker-option, .model-picker-option { border-radius: 6px; }
+.command-picker-option[aria-selected="true"], .command-picker-option:hover { border-color: transparent; background: var(--surface-hover); }
+.model-picker-option[aria-selected="true"] { border-color: transparent; background: var(--surface-hover); }
+.model-group-heading { font-weight: 400; }
+.model-selected-mark { color: var(--on-surface); }
+.settings-dialog.settings-dialog { border-color: var(--border); border-radius: 14px; box-shadow: 0 20px 60px #0005; }
+.settings-dialog .panel-heading h2 { font-size: var(--text-xl); }
+.settings-dialog .settings-layout .settings-tabs { border-right: 0; gap: 3px; }
+.settings-layout .settings-tabs button { border-radius: 6px; padding-block: 8px; }
+.settings-tabs [aria-selected="true"] { background: var(--surface-hover); color: var(--on-surface); }
+.settings-tabs [role="tab"]::after { background: transparent; }
+.settings-dialog :is(.settings-section, .settings-provider-section, .settings-key-entry, .oauth-login) {
+	border-color: transparent;
+	border-radius: 8px;
+	background: transparent;
+}
+.settings-dialog .settings-provider-section { border-bottom-color: var(--border-subtle); border-radius: 0; }
+.settings-dialog :is(input, select, textarea) { background: var(--surface-panel); border-color: var(--border); }
+.settings-next-action { background: var(--surface-panel); }
+.session-import-dialog { border-color: var(--border); border-radius: 12px; }
+
+/* Keep the dock and its tabs legible without a second layer of decoration. */
+.right-panel { --detail-corner: 10px; }
+.right-panel .detail-tab[data-active="true"] { background: var(--surface-hover); backdrop-filter: none; }
+.detail-tab[data-active="true"][data-focused="true"] { border-bottom-color: var(--on-surface-muted); }
+.detail-toolbar, .files-view-mode { border-bottom-color: var(--border-subtle); }
+.files-view-mode button { background: transparent; border-color: transparent; border-radius: 6px; }
+.files-view-mode [aria-pressed="true"] { background: var(--surface-hover); border-color: transparent; color: var(--on-surface); }
+.files-tree-entry { border-radius: 5px; }
+.files-tree-entry[aria-current="true"] { background: var(--surface-hover); color: var(--on-surface); }
+.files-type-icon { opacity: .8; }
+.team-overview, .team-focus, .team-graph-controls { border-color: var(--border); border-radius: 10px; }
+.team-graph-node { box-shadow: none; }
+.team-graph-node.is-selected { background: var(--surface-hover); box-shadow: 0 0 0 1px var(--on-surface-muted); }
+.team-graph-node.is-selected:hover:not(:disabled) { background: var(--surface-hover); }
+.team-view-switch button[aria-pressed="true"] { background: var(--surface-hover); border-color: transparent; }
+.widget-chip { border-radius: 7px; }
+.widget-chip > svg { color: var(--on-surface-muted); }
+.widget-chip[aria-expanded="true"] { background: var(--surface-hover); border-color: transparent; }
+
+@media (max-width: 520px) {
+	.composer { border-radius: 14px; padding: 14px 12px 10px; }
+	.composer-chip { font-size: var(--text-xs); }
+}
+@media (max-width: 600px) {
+	.session-import-dialog { border-radius: 0; }
+}
