@@ -1,5 +1,6 @@
 /* Neutral application chrome. Semantic status and code colors keep their meaning. */
 :root {
+	font-family: "Yu Gothic UI", "Yu Gothic", YuGothic, "Hiragino Sans", Meiryo, sans-serif;
 	--text-reading: 15px;
 	--text-control: 13px;
 	--surface: #141414;
