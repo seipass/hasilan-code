@@ -126,3 +126,5 @@ it("lets an accordion drive its own height instead of stacking a delayed wrapper
 	expect(outer.animate).not.toHaveBeenCalled();
 	cleanup?.();
 });
+
+vi.mock("../src/client/motion-policy.ts", () => ({ animationsEnabled: true }));

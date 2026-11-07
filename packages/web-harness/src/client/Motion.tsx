@@ -1,3 +1,4 @@
+import { animationsEnabled } from "./motion-policy.ts";
 import { cloneElement, isValidElement, type ReactElement, type ReactNode, type Ref, type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { motionEntries, type MotionEntry } from "./motion-items.ts";
 import "./Motion.css";
@@ -6,11 +7,12 @@ const ease = "cubic-bezier(.2, .75, .25, 1)";
 const mediaAnimations = new WeakMap<Element, Animation>();
 
 export function mediaReady(element: Element) {
+	if (!animationsEnabled) return;
 	const previous = mediaAnimations.get(element);
 	const opacity = previous && previous.playState !== "finished" ? getComputedStyle(element).opacity : .25;
 	previous?.cancel();
 	mediaAnimations.delete(element);
-	if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+	if ((!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
 	const animation = element.animate([{ opacity }, { opacity: 1 }], { duration: 160, easing: ease });
 	mediaAnimations.set(element, animation);
 	const clear = () => { if (mediaAnimations.get(element) === animation) mediaAnimations.delete(element); };
@@ -28,12 +30,13 @@ export function useContentMotion(ref: RefObject<Element | null>, version: unknow
 export function useLayoutMotion(ref: RefObject<Element | null>, version: unknown, enabled = true, size = false, resizeWidth = false) {
 	const previous = useRef<{ parent: Element | null; x: number; y: number; width: number; height: number } | undefined>(undefined);
 	useLayoutEffect(() => {
+		if (!animationsEnabled) return;
 		const element = ref.current;
 		if (!element || !(element instanceof HTMLElement) || !element.getClientRects().length) { previous.current = undefined; return; }
 		const next = { parent: element.offsetParent, x: element.offsetLeft, y: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight };
 		const before = previous.current;
 		previous.current = next;
-		if (!enabled || !before || before.parent !== next.parent || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+		if (!enabled || !before || before.parent !== next.parent || (!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
 		const animations: Animation[] = [];
 		if (size && before.height !== next.height) animations.push(element.animate([
 			{ height: `${before.height}px`, overflow: "clip" }, { height: `${next.height}px`, overflow: "clip" },
@@ -94,7 +97,7 @@ export function Presence({ show, children, keepMounted = false, collapse = false
 		const host = element.current;
 		if (!host || !present) return;
 		const nodes = host instanceof HTMLElement && getComputedStyle(host).display === "contents" ? [...host.children] : [host];
-		const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		const reduced = (!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 		let cancelled = false;
 		const animations: Animation[] = [];
 		const animatedNodes = new Map<Element, Animation>();
@@ -176,13 +179,14 @@ export function MotionItems<T>({ items, itemKey, children, enabled = true, resiz
 export function useChildrenMotion(ref: RefObject<HTMLElement | null>, version: unknown, enabled = true) {
 	const previous = useRef(new Map<Element, { x: number; y: number; width: number; height: number }>());
 	useLayoutEffect(() => {
+		if (!animationsEnabled) return;
 		const root = ref.current;
 		if (!root) return;
 		const children = [...root.children].filter((child): child is HTMLElement => child instanceof HTMLElement && !(child instanceof HTMLDialogElement));
 		const measure = () => new Map(children.filter((child) => child.getClientRects().length > 0).map((child) => [child, { x: child.offsetLeft, y: child.offsetTop, width: child.offsetWidth, height: child.offsetHeight }]));
 		const next = measure();
 		const animations: { child: HTMLElement; animation: Animation; before: { x: number; y: number; width: number; height: number }; box: { x: number; y: number; width: number; height: number } }[] = [];
-		if (enabled && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) for (const [child, box] of next) {
+		if (enabled && !(!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches)) for (const [child, box] of next) {
 			const before = previous.current.get(child);
 			if (!before || !box.width || !box.height || (before.x === box.x && before.y === box.y && before.width === box.width && before.height === box.height)) continue;
 			const animation = child.animate([

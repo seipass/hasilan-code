@@ -141,3 +141,5 @@ it("keeps a changing tab width continuous when its title changes again", () => {
 	render(element, "width", 2);
 	expect(element.animations[1].frames[0].scale).toBe("0.5 1");
 });
+
+vi.mock("../src/client/motion-policy.ts", () => ({ animationsEnabled: true }));

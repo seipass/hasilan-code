@@ -10,6 +10,7 @@ import "./GlassSurfaces.css";
 import "./CornerRadius.css";
 import "./Mobile.css";
 import "./CleanAppearance.css";
+import "./NoMotion.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Application root is missing");

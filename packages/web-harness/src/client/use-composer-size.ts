@@ -1,4 +1,5 @@
 import { type RefObject, useLayoutEffect, useRef } from "react";
+import { animationsEnabled } from "./motion-policy.ts";
 
 export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text: string) {
 	const motion = useRef<Animation | undefined>(undefined);
@@ -20,7 +21,7 @@ export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text
 				animate &&
 				initialized &&
 				before !== height &&
-				!window.matchMedia("(prefers-reduced-motion: reduce)").matches
+				!(!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches)
 			) {
 				const animation = element.animate([{ height: `${before}px` }, { height: `${height}px` }], {
 					duration: 180,

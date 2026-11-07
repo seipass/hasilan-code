@@ -1,3 +1,4 @@
+import { animationsEnabled } from "./motion-policy.ts";
 import { type ReactNode, type RefObject, type TransitionEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MotionItems } from "./Motion.tsx";
 import "./MotionSwap.css";
@@ -5,6 +6,7 @@ import "./MotionSwap.css";
 /** Measure natural content, so animating the wrapper cannot feed back into its measurement. */
 export function useMeasuredSize(outer: RefObject<HTMLElement | null>, content: RefObject<HTMLElement | null>, axis: "height" | "width", enabled = true) {
 	useLayoutEffect(() => {
+		if (!animationsEnabled) return;
 		const element = outer.current;
 		const inner = content.current;
 		if (!element || !inner || !enabled) return;
@@ -25,7 +27,7 @@ export function useMeasuredSize(outer: RefObject<HTMLElement | null>, content: R
 			animation?.cancel();
 			start = before;
 			target = next;
-			if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) animation = element.animate([
+			if (!(!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches)) animation = element.animate([
 				{ [axis]: `${before}px`, overflow: "clip" }, { [axis]: `${next}px`, overflow: "clip" },
 			], { duration: 180, easing: "cubic-bezier(.2, .75, .25, 1)" });
 		});
@@ -70,7 +72,7 @@ export function MotionSwap({ identity, ready = true, enabled = true, children, c
 	useMeasuredSize(outer, content, "height", animateHeight);
 	useEffect(() => {
 		if (!ready || displayed === identity) { setPhase("stable"); return; }
-		if (!enabled || !shown.current.children || content.current && !content.current.getClientRects().length || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+		if (!enabled || !shown.current.children || content.current && !content.current.getClientRects().length || (!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
 			shown.current = { identity, children: latest.current.children };
 			setDisplayed(identity);
 			setPhase("stable");
@@ -88,7 +90,7 @@ export function MotionSwap({ identity, ready = true, enabled = true, children, c
 	const Tag = inline ? "span" : "div";
 	return <Tag ref={(node) => { outer.current = node; }} className={`motion-swap${inline ? " motion-swap-inline" : ""} ${className}`} aria-busy={!ready} inert={!ready || displayed !== identity || phase === "out"}>
 		<Tag ref={(node) => { content.current = node; }} className="motion-swap-content" data-phase={phase} data-empty={!shown.current.children || undefined} onTransitionEnd={finish} onTransitionCancel={(event) => {
-			if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !event.currentTarget.getClientRects().length) finish(event);
+			if ((!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) || !event.currentTarget.getClientRects().length) finish(event);
 		}}>{shown.current.children}</Tag>
 	</Tag>;
 }

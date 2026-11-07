@@ -1,3 +1,5 @@
+import { animationsEnabled } from "./motion-policy.ts";
+
 const motions = new WeakMap<HTMLElement, Animation>();
 
 /** A live sheet tapers toward its trigger; interrupted motion starts at the visible shape. */
@@ -9,7 +11,7 @@ export function animateSheet(sheet: HTMLElement, anchor: HTMLElement | null, ope
 		: undefined;
 	previous?.cancel();
 	motions.delete(sheet);
-	if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+	if (!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 	const box = sheet.getBoundingClientRect();
 	const target = anchor?.getBoundingClientRect();
 	let frames: Keyframe[];

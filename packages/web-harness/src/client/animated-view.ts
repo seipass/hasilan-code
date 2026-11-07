@@ -1,4 +1,5 @@
 import { type SetStateAction, useCallback, useEffect, useRef, useState } from "react";
+import { animationsEnabled } from "./motion-policy.ts";
 
 export interface AnimatedView {
 	x: number;
@@ -21,7 +22,7 @@ export function useAnimatedView(initial: AnimatedView) {
 			cancelAnimationFrame(frame.current);
 			const before = current.current;
 			const target = typeof change === "function" ? change(before) : change;
-			if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			if (!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
 				setView(target);
 				return;
 			}

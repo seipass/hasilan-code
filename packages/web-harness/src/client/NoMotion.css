@@ -1,0 +1,17 @@
+/* Disable decorative motion, including native dialogs and accordion contents. */
+*, *::before, *::after {
+	animation: none !important;
+	transition: none !important;
+	scroll-behavior: auto !important;
+}
+::backdrop, ::details-content {
+	animation: none !important;
+	transition: none !important;
+}
+::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) {
+	animation: none !important;
+}
+.turn-activity-label {
+	background-image: none !important;
+	-webkit-text-fill-color: currentColor !important;
+}

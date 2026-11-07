@@ -78,3 +78,5 @@ it("cancels outstanding motion and uses native visibility when reduced motion is
 	expect(sheet.animations).toHaveLength(1);
 	expect(sheet.animations[0].animation.cancel).toHaveBeenCalledOnce();
 });
+
+vi.mock("../src/client/motion-policy.ts", () => ({ animationsEnabled: true }));

@@ -115,3 +115,5 @@ it("expands and reverses toolbar items across their width", () => {
 	expect(element.animations[1].frames[0]).toMatchObject({ width: "40px", opacity: "0.4" });
 	expect(element.animations[1].frames[1].width).toBe("0px");
 });
+
+vi.mock("../src/client/motion-policy.ts", () => ({ animationsEnabled: true }));
