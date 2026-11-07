@@ -1,6 +1,22 @@
 /* Neutral application chrome. Semantic status and code colors keep their meaning. */
 :root {
 	font-family: "Yu Gothic UI", "Yu Gothic", YuGothic, "Hiragino Sans", Meiryo, sans-serif;
+	font-size: 13px;
+	--text-2xs: 11px;
+	--text-xs: 12px;
+	--text-sm: 13px;
+	--text-md: 13px;
+	--text-base: 14px;
+	--text-lg: 15px;
+	--text-xl: 17px;
+	--text-2xl: 19px;
+	--text-3xl: 22px;
+	--text-4xl: 28px;
+	--text-code: 12px;
+	--leading-normal: 1.538462;
+	--leading-prose: 1.571429;
+	--leading-code: 1.666667;
+	--leading-diff: 1.666667;
 	--text-reading: 14px;
 	--text-control: 13px;
 	--surface: #141414;
@@ -48,15 +64,23 @@
 .message-content > :first-child, .files-markdown > :first-child { margin-top: 0; }
 .message-content > :last-child, .files-markdown > :last-child { margin-bottom: 0; }
 .message-content strong { font-weight: 600; }
-.message-meta, .message-usage { font-size: 11px; line-height: 1.5; }
+.message-meta, .message-usage { font-size: var(--text-xs); line-height: 16px; }
 .thinking, .thinking > summary, .turn-activity, .turn-activity-waiting,
 .context-entry > summary, .tool-card > summary, .tool-card .tool-summary { font-size: var(--text-control); line-height: 1.6; }
 .composer textarea { font-size: var(--text-reading); line-height: 22px; }
-.composer-workspace { font-size: 11px; }
+.composer-workspace { font-size: var(--text-xs); line-height: 16px; }
 .settings-content, .settings-content label, .settings-tabs button { font-size: var(--text-control); line-height: 1.6; }
 .settings-content > h3 { font-size: 15px; line-height: 22px; }
 .settings-content h4 { font-size: 14px; line-height: 1.5; }
 .model-picker-option strong, .widget-chip strong { font-weight: 400; }
+.history-heading, .model-group-heading, .widget-chip-label, .tool-meta, .fine-print, .revision { font-size: var(--text-xs); line-height: 16px; }
+.workspace-accordion > summary, .session-button, .new-conversation, .sidebar-bottom button,
+.page-title, .quiet-button, .detail-tab > [role="tab"], .files-tree-entry,
+.model-picker-option, .model-picker-option strong, .command-picker-title,
+.settings-content :is(input, select, textarea, button), .widget-chip strong { font-size: var(--text-control); line-height: 20px; }
+.model-picker-option > span, .command-picker-description, .tool-result-note { font-size: var(--text-xs); line-height: 16px; }
+.tool-body { font-size: var(--text-control); line-height: 20px; }
+.team-run-task, .team-graph-node-name { font-size: var(--text-control); line-height: 20px; }
 
 /* A quiet sidebar, with one consistent selection treatment. */
 .sidebar { border-radius: 0 10px 10px 0; }
