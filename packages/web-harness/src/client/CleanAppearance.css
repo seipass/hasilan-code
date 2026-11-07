@@ -1,7 +1,7 @@
 /* Neutral application chrome. Semantic status and code colors keep their meaning. */
 :root {
 	font-family: "Yu Gothic UI", "Yu Gothic", YuGothic, "Hiragino Sans", Meiryo, sans-serif;
-	--text-reading: 15px;
+	--text-reading: 14px;
 	--text-control: 13px;
 	--surface: #141414;
 	--surface-sunken: #111111;
@@ -36,19 +36,25 @@
 }
 
 /* Three reading levels: prose, controls, then supporting metadata. */
-.message-content, .files-markdown { font-size: var(--text-reading); line-height: 1.75; }
-.message h1, .files-markdown h1 { font-size: 22px; line-height: 1.4; }
-.message h2, .files-markdown h2 { font-size: 18px; line-height: 1.45; }
-.message h3, .files-markdown h3 { font-size: 16px; line-height: 1.5; }
-.message :is(h4, h5, h6), .files-markdown :is(h4, h5, h6) { font-size: var(--text-reading); line-height: 1.5; }
+.message-content, .files-markdown { font-size: var(--text-reading); line-height: 22px; }
+.message-content p, .files-markdown p { line-height: inherit; margin-block: .85em; }
+.message h1, .files-markdown h1 { font-size: 22px; line-height: 28px; }
+.message h2, .files-markdown h2 { font-size: 19px; line-height: 27px; }
+.message h3, .files-markdown h3 { font-size: 17px; line-height: 26px; }
+.message h4, .files-markdown h4 { font-size: 15px; line-height: 22px; }
+.message h5, .files-markdown h5 { font-size: 13px; line-height: 18px; }
+.message h6, .files-markdown h6 { font-size: 12px; line-height: 16px; }
+.message :is(h1, h2, h3, h4, h5, h6), .files-markdown :is(h1, h2, h3, h4, h5, h6) { margin-block: 1.25em .5em; }
+.message-content > :first-child, .files-markdown > :first-child { margin-top: 0; }
+.message-content > :last-child, .files-markdown > :last-child { margin-bottom: 0; }
 .message-content strong { font-weight: 600; }
 .message-meta, .message-usage { font-size: 11px; line-height: 1.5; }
 .thinking, .thinking > summary, .turn-activity, .turn-activity-waiting,
 .context-entry > summary, .tool-card > summary, .tool-card .tool-summary { font-size: var(--text-control); line-height: 1.6; }
-.composer textarea { font-size: var(--text-reading); line-height: 1.65; }
+.composer textarea { font-size: var(--text-reading); line-height: 22px; }
 .composer-workspace { font-size: 11px; }
 .settings-content, .settings-content label, .settings-tabs button { font-size: var(--text-control); line-height: 1.6; }
-.settings-content > h3 { font-size: 16px; line-height: 1.5; }
+.settings-content > h3 { font-size: 15px; line-height: 22px; }
 .settings-content h4 { font-size: 14px; line-height: 1.5; }
 .model-picker-option strong, .widget-chip strong { font-weight: 400; }
 
@@ -73,7 +79,7 @@
 .composer { border-color: var(--border); border-radius: 16px; box-shadow: none; padding: 16px 16px 12px; }
 .composer textarea::placeholder { color: var(--on-surface-muted); }
 .composer-heading { padding-bottom: 12px; }
-.composer-identity { font-size: var(--text-base); }
+.composer-identity { font-size: var(--text-control); }
 .composer-workspace { opacity: .8; }
 .composer-chip { border-radius: 6px; font-size: var(--text-sm); font-weight: 400; }
 .send-button, .stop-button { border-radius: 50%; }
