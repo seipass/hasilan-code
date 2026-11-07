@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { cacheReadPercent, type ModelUsage } from "../shared/usage.ts";
 import { MotionItems, Presence } from "./Motion.tsx";
 import { MotionSize } from "./MotionSwap.tsx";
+import { Icon } from "./Icon.tsx";
 import "./UsagePanel.css";
 
 const tokens = new Intl.NumberFormat("ja-JP");
@@ -25,7 +26,7 @@ export function UsagePanel({ title, groups, trigger }: {
 		if (!button) return;
 		function updatePosition() {
 			const bounds = button!.getBoundingClientRect();
-			const width = Math.min(720, window.innerWidth - 32);
+			const width = Math.min(520, window.innerWidth - 32);
 			setPosition({
 				left: Math.max(16, Math.min(bounds.right - width, window.innerWidth - width - 16)),
 				bottom: window.innerHeight - bounds.top + 10,
@@ -72,12 +73,18 @@ export function UsagePanel({ title, groups, trigger }: {
 		};
 	}, [isPopover, open]);
 	const body = <MotionSize>
-		<p>{tokens.format(total.responses)}応答 · 失敗・中止 {tokens.format(total.failures)}件{total.auxiliary > 0 && ` · 補助処理 ${tokens.format(total.auxiliary)}記録`}</p>
+		<p className="usage-summary">{tokens.format(total.responses)}応答{total.failures > 0 && ` · 失敗・中止 ${tokens.format(total.failures)}件`}{total.auxiliary > 0 && ` · 補助処理 ${tokens.format(total.auxiliary)}記録`}</p>
 		{isPopover && rows.length > 0 && <dl className="usage-totals">
-			<div><dt>キャッシュヒット率</dt><dd>{percent === null ? "—" : `${percent.toFixed(1)}%`}</dd></div>
-			<div><dt>概算費用</dt><dd>{money.format(total.cost)}{unpriced && <small>一部未計測</small>}</dd></div>
+			<div><dt>概算費用</dt><dd>{money.format(total.cost)}</dd>{unpriced && <small>一部未計測</small>}</div>
+			<div><dt>キャッシュヒット率</dt><dd>{percent === null ? "—" : `${percent.toFixed(1)}%`}</dd><progress max={100} value={percent ?? 0} aria-label="キャッシュヒット率" /></div>
 		</dl>}
-		<div className="usage-data-slot"><Presence show={rows.length > 0}><div className="usage-table-scroll" tabIndex={0} role="region" aria-label={`${title}のモデル別集計`}>
+		{isPopover && rows.length > 0 && <div className="usage-model-list" aria-label="モデル別の使用量">{rows.map(({ id, label, usage }) => {
+			const hit = cacheReadPercent(usage);
+			return <details className="usage-model" key={id}><summary><span className="usage-model-identity"><strong title={usage.model}>{usage.model.split("/").at(-1) || "補助処理"}</strong><span>{label}{usage.provider && ` · ${usage.provider}`}</span></span><span className="usage-model-cost">{usage.provider === "devin" ? "未計測" : money.format(usage.cost)}</span><Icon name="chevronRight" size="inline" /></summary><dl className="usage-model-metrics">
+				<div><dt>未キャッシュ入力</dt><dd>{tokens.format(usage.input)}</dd></div><div><dt>キャッシュ読取</dt><dd>{tokens.format(usage.cacheRead)}</dd></div><div><dt>キャッシュ書込</dt><dd>{tokens.format(usage.cacheWrite)}</dd></div><div><dt>出力</dt><dd>{tokens.format(usage.output)}</dd></div><div><dt>ヒット率</dt><dd>{hit === null ? "—" : `${hit.toFixed(1)}%`}</dd></div><div><dt>応答</dt><dd>{tokens.format(usage.responses)}</dd></div>
+			</dl><p className="usage-model-id">{usage.model}</p></details>;
+		})}</div>}
+		<div className="usage-data-slot"><Presence show={!isPopover && rows.length > 0}><div className="usage-table-scroll" tabIndex={0} role="region" aria-label={`${title}のモデル別集計`}>
 			<table><thead><tr><th scope="col">担当</th><th scope="col">モデル</th><th scope="col">ヒット率</th><th scope="col">未キャッシュ入力</th><th scope="col">読取</th><th scope="col">書込</th><th scope="col">出力</th><th scope="col">概算USD</th></tr></thead>
 				<tbody><MotionItems items={rows} itemKey={(row) => row.id}>{({ id, label, usage }) => {
 					const hit = cacheReadPercent(usage);
@@ -89,7 +96,7 @@ export function UsagePanel({ title, groups, trigger }: {
 	if (trigger !== undefined) return <div className="usage-panel usage-popover" ref={root}>
 		<button type="button" className="usage-popover-trigger" aria-haspopup="dialog" aria-expanded={open} aria-controls={popoverId} onClick={() => setOpen((value) => !value)}>{trigger}</button>
 		{typeof document !== "undefined" && createPortal(<div ref={popover} className="usage-popover-content" id={popoverId} role="dialog" aria-label={title} style={position} hidden={!open} inert={!open}>
-			<header className="usage-popover-header"><strong>{title}</strong><button type="button" aria-label={`${title}を閉じる`} onClick={() => { setOpen(false); root.current?.querySelector<HTMLButtonElement>(".usage-popover-trigger")?.focus(); }}>閉じる</button></header>
+			<header className="usage-popover-header"><strong>{title}</strong><button type="button" aria-label={`${title}を閉じる`} title="閉じる" onClick={() => { setOpen(false); root.current?.querySelector<HTMLButtonElement>(".usage-popover-trigger")?.focus(); }}><Icon name="close" size="control" /></button></header>
 			<div className="usage-panel-body">{body}</div>
 		</div>, document.body)}
 	</div>;

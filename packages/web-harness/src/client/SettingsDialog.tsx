@@ -13,18 +13,19 @@ import { Presence } from "./Motion.tsx";
 import { MotionSwap } from "./MotionSwap.tsx";
 import "./SettingsMotion.css";
 import { OAuthLogin } from "./OAuthLogin.tsx";
+import { Icon } from "./Icon.tsx";
 import type { ModelCatalog, Settings } from "./types.ts";
 
 const TABS = [
-	{ id: "providers", label: "プロバイダー" },
-	{ id: "usage", label: "使用量" },
-	{ id: "archive", label: "アーカイブ" },
-	{ id: "search", label: "検索" },
-	{ id: "agents", label: "エージェント" },
-	{ id: "translation", label: "翻訳・要約" },
-	{ id: "appearance", label: "外観" },
-	{ id: "environment", label: "環境" },
-	{ id: "beta", label: "ベータ" },
+	{ id: "providers", label: "プロバイダー", icon: "graph" },
+	{ id: "usage", label: "使用量", icon: "gauge" },
+	{ id: "archive", label: "アーカイブ", icon: "folder" },
+	{ id: "search", label: "検索", icon: "search" },
+	{ id: "agents", label: "エージェント", icon: "list" },
+	{ id: "translation", label: "翻訳・要約", icon: "copy" },
+	{ id: "appearance", label: "外観", icon: "pencil" },
+	{ id: "environment", label: "環境", icon: "settings" },
+	{ id: "beta", label: "ベータ", icon: "plus" },
 ] as const;
 type SettingsTab = (typeof TABS)[number]["id"];
 const SEARCH_KEY_PROVIDERS = [
@@ -179,7 +180,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 				else return;
 				event.preventDefault(); setTab(TABS[next].id); tabRefs.current[next]?.focus();
 			}}>
-				{TABS.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => { if (tab !== entry.id) setTab(entry.id); }}>{entry.label}</button>)}
+				{TABS.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => { if (tab !== entry.id) setTab(entry.id); }}><Icon name={entry.icon} size="control" /><span>{entry.label}</span></button>)}
 			</div>
 			<div className="settings-main">
 			<Presence show={!!error} collapse><div className="error" role="alert"><p>{error}</p>{!settings && <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>再読み込み</button>}</div></Presence>
@@ -222,17 +223,11 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 				</section></Presence>
 				<Presence show={tab === "providers"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-providers-panel`} aria-labelledby={`${tabsId}-providers-tab`}>
 					<h3>プロバイダーの認証</h3>
-					<div className="settings-section settings-provider-section">
-						<p className="settings-inline-status">認証設定あり: {catalog?.providers.filter((provider) => provider.configured).length ?? 0} / {catalog?.providers.length ?? 0} 件</p>
+					<p className="settings-description">利用するAIサービスを選び、アカウントまたはAPIキーを接続します。</p>
+					<div className="settings-provider-layout"><div className="settings-section settings-provider-selector">
+						<p className="settings-provider-count">{catalog?.providers.filter((provider) => provider.configured).length ?? 0}件接続済み</p>
 						<label>プロバイダーを検索<input type="search" value={providerQuery} disabled={busy || loginActive} placeholder="名前または ID で検索" onChange={(event) => setProviderQuery(event.target.value)} /></label>
-						<label>プロバイダー<select value={llmProvider} disabled={busy || loginActive || !catalog?.providers.length} onChange={(event) => {
-							const providerId = event.target.value;
-							setLlmProvider(providerId); setNotice(undefined);
-						}}>
-							{!llmProvider && <option value="">プロバイダーを選択</option>}
-							{selectedProvider && !matchingProviders.some((provider) => provider.id === selectedProvider.id) && <option value={selectedProvider.id}>{selectedProvider.name} · 現在の選択</option>}
-							{matchingProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.configured === true ? "認証設定あり" : provider.configured === false ? "未設定" : "状態不明"}</option>)}
-						</select></label>
+						<div className="settings-provider-options" role="group" aria-label="プロバイダー">{matchingProviders.map((provider) => <button type="button" key={provider.id} disabled={busy || loginActive} aria-pressed={provider.id === llmProvider} onClick={() => { setLlmProvider(provider.id); setNotice(undefined); }}><span className="settings-provider-dot" data-configured={provider.configured} role="img" aria-label={provider.configured === true ? "接続済み" : provider.configured === false ? "未設定" : "状態不明"} /><span>{provider.name}</span>{provider.id === llmProvider && <Icon name="check" size="inline" />}</button>)}</div>
 						{providerQuery.trim() && <p className="settings-inline-status" role="status">{matchingProviders.length ? `${matchingProviders.length} 件が一致しました。` : "一致するプロバイダーはありません。"}</p>}
 						{catalog?.providers.length === 0 && <p className="settings-next-action">利用できるプロバイダーがありません。サーバーのモデル設定を確認してください。</p>}
 					</div>
@@ -245,7 +240,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 							{selectedProvider.oauth && <p className="auth-method-divider">または、API キーで接続</p>}
 							{keyForm}
 						</>)}
-					</div>}</MotionSwap>
+					</div>}</MotionSwap></div>
 				</section></Presence>
 				<Presence show={tab === "usage"}><section className="settings-content" role="tabpanel" id={`${tabsId}-usage-panel`} aria-labelledby={`${tabsId}-usage-tab`}>
 					<AccountUsagePanel />
