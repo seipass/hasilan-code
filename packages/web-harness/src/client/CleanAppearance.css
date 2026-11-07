@@ -206,7 +206,7 @@ button, input, textarea, select { border-radius: 7px; }
 .command-picker-copy { gap: 2px; }
 .command-picker-title { line-height: 18px; }
 .command-picker-description { line-height: 16px; }
-.command-picker-option[class*=" command-"] { min-height: 34px; }
+.command-picker-option[class*=" command-"] { min-height: 30px; padding-block: 4px; }
 .command-picker-option[class*=" command-"] .command-picker-copy { grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 12px; }
 .command-picker-option[class*=" command-"] .command-picker-description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .command-picker-option[class*=" command-"] .command-picker-title { font-family: inherit; font-weight: 400; }
