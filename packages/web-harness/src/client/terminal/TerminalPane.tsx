@@ -171,6 +171,7 @@ export function TerminalView({ summary, pane, visible, selected, focusRequest, o
 				onSummary(terminalId, message.status, message.exitCode, message.signal);
 				setConnection(socket.readyState === WebSocket.OPEN ? "connected" : "disconnected");
 				send({ type: "ack", generation, seq });
+				if (running && visibleRef.current && !controlling) send({ type: "take_control" });
 				scheduleFit();
 				return;
 			}
@@ -233,12 +234,15 @@ export function TerminalView({ summary, pane, visible, selected, focusRequest, o
 		if (!visible) pendingFocus.current = false;
 		previousVisible.current = visible;
 		previousFocusRequest.current = focusRequest;
-		if (visible) fitRef.current();
+		if (visible) {
+			if (readyRef.current) sendRef.current({ type: "take_control" });
+			fitRef.current();
+		}
 	}, [visible, focusRequest]);
 
 	return <div hidden={!selected} className="terminal-view split-tab-body" data-pane={pane} onPointerDownCapture={onActivate} onDragOver={(event) => { if (dragging) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }} onDrop={(event) => { if (dragging) { event.preventDefault(); onTabDrop(); } }} id={id} role="tabpanel" aria-labelledby={labelledBy}>
 		<Presence show={connection !== "connected" || !controller || summary.status === "exited"}><div className="terminal-status-controls">
-			<span className="terminal-status" data-connection={connection} role="status" title={title}>{connection === "disconnected" ? "切断" : connection === "connecting" ? "接続中" : summary.status === "exited" ? `終了 ${summary.exitCode ?? "?"}` : "閲覧のみ"}</span>
+			<span className="terminal-status" data-connection={connection} role="status" title={summary.status === "exited" ? `終了コード: ${summary.exitCode ?? "不明"}` : title}>{connection === "disconnected" ? "切断" : connection === "connecting" ? "接続中" : summary.status === "exited" ? "終了" : "閲覧のみ"}</span>
 			{connection === "connected" && !controller && summary.status === "running" && <button type="button" onClick={takeControl}>操作権を取得</button>}
 			{connection === "disconnected" && <button type="button" onClick={reconnect}>再接続</button>}
 		</div></Presence>

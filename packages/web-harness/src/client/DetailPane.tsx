@@ -10,6 +10,7 @@ import { discardDraft, draftKey, draftStatusVersion, isDraftDirty, subscribeDraf
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
 import { FilePreview } from "./files/FilePreview.tsx";
 import { Icon } from "./Icon.tsx";
+import { Select } from "./Select.tsx";
 import { nextClientId } from "./ids.ts";
 import { MotionItems, Presence } from "./Motion.tsx";
 import { MotionSwap, useMeasuredSize } from "./MotionSwap.tsx";
@@ -54,6 +55,18 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 	const dragged = useRef<string | undefined>(undefined);
 	const strip = useRef<HTMLDivElement>(null);
 	const tabs = useRef<HTMLDivElement>(null);
+	const [tabOverflow, setTabOverflow] = useState({ left: false, right: false });
+	useEffect(() => {
+		const element = strip.current;
+		if (!element) return;
+		const update = () => setTabOverflow({ left: element.scrollLeft > 1, right: element.scrollLeft + element.clientWidth < element.scrollWidth - 1 });
+		const observer = new ResizeObserver(update);
+		observer.observe(element);
+		if (tabs.current) observer.observe(tabs.current);
+		element.addEventListener("scroll", update);
+		update();
+		return () => { observer.disconnect(); element.removeEventListener("scroll", update); };
+	}, [layout.tabs]);
 	useMeasuredSize(strip, tabs, "width", !dragging);
 	const previousMode = useRef(layout.mode);
 	const modeChanged = previousMode.current !== layout.mode;
@@ -211,7 +224,7 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 		return tab.kind === "terminal" ? `端末 ${tab.number}` : tab.kind === "file" ? tab.file?.path.split(/[\\/]/).at(-1) || "ファイルを選択" : tab.kind === "browser" ? "ブラウザ" : "新しいタブ";
 	}
 	function choices(tab: DetailTab | undefined, pane: PaneIndex) {
-		return <div className="detail-new-tab"><h2>新しいタブ</h2><div className="detail-new-choices"><button type="button" disabled={!!tab && creating.includes(tab.id)} onClick={() => chooseFile(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6l2 3h8v13H4z" /></svg><span>ファイル</span></button><button type="button" disabled={creating.includes(tab?.id ?? "")} onClick={() => { void createTerminal(tab, pane); }}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></svg><span>{tab && creating.includes(tab.id) ? "作成中…" : "端末"}</span></button>{document.documentElement.dataset.desktopPlatform && <button type="button" onClick={() => chooseBrowser(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18" /></svg><span>ブラウザ</span></button>}</div></div>;
+		return <div className="detail-new-tab"><h2 className="sr-only">新しいタブ</h2><div className="detail-new-choices"><button type="button" onClick={() => onViewChange("team")}><Icon name="graph" /><span>進捗</span></button><button type="button" disabled={!!tab && creating.includes(tab.id)} onClick={() => chooseFile(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6l2 3h8v13H4z" /></svg><span>ファイル</span></button><button type="button" disabled={creating.includes(tab?.id ?? "")} onClick={() => { void createTerminal(tab, pane); }}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></svg><span>{tab && creating.includes(tab.id) ? "作成中…" : "ターミナル"}</span></button>{document.documentElement.dataset.desktopPlatform && <button type="button" onClick={() => chooseBrowser(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18" /></svg><span>ブラウザ</span></button>}</div></div>;
 	}
 	const selectedFiles = layout.tabs.filter((tab) => tab.kind === "file" && layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single"));
 	const activeFile = selectedFiles.find((tab) => tab.pane === layout.focused) ?? selectedFiles[0];
@@ -234,10 +247,10 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 						else if (event.key === "Delete") { event.preventDefault(); void closeTab(tab); return; }
 						if (next === undefined) return;
 						event.preventDefault(); select(layout.tabs[next]); document.getElementById(`${id}-tab-${layout.tabs[next].id}`)?.focus();
-					}}><span className="detail-tab-kind" aria-hidden="true">{tab.kind === "terminal" ? ">_" : tab.kind === "file" ? "▤" : "+"}</span><span className="detail-tab-title" data-read-only={readOnly || undefined}>{title(tab)}</span>{tab.kind === "file" && tab.file && isDraftDirty(draftKey(workspaceId, tab.file.path)) && <span className="detail-tab-dirty" aria-label="未保存の変更">●</span>}{tab.kind === "terminal" && tab.summary.status === "exited" && <span className="terminal-tab-exit">終了 {tab.summary.exitCode ?? "?"}</span>}</button>
+					}}><span className="detail-tab-kind" aria-hidden="true">{tab.kind === "terminal" ? ">_" : tab.kind === "file" ? "▤" : "+"}</span><span className="detail-tab-title" data-read-only={readOnly || undefined}>{title(tab)}</span>{tab.kind === "file" && tab.file && isDraftDirty(draftKey(workspaceId, tab.file.path)) && <span className="detail-tab-dirty" aria-label="未保存の変更">●</span>}</button>
 					<button type="button" className="detail-tab-close" draggable={false} aria-label={`${title(tab)}を閉じる`} disabled={closing.includes(tab.id) || creating.includes(tab.id)} onClick={() => { void closeTab(tab); }}><Icon name="close" size="inline" /></button>
 				</div>; }}</MotionItems>
-			</div></div><div className="detail-tab-add"><button type="button" className="detail-tab-new" aria-label="新しいタブを開く" title="クリックで新しいタブ・下へスライドで端末・右へスライドでファイル" data-gesture={tabGesture} onPointerDown={(event) => {
+			</div></div>{(tabOverflow.left || tabOverflow.right) && <div className="detail-tab-overflow"><button type="button" aria-label="左のタブへ" disabled={!tabOverflow.left} onClick={() => strip.current?.scrollBy({ left: -200 })}><Icon name="chevronLeft" size="inline" /></button><button type="button" aria-label="右のタブへ" disabled={!tabOverflow.right} onClick={() => strip.current?.scrollBy({ left: 200 })}><Icon name="chevronRight" size="inline" /></button><Select aria-label="タブ一覧" value={layout.selected[layout.focused] ?? ""} onChange={(value) => { const tab = layout.tabs.find((entry) => entry.id === value); if (tab) select(tab, true); }}>{layout.tabs.map((tab) => <option key={tab.id} value={tab.id}>{title(tab)}</option>)}</Select></div>}<div className="detail-tab-add"><button type="button" className="detail-tab-new" aria-label="新しいタブを開く" title="クリックで新しいタブ・下へスライドで端末・右へスライドでファイル" data-gesture={tabGesture} onPointerDown={(event) => {
 				if (event.button !== 0) return;
 				setShowTabHints(false);
 				tabPress.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
