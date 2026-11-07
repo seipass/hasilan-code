@@ -32,6 +32,7 @@ import { EventHub } from "./events.ts";
 import { fileEditSchema, readEditableFile, saveEditableFile } from "./file-editor.ts";
 import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
+import { GithubDashboardReader } from "./github-dashboard.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { mediaView, serveMedia } from "./media.ts";
 import { acquireProfile } from "./profile-lock.ts";
@@ -99,6 +100,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	}));
 	const search = new SearchService(settings);
 	const widgets = new WidgetData();
+	const githubDashboard = new GithubDashboardReader();
 	let events: EventHub | undefined;
 	const files = new WorkspaceFiles({ onChanged: (event) => events?.publish("workspace", event.workspaceId, event) });
 	let teams: TeamManager;
@@ -198,6 +200,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					return true;
 				};
 				if (await uiPreferences.handle(request, response, url)) return true;
+				if (url.pathname === "/api/home/github" && method === "GET") return reply(await githubDashboard.read());
 				if (url.pathname.startsWith("/api/widgets/")) {
 					if (method !== "GET") throw new HttpError(405, "Method is not allowed");
 					return reply(await widgets.query(url));
