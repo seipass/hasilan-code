@@ -137,6 +137,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	}, []);
 	const clampWidth = (value: number) => clampChatWidth(value, paneWidth);
 	const shownWidth = clampWidth(chatWidth);
+	const compactModel = shownWidth <= 420;
 	// A fresh conversation should be ready to type in; the sidebar button keeps focus otherwise.
 	useEffect(() => {
 		if (loading || surface || !empty) return;
@@ -322,10 +323,11 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 						void attach(files);
 					}} />
 				</div>
-				<MotionSize><div className="composer-toolbar">
-					<div className="composer-context"><button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 11-8.4 8.4a5 5 0 0 1-7.1-7.1L13 3.8a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.4a1.6 1.6 0 0 1-2.3-2.3L15 6.2" /></svg></button>{modelControl}</div>
+				<MotionSize><div className={`composer-toolbar${compactModel ? " is-compact" : ""}`}>
+					<div className="composer-context"><button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 11-8.4 8.4a5 5 0 0 1-7.1-7.1L13 3.8a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.4a1.6 1.6 0 0 1-2.3-2.3L15 6.2" /></svg></button>{!compactModel && modelControl}</div>
 					<div className="composer-delivery">
 						<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage" aria-label={`${contextTokens == null ? "—" : compactTokens(contextTokens)} / ${compactTokens(contextLimit ?? 0)}${usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}`}><svg className="context-usage-ring" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><circle cx="10" cy="10" r="7" pathLength="100" strokeDasharray={`${Math.min(100, Math.max(0, usage?.percent ?? 0))} 100`} /></svg><span className="context-usage-tooltip" role="tooltip">{contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit ?? 0)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span></span>} /></div></Presence>
+						{compactModel && modelControl}
 						{busy && <button className="stop-button" type="button" aria-label="実行を停止" title="実行を停止" onClick={onStop}><Icon name="stop" size="primary" /></button>}
 						<button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Enter で送信 · Shift + Enter で改行 · Ctrl / Cmd + Shift + Enter で送信先を選択" : busy ? "Enter で実行中に指示 · Ctrl / Cmd + Enter で完了後に指示 · Shift + Enter で改行" : "Enter で送信 · Shift + Enter で改行"} disabled={sending || reading || (!text.trim() && !attachments.length && !browserAnnotations.length) || !slashInput && (!connected || session?.availability === "missing")}>{sending ? <span className="motion-label" aria-hidden="true">…</span> : <Icon name="send" size="primary" />}</button>
 					</div>

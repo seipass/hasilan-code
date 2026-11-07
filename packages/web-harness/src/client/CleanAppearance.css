@@ -156,6 +156,13 @@
 .composer-identity { font-size: var(--text-control); }
 .composer-workspace { opacity: .8; }
 .composer-chip { min-height: 28px; padding: 5px 6px; gap: 8px; border-radius: 6px; font-size: var(--text-sm); font-weight: 400; }
+.model-trigger .model-trigger-icon { display: none; }
+.composer-toolbar.is-compact { flex-wrap: nowrap; }
+.composer-toolbar.is-compact .composer-context { flex: 1 1 0; }
+.composer-toolbar.is-compact .composer-delivery { flex: none; margin-left: auto; }
+.composer-toolbar.is-compact .model-trigger { display: grid; place-items: center; width: 28px; height: 28px; min-height: 28px; padding: 0; }
+.composer-toolbar.is-compact .model-trigger :is(.model-trigger-name, .model-trigger-thinking, .model-trigger-chevron) { display: none; }
+.composer-toolbar.is-compact .model-trigger .model-trigger-icon { display: block; }
 .send-button, .stop-button { width: 28px; height: 28px; border-radius: 50%; }
 .send-button:disabled { background: var(--border-strong); }
 .new-conversation:hover:not(:disabled), .send-button:hover:not(:disabled), .stop-button:hover:not(:disabled),

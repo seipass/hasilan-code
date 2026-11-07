@@ -517,7 +517,7 @@ export function App() {
 		draftSession.current = undefined;
 	}
 	const modelControl = <div className="model-control">
-		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} title="モデル・Thinkingを選択" onClick={() => setModelOpen((value) => !value)}>{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}<span className="model-trigger-thinking">{session?.thinkingLevel ?? draftThinking ?? "自動"}</span><Icon name="chevronDown" size="inline" /></button>
+		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} aria-label={`モデル・Thinkingを選択: ${selectedModel?.name ?? selectedModel?.id ?? "未選択"} · ${session?.thinkingLevel ?? draftThinking ?? "自動"}`} title={`${selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"} · ${session?.thinkingLevel ?? draftThinking ?? "自動"}`} onClick={() => setModelOpen((value) => !value)}><Icon name="graph" className="model-trigger-icon" /><span className="model-trigger-name">{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}</span><span className="model-trigger-thinking">{session?.thinkingLevel ?? draftThinking ?? "自動"}</span><Icon name="chevronDown" className="model-trigger-chevron" size="inline" /></button>
 	</div>;
 	const rightMaximum = Math.max(480, viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 260 : 0) - 320);
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);
