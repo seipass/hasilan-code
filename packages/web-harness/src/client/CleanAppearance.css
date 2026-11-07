@@ -1,5 +1,7 @@
 /* Neutral application chrome. Semantic status and code colors keep their meaning. */
 :root {
+	--text-reading: 15px;
+	--text-control: 13px;
 	--surface: #141414;
 	--surface-sunken: #111111;
 	--surface-panel: #191919;
@@ -31,6 +33,23 @@
 	--glass-panel: color-mix(in srgb, var(--surface-panel) 92%, transparent);
 	--glass-filter: blur(24px);
 }
+
+/* Three reading levels: prose, controls, then supporting metadata. */
+.message-content, .files-markdown { font-size: var(--text-reading); line-height: 1.75; }
+.message h1, .files-markdown h1 { font-size: 22px; line-height: 1.4; }
+.message h2, .files-markdown h2 { font-size: 18px; line-height: 1.45; }
+.message h3, .files-markdown h3 { font-size: 16px; line-height: 1.5; }
+.message :is(h4, h5, h6), .files-markdown :is(h4, h5, h6) { font-size: var(--text-reading); line-height: 1.5; }
+.message-content strong { font-weight: 600; }
+.message-meta, .message-usage { font-size: 11px; line-height: 1.5; }
+.thinking, .thinking > summary, .turn-activity, .turn-activity-waiting,
+.context-entry > summary, .tool-card > summary, .tool-card .tool-summary { font-size: var(--text-control); line-height: 1.6; }
+.composer textarea { font-size: var(--text-reading); line-height: 1.65; }
+.composer-workspace { font-size: 11px; }
+.settings-content, .settings-content label, .settings-tabs button { font-size: var(--text-control); line-height: 1.6; }
+.settings-content > h3 { font-size: 16px; line-height: 1.5; }
+.settings-content h4 { font-size: 14px; line-height: 1.5; }
+.model-picker-option strong, .widget-chip strong { font-weight: 400; }
 
 /* A quiet sidebar, with one consistent selection treatment. */
 .sidebar { border-radius: 0 10px 10px 0; }
@@ -66,7 +85,7 @@
 .role-user .message-content { background: var(--surface-hover); border-radius: 14px; }
 .tool-card, .tool-card[open] { border-color: transparent; background: transparent; border-radius: 8px; box-shadow: none; }
 .tool-card:hover { border-color: transparent; background: color-mix(in srgb, var(--surface-hover) 35%, transparent); }
-.tool-card > summary { padding: 7px 8px; font-size: var(--text-sm); }
+.tool-card > summary { padding: 7px 8px; }
 .tool-card > summary strong { font-weight: 400; }
 .tool-card .tool-summary { color: var(--on-surface-muted); }
 .tool-result-note { color: var(--on-surface-muted); }
@@ -132,6 +151,9 @@ button, input, textarea, select { border-radius: 7px; }
 @media (max-width: 520px) {
 	.composer { border-radius: 14px; padding: 14px 12px 10px; }
 	.composer-chip { font-size: var(--text-xs); }
+}
+@media (max-width: 900px) {
+	.composer textarea { font-size: 16px; }
 }
 @media (max-width: 600px) {
 	.session-import-dialog { border-radius: 0; }
