@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Content, record } from "./Content.tsx";
 import { browserView } from "./tools/browser.tsx";
 import { computerView } from "./tools/computer.tsx";
@@ -72,6 +73,9 @@ function toolContext(name: string, input: Record<string, unknown> | undefined): 
 export function ToolCard({ tool, onFile, expanded = false }: {
 	tool: ToolCall; onFile: (path: string, line?: number) => void; expanded?: boolean;
 }) {
+	const [open, setOpen] = useState(expanded);
+	const [visited, setVisited] = useState(expanded);
+	useEffect(() => setOpen(expanded), [expanded]);
 	const result = record(tool.result) ? tool.result : undefined;
 	const details = result && record(result.details) ? result.details : result;
 	const structured = result && record(result.structuredContent) ? result.structuredContent : undefined;
@@ -79,21 +83,39 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const input = record(tool.input) ? tool.input : undefined;
 	const visual = toolVisuals[tool.name as keyof typeof toolVisuals];
 	const summary = toolContext(tool.name, input);
+	const resultNote = tool.name === "web_search" && Array.isArray(details?.results) ? countLabel(details.results.length, "result")
+		: (tool.name === "bash" || tool.name === "terminal") && typeof structured?.exit_code === "number" ? `Exit ${structured.exit_code}`
+		: tool.name === "edit" && Array.isArray(details?.files) ? countLabel(details.files.length, "file")
+		: tool.name === "write" && typeof details?.totalLines === "number" ? countLabel(details.totalLines, "line") : undefined;
+	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={open} onToggle={(event) => {
+		if (event.target !== event.currentTarget) return;
+		setOpen(event.currentTarget.open);
+		if (event.currentTarget.open) setVisited(true);
+	}}>
+		<summary>
+			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
+			{summary && <span className="tool-summary" title={summary}>{summary}</span>}
+			{resultNote && <span className="tool-result-note">{resultNote}</span>}
+			<span key={tool.status} className={`badge status-${tool.status} motion-label`}>{status}</span>
+		</summary>
+		{(open || visited) && <ToolBody tool={tool} onFile={onFile} />}
+	</details>;
+}
+
+function ToolBody({ tool, onFile }: { tool: ToolCall; onFile: (path: string, line?: number) => void }) {
+	const result = record(tool.result) ? tool.result : undefined;
+	const details = result && record(result.details) ? result.details : result;
+	const structured = result && record(result.structuredContent) ? result.structuredContent : undefined;
+	const input = record(tool.input) ? tool.input : undefined;
 	const filePaths = new Set<string>();
 	if (typeof input?.path === "string") filePaths.add(input.path);
 	if (typeof input?.input === "string") {
 		for (const match of input.input.matchAll(/^\[([^\r\n#]+)#[A-F0-9]{4}\]$/gm)) if (match[1]) filePaths.add(match[1]);
 	}
-	const searchResults: unknown[] | undefined = details && Array.isArray(details.results) ? details.results : undefined;
 	const artifact = details && record(details.artifact) && typeof details.artifact.id === "string" ? details.artifact : undefined;
 	const originalContent = result && "content" in result ? result.content : tool.result;
 	const content = tool.name === "write" ? writeResultContent(originalContent) : originalContent;
 	const textContent = Array.isArray(content) ? content.map((part: unknown) => record(part) && part.type === "text" && typeof part.text === "string" ? part.text : "").join("\n") : typeof content === "string" ? content : "";
-	const exitCode = structured?.exit_code;
-	const resultNote = tool.name === "web_search" && searchResults ? countLabel(searchResults.length, "result")
-		: (tool.name === "bash" || tool.name === "terminal") && typeof exitCode === "number" ? `Exit ${exitCode}`
-		: tool.name === "edit" && details && Array.isArray(details.files) ? countLabel(details.files.length, "file")
-		: tool.name === "write" && typeof details?.totalLines === "number" ? countLabel(details.totalLines, "line") : undefined;
 	const isShell = tool.name === "bash" || tool.name === "terminal";
 	const specialized = ["read", "write", "edit", "bash", "terminal", "browser", "computer", "web_search", "team"].includes(tool.name);
 	const viewDetails: ToolDetails = { input, details, result: structured, text: textContent, content, status: tool.status, onFile };
@@ -114,14 +136,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 								: tool.name === "team"
 									? teamView(viewDetails)
 									: undefined;
-	return <details className={`tool-card tool-kind-${visual?.kind ?? "generic"} status-${tool.status}`} open={expanded}>
-		<summary>
-			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
-			{summary && <span className="tool-summary" title={summary}>{summary}</span>}
-			{resultNote && <span className="tool-result-note">{resultNote}</span>}
-			<span key={tool.status} className={`badge status-${tool.status} motion-label`}>{status}</span>
-		</summary>
-		<div className="tool-body" data-view={isShell ? "shell" : tool.name === "read" ? "read" : tool.name === "edit" || tool.name === "write" ? tool.name : undefined}>
+	return <div className="tool-body" data-view={isShell ? "shell" : tool.name === "read" ? "read" : tool.name === "edit" || tool.name === "write" ? tool.name : undefined}>
 			{tool.sourceStatus && <p className="muted">元の状態: {tool.sourceStatus}</p>}
 			{(tool.importedOrigin?.url || typeof result?.sourceRecord === "string") && <div className="imported-record-links">
 				{tool.importedOrigin?.url && <a href={tool.importedOrigin.url} target="_blank" rel="noopener noreferrer">元の呼び出し記録</a>}
@@ -141,8 +156,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 						</>}
 				{!specialized && details && <details><summary>Details</summary><pre>{JSON.stringify(details, null, 2)}</pre></details>}
 			</>}
-		</div>
-	</details>;
+		</div>;
 }
 
 export function ToolInspector({ tools, onFile }: { tools: ToolCall[]; onFile: (path: string, line?: number) => void }) {
