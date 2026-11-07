@@ -53,7 +53,7 @@
 
 /* Devin's default prose-ds and text-11 through text-15 type scales, in CSS pixels. */
 .message-content, .files-markdown { font-size: var(--text-reading); line-height: 20px; letter-spacing: -.005em; }
-.message-content p, .files-markdown p { line-height: inherit; margin-block: .85em; }
+.message-content p, .files-markdown p { line-height: inherit; margin-block: 8px; }
 .message-content :is(ul, ol, li), .files-markdown :is(ul, ol, li) { line-height: 20px; }
 .message h1, .files-markdown h1 { font-size: 22px; line-height: 28px; }
 .message h2, .files-markdown h2 { font-size: 19px; line-height: 27px; }
@@ -61,7 +61,7 @@
 .message h4, .files-markdown h4 { font-size: 15px; line-height: 22px; }
 .message h5, .files-markdown h5 { font-size: 13px; line-height: 18px; }
 .message h6, .files-markdown h6 { font-size: 12px; line-height: 16px; }
-.message :is(h1, h2, h3, h4, h5, h6), .files-markdown :is(h1, h2, h3, h4, h5, h6) { margin-block: 1.25em .5em; font-weight: 600; }
+.message :is(h1, h2, h3, h4, h5, h6), .files-markdown :is(h1, h2, h3, h4, h5, h6) { margin-block: 16px 4px; font-weight: 600; }
 .message-content > :first-child, .files-markdown > :first-child { margin-top: 0; }
 .message-content > :last-child, .files-markdown > :last-child { margin-bottom: 0; }
 .message-content strong { font-weight: 600; }
@@ -88,28 +88,31 @@
 /* A quiet sidebar, with one consistent selection treatment. */
 .sidebar { border-radius: 0 10px 10px 0; }
 .sidebar-brand { margin-bottom: 16px; }
-.new-conversation { justify-content: flex-start; gap: 9px; border-radius: 7px; background: var(--surface-hover); font-weight: 400; }
-.new-conversation > span { color: var(--on-surface-secondary); }
+.new-conversation { justify-content: flex-start; gap: 8px; min-height: 30px; padding: 6px 8px; border-radius: 7px; background: var(--surface-hover); font-weight: 400; }
+.new-conversation > span { color: var(--on-surface-secondary); line-height: 18px; }
 .history-search { margin-block: 14px 20px; }
 .history-search input { font-size: var(--text-md); }
-.workspace-accordion { margin-bottom: 3px; }
-.workspace-accordion > summary, .session-button { border-radius: 6px; font-size: var(--text-md); }
+.workspace-accordion { margin-bottom: 0; }
+.workspace-accordion > summary, .session-button { min-height: 30px; padding: 6px 8px; gap: 8px; border-radius: 6px; font-size: var(--text-md); }
 .workspace-accordion[data-selected="true"] > summary { background: transparent; }
 .workspace-accordion > summary:hover { background: var(--surface-hover); }
-.session-button { padding-block: 8px; }
 .session-button.selected { background: var(--surface-hover); }
 .sidebar-bottom { border-color: transparent; }
+.sidebar-bottom button { min-height: 30px; padding: 6px 8px; }
 .page-title { color: var(--on-surface-secondary); }
-.quiet-button { border-radius: 6px; }
+.quiet-button { min-height: 28px; padding: 5px 8px; border-radius: 6px; }
 
 /* The composer is the main elevated surface; secondary controls stay flat. */
-.composer { border-color: var(--border); border-radius: 16px; box-shadow: none; padding: 16px 16px 12px; }
+.composer { border-color: var(--border); border-radius: 16px; box-shadow: none; padding: 12px; }
+.composer-input-row { min-height: 54px; }
+.composer textarea { min-height: 54px; padding: 4px 6px 4px 4px; }
+.composer-toolbar { min-height: 28px; padding-top: 0; gap: 8px; }
 .composer textarea::placeholder { color: var(--on-surface-muted); }
 .composer-heading { padding-bottom: 12px; }
 .composer-identity { font-size: var(--text-control); }
 .composer-workspace { opacity: .8; }
-.composer-chip { border-radius: 6px; font-size: var(--text-sm); font-weight: 400; }
-.send-button, .stop-button { border-radius: 50%; }
+.composer-chip { min-height: 28px; padding: 5px 6px; gap: 8px; border-radius: 6px; font-size: var(--text-sm); font-weight: 400; }
+.send-button, .stop-button { width: 28px; height: 28px; border-radius: 50%; }
 .send-button:disabled { background: var(--border-strong); }
 .new-conversation:hover:not(:disabled), .send-button:hover:not(:disabled), .stop-button:hover:not(:disabled),
 .new-conversation:active:not(:disabled), .send-button:active:not(:disabled), .stop-button:active:not(:disabled),
@@ -143,14 +146,30 @@ button, input, textarea, select { border-radius: 7px; }
 	box-shadow: 0 12px 36px #0005;
 }
 .command-picker-option, .model-picker-option { border-radius: 6px; }
+.session-context-menu, .detail-context-menu, .command-picker { padding: 4px; }
+.session-context-menu button, .detail-context-menu button,
+.model-picker-option, .model-picker-compact .model-picker-option,
+.thinking-picker-results .model-picker-option {
+	min-height: 30px;
+	padding: 6px 8px;
+	border-width: 0;
+	line-height: 18px;
+}
+.model-picker-results, .command-picker-options { gap: 0; }
+.model-group-heading, .model-picker-compact .model-group-heading { padding: 6px 8px; }
+.model-compact-search input { min-height: 32px; padding: 6px 12px; font-size: var(--text-control); line-height: 18px; }
+.command-picker-option { min-height: 48px; padding: 6px 8px; gap: 8px; border-width: 0; }
+.command-picker-copy { gap: 2px; }
+.command-picker-title { line-height: 18px; }
+.command-picker-description { line-height: 16px; }
 .command-picker-option[aria-selected="true"], .command-picker-option:hover { border-color: transparent; background: var(--surface-hover); }
 .model-picker-option[aria-selected="true"] { border-color: transparent; background: var(--surface-hover); }
 .model-group-heading { font-weight: 400; }
 .model-selected-mark { color: var(--on-surface); }
 .settings-dialog.settings-dialog { border-color: var(--border); border-radius: 14px; box-shadow: 0 20px 60px #0005; }
 .settings-dialog .panel-heading h2 { font-size: var(--text-xl); }
-.settings-dialog .settings-layout .settings-tabs { border-right: 0; gap: 3px; }
-.settings-layout .settings-tabs button { border-radius: 6px; padding-block: 8px; }
+.settings-dialog .settings-layout .settings-tabs { border-right: 0; gap: 0; }
+.settings-layout .settings-tabs button { min-height: 30px; border-radius: 6px; padding: 6px 8px; }
 .settings-tabs [aria-selected="true"] { background: var(--surface-hover); color: var(--on-surface); }
 .settings-tabs [role="tab"]::after { background: transparent; }
 .settings-dialog :is(.settings-section, .settings-provider-section, .settings-key-entry, .oauth-login) {
@@ -160,6 +179,8 @@ button, input, textarea, select { border-radius: 7px; }
 }
 .settings-dialog .settings-provider-section { border-bottom-color: var(--border-subtle); border-radius: 0; }
 .settings-dialog :is(input, select, textarea) { background: var(--surface-panel); border-color: var(--border); }
+.settings-content :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select) { min-height: 32px; padding: 6px 12px; }
+.settings-content button { min-height: 28px; padding: 4px 8px; }
 .settings-next-action { background: var(--surface-panel); }
 .session-import-dialog { border-color: var(--border); border-radius: 12px; }
 
@@ -183,8 +204,10 @@ button, input, textarea, select { border-radius: 7px; }
 .widget-chip[aria-expanded="true"] { background: var(--surface-hover); border-color: transparent; }
 
 @media (max-width: 520px) {
-	.composer { border-radius: 14px; padding: 14px 12px 10px; }
-	.composer-chip { font-size: var(--text-xs); }
+	.composer { border-radius: 14px; padding: 8px; }
+	.composer-input-row, .composer textarea { min-height: 44px; }
+	.composer-toolbar { min-height: 24px; }
+	.composer-chip { min-height: 24px; padding: 4px 5px; font-size: var(--text-xs); line-height: 16px; }
 }
 @media (max-width: 900px) {
 	.composer textarea { font-size: 16px; }
