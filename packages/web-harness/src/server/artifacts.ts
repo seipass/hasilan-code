@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export type ArtifactMimeType = "image/png" | "image/jpeg" | "image/webp" | "image/gif";
 
@@ -42,7 +45,9 @@ function matchesImageSignature(bytes: Buffer, mimeType: ArtifactMimeType): boole
 
 /** Launch-local artifacts only: active documents and host paths are never served. */
 export class ArtifactStore {
-	private readonly artifacts = new Map<string, Artifact>();
+	private readonly artifacts = new Map<string, Omit<Artifact, "bytes"> & { bytes?: Buffer; file?: string }>();
+	private cachedBytes = 0;
+	private directory?: string;
 
 	put(input: ArtifactInput): ArtifactReference {
 		if (!input.sessionId || !input.agentId) throw new Error("Artifacts require a session and agent owner");
@@ -61,20 +66,43 @@ export class ArtifactStore {
 			agentId: input.agentId,
 			bytes: Buffer.from(input.bytes),
 		});
+		this.cachedBytes += input.bytes.length;
+		// Keep recent frames fast without retaining every screenshot for the host's entire lifetime.
+		// Spilled images remain addressable at the same URL until the session or host closes.
+		for (const artifact of this.artifacts.values()) {
+			if (this.cachedBytes <= 8 * 1024 * 1024) break;
+			if (!artifact.bytes) continue;
+			this.directory ??= mkdtempSync(join(tmpdir(), "hasilan-artifacts-"));
+			const file = join(this.directory, artifact.id);
+			writeFileSync(file, artifact.bytes, { mode: 0o600, flag: "wx" });
+			artifact.file = file;
+			this.cachedBytes -= artifact.bytes.length;
+			artifact.bytes = undefined;
+		}
 		return reference;
 	}
 
 	get(id: string): Artifact | undefined {
-		return this.artifacts.get(id);
+		const artifact = this.artifacts.get(id);
+		if (!artifact) return undefined;
+		const { file, bytes, ...reference } = artifact;
+		return { ...reference, bytes: bytes ?? readFileSync(file!) };
 	}
 
 	deleteSession(sessionId: string): void {
 		for (const [id, artifact] of this.artifacts) {
-			if (artifact.sessionId === sessionId) this.artifacts.delete(id);
+			if (artifact.sessionId !== sessionId) continue;
+			if (artifact.file) unlinkSync(artifact.file);
+			this.cachedBytes -= artifact.bytes?.length ?? 0;
+			this.artifacts.delete(id);
 		}
 	}
 
 	close(): void {
 		this.artifacts.clear();
+		this.cachedBytes = 0;
+		// This directory is created exclusively by mkdtempSync above; no user path enters it.
+		if (this.directory) rmSync(this.directory, { recursive: true, force: true });
+		this.directory = undefined;
 	}
 }
