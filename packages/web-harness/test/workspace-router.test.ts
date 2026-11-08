@@ -327,7 +327,7 @@ describe("Jev workspace and conversation selection", () => {
 		["vercel-ai-gateway", "liquid/d1", "https://ai-gateway.vercel.sh/typesafe/v1/systemone"],
 		["openrouter", "typesafe/jev-1.14", "https://openrouter.ai/api/v1/systemone"],
 		["vercel-ai-gateway", "typesafe-ai/jev", "https://ai-gateway.vercel.sh/typesafe/v1/systemone"],
-		["opencode", "jev-1.13", "https://opencode.ai/inference/v1/systemone"],
+		["opencode", "jev-1.13", "https://opencode.ai/inference/systemone/v1/systemone"],
 	])("uses the chosen %s model and its existing runtime credentials", async (provider, id, endpoint) => {
 		selection = { provider, id };
 		await runtime.setRuntimeApiKey(provider, "provider-specific-key");

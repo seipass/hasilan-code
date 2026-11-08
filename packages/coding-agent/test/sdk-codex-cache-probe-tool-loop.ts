@@ -21,8 +21,8 @@ import {
 	getModel,
 	type Model,
 	type SimpleStreamOptions,
-	Type,
 } from "@hasilan-code/pi-ai/compat";
+import { Type } from "typebox";
 import {
 	getOpenAICodexWebSocketDebugStats,
 	streamSimple as streamSimpleOpenAICodexResponses,

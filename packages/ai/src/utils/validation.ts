@@ -1,10 +1,9 @@
-import { Compile } from "typebox/compile";
-import type { TLocalizedValidationError } from "typebox/error";
-import { Value } from "typebox/value";
+import { type CoercingValidator, compile } from "@hasilan-code/pi-schema";
+import { formats } from "@hasilan-code/pi-schema/formats";
 import type { Tool, ToolCall } from "../types.ts";
 
-const validatorCache = new WeakMap<object, ReturnType<typeof Compile>>();
-const TYPEBOX_KIND = Symbol.for("TypeBox.Kind");
+// One compiled validator per schema object: tool schemas are long-lived, so the WeakMap drops entries with their tools.
+const validatorCache = new WeakMap<object, CoercingValidator>();
 
 interface JsonSchemaObject {
 	type?: string | string[];
@@ -27,106 +26,11 @@ function getSchemaTypes(schema: JsonSchemaObject): string[] {
 	return [];
 }
 
-function matchesJsonType(value: unknown, type: string): boolean {
-	switch (type) {
-		case "number":
-			return typeof value === "number";
-		case "integer":
-			return typeof value === "number" && Number.isInteger(value);
-		case "boolean":
-			return typeof value === "boolean";
-		case "string":
-			return typeof value === "string";
-		case "null":
-			return value === null;
-		case "array":
-			return Array.isArray(value);
-		case "object":
-			return typeof value === "object" && value !== null && !Array.isArray(value);
-		default:
-			return false;
-	}
-}
-
-function getSubSchemaValidator(schema: JsonSchemaObject): ReturnType<typeof Compile> | undefined {
+function getSubSchemaValidator(schema: JsonSchemaObject): CoercingValidator | undefined {
 	try {
 		return getValidator(schema as Tool["parameters"]);
 	} catch {
 		return undefined;
-	}
-}
-
-function coercePrimitiveByType(value: unknown, type: string): unknown {
-	switch (type) {
-		case "number": {
-			if (value === null) {
-				return 0;
-			}
-			if (typeof value === "string" && value.trim() !== "") {
-				const parsed = Number(value);
-				if (Number.isFinite(parsed)) {
-					return parsed;
-				}
-			}
-			if (typeof value === "boolean") {
-				return value ? 1 : 0;
-			}
-			return value;
-		}
-		case "integer": {
-			if (value === null) {
-				return 0;
-			}
-			if (typeof value === "string" && value.trim() !== "") {
-				const parsed = Number(value);
-				if (Number.isInteger(parsed)) {
-					return parsed;
-				}
-			}
-			if (typeof value === "boolean") {
-				return value ? 1 : 0;
-			}
-			return value;
-		}
-		case "boolean": {
-			if (value === null) {
-				return false;
-			}
-			if (typeof value === "string") {
-				if (value === "true") {
-					return true;
-				}
-				if (value === "false") {
-					return false;
-				}
-			}
-			if (typeof value === "number") {
-				if (value === 1) {
-					return true;
-				}
-				if (value === 0) {
-					return false;
-				}
-			}
-			return value;
-		}
-		case "string": {
-			if (value === null) {
-				return "";
-			}
-			if (typeof value === "number" || typeof value === "boolean") {
-				return String(value);
-			}
-			return value;
-		}
-		case "null": {
-			if (value === "" || value === 0 || value === false) {
-				return null;
-			}
-			return value;
-		}
-		default:
-			return value;
 	}
 }
 
@@ -175,7 +79,7 @@ function applySchemaArrayCoercion(value: unknown[], schema: JsonSchemaObject): v
 function coerceWithUnionSchema(value: unknown, schemas: JsonSchemaObject[]): unknown {
 	for (const schema of schemas) {
 		const validator = getSubSchemaValidator(schema);
-		if (validator?.Check(value)) {
+		if (validator?.check(value)) {
 			return value;
 		}
 	}
@@ -184,8 +88,9 @@ function coerceWithUnionSchema(value: unknown, schemas: JsonSchemaObject[]): unk
 		const candidate = structuredClone(value);
 		const coerced = coerceWithJsonSchema(candidate, schema);
 		const validator = getSubSchemaValidator(schema);
-		if (validator?.Check(coerced)) {
-			return coerced;
+		const result = validator?.parse(coerced);
+		if (result?.ok) {
+			return result.value;
 		}
 	}
 	return value;
@@ -209,8 +114,7 @@ function coerceWithJsonSchema(value: unknown, schema: JsonSchemaObject): unknown
 	}
 
 	const schemaTypes = getSchemaTypes(schema);
-	// Weaker models send arrays and objects as their JSON text, and TypeBox's Value.Convert
-	// does not parse those back. Only accept a parse that produces the declared kind.
+	// Some models send arrays and objects as JSON text. Only accept a parse that produces the declared kind.
 	if (
 		typeof nextValue === "string" &&
 		!schemaTypes.includes("string") &&
@@ -224,17 +128,6 @@ function coerceWithJsonSchema(value: unknown, schema: JsonSchemaObject): unknown
 			if (matchesKind) nextValue = parsed;
 		} catch {
 			// Not JSON. Leave it for the validator to report against the received value.
-		}
-	}
-	const matchesUnionMember =
-		schemaTypes.length > 1 && schemaTypes.some((schemaType) => matchesJsonType(nextValue, schemaType));
-	if (schemaTypes.length > 0 && !matchesUnionMember) {
-		for (const schemaType of schemaTypes) {
-			const candidate = coercePrimitiveByType(nextValue, schemaType);
-			if (candidate !== nextValue) {
-				nextValue = candidate;
-				break;
-			}
 		}
 	}
 
@@ -254,63 +147,30 @@ function coerceWithJsonSchema(value: unknown, schema: JsonSchemaObject): unknown
 	return nextValue;
 }
 
-function normalizeOptionalNulls(value: unknown, schema: JsonSchemaObject): void {
-	if (Array.isArray(value)) {
-		if (Array.isArray(schema.items)) {
-			for (let index = 0; index < value.length; index++) {
-				const itemSchema = schema.items[index];
-				if (itemSchema) normalizeOptionalNulls(value[index], itemSchema);
-			}
-		} else if (schema.items) {
-			for (const item of value) normalizeOptionalNulls(item, schema.items);
-		}
-		return;
-	}
-	if (typeof value !== "object" || value === null || !schema.properties) return;
-
-	const object = value as Record<string, unknown>;
-	const required = new Set(schema.required ?? []);
-	for (const [key, propertySchema] of Object.entries(schema.properties)) {
-		if (!(key in object)) continue;
-		if (
-			object[key] === null &&
-			!required.has(key) &&
-			typeof (propertySchema as { $ref?: unknown }).$ref !== "string" &&
-			getSubSchemaValidator(propertySchema)?.Check(null) === false
-		) {
-			delete object[key];
-		} else {
-			normalizeOptionalNulls(object[key], propertySchema);
-		}
-	}
-}
-
-function getValidator(schema: Tool["parameters"]): ReturnType<typeof Compile> {
-	const key = schema as object;
-	const cached = validatorCache.get(key);
+function getValidator(schema: Tool["parameters"]): CoercingValidator {
+	const cached = validatorCache.get(schema);
 	if (cached) {
 		return cached;
 	}
-	const validator = Compile(schema);
-	validatorCache.set(key, validator);
+	// A $ref that names nothing (a dangling definition in an MCP server's schema) rejects only values at its place,
+	// instead of making every call of the tool fail.
+	const validator = compile(schema, { formats, coerce: true, unresolvedRefs: "reject" });
+	validatorCache.set(schema, validator);
 	return validator;
 }
 
-function formatValidationPath(error: TLocalizedValidationError): string {
-	if (error.keyword === "required") {
-		const requiredProperties = (error.params as { requiredProperties?: string[] }).requiredProperties;
-		const requiredProperty = requiredProperties?.[0];
-		if (requiredProperty) {
-			const basePath = error.instancePath.replace(/^\//, "").replace(/\//g, ".");
-			return basePath ? `${basePath}.${requiredProperty}` : requiredProperty;
-		}
-	}
-	const path = error.instancePath.replace(/^\//, "").replace(/\//g, ".");
-	return path || "root";
+/** A pi-schema error path (a JSON Pointer) as the dotted path the model sees: `/edits/0/oldText` -> `edits.0.oldText`. */
+function formatValidationPath(pointer: string): string {
+	if (pointer === "") return "root";
+	return pointer
+		.slice(1)
+		.split("/")
+		.map((segment) => segment.replace(/~1/g, "/").replace(/~0/g, "~"))
+		.join(".");
 }
 
 /**
- * Finds a tool by name and validates the tool call arguments against its TypeBox schema
+ * Finds a tool by name and validates the tool call arguments against its JSON Schema
  * @param tools Array of tool definitions
  * @param toolCall The tool call from the LLM
  * @returns The validated arguments
@@ -325,8 +185,10 @@ export function validateToolCall(tools: Tool[], toolCall: ToolCall): any {
 }
 
 /**
- * Validates tool call arguments against the tool's TypeBox schema
- * @param tool The tool definition with TypeBox schema
+ * Validates tool call arguments against the tool's JSON Schema (any JSON Schema: pi-schema's builders, TypeBox, plain
+ * objects). The arguments are coerced first (pi-schema's `parse()`): models often send `"42"` for a number, a single
+ * value for an array, or `null` for an omitted optional property.
+ * @param tool The tool definition with its JSON Schema
  * @param toolCall The tool call from the LLM
  * @returns The validated (and potentially coerced) arguments
  * @throws Error with formatted message if validation fails
@@ -335,42 +197,15 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
 	if (toolCall.argumentsError) {
 		throw new Error(`Invalid arguments for tool "${toolCall.name}": ${toolCall.argumentsError}`);
 	}
-	const args = structuredClone(toolCall.arguments);
-	normalizeOptionalNulls(args, tool.parameters as JsonSchemaObject);
-	Value.Convert(tool.parameters, args);
-
-	const validator = getValidator(tool.parameters);
-	if (!Object.getOwnPropertySymbols(tool.parameters).includes(TYPEBOX_KIND)) {
-		const coerced = coerceWithJsonSchema(args, tool.parameters as JsonSchemaObject);
-		if (coerced !== args) {
-			if (typeof args === "object" && args !== null && typeof coerced === "object" && coerced !== null) {
-				for (const key of Object.keys(args)) {
-					delete args[key];
-				}
-				Object.assign(args, coerced);
-			} else {
-				return validator.Check(coerced) ? coerced : args;
-			}
-		}
+	// A copy, so tools that modify their arguments never modify the tool call in the transcript.
+	const result = getValidator(tool.parameters).parse(
+		coerceWithJsonSchema(structuredClone(toolCall.arguments), tool.parameters as JsonSchemaObject),
+	);
+	if (result.ok) {
+		return result.value;
 	}
 
-	if (validator.Check(args)) {
-		return args;
-	}
-
-	// TypeBox schemas normally rely on Value.Convert, which leaves serialized arrays and
-	// objects untouched (and does not descend into unions). Retry with the schema walker
-	// so a stringified "tasks": "[{...}]" still validates.
-	const coercedArgs = coerceWithJsonSchema(args, tool.parameters as JsonSchemaObject);
-	if (validator.Check(coercedArgs)) {
-		return coercedArgs;
-	}
-
-	const errors =
-		validator
-			.Errors(args)
-			.map((error) => `  - ${formatValidationPath(error)}: ${error.message}`)
-			.join("\n") || "Unknown validation error";
+	const errors = result.errors.map((error) => `  - ${formatValidationPath(error.path)}: ${error.message}`).join("\n");
 
 	const errorMessage = `Validation failed for tool "${toolCall.name}":\n${errors}\n\nReceived arguments:\n${JSON.stringify(toolCall.arguments, null, 2)}`;
 

@@ -89,6 +89,7 @@ export async function buildHasilan(root) {
 	for (const name of [
 		"pi-tui",
 		"pi-telemetry",
+		"pi-schema",
 		"pi-codemode",
 		"pi-mcp",
 		"pi-ai",

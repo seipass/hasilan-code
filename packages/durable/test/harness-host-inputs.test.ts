@@ -6,7 +6,6 @@ import {
 	fauxToolCall,
 	type Models,
 	type SimpleStreamOptions,
-	Type,
 } from "@hasilan-code/pi-ai";
 import {
 	type Conversation,
@@ -19,6 +18,7 @@ import {
 	MemoryStorage,
 	type Registry,
 } from "@hasilan-code/pi-durable";
+import { obj } from "@hasilan-code/pi-schema";
 import { describe, expect, it } from "vitest";
 import { allEntries, textOf } from "./chat-support.ts";
 import { context } from "./session-support.ts";
@@ -86,7 +86,7 @@ describe("HarnessOptions.models and settings as functions", () => {
 					defineTool({
 						name: "probe",
 						description: "Records api.models before and after the host swaps it",
-						parameters: Type.Object({}),
+						parameters: obj({}),
 						execute: async (_args, api) => {
 							seen.push(api.models);
 							current = second;

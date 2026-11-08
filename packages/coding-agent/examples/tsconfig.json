@@ -1,0 +1,180 @@
+// Type-checks the example extensions against the modules extensions see at run time (core/extensions/virtual-modules.ts):
+// "@hasilan-code/pi-ai" is the extension view, which adds TypeBox's Type, Static and TSchema to the compat entry (the
+// view imports "@hasilan-code/pi-ai/compat", so that path stays the package's own).
+// The other paths repeat the root tsconfig.json; keep them in sync.
+// Also the test that imports the subagent example: it type-checks only against the extension view.
+{
+	"extends": "../../../tsconfig.json",
+	"compilerOptions": {
+		"paths": {
+			"@hasilan-code/chord": [
+				"../../../packages/chord/src/index.ts"
+			],
+			"@hasilan-code/chord/context": [
+				"../../../packages/chord/src/context/index.ts"
+			],
+			"@hasilan-code/chord/delta": [
+				"../../../packages/chord/src/delta/index.ts"
+			],
+			"@hasilan-code/chord/next": [
+				"../../../packages/chord/src/next/index.ts"
+			],
+			"@hasilan-code/chord/next/plugins": [
+				"../../../packages/chord/src/next-node/plugins/index.ts"
+			],
+			"@hasilan-code/chord/next/plugins/runtime": [
+				"../../../packages/chord/src/next-node/plugins/runtime.ts"
+			],
+			"@test/contracts/*": [
+				"../../../packages/chord/test/next-node/fixtures/plugins/contracts/*.ts"
+			],
+			"@example/contracts/*": [
+				"../../../packages/chord/test/next/examples/35-plugins/plugins/contracts/*.ts"
+			],
+			"@example/weather/*": [
+				"../../../packages/chord/test/next/examples/36-plugin-failures/plugins/weather/*.ts"
+			],
+			"@example/prices/*": [
+				"../../../packages/chord/test/next/examples/36-plugin-failures/plugins/prices/*.ts"
+			],
+			"@example/shapes/*": [
+				"../../../packages/chord/test/next/examples/37-plugin-imports/plugins/shapes/*.ts"
+			],
+			"@example/shared/*": [
+				"../../../packages/chord/test/next/examples/38-watch-and-rollout/plugins/contracts/*.ts"
+			],
+			"@hasilan-code/chord/next/http": [
+				"../../../packages/chord/src/next-node/http/index.ts"
+			],
+			"@hasilan-code/chord/next/workers": [
+				"../../../packages/chord/src/next-node/workers/index.ts"
+			],
+			"@hasilan-code/chord/node": [
+				"../../../packages/chord/src/node.ts"
+			],
+			"@hasilan-code/chord/output": [
+				"../../../packages/chord/src/output.ts"
+			],
+			"@hasilan-code/chord/telemetry-sqlite": [
+				"../../../packages/chord/src/telemetry-sqlite/index.ts"
+			],
+			"@hasilan-code/chord/sqlite": [
+				"../../../packages/chord/src/sqlite/index.ts"
+			],
+			"@hasilan-code/chord/sqlite/node": [
+				"../../../packages/chord/src/sqlite/node.ts"
+			],
+			"@hasilan-code/chord/sqlite/cloudflare": [
+				"../../../packages/chord/src/sqlite/cloudflare.ts"
+			],
+			"@hasilan-code/pi-telemetry": [
+				"../../../packages/telemetry/src/index.ts"
+			],
+			"@hasilan-code/pi-telemetry/testing": [
+				"../../../packages/telemetry/src/testing/index.ts"
+			],
+			"@hasilan-code/pi-telemetry/render": [
+				"../../../packages/telemetry/src/render.ts"
+			],
+			"@hasilan-code/pi-codemode": [
+				"../../../packages/codemode/src/index.ts"
+			],
+			"@hasilan-code/pi-codemode/cloudflare": [
+				"../../../packages/codemode/src/cloudflare.ts"
+			],
+			"@hasilan-code/pi-codemode/declarations": [
+				"../../../packages/codemode/src/declarations.ts"
+			],
+			"@hasilan-code/pi-codemode/portable": [
+				"../../../packages/codemode/src/portable.ts"
+			],
+			"@hasilan-code/pi-codemode/source": [
+				"../../../packages/codemode/src/source.ts"
+			],
+			"@hasilan-code/pi-codemode/worker": [
+				"../../../packages/codemode/src/runtime/worker.ts"
+			],
+			"@hasilan-code/pi-schema": [
+				"../../../packages/schema/src/index.ts"
+			],
+			"@hasilan-code/pi-schema/formats": [
+				"../../../packages/schema/src/formats/index.ts"
+			],
+			"@hasilan-code/pi-mcp": [
+				"../../../packages/mcp/src/index.ts"
+			],
+			"@hasilan-code/pi-mcp/oauth": [
+				"../../../packages/mcp/src/oauth/index.ts"
+			],
+			"@hasilan-code/pi-mcp/testing": [
+				"../../../packages/mcp/src/testing/index.ts"
+			],
+			"@hasilan-code/pi-ai": [
+				"../../../packages/coding-agent/src/core/extensions/pi-ai-extension-view.ts"
+			],
+			"@hasilan-code/pi-ai/oauth": [
+				"../../../packages/ai/src/oauth.ts"
+			],
+			"@hasilan-code/pi-ai/*": [
+				"../../../packages/ai/src/*.ts",
+				"../../../packages/ai/src/providers/*.ts"
+			],
+			"@hasilan-code/pi-ai/dist/*": [
+				"../../../packages/ai/src/*"
+			],
+			"@hasilan-code/pi-durable": [
+				"../../../packages/durable/src/index.ts"
+			],
+			"@hasilan-code/pi-durable/testing": [
+				"../../../packages/durable/src/testing/index.ts"
+			],
+			"@hasilan-code/pi-durable/*": [
+				"../../../packages/durable/src/*.ts",
+				"../../../packages/durable/src/*/index.ts",
+				"../../../packages/durable/src/*"
+			],
+			"@hasilan-code/pi-env": [
+				"../../../packages/env/src/index.ts"
+			],
+			"@hasilan-code/pi-agent-core": [
+				"../../../packages/agent/src/index.ts"
+			],
+			"@hasilan-code/pi-coding-agent": [
+				"../../../packages/coding-agent/src/index.ts"
+			],
+			"@hasilan-code/pi-coding-agent/hooks": [
+				"../../../packages/coding-agent/src/core/hooks/index.ts"
+			],
+			"@hasilan-code/pi-coding-agent/*": [
+				"../../../packages/coding-agent/src/*"
+			],
+			"typebox": [
+				"../../../node_modules/typebox"
+			],
+			"@hasilan-code/pi-tui": [
+				"../../../packages/tui/src/index.ts"
+			],
+			"@hasilan-code/pi-tui/*": [
+				"../../../packages/tui/src/*"
+			],
+			"@hasilan-code/pi-agent-old": [
+				"../../../packages/agent-old/src/index.ts"
+			],
+			"@hasilan-code/pi-agent-old/*": [
+				"../../../packages/agent-old/src/*"
+			],
+			"@mariozechner/pi-ai": [
+				"../../../packages/coding-agent/src/core/extensions/pi-ai-extension-view.ts"
+			]
+		}
+	},
+	"include": [
+		"./extensions/**/*",
+		"../../*/src/**/*.d.ts",
+		"../test/suite/regressions/8261-subagent-project-trust.test.ts"
+	],
+	"exclude": [
+		"**/node_modules/**",
+		"./extensions/gondolin/**"
+	]
+}

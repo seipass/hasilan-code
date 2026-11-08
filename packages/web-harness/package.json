@@ -28,8 +28,8 @@
 		"registry": "https://registry.npmjs.org"
 	},
 	"hasilanCode": {
-		"piVersion": "1.4.0",
-		"piCommit": "4a080252f06caf63a525d7873c5d94d3c23887e0"
+		"piVersion": "1.5.0",
+		"piCommit": "f9a26365568127461c47a07a37dcb42c140a3ac5"
 	},
 	"engines": {
 		"node": ">=22.19.0"
@@ -44,9 +44,9 @@
 	},
 	"dependencies": {
 		"proper-lockfile": "4.1.2",
-		"@hasilan-code/pi-agent-core": "1.4.0",
-		"@hasilan-code/pi-ai": "1.4.0",
-		"@hasilan-code/pi-coding-agent": "1.4.0",
+		"@hasilan-code/pi-agent-core": "1.5.0",
+		"@hasilan-code/pi-ai": "1.5.0",
+		"@hasilan-code/pi-coding-agent": "1.5.0",
 		"@xterm/addon-serialize": "0.14.0",
 		"@xterm/headless": "6.0.0",
 		"music-metadata": "12.2.3",

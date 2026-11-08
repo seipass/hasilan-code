@@ -53,7 +53,10 @@ async function fetchCommandCodeModels(context: { allowNetwork: boolean; signal: 
 			name: entry.name ?? entry.id,
 			provider: "commandcode",
 			api,
-			baseUrl: api === "anthropic-messages" ? "https://api.commandcode.ai/provider" : "https://api.commandcode.ai/provider/v1",
+			baseUrl:
+				api === "anthropic-messages"
+					? "https://api.commandcode.ai/provider"
+					: "https://api.commandcode.ai/provider/v1",
 			reasoning: false,
 			input: ["text"],
 			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },

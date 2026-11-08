@@ -282,8 +282,8 @@ Hasilan Code は [Pi](https://github.com/earendil-works/pi) を基盤にした�
 | --- | --- |
 | 独自リポジトリ | [`seipass/hasilan-code`](https://github.com/seipass/hasilan-code) |
 | 上流リポジトリ | [`earendil-works/pi`](https://github.com/earendil-works/pi) |
-| 取り込み済みのリリース | [Pi v1.4.0](https://github.com/earendil-works/pi/releases/tag/v1.4.0) |
-| 上流のコミット | `4a080252f06caf63a525d7873c5d94d3c23887e0` |
+| 取り込み済みのリリース | [Pi v1.5.0](https://github.com/earendil-works/pi/releases/tag/v1.5.0) |
+| 上流のコミット | `f9a26365568127461c47a07a37dcb42c140a3ac5` |
 
 Pi由来の共有パッケージは独自の`@hasilan-code/*`名前空間で管理します。たとえば`@hasilan-code/pi-ai`・`@hasilan-code/pi-agent-core`・`@hasilan-code/pi-coding-agent`です。SDKを利用するコードや拡張機能のimportも、この名前へ変更してください。旧名前空間への互換エイリアスは用意しません。第三者ライブラリの名前と著作権表示は維持します。
 

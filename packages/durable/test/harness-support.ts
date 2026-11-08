@@ -7,7 +7,7 @@ import type {
 	ToolResultMessage,
 	UserMessage,
 } from "@hasilan-code/pi-ai";
-import { createModels, Type } from "@hasilan-code/pi-ai";
+import { createModels } from "@hasilan-code/pi-ai";
 import {
 	type AnyTask,
 	createRegistry,
@@ -23,10 +23,11 @@ import {
 	section,
 	type ToolRegistration,
 } from "@hasilan-code/pi-durable";
+import { obj } from "@hasilan-code/pi-schema";
 import { context } from "./session-support.ts";
 
 export function tool(name: string, description = `${name} tool`): ToolRegistration {
-	return defineTool({ name, description, parameters: Type.Object({}), execute: async () => ({ output: [] }) });
+	return defineTool({ name, description, parameters: obj({}), execute: async () => ({ output: [] }) });
 }
 
 /** Open a Harness with a fresh registry holding the named tools. */
@@ -40,7 +41,11 @@ export async function openHarness(
 		registry.install(defineExtension({ name: "tools", tools: toolNames.map((name) => tool(name)) }));
 	const harness = await Harness.open(
 		storage,
-		{ models: createModels(), registry, ...(options.onReport === undefined ? {} : { onReport: options.onReport }) },
+		{
+			models: createModels(),
+			registry,
+			...(options.onReport === undefined ? {} : { onReport: (report) => options.onReport?.(report.error) }),
+		},
 		context,
 	);
 	return { harness, registry };
