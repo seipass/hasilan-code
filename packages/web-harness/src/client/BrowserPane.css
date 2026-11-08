@@ -1,4 +1,13 @@
 .browser-pane { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.browser-history { padding: 12px; max-height: 45vh; overflow: auto; border-bottom: 1px solid var(--border-subtle); background: var(--surface-panel); }
+.browser-history header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.browser-history header strong { flex: 1; }
+.browser-history > input { width: 100%; }
+.browser-history ul { list-style: none; padding: 0; margin: 8px 0 0; }
+.browser-history li { display: flex; align-items: center; gap: 8px; }
+.browser-history li > button:first-child { display: grid; flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; padding: 8px; }
+.browser-history strong, .browser-history small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-history small, .browser-history time { color: var(--on-surface-muted); font-size: var(--text-xs); }
 .browser-toolbar, .browser-annotation-tools { display: flex; flex: none; align-items: center; gap: 5px; padding: 6px; border-bottom: 1px solid var(--border-subtle); }
 .browser-toolbar button, .browser-annotation-tools button { flex: none; padding: 5px 8px; font-size: var(--text-sm); }
 .browser-toolbar input { flex: 1; min-width: 0; padding: 6px 8px; font-size: var(--text-sm); }

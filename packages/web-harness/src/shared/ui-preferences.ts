@@ -98,6 +98,7 @@ export function uiPreferenceLimit(key: string): number | undefined {
 	if (key === "hasilan-widgets-v1") return 500_000;
 	if (["pi-web-model-selection", "pi-web-keybindings", "pi-web-expanded-workspaces"].includes(key)) return 64_000;
 	if (key === "pi-web-music" || key === "pi-web-session-order") return 500_000;
+	if (key === "pi-web-browser-history") return 500_000;
 	if (
 		[
 			"pi-web-selected-session",
@@ -128,6 +129,21 @@ export function validUiPreference(key: string, value: unknown): value is string 
 	if (key.startsWith("pi-web-draft:") || key === "pi-web-selected-session" || key === "pi-web-workspace") return true;
 	try {
 		const parsed: unknown = JSON.parse(value);
+		if (key === "pi-web-browser-history")
+			return Check(
+				Type.Array(
+					Type.Object(
+						{
+							url: Type.String({ maxLength: 8192 }),
+							title: Type.String({ maxLength: 512 }),
+							visitedAt: Type.Number(),
+						},
+						{ additionalProperties: false },
+					),
+					{ maxItems: 200 },
+				),
+				parsed,
+			);
 		if (key === "pi-web-ui-font")
 			return typeof parsed === "string" && parsed.length <= 200 && !/[\u0000-\u001f\u007f]/.test(parsed);
 		if (
