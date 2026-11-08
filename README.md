@@ -271,6 +271,8 @@ Web 側のコードだけを変更した場合は、`npm run build --workspace=h
 
 開発時の規則は [`AGENTS.md`](AGENTS.md)、貢献に関する案内は [`CONTRIBUTING.md`](CONTRIBUTING.md) を参照してください。実際の AI プロバイダーを呼び出すテストには、認証や利用料金が必要な場合があります。
 
+ローカルで画面の認証を省略して開発する場合は、[ローカル開発モード](docs/local-development.md)を参照してください。
+
 ## メンテナー向け文書
 
 - [リリースとnpm公開の手順](docs/release.md)
