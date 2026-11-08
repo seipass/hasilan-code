@@ -104,18 +104,26 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 	block: TurnActivity;
 	onFile: MessageProps["onFile"];
 	expansions: MessageProps["expansions"];
-	opened: Set<string>;
+	opened: Map<string, { active: boolean; open: boolean }>;
 }) {
-	const [open, setOpen] = useState(() => opened.has(block.key));
+	const [, setVersion] = useState(0);
+	let state = opened.get(block.key);
+	if (!state || state.active !== block.active) {
+		state = { active: block.active, open: block.active };
+		opened.set(block.key, state);
+	}
+	const open = state.open;
 	const label = turnActivityLabel(block);
 	return <div className="virtual-message" data-message-id={block.key}>
 		{block.items.length === 0 ? <p className="turn-activity-waiting" role="status"><span className="turn-activity-label">{label}</span></p> :
 			<details className="turn-activity" data-active={block.active} open={open} onToggle={(event) => {
 				if (event.target !== event.currentTarget) return;
 				const next = event.currentTarget.open;
-				if (next) opened.add(block.key);
-				else opened.delete(block.key);
-				setOpen(next);
+				const current = opened.get(block.key);
+				if (current && current.open !== next) {
+					current.open = next;
+					setVersion((version) => version + 1);
+				}
 			}}>
 				<summary><span className="turn-activity-label" role={block.active ? "status" : undefined}>{label}</span></summary>
 				{open && <div className="turn-activity-items">{block.items.map((row) =>
@@ -144,7 +152,7 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const rowsStart = useRef<HTMLDivElement>(null);
 	const heights = useRef(new Map<string, number>());
 	const expansions = useRef(new Map<string, boolean[]>());
-	const openedActivity = useRef(new Set<string>());
+	const openedActivity = useRef(new Map<string, { active: boolean; open: boolean }>());
 	const [activityBeta] = usePreferenceState("pi-web-beta-turn-activity", false);
 	const anchor = useRef<{ id: string; offset: number } | undefined>(undefined);
 	const following = useRef(true);
