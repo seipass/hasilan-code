@@ -43,7 +43,15 @@ afterAll(async () => {
 });
 
 async function showTeam(page: Page, width: number) {
-	const css = ["styles.css", "Motion.css", "MotionSwap.css", "TeamPane.css"]
+	const css = [
+		"styles.css",
+		"Motion.css",
+		"MotionSwap.css",
+		"TeamPane.css",
+		"TeamGraphAppearance.css",
+		"CleanAppearance.css",
+		"NoMotion.css",
+	]
 		.map((name) => readFileSync(fileURLToPath(new URL(`../src/client/${name}`, import.meta.url)), "utf8"))
 		.join("\n");
 	await page.setContent(
@@ -124,11 +132,34 @@ it("keeps the detail content width when the panel starts scrolling", async () =>
 			);
 		});
 		await expect
-			.poll(() => page.locator(".team-focus").evaluate((element) => element.scrollHeight > element.clientHeight))
+			.poll(() => page.locator(".team-inspector").evaluate((element) => element.scrollHeight > element.clientHeight))
 			.toBe(true);
 		await page.waitForTimeout(350);
 		const width = await page.locator(".team-focus > .motion-size").evaluate((element) => element.clientWidth);
 		expect(Math.abs(width - initial)).toBeLessThanOrEqual(1);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+it("groups the overview, controls and selected agent in a sidebar beside the graph", async () => {
+	const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+	try {
+		await showTeam(page, 1100);
+		const inspector = page.getByRole("complementary", { name: "チームの概要と担当の詳細" });
+		expect(await inspector.locator(".team-overview").count()).toBe(1);
+		expect(await inspector.locator(".team-graph-controls").count()).toBe(1);
+		expect(await inspector.locator(".team-focus").count()).toBe(1);
+		const graphBounds = await page.locator(".team-graph-viewport").boundingBox();
+		const inspectorBounds = await inspector.boundingBox();
+		expect(graphBounds!.x + graphBounds!.width).toBeLessThanOrEqual(inspectorBounds!.x + 1);
+		await page.getByRole("button", { name: "担当の詳細を閉じる" }).click();
+		expect(await inspector.locator(".team-focus").count()).toBe(0);
+		await inspector.getByRole("button", { name: "親AIの詳細", exact: true }).click();
+		expect(await inspector.locator(".team-focus").count()).toBe(1);
+		await page.getByRole("button", { name: "一覧", exact: true }).click();
+		expect(await inspector.locator(".team-overview").count()).toBe(1);
+		expect(await inspector.locator(".team-focus").count()).toBe(1);
 	} finally {
 		await page.close();
 	}

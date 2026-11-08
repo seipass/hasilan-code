@@ -58,12 +58,13 @@ function elapsed(run: Run, now: number): string | undefined {
 	return minutes < 1 ? "1分未満" : minutes < 60 ? `${minutes}分` : `${Math.floor(minutes / 60)}時間${minutes % 60}分`;
 }
 
-function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visible }: {
+function TeamGraph({ agents, snapshot, focusedId, focus, overview, inspector, swarm, visible }: {
 	agents: TeamAgent[];
 	snapshot: TeamSnapshot;
 	focusedId: string;
 	focus: (id: string) => void;
 	overview: ReactNode;
+	inspector: ReactNode;
 	swarm: SessionSummary["swarm"];
 	visible: boolean;
 }) {
@@ -177,9 +178,10 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 		if (!gesture.current.pointers.size) setDragging(false);
 	}
 	return <section className="team-graph" aria-label="エージェントの親子関係">
+		<aside className="team-inspector" aria-label="チームの概要と担当の詳細">
 		<div className="team-graph-top">
 			{overview}
-			<div className="team-graph-controls">
+			<div className="team-graph-controls"><h3 className="team-section-label">表示操作</h3>
 		<div className="team-graph-toolbar" role="group" aria-label="関係図の表示">
 			<div className="team-graph-zoom"><button type="button" aria-label="関係図を縮小" disabled={zoom <= 0.01} onClick={() => zoomTo(zoom / 1.2)}><Icon name="minus" size="inline" /></button><output aria-label="関係図の拡大率">{Math.round(zoom * 100)}%</output><button type="button" aria-label="関係図を拡大" disabled={zoom >= 2} onClick={() => zoomTo(zoom * 1.2)}><Icon name="plus" size="inline" /></button></div>
 			<button type="button" onClick={() => zoomTo(1)}>等倍</button>
@@ -189,6 +191,8 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, swarm, visibl
 				<div className="team-graph-legend" aria-label="関係図の凡例"><span><i className="team-graph-line" />親 → 子</span><span><i className="team-graph-line is-waiting" />結果を待つ相手 →</span><span><i className="team-graph-selection" />選択中</span></div>
 			</div>
 		</div>
+		{inspector}
+		</aside>
 		<div ref={viewport} className={`team-graph-viewport${dragging ? " is-dragging" : ""}`} tabIndex={0} role="region" aria-label="チーム関係図。ドラッグして移動、2本指のピンチまたはホイールで拡大縮小、Tab・Enterで担当を選択。"
 			onPointerDownCapture={beginGesture} onPointerMove={moveGesture} onPointerUp={endGesture} onPointerCancel={endGesture} onLostPointerCapture={(event) => { if (event.target === event.currentTarget) endGesture(event); }}
 			onClickCapture={(event) => {
@@ -321,15 +325,16 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	}
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
 	const summary = [`${managed ? "担当者" : "子の担当"} ${managed ? specialists.length : workers.length}人`, ...(managed && helpers > 0 ? [`補助 ${helpers}人`] : []), `作業中 ${counts.running}`, `結果待ち ${counts.waiting}`, `開始待ち ${counts.queued}`, managed ? `指示待ち ${counts.ready}` : `完了 ${counts.completed}`, ...(counts.cancelled > 0 ? [`中止 ${counts.cancelled}`] : []), ...(counts.stopping > 0 ? [`停止中 ${counts.stopping}`] : [])].join(" · ");
-	const overview = <header className="team-overview" data-state={rootState}><MotionSize><MotionSwap identity={situation}><h2 role="status">{situation}</h2></MotionSwap><MotionSwap identity={summary}><p>{summary}</p></MotionSwap><Presence show={problems > 0}><strong className="team-attention"><MotionLabel value={`確認が必要な作業 ${problems}件`} /></strong></Presence><UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></MotionSize></header>;
+	const overview = <header className="team-overview" data-state={rootState}><MotionSize><MotionSwap identity={situation}><h2 role="status">{situation}</h2></MotionSwap><MotionSwap identity={summary}><p className="sr-only">{summary}</p></MotionSwap><dl className="team-summary-metrics"><div><dt>エージェント</dt><dd>{agents.length}</dd></div><div><dt>作業中</dt><dd>{agents.filter((agent) => status(agent, swarm, managed ? roots[0]?.agentId : undefined) === "running").length}</dd></div><div><dt>完了</dt><dd>{agents.filter((agent) => status(agent, swarm, managed ? roots[0]?.agentId : undefined) === "completed").length}</dd></div></dl><Presence show={problems > 0}><strong className="team-attention"><MotionLabel value={`確認が必要な作業 ${problems}件`} /></strong></Presence><UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></MotionSize></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
-				{!mobile && <button type="button" className="team-focus-close" aria-label="担当の詳細を閉じる" onClick={() => setDesktopDetailsOpen(false)}><Icon name="close" size="inline" /></button>}
+				<header className="team-agent-heading"><div><span className="team-section-label">選択した担当</span><h3>{label(focused)}</h3></div>{!mobile && <button type="button" className="team-focus-close" aria-label="担当の詳細を閉じる" onClick={() => setDesktopDetailsOpen(false)}><Icon name="close" size="inline" /></button>}</header>
 				<MotionSize><MotionSwap identity={detailId} enabled={visible}><div key={detailId} className="team-focus-content">
 				<Presence show={!!focused.responsibility}><section className="team-responsibility"><h4>担当範囲</h4><MotionSwap identity={focused.responsibility ?? ""}><p>{focused.responsibility}</p></MotionSwap></section></Presence>
 				{run ? <RunDetail run={run} snapshot={snapshot} focus={focusAgent} onFile={onFile} now={now} onOpen={() => { setDetailsOpen(false); onSelect(focused.sessionId); }} /> : <p className="team-inline-note">まだ作業はありません。<button type="button" className="text-link" onClick={() => { setDetailsOpen(false); onSelect(focused.sessionId); }}>会話を開く <Icon name="external" size="inline" /></button></p>}
 				<Presence show={!!focused.currentRun}><div className="team-focus-actions"><button className="danger" type="button" onClick={() => onStop(focused.sessionId)}>{focused.parentAgentId ? "この担当と子を停止" : "チームを停止"}</button></div></Presence>
 				</div></MotionSwap></MotionSize>
 			</section>;
+	const inspector = !mobile && <><Presence show={!!details && desktopDetailsOpen}>{details}</Presence>{!!focused && !desktopDetailsOpen && <button type="button" className="team-focus-reopen" onClick={() => setDesktopDetailsOpen(true)}>{label(focused)}の詳細</button>}</>;
 	return <section className="team-pane" aria-label="チームの進行状況">
 		<Presence show={!snapshot}><div className="team-empty"><h2>チームの状態を読み込んでいます…</h2></div></Presence>
 		<Presence show={!!snapshot && agents.length === 0}><div className="team-empty"><h2>この会話のチームはまだありません</h2></div></Presence>
@@ -339,19 +344,19 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 					<button type="button" aria-pressed={graphView === "list"} onClick={() => setGraphView("list")}>一覧</button>
 				</div>
 				{graphView === "graph"
-					? <MotionSwap identity={roots[0]?.teamId ?? "none"} className="team-graph-swap" enabled={visible}>{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} swarm={swarm} visible={visible} />}</MotionSwap>
-					: <div className="team-list">{overview}{agents.map((agent) => {
+					? <MotionSwap identity={roots[0]?.teamId ?? "none"} className="team-graph-swap" enabled={visible}>{snapshot && <TeamGraph key={roots[0]?.teamId} agents={agents} snapshot={snapshot} focusedId={focused?.agentId ?? ""} focus={focusAgent} overview={overview} inspector={inspector} swarm={swarm} visible={visible} />}</MotionSwap>
+					: <div className="team-list-layout"><div className="team-list">{mobile && overview}{agents.map((agent) => {
 						const state = status(agent, swarm, managed ? roots[0]?.agentId : undefined);
 						const run = agent.currentRun ?? agent.latestRun;
 						return <button key={agent.agentId} type="button" className="team-list-row" aria-pressed={focused?.agentId === agent.agentId} onClick={() => focusAgent(agent.agentId)}>
 							<span className="team-list-main"><strong>{label(agent)}</strong><span className={`team-map-state status-${state}`}>{AGENT_LABELS[state]}</span></span>
 							<span className="team-list-task">{run ? taskText(run) : "まだ作業はありません"}</span>
 						</button>;
-					})}</div>}
+					})}</div>{!mobile && <aside className="team-inspector" aria-label="チームの概要と担当の詳細"><div className="team-graph-top">{overview}</div>{inspector}</aside>}</div>}
 			</div></Presence>
 			{mobile ? <>
 				<Presence show={!!focused}><button type="button" className="team-focus-trigger" aria-haspopup="dialog" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>{focused && label(focused)}の詳細</button></Presence>
 				<MobileSheet open={detailsOpen && visible && agents.length > 0} side="bottom" title="担当の詳細" onClose={() => setDetailsOpen(false)}>{details}</MobileSheet>
-			</> : <><Presence show={!!details && desktopDetailsOpen}>{details}</Presence>{!!focused && !desktopDetailsOpen && <button type="button" className="team-focus-reopen" onClick={() => setDesktopDetailsOpen(true)}>{label(focused)}の詳細</button>}</>}
+			</> : null}
 	</section>;
 }
