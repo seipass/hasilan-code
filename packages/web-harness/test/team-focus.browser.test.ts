@@ -142,13 +142,17 @@ it("keeps the detail content width when the panel starts scrolling", async () =>
 	}
 }, 30000);
 
-it("groups the overview, controls and selected agent in a sidebar beside the graph", async () => {
+it("groups status and the selected agent in a sidebar and keeps display controls collapsed on the canvas", async () => {
 	const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 	try {
 		await showTeam(page, 1100);
 		const inspector = page.getByRole("complementary", { name: "チームの概要と担当の詳細" });
 		expect(await inspector.locator(".team-overview").count()).toBe(1);
-		expect(await inspector.locator(".team-graph-controls").count()).toBe(1);
+		expect(await inspector.locator(".team-graph-controls").count()).toBe(0);
+		expect(await page.getByRole("button", { name: "関係図を拡大", exact: true }).isVisible()).toBe(false);
+		await page.locator(".team-graph-controls > summary").click();
+		expect(await page.getByRole("button", { name: "関係図を拡大", exact: true }).isVisible()).toBe(true);
+		await page.locator(".team-graph-controls > summary").click();
 		expect(await inspector.locator(".team-focus").count()).toBe(1);
 		const graphBounds = await page.locator(".team-graph-viewport").boundingBox();
 		const inspectorBounds = await inspector.boundingBox();

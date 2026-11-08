@@ -181,15 +181,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, inspector, sw
 		<aside className="team-inspector" aria-label="チームの概要と担当の詳細">
 		<div className="team-graph-top">
 			{overview}
-			<div className="team-graph-controls"><h3 className="team-section-label">表示操作</h3>
-		<div className="team-graph-toolbar" role="group" aria-label="関係図の表示">
-			<div className="team-graph-zoom"><button type="button" aria-label="関係図を縮小" disabled={zoom <= 0.01} onClick={() => zoomTo(zoom / 1.2)}><Icon name="minus" size="inline" /></button><output aria-label="関係図の拡大率">{Math.round(zoom * 100)}%</output><button type="button" aria-label="関係図を拡大" disabled={zoom >= 2} onClick={() => zoomTo(zoom * 1.2)}><Icon name="plus" size="inline" /></button></div>
-			<button type="button" onClick={() => zoomTo(1)}>等倍</button>
-			<button type="button" onClick={() => fitGraph()}>全体表示</button>
-			<button type="button" disabled={!focused} onClick={() => { if (focused) centerNode(focused.x, focused.y); }}>選択へ</button>
-		</div>
-				<div className="team-graph-legend" aria-label="関係図の凡例"><span><i className="team-graph-line" />親 → 子</span><span><i className="team-graph-line is-waiting" />結果を待つ相手 →</span><span><i className="team-graph-selection" />選択中</span></div>
-			</div>
+
 		</div>
 		{inspector}
 		</aside>
@@ -232,6 +224,15 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, inspector, sw
 					}}</MotionItems>
 				</div>
 		</div>
+			<details className="team-graph-controls"><summary aria-label="関係図の表示操作"><Icon name="gauge" size="inline" /><span>{Math.round(zoom * 100)}%</span><Icon name="chevronDown" size="inline" /></summary><div className="team-graph-controls-body">
+		<div className="team-graph-toolbar" role="group" aria-label="関係図の表示">
+			<div className="team-graph-zoom"><button type="button" aria-label="関係図を縮小" disabled={zoom <= 0.01} onClick={() => zoomTo(zoom / 1.2)}><Icon name="minus" size="inline" /></button><output aria-label="関係図の拡大率">{Math.round(zoom * 100)}%</output><button type="button" aria-label="関係図を拡大" disabled={zoom >= 2} onClick={() => zoomTo(zoom * 1.2)}><Icon name="plus" size="inline" /></button></div>
+			<button type="button" onClick={() => zoomTo(1)}>等倍</button>
+			<button type="button" onClick={() => fitGraph()}>全体表示</button>
+			<button type="button" disabled={!focused} onClick={() => { if (focused) centerNode(focused.x, focused.y); }}>選択へ</button>
+		</div>
+				<div className="team-graph-legend" aria-label="関係図の凡例"><span><i className="team-graph-line" />親 → 子</span><span><i className="team-graph-line is-waiting" />結果を待つ相手 →</span><span><i className="team-graph-selection" />選択中</span></div>
+			</div></details>
 	</section>;
 }
 
