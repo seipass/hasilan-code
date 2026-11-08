@@ -10,6 +10,7 @@ import { layoutTeamGraph, selectedTeamAgents, teamEdgePath, TEAM_NODE_HEIGHT, TE
 import type { Run, RunStatus, SessionSummary, TeamAgent, TeamSnapshot } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import "./TeamPane.css";
+import "./TeamGraphAppearance.css";
 
 export const RUN_LABELS: Record<RunStatus, string> = {
 	queued: "開始待ち", running: "作業中", waiting: "結果待ち", cancelling: "停止中",
@@ -320,7 +321,7 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	}
 	const sessionUsage = new Map(sessions.map((session) => [session.sessionId, session.usage]));
 	const summary = [`${managed ? "担当者" : "子の担当"} ${managed ? specialists.length : workers.length}人`, ...(managed && helpers > 0 ? [`補助 ${helpers}人`] : []), `作業中 ${counts.running}`, `結果待ち ${counts.waiting}`, `開始待ち ${counts.queued}`, managed ? `指示待ち ${counts.ready}` : `完了 ${counts.completed}`, ...(counts.cancelled > 0 ? [`中止 ${counts.cancelled}`] : []), ...(counts.stopping > 0 ? [`停止中 ${counts.stopping}`] : [])].join(" · ");
-	const overview = <header className="team-overview"><MotionSize><MotionSwap identity={situation}><h2 role="status">{situation}</h2></MotionSwap><MotionSwap identity={summary}><p>{summary}</p></MotionSwap><Presence show={problems > 0}><strong className="team-attention"><MotionLabel value={`確認が必要な作業 ${problems}件`} /></strong></Presence><UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></MotionSize></header>;
+	const overview = <header className="team-overview" data-state={rootState}><MotionSize><MotionSwap identity={situation}><h2 role="status">{situation}</h2></MotionSwap><MotionSwap identity={summary}><p>{summary}</p></MotionSwap><Presence show={problems > 0}><strong className="team-attention"><MotionLabel value={`確認が必要な作業 ${problems}件`} /></strong></Presence><UsagePanel title="チームの使用量" groups={agents.map((agent) => ({ id: agent.agentId, label: label(agent), usage: sessionUsage.get(agent.sessionId) }))} /></MotionSize></header>;
 	const details = focused && snapshot && <section className="team-focus" aria-label={`${label(focused)}の詳細`}>
 				{!mobile && <button type="button" className="team-focus-close" aria-label="担当の詳細を閉じる" onClick={() => setDesktopDetailsOpen(false)}><Icon name="close" size="inline" /></button>}
 				<MotionSize><MotionSwap identity={detailId} enabled={visible}><div key={detailId} className="team-focus-content">

@@ -1,0 +1,128 @@
+/* A single quiet header and canvas, with semantic color reserved for status dots. */
+.team-pane .team-graph {
+	display: flex;
+	flex-direction: column;
+}
+.team-pane .team-graph-top {
+	position: relative;
+	inset: auto;
+	display: block;
+	flex: none;
+	padding: 16px 20px 10px;
+	border-bottom: 1px solid var(--border-subtle);
+	background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+}
+.team-pane .team-graph-top > .team-overview {
+	max-width: none;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+.team-pane .team-overview h2 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 6px;
+	font-size: 14px;
+	line-height: 20px;
+	font-weight: 600;
+	letter-spacing: -.01em;
+}
+.team-pane .team-overview h2::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--on-surface-muted); }
+.team-pane .team-overview[data-state="completed"] h2::before { background: var(--success); }
+.team-pane .team-overview[data-state="running"] h2::before { background: var(--secondary); }
+.team-pane .team-overview:is([data-state="waiting"], [data-state="blocked"], [data-state="paused"]) h2::before { background: var(--warning); }
+.team-pane .team-overview p { color: var(--on-surface-muted); font-size: 11px; line-height: 18px; }
+.team-pane .team-graph-top .usage-panel { margin-top: 8px; }
+.team-pane .team-graph-controls {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	max-width: none;
+	margin: 12px 0 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+.team-pane .team-graph-toolbar { order: 1; gap: 2px; padding: 0; }
+.team-pane .team-graph-toolbar button { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--on-surface-secondary); font-size: 11px; }
+.team-pane .team-graph-toolbar button:hover:not(:disabled) { background: var(--surface-hover); color: var(--on-surface); }
+.team-pane .team-graph-zoom { gap: 0; margin-right: 8px; padding-right: 8px; border-right: 1px solid var(--border); }
+.team-pane .team-graph-zoom button { min-width: 24px; }
+.team-pane .team-graph-zoom output { min-width: 38px; font-size: 11px; }
+.team-pane .team-graph-legend { gap: 12px; padding: 0; font-size: 10px; }
+.team-pane .team-graph-line { width: 14px; border-top-width: 1px; }
+.team-pane .team-graph-selection { width: 7px; height: 7px; border-width: 1px; border-color: var(--on-surface-muted); background: transparent; border-radius: 2px; }
+.team-pane .team-graph-viewport {
+	position: relative;
+	inset: auto;
+	flex: 1;
+	height: auto;
+	min-height: 0;
+	background-image: radial-gradient(circle, color-mix(in srgb, var(--on-surface-muted) 15%, transparent) .7px, transparent .8px);
+	background-size: 24px 24px;
+}
+.team-pane .team-graph-edge { stroke: color-mix(in srgb, var(--on-surface-muted) 55%, transparent); stroke-width: 1.2; }
+.team-pane .team-graph-edge.is-waiting { stroke: var(--warning); stroke-width: 1.4; }
+.team-pane .team-graph-node {
+	grid-template-rows: 16px 22px minmax(0, 1fr) 20px;
+	gap: 6px;
+	padding: 14px 16px;
+	border: 1px solid var(--border-strong);
+	border-radius: 10px;
+	background: var(--surface-panel);
+	box-shadow: 0 2px 8px #0002;
+}
+.team-pane .team-graph-node.is-root { border-top-width: 1px; border-radius: 10px; background: var(--surface-panel); }
+.team-pane .team-graph-node.status-queued { border-top-style: solid; }
+.team-pane .team-graph-node.is-selected { border-color: color-mix(in srgb, var(--on-surface) 48%, transparent); background: var(--surface-raised); box-shadow: 0 4px 16px #0003; }
+.team-pane .team-graph-node:hover:not(:disabled), .team-pane .team-graph-node.is-selected:hover:not(:disabled) { border-color: var(--on-surface-muted); background: var(--surface-raised); }
+.team-pane .team-graph-node:focus-visible { outline: 1px solid var(--on-surface-muted); outline-offset: 3px; }
+.team-pane .team-graph-node-role, .team-pane .team-graph-node.is-root .team-graph-node-role { color: var(--on-surface-muted); font-size: 10px; font-weight: 400; }
+.team-pane .team-graph-node-name { color: var(--on-surface); font-size: 14px; line-height: 22px; letter-spacing: -.01em; }
+.team-pane .team-graph-node-task { color: var(--on-surface-secondary); font-size: 12px; line-height: 18px; font-weight: 400; }
+.team-pane .team-graph-node-footer { border-top: 1px solid var(--border-subtle); padding-top: 7px; }
+.team-pane .team-map-state[class*="status-"] {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--on-surface-secondary);
+	font-size: 11px;
+	line-height: 16px;
+	font-weight: 400;
+}
+.team-pane .team-map-state::before { content: ""; width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--on-surface-muted); }
+.team-pane .team-map-state.status-completed::before { background: var(--success); }
+.team-pane .team-map-state:is(.status-running, .status-coordinating)::before { background: var(--secondary); }
+.team-pane .team-map-state:is(.status-waiting, .status-queued, .status-paused, .status-blocked, .status-cancelling, .status-cancelled, .status-interrupted)::before { background: var(--warning); }
+.team-pane .team-map-state.status-failed::before { background: var(--danger); }
+.team-pane > .team-focus { width: 100%; height: clamp(180px, 32%, 260px); max-height: none; right: 0; bottom: 0; padding: 18px 20px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: var(--surface-panel); box-shadow: none; }
+.team-pane:has(> .team-focus) :is(.team-graph-swap, .team-list) { bottom: clamp(180px, 32%, 260px); }
+.team-pane .team-focus-close { margin: -6px -6px 0 8px; width: 24px; height: 24px; background: transparent; color: var(--on-surface-muted); }
+.team-pane .team-task-heading { margin-top: 18px; }
+.team-pane .team-task-heading h4 { margin: 0; color: var(--on-surface-muted); font-size: 11px; font-weight: 400; }
+.team-pane .team-task-heading .text-link { color: var(--on-surface-secondary); font-size: 11px; text-decoration: none; }
+.team-pane .team-run-task { margin: 7px 0 0; color: var(--on-surface); font-size: 13px; line-height: 19px; }
+.team-pane .team-run-result { padding: 12px 0 0; margin-top: 14px; border-top: 1px solid var(--border); border-radius: 0; background: transparent; color: var(--on-surface-secondary); font-size: 12px; line-height: 18px; }
+.team-pane .team-run-result > strong { color: var(--on-surface-muted); font-size: 11px; font-weight: 400; }
+.team-pane .team-run-result summary { color: var(--on-surface-muted); font-size: 11px; }
+.team-pane .team-run-meta { gap: 12px; font-size: 11px; color: var(--on-surface-muted); }
+.team-pane .team-view-switch { top: 6px; left: 12px; padding: 3px; gap: 2px; background: transparent; }
+.team-pane .team-view-switch button { min-height: 26px; padding: 4px 10px; font-size: 11px; border-radius: 5px; }
+.team-pane .team-list-row { padding: 12px 14px; background: var(--surface-panel); }
+.team-pane .team-list-row[aria-pressed="true"] { border-color: var(--border-strong); background: var(--surface-raised); }
+.team-pane .team-list > .team-overview { padding: 14px; border-color: transparent; background: transparent; }
+@container (max-width: 540px) {
+	.team-pane .team-graph-top { padding: 12px 14px 8px; }
+	.team-pane .team-graph-controls { gap: 8px; }
+	.team-pane .team-graph-legend { width: 100%; }
+}
+@media (max-width: 900px) {
+	.team-pane .team-graph-controls { display: none; }
+}
