@@ -32,9 +32,9 @@
 
 ### 必要なもの
 
-- Node.js 22.19.0 以上
 - AI モデルの認証または API キー（利用開始時に設定）
-- ソースからビルドする場合は Git。Linux では端末機能に必要な `node-pty` のビルドに C++ コンパイラー（g++）、make、Python が必要です。
+- Web 版には Node.js 22.19.0 以上。Windows デスクトップ版には不要です。
+- ソースからビルドする場合は Git。Linux で `node-pty` をビルドする場合は C++ コンパイラー（g++）、make、Python も必要です。
 
 ### ビルド済み版を使う
 
@@ -46,24 +46,6 @@
 
 配布版に Git は不要です。Linux の端末機能には別途ビルド環境が必要です。
 
-### ソースから起動する（開発者向け）
-
-リポジトリを取得し、ターミナルで次のコマンドを順番に実行します。
-
-```sh
-git clone https://github.com/seipass/hasilan-code.git
-cd hasilan-code
-npm install --ignore-scripts
-npm rebuild node-pty --ignore-scripts=false --foreground-scripts
-npm run build:hasilan
-node packages/web-harness/bin/hasilan-code.mjs setup
-npm run web
-```
-
-起動したら、ターミナルに表示される認証付き URL をブラウザーで開いてください。ブラウザーは自動で開きません。既定の待ち受け先は `127.0.0.1:3080` です。
-
-表示される認証URLは共有しないでください。
-
 ### 最初の会話
 
 1. 設定画面の「プロバイダー」で、使う AI モデルの認証を設定します。
@@ -72,11 +54,13 @@ npm run web
 
 送信は **Enter**、改行は **Shift + Enter** です。実行中は **Enter** で実行中の指示、**Ctrl + Enter**（macOS では **⌘ + Enter**）で完了後の指示を送ります。
 
-別の作業フォルダーを使う場合は、起動時に `--cwd` で指定します。
+Web 版で別の作業フォルダーを使う場合は、起動時に `--cwd` で指定します。
 
 ```sh
-npm run web -- --cwd /path/to/project
+hasilan-code --cwd /path/to/project
 ```
+
+ソースから起動する場合は `npm run web -- --cwd /path/to/project` を使います。
 
 ポート番号は `--port` で変更できます。たとえば `--port 0` を指定すると、OS が空いているポートを割り当てます。
 
@@ -163,6 +147,24 @@ node install-hasilan.mjs --setup
 ```text
 https://github.com/seipass/hasilan-code/blob/main/INSTALL.md に従って Hasilan Code をインストールしてください。
 ```
+
+### ソースから起動する（開発者向け）
+
+リポジトリを取得し、ターミナルで次のコマンドを順番に実行します。
+
+```sh
+git clone https://github.com/seipass/hasilan-code.git
+cd hasilan-code
+npm install --ignore-scripts
+npm rebuild node-pty --ignore-scripts=false --foreground-scripts
+npm run build:hasilan
+node packages/web-harness/bin/hasilan-code.mjs setup
+npm run web
+```
+
+起動したら、ターミナルに表示される認証付き URL をブラウザーで開いてください。ブラウザーは自動で開きません。既定の待ち受け先は `127.0.0.1:3080` です。
+
+表示される認証URLは共有しないでください。
 
 ### 同じLANの別端末から使う
 
