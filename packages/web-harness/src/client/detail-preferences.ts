@@ -36,9 +36,12 @@ export function restoreDetailTabs(raw: string | null, terminals: TerminalSummary
 		parsed = null;
 	}
 	let layout = initial;
+	const restoredTerminalIds = new Set<string>();
 	if (Check(savedDetailTabsSchema, parsed) && new Set(parsed.tabs.map((tab) => tab.id)).size === parsed.tabs.length) {
 		const tabs: DetailTab[] = parsed.tabs.flatMap((tab): DetailTab[] => {
 			if (tab.kind !== "terminal") return [tab];
+			if (restoredTerminalIds.has(tab.terminalId)) return [];
+			restoredTerminalIds.add(tab.terminalId);
 			const summary = terminals.find((item) => item.terminalId === tab.terminalId);
 			return summary ? [{ id: tab.id, pane: tab.pane, kind: "terminal", number: tab.number, summary }] : [];
 		});

@@ -1,7 +1,8 @@
 let nextId = 0;
+const pageId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
-/** UI request and subscription IDs need page-local uniqueness, not secure-context UUIDs. */
+/** Persisted tab IDs must also remain distinct after a reload; these are not security tokens. */
 export function nextClientId(): string {
 	nextId += 1;
-	return `c${nextId}`;
+	return `c${pageId}-${nextId}`;
 }

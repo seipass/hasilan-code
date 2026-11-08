@@ -35,6 +35,16 @@ test("does not resurrect a PTY after the backend restarts and reconciles the mis
 	expect(restored.selected).toEqual(["file", undefined]);
 });
 
+test("does not multiply the same terminal when restoring navigation repeatedly", () => {
+	const duplicate = { ...layout.tabs[1], id: "duplicate-terminal" };
+	let saved = saveDetailTabs({ ...layout, tabs: [...layout.tabs, duplicate] });
+	for (let index = 0; index < 3; index++) {
+		const restored = restoreDetailTabs(saved, [terminal, terminal]);
+		expect(restored.tabs.filter((tab) => tab.kind === "terminal")).toHaveLength(1);
+		saved = saveDetailTabs(restored);
+	}
+});
+
 test("keeps intentionally empty tabs and panes, and rejects duplicate or invalid tab data", () => {
 	const empty: DetailTabs = { tabs: [], selected: [undefined, undefined], focused: 0, mode: "columns" };
 	expect(restoreDetailTabs(saveDetailTabs(empty), [])).toEqual(empty);

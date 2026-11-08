@@ -153,12 +153,9 @@ export function detailTabsReducer(state: DetailTabs, action: DetailTabsAction): 
 				),
 			};
 		case "restoreTerminals": {
+			const seen = new Set(state.tabs.flatMap((tab) => (tab.kind === "terminal" ? [tab.summary.terminalId] : [])));
 			const additions = action.tabs.filter(
-				(tab) =>
-					tab.kind === "terminal" &&
-					!state.tabs.some(
-						(entry) => entry.kind === "terminal" && entry.summary.terminalId === tab.summary.terminalId,
-					),
+				(tab) => tab.kind === "terminal" && !seen.has(tab.summary.terminalId) && !!seen.add(tab.summary.terminalId),
 			);
 			if (!additions.length) return state;
 			const tabs = [...state.tabs, ...additions];
