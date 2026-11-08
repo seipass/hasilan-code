@@ -1,20 +1,24 @@
-# Electronデスクトップ版
+# デスクトップ版
 
-Web版のReact UI・HTTP/WebSocket API・AI実行処理を共有し、Electronはウィンドウと共有サーバーの起動・終了を管理します。ブラウザーで使うWeb版も継続して利用できます。
+デスクトップ版は、Web版と同じ画面・サーバー・AI実行処理を使います。Electronがウィンドウとサーバーの起動・終了を管理します。
 
 ## 利用
 
-Windowsの配布物は`Hasilan-Code-<version>-win-x64.exe`です。インストール後はスタートメニューから起動します。Node.jsの別途インストールは不要です。Electron内蔵のNodeランタイムで同梱サーバーを動かします。
+Windowsでは、[GitHub Releases](https://github.com/seipass/hasilan-code/releases)から`Hasilan-Code-<version>-win-x64.exe`をダウンロードしてインストールします。インストール後はスタートメニューから起動してください。Node.jsの別途インストールは不要です。
 
 - ウィンドウのタイトルと通知領域のツールチップには、Web画面と同じ実行中・完了の件数と会話名を表示します。macOSのDockとWindowsのタスクバーには件数のバッジを出します。
-- アプリ上部にウィンドウ操作を配置します。Windows・LinuxではVS Codeの実装を参考にした最小化・最大化／復元・閉じるを右側に配置し、macOSは標準のウィンドウボタンを使用します。上部の空き領域をドラッグしてウィンドウを移動できます。
+- アプリ上部のボタンでウィンドウを最小化・最大化・復元・閉じることができます。macOSでは標準のボタンを使います。上部の空き領域をドラッグするとウィンドウを移動できます。
 - 作業フォルダーの選択はOSのダイアログで行います。
 - ウィンドウの閉じるボタンは画面を隠します。処理は通知領域で継続し、アイコンから再表示できます。通知領域を使えない環境では終了操作になります。
 - メニューまたは通知領域の「終了」でサーバーも停止します。AIの作業・未処理の入力・稼働中の端末があれば、停止前に確認します。
-- 通知領域の「表示 → サーバーを再起動」は処理を停止する確認を表示します。起動失敗時は画面の「もう一度起動」で再試行できます。
-- 「Hasilan Code → 更新を確認」で更新を確認します。ダウンロードと適用はユーザーが選びます。作業中の更新にも終了確認があり、通常終了だけで更新を勝手に適用しません。
+- 通知領域の「表示 → サーバーを再起動」では、処理を停止する前に確認します。起動失敗時は画面の「もう一度起動」で再試行できます。
+- 「Hasilan Code → 更新を確認」で更新を確認し、ダウンロードと適用を選べます。作業中の更新では終了前に確認します。
 
-認証・ワークスペース・セッションはWeb版と同じ`~/.hasilan-code/agent/`を使用します。`HASILAN_CODE_AGENT_DIR`で別の絶対パスも指定できます。同じデータを使うサーバーは一つだけ起動できます。Web版を終了してからデスクトップ版を起動してください。所有プロセスが異常終了した場合は次回起動時にロックを回復します。稼働中と確認できた場合は所有プロセスのPIDを表示します。旧版が残した所有情報のないロックだけは、最大1分の確認待ちになります。ロック未対応の古いWeb版も先に終了してください。
+## データの保存先
+
+認証・ワークスペース・セッションはWeb版と同じ`~/.hasilan-code/agent/`に保存します。`HASILAN_CODE_AGENT_DIR`で別の絶対パスも指定できます。
+
+同じデータを使うサーバーは一つだけ起動できます。Web版を終了してからデスクトップ版を起動してください。前回のプロセスが異常終了した場合、次回起動時にロックを回復します。稼働中のプロセスがある場合はPIDを表示します。旧版が残した所有情報のないロックは、確認に最大1分かかります。ロック未対応の古いWeb版も先に終了してください。
 
 ウィンドウ位置とブラウザーの保存領域はElectronのユーザーデータディレクトリに保存します。`HASILAN_CODE_DESKTOP_DATA_DIR`を指定すると、この保存先も分離できます。アンインストールでは利用者データを削除しません。
 
@@ -30,7 +34,7 @@ Pythonを使用するComputer Use、Chromiumを使用するブラウザーツー
 
 ```sh
 npm ci --ignore-scripts
-# クリーンなcheckoutでPi SDKが未ビルドの場合
+# 新しいチェックアウトでPi SDKが未ビルドの場合
 npm run build:hasilan
 npm run build:desktop
 npm run desktop
@@ -54,7 +58,7 @@ npm run smoke:desktop
 npm run build:desktop
 npm run pack:desktop -- --dir
 npm run smoke:desktop -- --executable ".artifacts/desktop/win-unpacked/Hasilan Code.exe"
-npm run pack:desktop -- --web-package .artifacts/desktop/web/hasilan-code-0.1.7.tgz
+npm run pack:desktop -- --web-package .artifacts/desktop/web/hasilan-code-0.2.0.tgz
 ```
 
 成果物は`.artifacts/desktop/`です。`--dir`は展開済みアプリだけを作成します。指定がなければWindowsではNSISインストーラーを作ります。Web配布物のバージョンをElectron側にも設定し、同じ配布物のUIとSDKをまとめて同梱します。`--web-package`を省略すると現在のビルド済みWeb版を、レビュー済みルートlockfileの依存関係で再パッケージします。
