@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { SESSION_IMPORT_SOURCES, type SessionDiscovery, type SessionImportPreview, type SessionImportSource } from "../shared/session-import.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { Content } from "./Content.tsx";
+import { Icon } from "./Icon.tsx";
 import { MotionItems, Presence, useChildrenMotion } from "./Motion.tsx";
 import type { Model, SessionSummary, Workspace } from "./types.ts";
 import "./SessionImportDialog.css";
@@ -79,7 +80,7 @@ export function SessionImportDialog({ workspace, model, thinkingLevel, onClose, 
 		const bounds = event.currentTarget.getBoundingClientRect();
 		if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
 	}}>
-		<header className="session-import-heading"><div><h2 id={titleId}>セッションを引き継ぐ</h2><code>{workspace.path}</code></div><button type="button" disabled={busy} onClick={onClose} aria-label="セッション引き継ぎを閉じる">閉じる</button></header>
+		<header className="session-import-heading"><div><h2 id={titleId}>セッションを引き継ぐ</h2><code title={workspace.path}>{workspace.path}</code></div><button type="button" disabled={busy} onClick={onClose} aria-label="セッション引き継ぎを閉じる"><Icon name="close" size="control" /></button></header>
 		<form className="session-import-source" onSubmit={(event) => { event.preventDefault(); setRequestPath(path.trim()); setAttempt((value) => value + 1); }}>
 			<label>ハーネス<Select value={source} disabled={busy} onChange={(value) => { setSource(value as SessionImportSource); setPath(""); setRequestPath(""); setQuery(""); }}>{SESSION_IMPORT_SOURCES.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</Select></label>
 			<label>履歴ファイル<input value={path} disabled={busy} onChange={(event) => setPath(event.target.value)} placeholder="自動検出 · フォルダーまたは履歴ファイルの絶対パス" /></label>
@@ -99,7 +100,7 @@ export function SessionImportDialog({ workspace, model, thinkingLevel, onClose, 
 			</section>
 			<section className="session-import-preview" aria-label="引き継ぐ履歴のプレビュー" aria-busy={previewLoading}>
 				<Presence show={previewLoading}><p role="status">履歴を読み込んでいます…</p></Presence>
-				<Presence show={!previewLoading && !candidateId}><p className="session-import-empty">引き継ぐセッションを選択してください。</p></Presence>
+					<Presence show={!previewLoading && !candidateId}><div className="session-import-empty"><Icon name="copy" size="chrome" /><strong>引き継ぐセッションを選択</strong><p>左の一覧から履歴を選ぶと、内容を確認できます。</p></div></Presence>
 				<Presence show={!!preview}>{preview && <div key={preview.candidateId} className="session-import-preview-content"><h3>{preview.title}</h3><p className="fine-print">履歴{preview.messageCount}件を引き継ぎます。会話の直近12件を表示しています。</p>{preview.warnings.map((warning) => <p className="session-import-warning" key={warning}>{warning}</p>)}{preview.messages.map((message, index) => <article className="session-import-message" key={`${preview.candidateId}-${index}`}><span>{message.role === "user" ? "ユーザー" : "AI"}</span><div className="message-content"><Content value={message.text} onFile={(path, line) => { onClose(); onFile(path, line); }} /></div></article>)}</div>}</Presence>
 				<Presence show={!!previewError}><div className="session-import-error" role="alert"><p>{previewError}</p>{candidateId && <button type="button" disabled={busy} onClick={() => setPreviewAttempt((value) => value + 1)}>プレビューを再読み込み</button>}</div></Presence>
 			</section>
