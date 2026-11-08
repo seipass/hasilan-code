@@ -217,6 +217,8 @@ URLとQRには認証情報が含まれます。起動し直すと無効になる
 
 操作の詳細、チームの制約、検索設定、保存形式については [Web ハーネスの README](packages/web-harness/README.md) にまとめています。
 
+AIによるデスクトップ操作を使う場合は、[Computer Use の準備と操作](docs/computer-use.md)を参照してください。Pythonと画面へのアクセス権限が必要です。
+
 ## 設定と保存先
 
 認証情報や会話履歴などの既定の保存先は `~/.hasilan-code/agent` です。変更する場合は、環境変数 `HASILAN_CODE_AGENT_DIR` に絶対パスを指定してください。

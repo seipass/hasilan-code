@@ -26,7 +26,7 @@ Windowsでは、[GitHub Releases](https://github.com/seipass/hasilan-code/releas
 
 既存のブラウザー内設定は、更新後に元のWeb版URLを一度開くと共通保存先へ移行します。移行では共通保存済みの値を上書きしません。Web・デスクトップで`HASILAN_CODE_AGENT_DIR`が異なる場合は共有しません。Electronのポートが次回起動で変わっても、共通設定は復元されます。
 
-Pythonを使用するComputer Use、Chromiumを使用するブラウザーツールなどの外部ツールはWeb版と同じ要件です。デスクトップ版にPythonやPlaywrightのブラウザーは同梱していません。
+[Computer Use](computer-use.md)に必要なPythonや、ブラウザーツールに必要なChromiumはWeb版と同じ要件です。デスクトップ版には同梱していません。
 
 ## 開発
 
