@@ -26,7 +26,8 @@ export function getDraft(key: string): FileDraft | undefined {
 export function setDraft(key: string, draft: FileDraft): void {
 	const previous = drafts.get(key);
 	if (previous?.text === draft.text && previous.saved === draft.saved && previous.revision === draft.revision) return;
-	drafts.set(key, draft);
+	if (draft.text === draft.saved && !listeners.has(key)) drafts.delete(key);
+	else drafts.set(key, draft);
 	for (const listener of listeners.get(key) ?? []) listener(draft);
 	if ((previous?.text !== previous?.saved) !== (draft.text !== draft.saved)) notifyDirty();
 }
@@ -37,7 +38,11 @@ export function subscribeDraft(key: string, listener: (draft: FileDraft) => void
 	listeners.set(key, group);
 	return () => {
 		group.delete(listener);
-		if (!group.size) listeners.delete(key);
+		if (!group.size) {
+			listeners.delete(key);
+			// Closed clean files can be read again. Unsaved text must survive workspace changes.
+			if (!isDraftDirty(key)) drafts.delete(key);
+		}
 	};
 }
 

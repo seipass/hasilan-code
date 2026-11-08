@@ -90,7 +90,7 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 			<Presence show={!!loaded?.error}><p role="alert" className="files-message error">{loaded?.error}</p></Presence>
 			<Presence show={!!file && !!loaded?.view && !loaded.error}>{file && loaded?.view && <div className={`files-content${loaded.view.kind === "audio" ? " files-content-audio" : ""}`} key={loaded.key}>
 				{loaded.view.kind === "text" && rendered && loaded.markdown !== undefined && (loaded.markdown === "" ? <p className="files-message muted">空のファイル</p> : <FileMarkdown text={loaded.markdown} path={file.path} onFile={onOpen} />)}
-				{loaded.view.kind === "text" && !rendered && loaded.view.size <= 2 * 1024 * 1024 && <FileEditor workspaceId={workspaceId} path={file.path} line={file.line} />}
+				{loaded.view.kind === "text" && !rendered && loaded.view.size <= 2 * 1024 * 1024 && <FileEditor workspaceId={workspaceId} path={file.path} line={file.line} visible={visible} />}
 				{loaded.view.kind === "text" && !rendered && loaded.view.size > 2 * 1024 * 1024 && <>
 					{loaded.view.size > 2 * 1024 * 1024 && <p className="files-message muted">2 MB を超えるファイルは閲覧のみ対応しています。</p>}
 					{file.offset > 1 && <div className="files-page"><button onClick={() => onChange(file.path, { offset: Math.max(1, file.offset - 200) })}>前の行</button></div>}

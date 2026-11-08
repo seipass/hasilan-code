@@ -26,7 +26,7 @@ const highlight = syntaxHighlighting(HighlightStyle.define([
 	{ tag: [tags.invalid], color: "var(--syntax-meta, #f38ba8)", textDecoration: "underline" },
 ]));
 
-export function FileEditor({ workspaceId, path, line }: { workspaceId: string; path: string; line?: number }) {
+export function FileEditor({ workspaceId, path, line, visible = true }: { workspaceId: string; path: string; line?: number; visible?: boolean }) {
 	const key = draftKey(workspaceId, path);
 	const [dirty, setDirty] = useState(() => isDraftDirty(key));
 	const endpoint = `/api/workspaces/${encodeURIComponent(workspaceId)}/file-edit?path=${encodeURIComponent(path)}`;
@@ -35,6 +35,8 @@ export function FileEditor({ workspaceId, path, line }: { workspaceId: string; p
 	const [saving, setSaving] = useState(false);
 	const host = useRef<HTMLDivElement>(null);
 	const editor = useRef<EditorView | undefined>(undefined);
+	const suspended = useRef<{ key: string; state: EditorState; language: Compartment; top: number; left: number } | undefined>(undefined);
+	const appliedLine = useRef<{ key: string; line: number } | undefined>(undefined);
 	const savingRef = useRef(false);
 	const [read, setRead] = useState(0);
 	const saveRef = useRef<() => void>(() => {});
@@ -47,19 +49,21 @@ export function FileEditor({ workspaceId, path, line }: { workspaceId: string; p
 		});
 	}, [key]);
 	useEffect(() => {
+		if (!visible) return;
 		const controller = new AbortController();
 		setError(undefined);
 		const existing = getDraft(key);
 		const unsaved = existing && existing.text !== existing.saved ? existing : undefined;
 		setDraft(unsaved);
 		if (!unsaved) void api<{ text: string; revision: string }>(endpoint, { signal: controller.signal }).then(({ text, revision }) => {
+			if (controller.signal.aborted) return;
 			if (getDraft(key) !== existing) { setDraft(getDraft(key)); return; }
 			const normalized = text.replace(/\r\n/g, "\n");
 			const value: FileDraft = { text: normalized, saved: normalized, revision, newline: text.includes("\r\n") ? "\r\n" : "\n" };
 			updateDraft(key, value);
 		}).catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
 		return () => controller.abort();
-	}, [endpoint, key, read]);
+	}, [endpoint, key, read, visible]);
 	async function save() {
 		const current = getDraft(key);
 		if (!current || savingRef.current || current.text === current.saved) return;
@@ -74,12 +78,14 @@ export function FileEditor({ workspaceId, path, line }: { workspaceId: string; p
 	saveRef.current = () => { void save(); };
 	useEffect(() => {
 		const current = getDraft(key);
-		if (!draft || !current || !host.current) return;
+		if (!visible || !draft || !current || !host.current) return;
 		let disposed = false;
-		const language = new Compartment();
+		const previous = suspended.current;
+		const restored = previous?.key === key && previous.state.doc.toString() === current.text ? previous : undefined;
+		const language = restored?.language ?? new Compartment();
 		const view = new EditorView({
 			parent: host.current,
-			state: EditorState.create({ doc: current.text, extensions: [
+			state: restored?.state ?? EditorState.create({ doc: current.text, extensions: [
 				basicSetup,
 				highlight,
 				language.of([]),
@@ -96,18 +102,27 @@ export function FileEditor({ workspaceId, path, line }: { workspaceId: string; p
 			] }),
 		});
 		editor.current = view;
+		suspended.current = undefined;
+		if (restored) view.requestMeasure({ read: () => undefined, write: () => { view.scrollDOM.scrollTop = restored.top; view.scrollDOM.scrollLeft = restored.left; } });
 		const description = LanguageDescription.matchFilename(languages, path.split(/[\\/]/).at(-1) ?? path);
 		if (description) void description.load().then((support) => {
 			if (!disposed) view.dispatch({ effects: language.reconfigure(support) });
 		}).catch(() => { if (!disposed) setError("言語の読み込みに失敗しました。テキストは編集できます。"); });
-		return () => { disposed = true; editor.current = undefined; view.destroy(); };
-	}, [key, path, !!draft]);
+		return () => {
+			disposed = true;
+			suspended.current = { key, state: view.state, language, top: view.scrollDOM.scrollTop, left: view.scrollDOM.scrollLeft };
+			editor.current = undefined;
+			view.destroy();
+		};
+	}, [key, path, !!draft, visible]);
 	useEffect(() => {
 		const view = editor.current;
-		if (!view || !line) return;
+		if (!line) { appliedLine.current = undefined; return; }
+		if (!view || appliedLine.current?.key === key && appliedLine.current.line === line) return;
+		appliedLine.current = { key, line };
 		const position = view.state.doc.line(Math.min(Math.max(1, line), view.state.doc.lines)).from;
 		view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: "center" }) });
-	}, [key, !!draft, line]);
+	}, [key, !!draft, line, visible]);
 	return <div className="file-editor">
 		<div className="file-editor-toolbar"><span role="status">{saving ? "保存中…" : !draft ? "読み込み中…" : dirty ? "未保存" : "保存済み"}</span><button type="button" disabled={!draft || saving || !dirty} onClick={() => { void save(); }}>保存</button><button type="button" disabled={!draft || saving || !dirty} title="保存せずにファイルの内容を読み直す" onClick={() => {
 			if (!window.confirm("未保存の変更を破棄して、ファイルの内容を読み直しますか？")) return;
