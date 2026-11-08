@@ -4,6 +4,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session, shell, Tray } from "electron";
 import { autoUpdater } from "electron-updater";
+import { installContextMenu } from "./context-menu.ts";
 import { DesktopHost } from "./host.ts";
 import { type DesktopWindowState, describeActivity, externalLink } from "./protocol.ts";
 
@@ -245,6 +246,7 @@ async function start(): Promise<void> {
 		},
 	});
 	window.once("ready-to-show", showWindow);
+	installContextMenu(window.webContents, false);
 	const trustedWindowRequest = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => {
 		if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;
 		try {
@@ -352,6 +354,7 @@ async function start(): Promise<void> {
 		webPreferences.partition = "persist:hasilan-browser";
 	});
 	window.webContents.on("did-attach-webview", (_event, contents) => {
+		installContextMenu(contents, true);
 		contents.setWindowOpenHandler(({ url }) => {
 			const target = externalLink(url);
 			if (target && (target.startsWith("https:") || target.startsWith("http:"))) void contents.loadURL(target);
