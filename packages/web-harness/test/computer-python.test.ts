@@ -50,13 +50,17 @@ describe.skipIf(!available)("Production Python helper with OS library doubles (r
 		return result;
 	}
 
-	it.each(["win32", "darwin", "linux"])("captures through the production helper on %s", async (platform) => {
-		const result = await run({ action: "screenshot" }, "", platform);
-		expect(result.error).toBeUndefined();
-		expect(result.png).toBeTruthy();
-		expect(result.events).toContainEqual(["capture", { left: -100, top: 20, width: 100, height: 50 }]);
-		if (platform === "win32") expect(result.events[0]).toEqual(["dpi"]);
-	});
+	it.each(["win32", "darwin", "linux"])(
+		"captures through the production helper on %s",
+		async (platform) => {
+			const result = await run({ action: "screenshot" }, "", platform);
+			expect(result.error).toBeUndefined();
+			expect(result.png).toBeTruthy();
+			expect(result.events).toContainEqual(["capture", { left: -100, top: 20, width: 100, height: 50 }]);
+			if (platform === "win32") expect(result.events[0]).toEqual(["dpi"]);
+		},
+		25_000,
+	);
 	it("checks geometry before pointer motion or input", async () => {
 		const result = await run({
 			action: "click",

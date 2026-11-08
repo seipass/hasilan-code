@@ -1,7 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ModelRuntime, type ToolDefinition } from "@hasilan-code/pi-coding-agent";
+import {
+	applyHttpProxySettings,
+	configureHttpDispatcher,
+	ModelRuntime,
+	type ToolDefinition,
+} from "@hasilan-code/pi-coding-agent";
 import { toString as qrCodeText } from "qrcode";
 import { ATTACHMENT_LIMITS } from "../shared/attachments.ts";
 import { CANVAS_LIMITS, canvasSaveSchema, isCanvasDocument, serializeCanvasDesign } from "../shared/canvas.ts";
@@ -82,6 +87,9 @@ export async function startHarness(options: CliOptions, hooks: HarnessHooks = {}
 async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const cwd = await resolveCliWorkspace(options);
 	const agentDir = getHarnessAgentDir();
+	const agentSettings = createHarnessSettings(cwd, agentDir);
+	applyHttpProxySettings(agentSettings.getGlobalSettings().httpProxy);
+	configureHttpDispatcher(agentSettings.getHttpIdleTimeoutMs());
 	const modelRuntime = await ModelRuntime.create({
 		authPath: join(agentDir, "auth.json"),
 		modelsPath: join(agentDir, "models.json"),
@@ -89,7 +97,6 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	});
 	const settings = await SettingsService.open(agentDir, modelRuntime);
 	const uiPreferences = await UiPreferencesStore.open(agentDir);
-	const agentSettings = createHarnessSettings(cwd, agentDir);
 	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
 	const artifacts = new ArtifactStore();
 	const browser = new BrowserManager(artifacts);

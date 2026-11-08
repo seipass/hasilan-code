@@ -2,7 +2,16 @@ import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAnimatedView } from "../src/client/animated-view.ts";
 
-const hooks = vi.hoisted(() => ({ update: vi.fn(), cleanup: undefined as (() => void) | undefined }));
+const hooks = vi.hoisted(() => ({
+	update: vi.fn(),
+	cleanup: undefined as (() => void) | undefined,
+	animationsEnabled: true,
+}));
+vi.mock("../src/client/motion-policy.ts", () => ({
+	get animationsEnabled() {
+		return hooks.animationsEnabled;
+	},
+}));
 vi.mock("react", async () => ({
 	...(await vi.importActual<typeof React>("react")),
 	useState: (initial: unknown) => [initial, hooks.update],
@@ -19,6 +28,7 @@ let reduced = false;
 beforeEach(() => {
 	sequence = 0;
 	reduced = false;
+	hooks.animationsEnabled = true;
 	frames.clear();
 	hooks.update.mockClear();
 	vi.spyOn(performance, "now").mockReturnValue(0);
@@ -50,6 +60,13 @@ describe("animated graph commands", () => {
 	});
 	it("applies commands immediately when reduced motion is enabled", () => {
 		reduced = true;
+		const motion = useAnimatedView({ x: 0, y: 0, zoom: 1 });
+		motion.animateView({ x: 100, y: 80, zoom: 2 });
+		expect(motion.viewRef.current).toEqual({ x: 100, y: 80, zoom: 2 });
+		expect(frames.size).toBe(0);
+	});
+	it("applies commands immediately when application animations are disabled", () => {
+		hooks.animationsEnabled = false;
 		const motion = useAnimatedView({ x: 0, y: 0, zoom: 1 });
 		motion.animateView({ x: 100, y: 80, zoom: 2 });
 		expect(motion.viewRef.current).toEqual({ x: 100, y: 80, zoom: 2 });

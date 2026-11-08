@@ -1,12 +1,12 @@
 {
 	"name": "@hasilan-code/desktop",
-	"version": "0.1.7",
+	"version": "0.2.0",
 	"private": true,
 	"type": "module",
 	"main": "dist/main.cjs",
 	"description": "Hasilan Code desktop application",
 	"author": "Hasilan",
-	"license": "MIT",
+	"license": "GPL-3.0-only",
 	"scripts": {
 		"typecheck": "tsc --noEmit -p tsconfig.json",
 		"test": "node --test test/*.test.ts test/*.test.mjs",
