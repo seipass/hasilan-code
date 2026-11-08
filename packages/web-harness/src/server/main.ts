@@ -137,12 +137,14 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	});
 	const terminals = new TerminalManager({ getWorkspaceRoot: (id) => files.getWorkspaceRoot(id) });
 	const sessionImports = new SessionImportService();
-	events = new EventHub((channel, id) =>
-		channel === "session"
-			? registry.state.sessions.some((session) => session.sessionId === id)
-				? registry.projection(id)
-				: undefined
-			: { sessions: registry.list(id), teams: teams.snapshot(id) },
+	events = new EventHub(
+		(channel, id) =>
+			channel === "session"
+				? registry.state.sessions.some((session) => session.sessionId === id)
+					? registry.projection(id)
+					: undefined
+				: { sessions: registry.list(id), teams: teams.snapshot(id) },
+		(channel, id) => (channel === "session" ? registry.retainHistory(id) : () => {}),
 	);
 	const hub = events;
 	registry.subscribe((event) => {

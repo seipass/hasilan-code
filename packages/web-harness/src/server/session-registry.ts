@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdir, open, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import type { AgentMessage, ThinkingLevel } from "@hasilan-code/pi-agent-core";
@@ -162,6 +162,8 @@ export class HarnessError extends Error {
 	}
 }
 interface LiveSession {
+	/** Conservative budget for parsed history plus its UI projection, not a heap measurement. */
+	historyBytes: number;
 	manager: SessionManager;
 	usage: SessionUsage;
 	adapter?: ExecutionAdapter;
@@ -459,6 +461,8 @@ export class SessionRegistry {
 	private readonly options: RegistryOptions;
 	private readonly statePath: string;
 	private readonly live = new Map<string, LiveSession>();
+	private readonly usageSummaries = new Map<string, ModelUsage[]>();
+	private readonly historyReaders = new Map<string, number>();
 	private readonly listeners = new Set<(event: RegistryEvent) => void>();
 	private readonly executionListeners = new Set<(sessionId: string, event: AgentSessionEvent) => void>();
 	private saveQueue: Promise<void> = Promise.resolve();
@@ -511,7 +515,12 @@ export class SessionRegistry {
 	private ensureLive(id: string): LiveSession | undefined {
 		const descriptor = this.descriptor(id);
 		const existing = this.live.get(id);
-		if (existing || descriptor.availability === "missing") return existing;
+		if (existing) {
+			this.live.delete(id);
+			this.live.set(id, existing);
+			return existing;
+		}
+		if (descriptor.availability === "missing") return undefined;
 		const materialized = !!descriptor.path && existsSync(descriptor.path);
 		if (descriptor.materialized && !materialized) {
 			descriptor.availability = "missing";
@@ -526,7 +535,34 @@ export class SessionRegistry {
 		this.addLive(descriptor, manager);
 		return this.live.get(id);
 	}
-	/** Restore usage and history in the background after the HTTP server is available. */
+	/** Keep paged message identities stable for every connected UI, including multiple windows. */
+	retainHistory(id: string): () => void {
+		this.historyReaders.set(id, (this.historyReaders.get(id) ?? 0) + 1);
+		let released = false;
+		return () => {
+			if (released) return;
+			released = true;
+			const remaining = (this.historyReaders.get(id) ?? 1) - 1;
+			if (remaining) this.historyReaders.set(id, remaining);
+			else this.historyReaders.delete(id);
+			this.trimHistoryCache();
+		};
+	}
+	private trimHistoryCache(protectedId?: string): void {
+		const histories = [...this.live].filter(([, live]) => !live.adapter && !live.loading && !live.runId);
+		let count = histories.length;
+		let bytes = histories.reduce((sum, [, live]) => sum + live.historyBytes, 0);
+		for (const [id, live] of histories) {
+			if (count <= 4 && bytes <= 32 * 1024 * 1024) break;
+			const descriptor = this.state.sessions.find((session) => session.sessionId === id);
+			if (id === protectedId || this.historyReaders.has(id) || !descriptor?.materialized) continue;
+			this.usageSummaries.set(id, live.usage.snapshot());
+			this.live.delete(id);
+			count--;
+			bytes -= live.historyBytes;
+		}
+	}
+	/** Restore billing in the background; unopened transcripts must not stay resident. */
 	startHistoryHydration(): void {
 		const ids = this.state.sessions.map((session) => session.sessionId);
 		let index = 0;
@@ -534,9 +570,18 @@ export class SessionRegistry {
 			this.hydrationTimer = undefined;
 			if (!this.accepting || index >= ids.length) return;
 			const id = ids[index++];
-			if (this.state.sessions.some((session) => session.sessionId === id) && !this.live.has(id)) {
+			const descriptor = this.state.sessions.find((session) => session.sessionId === id);
+			if (
+				descriptor?.materialized &&
+				descriptor.path &&
+				descriptor.availability !== "missing" &&
+				!this.live.has(id)
+			) {
 				try {
-					if (this.ensureLive(id)) this.changed(id);
+					const manager = SessionManager.open(descriptor.path);
+					if (manager.getSessionId() !== id) throw new Error("Conversation ID differs from web-harness state");
+					this.usageSummaries.set(id, new SessionUsage(manager).snapshot());
+					this.changed(id);
 				} catch (error) {
 					console.error("Could not restore conversation history:", error instanceof Error ? error.message : error);
 				}
@@ -634,12 +679,14 @@ export class SessionRegistry {
 			}
 		}
 		this.live.set(descriptor.sessionId, {
+			historyBytes: descriptor.materialized && descriptor.path ? statSync(descriptor.path).size * 4 : 0,
 			manager,
 			usage: new SessionUsage(manager),
 			projection: { ...descriptor, messages, toolCalls, activity: {}, pendingInput: [] },
 			importAssets: imported.assets,
 			aborted: false,
 		});
+		this.trimHistoryCache(descriptor.sessionId);
 	}
 	listWorkspaces(): WorkspaceDirectory[] {
 		return structuredClone(this.state.workspaces);
@@ -970,6 +1017,7 @@ export class SessionRegistry {
 				live?.unsubscribe?.();
 				live?.adapter?.dispose();
 				this.live.delete(sessionId);
+				this.usageSummaries.delete(sessionId);
 				this.emit({ type: "session_deleted", sessionId, workspaceId: descriptor.workspaceId });
 			}
 			this.emit({ type: "workspace_changed", workspaceId: descriptor.workspaceId });
@@ -1088,7 +1136,9 @@ export class SessionRegistry {
 				const { systemPrompt: _systemPrompt, path: _path, ...summary } = descriptor;
 				return structuredClone({
 					...summary,
-					usage: this.live.get(descriptor.sessionId)?.usage.snapshot(),
+					usage:
+						this.live.get(descriptor.sessionId)?.usage.snapshot() ??
+						this.usageSummaries.get(descriptor.sessionId),
 					title: descriptor.title ?? runs[0]?.task,
 					currentRun,
 					// Lists only need the run state; result text is fetched with the session page.
@@ -1628,5 +1678,8 @@ export class SessionRegistry {
 		);
 		await this.persist();
 		await this.saveQueue;
+		this.live.clear();
+		this.usageSummaries.clear();
+		this.historyReaders.clear();
 	}
 }

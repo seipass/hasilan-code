@@ -22,9 +22,20 @@ export class EventHub {
 	private clients = new Map<WebSocket, Map<string, Subscription>>();
 	private pending = new Map<string, NodeJS.Timeout>();
 	private histories = new WeakMap<Subscription, HistoryBaseline>();
+	private releases = new WeakMap<Subscription, () => void>();
 	private snapshot: (channel: Channel, id: string) => unknown;
-	constructor(snapshot: (channel: Channel, id: string) => unknown) {
+	private retain?: (channel: Channel, id: string) => () => void;
+	constructor(
+		snapshot: (channel: Channel, id: string) => unknown,
+		retain?: (channel: Channel, id: string) => () => void,
+	) {
 		this.snapshot = snapshot;
+		this.retain = retain;
+	}
+	private release(subscription: Subscription): void {
+		this.releases.get(subscription)?.();
+		this.releases.delete(subscription);
+		this.histories.delete(subscription);
 	}
 	private send(socket: WebSocket, value: unknown) {
 		if (socket.readyState !== 1) return;
@@ -37,8 +48,13 @@ export class EventHub {
 	attach(socket: WebSocket) {
 		const subscriptions = new Map<string, Subscription>();
 		this.clients.set(socket, subscriptions);
-		socket.on("close", () => this.clients.delete(socket));
-		socket.on("error", () => this.clients.delete(socket));
+		const disconnect = () => {
+			for (const subscription of subscriptions.values()) this.release(subscription);
+			subscriptions.clear();
+			this.clients.delete(socket);
+		};
+		socket.on("close", disconnect);
+		socket.on("error", disconnect);
 		socket.on("message", (raw, binary) => {
 			try {
 				if (binary) throw new Error("Invalid subscription");
@@ -48,6 +64,8 @@ export class EventHub {
 				if (typeof command.subscriptionId !== "string" || command.subscriptionId.length > 128)
 					throw new Error("Invalid subscription ID");
 				if (command.type === "unsubscribe") {
+					const previous = subscriptions.get(command.subscriptionId);
+					if (previous) this.release(previous);
 					subscriptions.delete(command.subscriptionId);
 					return;
 				}
@@ -62,11 +80,22 @@ export class EventHub {
 					channel: command.channel,
 					id: command.id,
 				};
-				const source = this.snapshot(subscription.channel, subscription.id);
+				const release = this.retain?.(subscription.channel, subscription.id);
+				const source = (() => {
+					try {
+						return this.snapshot(subscription.channel, subscription.id);
+					} catch (error) {
+						release?.();
+						throw error;
+					}
+				})();
 				const paged = subscription.channel === "session" && isHistorySource(source);
 				const data = paged ? historyPage(source) : source;
 				if (paged) this.histories.set(subscription, historyBaseline(source));
 				const seq = this.sequences.get(`${subscription.channel}:${subscription.id}`) ?? 0;
+				const previous = subscriptions.get(subscription.subscriptionId);
+				if (previous) this.release(previous);
+				if (release) this.releases.set(subscription, release);
 				subscriptions.set(subscription.subscriptionId, subscription);
 				this.send(socket, { type: "snapshot", ...subscription, epoch: this.epoch, seq, data });
 			} catch {
@@ -120,12 +149,19 @@ export class EventHub {
 		this.broadcast("session", id, { type: "session_deleted" });
 		for (const subscriptions of this.clients.values())
 			for (const [subscriptionId, subscription] of subscriptions)
-				if (subscription.channel === "session" && subscription.id === id) subscriptions.delete(subscriptionId);
+				if (subscription.channel === "session" && subscription.id === id) {
+					this.release(subscription);
+					subscriptions.delete(subscriptionId);
+				}
 	}
 	close() {
 		for (const timer of this.pending.values()) clearTimeout(timer);
 		this.pending.clear();
-		for (const socket of this.clients.keys()) socket.close(1001, "Host shutting down");
+		for (const [socket, subscriptions] of this.clients) {
+			for (const subscription of subscriptions.values()) this.release(subscription);
+			subscriptions.clear();
+			socket.close(1001, "Host shutting down");
+		}
 		this.clients.clear();
 	}
 }

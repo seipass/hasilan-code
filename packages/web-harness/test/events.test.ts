@@ -23,6 +23,34 @@ class Socket extends EventEmitter {
 }
 
 describe("channel subscriptions", () => {
+	it("releases retained histories on replacement, unsubscribe, failed reads and disconnect", () => {
+		const readers = new Map<string, number>();
+		const hub = new EventHub(
+			(_channel, id) => {
+				if (id === "missing") throw new Error("Missing");
+				return {};
+			},
+			(_channel, id) => {
+				readers.set(id, (readers.get(id) ?? 0) + 1);
+				return () => readers.set(id, (readers.get(id) ?? 1) - 1);
+			},
+		);
+		const socket = new Socket();
+		hub.attach(socket as unknown as WebSocket);
+		for (const id of ["a", "b", "missing"])
+			socket.command({ type: "subscribe", subscriptionId: "selected", channel: "session", id });
+		expect([...readers]).toEqual([
+			["a", 0],
+			["b", 1],
+			["missing", 0],
+		]);
+		socket.command({ type: "unsubscribe", subscriptionId: "selected" });
+		expect(readers.get("b")).toBe(0);
+		socket.command({ type: "subscribe", subscriptionId: "selected", channel: "session", id: "a" });
+		socket.close(1000);
+		expect(readers.get("a")).toBe(0);
+		hub.close();
+	});
 	it("cancels pending updates and notifies subscribers when a session is deleted", async () => {
 		vi.useFakeTimers();
 		let deleted = false;
