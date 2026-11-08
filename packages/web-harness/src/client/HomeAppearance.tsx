@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
+import { FontAppearance } from "./FontAppearance.tsx";
 import { HOME_BACKGROUND_KEY, type HomeBackground, parseHomeBackground, prepareHomeBackground, saveHomeBackground } from "./home-background.ts";
 import { preferences, usePreferenceString } from "./preferences.ts";
 import { Presence } from "./Motion.tsx";
@@ -38,7 +39,7 @@ export function HomeAppearance({ background, onChange }: { background?: HomeBack
 		} catch (reason) { if (mounted.current) setError(errorMessage(reason)); }
 		finally { if (mounted.current) setBusy(false); }
 	}
-	return <div className="home-appearance" aria-busy={busy}>
+	return <><FontAppearance /><div className="home-appearance" aria-busy={busy}>
 		<h3>ホーム画面の背景</h3>
 		<p>選んだ画像をホーム画面の上半分に表示します。</p>
 		<div className="home-background-preview" aria-label="背景のプレビュー">
@@ -58,5 +59,5 @@ export function HomeAppearance({ background, onChange }: { background?: HomeBack
 		}}>背景を解除</button></div>
 		<p className="fine-print">20 MB 以下の JPEG・PNG・WebP・AVIF・GIF・BMP。画像はWeb・デスクトップで共有されます。</p>
 		<Presence show={!!error}><p className="error" role="alert">{error}</p></Presence>
-	</div>;
+	</div></>;
 }

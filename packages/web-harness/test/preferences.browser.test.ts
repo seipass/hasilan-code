@@ -73,6 +73,8 @@ it("boots the real UI after migration and restores text, attachments, background
 	const errors: string[] = [];
 	page.on("pageerror", (error) => errors.push(error.message));
 	await web.addInitScript(() => {
+		localStorage.setItem("pi-web-sidebar-open", "true");
+		localStorage.setItem("pi-web-ui-font", JSON.stringify("Meiryo"));
 		localStorage.setItem(
 			"pi-web-model-selection",
 			JSON.stringify({ model: { provider: "fixture", id: "fixture" }, thinkingLevel: "max" }),
@@ -97,6 +99,16 @@ it("boots the real UI after migration and restores text, attachments, background
 	await expect.poll(() => page.locator(".composer-attachment").count()).toBe(0);
 	await input.setInputFiles({ name: "keep.txt", mimeType: "text/plain", buffer: Buffer.from("keep") });
 	await expect.poll(() => page.locator(".composer-attachment").count()).toBe(1);
+	await expect
+		.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).fontFamily))
+		.toContain("Meiryo");
+	await page.getByRole("button", { name: "設定", exact: true }).click();
+	await page.getByRole("tab", { name: "外観", exact: true }).click();
+	await page.getByRole("combobox", { name: "画面のフォント" }).click();
+	await page.getByRole("option", { name: "Arial", exact: true }).click();
+	await expect
+		.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).fontFamily))
+		.toContain("Arial");
 	await page.evaluate(() => window.hasilanFlushPreferences?.());
 	await web.close();
 	hub.close();
@@ -114,6 +126,7 @@ it("boots the real UI after migration and restores text, attachments, background
 	expect(await restored.locator(".model-trigger").textContent()).toContain("Fixture model");
 	expect(await restored.locator(".model-trigger").textContent()).toContain("max");
 	expect(await restored.locator(".home-backdrop img").getAttribute("src")).toContain("data:image/png;base64,");
+	expect(await restored.evaluate(() => getComputedStyle(document.documentElement).fontFamily)).toContain("Arial");
 	expect(errors).toEqual([]);
 	await desktop.close();
 }, 30000);
