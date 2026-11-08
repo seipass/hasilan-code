@@ -1,0 +1,44 @@
+name: Sync published release notes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/releases/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.repository == 'seipass/hasilan-code'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release notes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify published releases exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in docs/releases/hasilan-v*.md; do
+            tag="${file##*/}"
+            tag="${tag%.md}"
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
+          done
+      - name: Update release descriptions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in docs/releases/hasilan-v*.md; do
+            tag="${file##*/}"
+            tag="${tag%.md}"
+            echo "Updating $tag"
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file "$file"
+          done
