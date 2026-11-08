@@ -83,6 +83,8 @@
 .session-import-dialog .session-import-actions { padding: 12px 16px; border-top: 1px solid var(--border-subtle); }
 .session-import-actions > button { min-height: 32px; padding: 6px 12px; border: 0; border-radius: 6px; background: var(--on-surface); color: var(--surface); font-size: 13px; line-height: 18px; font-weight: 500; }
 .session-import-actions > button:disabled { background: var(--surface-hover); color: var(--on-surface-muted); opacity: 1; }
+.session-import-actions > button:hover:not(:disabled) { background: color-mix(in srgb, var(--on-surface) 90%, var(--surface)); color: var(--surface); }
+.session-import-actions > button:active:not(:disabled) { background: color-mix(in srgb, var(--on-surface) 80%, var(--surface)); color: var(--surface); }
 @media (max-width: 600px) {
 	.session-import-dialog.session-import-dialog { border-radius: 0; }
 	.session-import-dialog .session-import-source { grid-template-columns: minmax(0, 1fr) auto; padding: 12px; }
