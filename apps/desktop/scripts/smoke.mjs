@@ -96,18 +96,18 @@ try {
 		}
 	};
 	await checkChrome();
-	const { backdropTop, titlebarBottom } = await page.evaluate(() => {
+	const { backdropTop, topbarBottom } = await page.evaluate(() => {
 		const backdrop = document.createElement("div");
 		backdrop.className = "home-backdrop";
-		document.querySelector(".workspace-surface").append(backdrop);
+		document.querySelector(".home-backdrop-anchor").append(backdrop);
 		const top = backdrop.getBoundingClientRect().top;
 		backdrop.remove();
 		return {
 			backdropTop: top,
-			titlebarBottom: document.querySelector(".desktop-titlebar").getBoundingClientRect().bottom,
+			topbarBottom: document.querySelector(".topbar").getBoundingClientRect().bottom,
 		};
 	});
-	assert.equal(backdropTop, titlebarBottom, "Home background must start below the title bar");
+	assert.equal(backdropTop, topbarBottom, "Home background must start below the top bar");
 	await page.locator(".sidebar-toggle").click();
 	await expect(page.locator(".app-shell")).toHaveClass(/sidebar-closed/);
 	await page.locator(".sidebar-toggle").click();
