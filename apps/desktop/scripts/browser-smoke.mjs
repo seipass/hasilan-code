@@ -79,6 +79,7 @@ try {
 			{ timeout: 15_000 },
 		)
 		.toBe(true);
+	await page.getByRole("button", { name: "注釈", exact: true }).click();
 	await page.getByRole("button", { name: "要素", exact: true }).click();
 	const rect = await app.evaluate(async ({ webContents }) => {
 		const guest = webContents.getAllWebContents().find((item) => item.getType() === "webview");
