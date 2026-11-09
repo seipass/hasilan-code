@@ -2,7 +2,19 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, screen, session, shell, Tray } from "electron";
+import {
+	app,
+	BrowserWindow,
+	dialog,
+	ipcMain,
+	Menu,
+	nativeImage,
+	screen,
+	session,
+	shell,
+	Tray,
+	webContents,
+} from "electron";
 import { autoUpdater } from "electron-updater";
 import { installContextMenu } from "./context-menu.ts";
 import { DesktopHost } from "./host.ts";
@@ -364,6 +376,15 @@ async function start(): Promise<void> {
 			const target = externalLink(url);
 			if (!target || !(target.startsWith("https:") || target.startsWith("http:"))) event.preventDefault();
 		});
+	});
+	window.on("app-command", (event, command) => {
+		if (command !== "browser-backward" && command !== "browser-forward") return;
+		const focused = webContents.getFocusedWebContents();
+		if (focused?.getType() !== "webview" || focused.hostWebContents !== window.webContents) return;
+		event.preventDefault();
+		const history = focused.navigationHistory;
+		if (command === "browser-backward" && history.canGoBack()) history.goBack();
+		if (command === "browser-forward" && history.canGoForward()) history.goForward();
 	});
 	window.webContents.setWindowOpenHandler(({ url }) => {
 		const external = externalLink(url);
