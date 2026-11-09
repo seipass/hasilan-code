@@ -45,3 +45,35 @@ export function externalLink(value: string): string | undefined {
 export function describeActivity(activity: Activity): string {
 	return `実行中のAI作業 ${activity.runs}件、待機中の入力 ${activity.queued}件、端末 ${activity.terminals}件があります。終了すると処理を停止します。`;
 }
+
+export function readBrowserHistory(
+	encoded: string,
+): { entries: { url: string; title: string }[]; index: number } | undefined {
+	if (encoded.length > 250_000) return;
+	try {
+		const data = JSON.parse(decodeURIComponent(encoded)) as { entries?: unknown; index?: unknown };
+		if (
+			!Array.isArray(data.entries) ||
+			data.entries.length > 100 ||
+			typeof data.index !== "number" ||
+			!Number.isInteger(data.index) ||
+			data.index < 0 ||
+			data.index >= data.entries.length
+		)
+			return;
+		const entries = [];
+		for (const entry of data.entries as { url?: unknown; title?: unknown }[]) {
+			if (
+				!entry ||
+				typeof entry.url !== "string" ||
+				typeof entry.title !== "string" ||
+				(entry.url !== "about:blank" && (!/^https?:\/\//i.test(entry.url) || !externalLink(entry.url)))
+			)
+				return;
+			entries.push({ url: entry.url, title: entry.title });
+		}
+		return { entries, index: data.index };
+	} catch {
+		return;
+	}
+}

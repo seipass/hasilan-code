@@ -36,7 +36,7 @@ function addressCandidate(input: string) {
 	}
 }
 
-export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
+export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visible: boolean }) {
 	const container = useRef<HTMLDivElement>(null);
 	const browser = useRef<WebviewTag>(null);
 	const addressInput = useRef<HTMLInputElement>(null);
@@ -56,6 +56,11 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [historyQuery, setHistoryQuery] = useState("");
 	const [navigation, setNavigation] = useState({ back: false, forward: false, loading: false });
+	const [sleeping, setSleeping] = useState(false);
+	const suspended = useRef<{ encoded: string; url: string; x: number; y: number } | undefined>(undefined);
+	const canSuspend = !visible && ready && !annotating && !selection && !image && !note && !navigation.loading;
+	const canSuspendRef = useRef(canSuspend);
+	canSuspendRef.current = canSuspend;
 	const query = draftAddress?.trim().toLowerCase() ?? "";
 	const primary = addressCandidate(query ? draftAddress ?? "" : "");
 	const suggestions = query ? [
@@ -68,15 +73,29 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 	const selectedSuggestion = Math.min(activeSuggestion, suggestions.length - 1);
 	const suggestionsOpen = ready && addressFocused && suggestions.length > 0;
 	useEffect(() => {
+		if (visible && sleeping) setSleeping(false);
+	}, [visible, sleeping]);
+	useEffect(() => {
+		if (!canSuspend) return;
+		const timer = window.setTimeout(() => browser.current?.send("hasilan:browser-suspend"), 5 * 60_000);
+		return () => window.clearTimeout(timer);
+	}, [canSuspend, pageAddress]);
+	useEffect(() => {
 		const host = container.current;
-		if (!host) return;
+		if (!host || sleeping) return;
+		const restore = suspended.current;
+		suspended.current = undefined;
 		const view = document.createElement("webview") as WebviewTag;
-		view.setAttribute("src", "about:blank");
+		view.setAttribute("src", restore ? `about:blank#resume=${restore.encoded}` : "about:blank");
 		view.setAttribute("partition", "persist:hasilan-browser");
 		view.className = "browser-webview";
 		browser.current = view;
-		let initial = initialUrl;
-		const ready = () => { setReady(true); if (initial) { const url = initial; initial = undefined; void view.loadURL(url).catch(() => setError("ページを開けませんでした。")); } };
+		let initial = restore ? undefined : initialUrl;
+		let restoreScroll = !!restore;
+		const ready = () => {
+			setReady(true);
+			if (initial) { const url = initial; initial = undefined; void view.loadURL(url).catch(() => setError("ページを開けませんでした。")); }
+		};
 		const updateNavigation = () => setNavigation({ back: view.canGoBack(), forward: view.canGoForward(), loading: view.isLoading() });
 		const navigate = (event: Electron.DidNavigateEvent | Electron.DidNavigateInPageEvent) => {
 			if ("isMainFrame" in event && !event.isMainFrame) return;
@@ -88,9 +107,22 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 			updateNavigation();
 			const url = view.getURL();
 			if (!/^https?:\/\//i.test(url)) return;
+			if (restore && restoreScroll) {
+				restoreScroll = false;
+				if (url === restore.url) void view.executeJavaScript(`scrollTo(${restore.x}, ${restore.y})`).catch(() => undefined);
+			}
 			setHistory((previous) => [{ url: url.slice(0, 8192), title: (view.getTitle() || url).slice(0, 512), visitedAt: Date.now() }, ...previous.filter((entry) => entry.url !== url)].slice(0, 200));
 		};
 		const message = (event: Electron.IpcMessageEvent) => {
+			if (event.channel === "hasilan:browser-snapshot") {
+				const [encoded, url, x, y] = event.args as [string, string, number, number];
+				if (!canSuspendRef.current || view.isLoading() || view.isCurrentlyAudible() || url !== view.getURL() ||
+					!/^https?:\/\//i.test(url) || !Number.isFinite(x) || !Number.isFinite(y)) return;
+				suspended.current = { encoded, url, x, y };
+				setReady(false);
+				setSleeping(true);
+				return;
+			}
 			if (event.channel === "hasilan:browser-focus-address") { addressInput.current?.focus(); addressInput.current?.select(); return; }
 			if (event.channel === "hasilan:browser-cancel") { setAnnotating(false); return; }
 			if (event.channel !== "hasilan:browser-selection") return;
@@ -110,7 +142,7 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 		view.addEventListener("did-finish-load", loaded);
 		host.append(view);
 		return () => { browser.current = null; view.remove(); };
-	}, []);
+	}, [sleeping]);
 	function navigate(destination = address) {
 		const view = browser.current;
 		const value = destination.trim();

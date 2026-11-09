@@ -18,7 +18,7 @@ import {
 import { autoUpdater } from "electron-updater";
 import { installContextMenu } from "./context-menu.ts";
 import { DesktopHost } from "./host.ts";
-import { type DesktopWindowState, describeActivity, externalLink } from "./protocol.ts";
+import { type DesktopWindowState, describeActivity, externalLink, readBrowserHistory } from "./protocol.ts";
 
 app.setName("Hasilan Code");
 if (process.env.HASILAN_CODE_DESKTOP_DATA_DIR) {
@@ -369,7 +369,13 @@ async function start(): Promise<void> {
 		navigate(event, url);
 	});
 	window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
-		if (!host?.origin || !window.webContents.getURL().startsWith(`${host.origin}/`) || params.src !== "about:blank") {
+		const prefix = "about:blank#resume=";
+		const restore = params.src?.startsWith(prefix) ? readBrowserHistory(params.src.slice(prefix.length)) : undefined;
+		if (
+			!host?.origin ||
+			!window.webContents.getURL().startsWith(`${host.origin}/`) ||
+			(params.src !== "about:blank" && !restore)
+		) {
 			event.preventDefault();
 			return;
 		}
@@ -381,6 +387,18 @@ async function start(): Promise<void> {
 		webPreferences.sandbox = true;
 		webPreferences.webSecurity = true;
 		webPreferences.partition = "persist:hasilan-browser";
+		if (restore) {
+			// History must be restored before Electron starts the guest's first navigation.
+			params.src = "";
+			app.once("web-contents-created", (_event, guest) => {
+				guest.once("did-attach", () => {
+					void guest.navigationHistory.restore(restore).catch(() => {
+						if (!guest.isDestroyed())
+							void guest.loadURL(restore.entries[restore.index].url).catch(() => undefined);
+					});
+				});
+			});
+		}
 	});
 	window.webContents.on("did-attach-webview", (_event, contents) => {
 		installContextMenu(contents, true);
@@ -393,6 +411,17 @@ async function start(): Promise<void> {
 			const target = externalLink(url);
 			if (!target || !(target.startsWith("https:") || target.startsWith("http:"))) event.preventDefault();
 		});
+	});
+	const ownsBrowser = (event: Electron.IpcMainInvokeEvent) =>
+		event.sender.getType() === "webview" &&
+		event.sender.hostWebContents === window.webContents &&
+		event.senderFrame === event.sender.mainFrame;
+	ipcMain.handle("hasilan:browser-history-snapshot", (event) => {
+		if (!ownsBrowser(event) || event.sender.isLoading() || event.sender.isCurrentlyAudible()) return;
+		const history = event.sender.navigationHistory;
+		const entries = history.getAllEntries().map(({ url, title }) => ({ url, title }));
+		const encoded = encodeURIComponent(JSON.stringify({ entries, index: history.getActiveIndex() }));
+		return readBrowserHistory(encoded) ? encoded : undefined;
 	});
 	window.on("app-command", (event, command) => {
 		if (command !== "browser-backward" && command !== "browser-forward") return;

@@ -82,6 +82,25 @@ ipcRenderer.on("hasilan:browser-select", (_event, value: unknown) => {
 	if (value === "element" || value === "text" || value === "region") mode = value;
 });
 ipcRenderer.on("hasilan:browser-clear", clear);
+let edited = false;
+window.addEventListener(
+	"input",
+	(event) => {
+		if (event.isTrusted) edited = true;
+	},
+	true,
+);
+ipcRenderer.on("hasilan:browser-suspend", async () => {
+	if (edited || mode || document.querySelector("iframe, frame, audio, video, [contenteditable]")) return;
+	try {
+		const url = location.href;
+		const encoded: string | undefined = await ipcRenderer.invoke("hasilan:browser-history-snapshot");
+		if (encoded && url === location.href && !edited && !mode)
+			ipcRenderer.sendToHost("hasilan:browser-snapshot", encoded, url, scrollX, scrollY);
+	} catch {
+		/* Leave the live page in place if the snapshot is unavailable. */
+	}
+});
 window.addEventListener(
 	"keydown",
 	(event) => {
