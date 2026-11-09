@@ -50,11 +50,11 @@ import { readStorageUsage } from "./storage-usage.ts";
 import { TeamManager } from "./team-manager.ts";
 import { TerminalManager } from "./terminal-manager.ts";
 import { textTransformSchema, transformText } from "./text-transform.ts";
-import { BrowserManager } from "./tools/browser.ts";
 import { PythonDesktop } from "./tools/computer/backend.ts";
 import { ComputerManager } from "./tools/computer/index.ts";
 import { JevComputer } from "./tools/computer/jev.ts";
 import { createHashlineTools } from "./tools/hashline/index.ts";
+import { LazyBrowserManager } from "./tools/lazy-browser.ts";
 import { SearchService } from "./tools/search.ts";
 import { UiPreferencesStore } from "./ui-preferences.ts";
 import { WidgetData } from "./widget-data.ts";
@@ -99,7 +99,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const uiPreferences = await UiPreferencesStore.open(agentDir);
 	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
 	const artifacts = new ArtifactStore();
-	const browser = new BrowserManager(artifacts);
+	const browser = new LazyBrowserManager(artifacts);
 	const computer = new ComputerManager(new PythonDesktop(agentDir), artifacts);
 	const jevComputer = new JevComputer(computer, modelRuntime, () => ({
 		jev: settings.get().jev.model,
@@ -335,7 +335,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					if (method === "GET") {
 						return reply({
 							...settings.get(),
-							browser: browser.status(),
+							browser: await browser.status(),
 							computer: await computer.status(),
 						});
 					}

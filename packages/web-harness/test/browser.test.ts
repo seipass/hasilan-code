@@ -3,7 +3,7 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ArtifactStore } from "../src/server/artifacts.ts";
-import { BrowserManager } from "../src/server/tools/browser.ts";
+import { LazyBrowserManager as BrowserManager } from "../src/server/tools/lazy-browser.ts";
 
 describe("Playwright browser consumer boundaries (requires installed Chromium)", () => {
 	let server: Server;
@@ -207,5 +207,14 @@ describe("Playwright browser consumer boundaries (requires installed Chromium)",
 		await expect(manager.execute("session", "agent", { action: "open", url: "javascript:alert(1)" })).rejects.toThrow(
 			"http and https only",
 		);
+		expect(Reflect.get(manager, "worker")).toBeUndefined();
+	});
+
+	it("checks browser availability without keeping its worker alive", async () => {
+		const status = await manager.status();
+		expect(status.ready).toBe(true);
+		expect(Reflect.get(manager, "worker")).toBeUndefined();
+		await manager.execute("session", "agent", { action: "open", url: base });
+		expect((await manager.status()).ready).toBe(true);
 	});
 });
