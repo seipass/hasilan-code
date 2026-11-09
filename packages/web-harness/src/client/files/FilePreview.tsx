@@ -104,6 +104,7 @@ export function FilePreview({ workspaceId, file, visible, refreshKey, id, labell
 					size={loaded.view.size}
 					mime={loaded.view.mime}
 					revision={loaded.view.revision}
+					visible={visible}
 					src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`}
 				/>}
 				{loaded.view.kind === "video" && <div className="files-video-preview"><video className="files-video" controls playsInline preload="metadata" onLoadedData={(event) => mediaReady(event.currentTarget)} aria-label={loaded.view.path} src={`/api/workspaces/${encodeURIComponent(workspaceId)}/file-content?path=${encodeURIComponent(loaded.view.path)}&revision=${encodeURIComponent(loaded.view.revision)}`} onError={() => setResult((current) => current?.key === loaded.key ? { ...current, error: "動画を再生できません。ファイルの破損、またはブラウザー非対応のコーデックを確認してください。" } : current)}>お使いのブラウザーは動画再生に対応していません。</video></div>}

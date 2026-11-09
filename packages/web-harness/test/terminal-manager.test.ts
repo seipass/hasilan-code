@@ -274,6 +274,25 @@ describe("TerminalManager", () => {
 		expect(spawnPty).toHaveBeenCalledTimes(1);
 	});
 
+	it("releases an exited screen while retaining its exact snapshot for repeated attachments", async () => {
+		const { manager, processes } = setup();
+		const terminal = await manager.create({ workspaceId: "a", cols: 80, rows: 24 });
+		processes[0].emitData("\u001b[31m日本語 😀\u001b[0m\r\nsecond line");
+		const before = new TestSocket();
+		await manager.attach(terminal.terminalId, before);
+		processes[0].emitExit(3);
+		const after = new TestSocket();
+		await manager.attach(terminal.terminalId, after);
+		expect(after.snapshot().vt).toBe(before.snapshot().vt);
+		expect(await screenText(after.snapshot().vt, 80, 24)).toContain("日本語 😀");
+		const entries = Reflect.get(manager, "terminals") as Map<string, { screen?: unknown; exitedSnapshot?: Buffer }>;
+		expect(entries.get(terminal.terminalId)?.screen).toBeUndefined();
+		expect(entries.get(terminal.terminalId)?.exitedSnapshot).toBeInstanceOf(Buffer);
+		const again = new TestSocket();
+		await manager.attach(terminal.terminalId, again);
+		expect(again.snapshot().vt).toBe(before.snapshot().vt);
+	});
+
 	it("kills explicitly with no Windows signal and closes all ownership during shutdown", async () => {
 		const { manager, processes } = setup();
 		const a = await manager.create({ workspaceId: "a", cols: 80, rows: 24 });

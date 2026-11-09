@@ -60,23 +60,33 @@ export function codexUserText(text: string): string | undefined {
 	return string(request.replace(/^## My request:\s*/, ""));
 }
 export function jsonLines(text: string, warnings: string[], partial = false): JsonRecord[] {
-	const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+	const source = text.replace(/^\uFEFF/, "");
 	const result: JsonRecord[] = [];
-	for (let index = 0; index < lines.length; index++) {
-		const line = lines[index];
-		if (!line.trim()) continue;
-		try {
-			const value = record(JSON.parse(line));
-			if (!Object.keys(value).length) throw new Error("Expected a record");
-			result.push(value);
-		} catch {
-			if (index === lines.length - 1 && (partial || !text.endsWith("\n"))) {
-				if (!partial)
-					warnings.push("書き込み途中の最終行を除外しました。元のハーネスで保存を終えてから再読み込みできます。");
-				break;
+	let start = 0;
+	let index = 0;
+	for (;;) {
+		const end = source.indexOf("\n", start);
+		let line = source.slice(start, end < 0 ? undefined : end);
+		if (end >= 0 && line.endsWith("\r")) line = line.slice(0, -1);
+		if (line.trim()) {
+			try {
+				const value = record(JSON.parse(line));
+				if (!Object.keys(value).length) throw new Error("Expected a record");
+				result.push(value);
+			} catch {
+				if (end < 0 && (partial || !text.endsWith("\n"))) {
+					if (!partial)
+						warnings.push(
+							"書き込み途中の最終行を除外しました。元のハーネスで保存を終えてから再読み込みできます。",
+						);
+					break;
+				}
+				throw new Error(`履歴の ${index + 1} 行目が不正な JSON です。`);
 			}
-			throw new Error(`履歴の ${index + 1} 行目が不正な JSON です。`);
 		}
+		if (end < 0) break;
+		start = end + 1;
+		index++;
 	}
 	return result;
 }

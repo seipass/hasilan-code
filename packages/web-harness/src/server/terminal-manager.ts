@@ -51,8 +51,11 @@ interface Attachment {
 interface ManagedTerminal {
 	summary: TerminalSummary;
 	pty: IPty;
-	screen: Terminal;
-	serializer: SerializeAddon;
+	screen?: Terminal;
+	serializer?: SerializeAddon;
+	/** Exited terminals keep their exact serialized display without the headless screen. */
+	exitedSnapshot?: Buffer;
+	exitedEncoding?: "utf8" | "utf16le";
 	seq: number;
 	queue: Promise<void>;
 	attachments: Set<Attachment>;
@@ -204,6 +207,17 @@ export class TerminalManager {
 				// Fence input immediately; final output and exit projection remain ordered on the screen queue.
 				entry.closing = true;
 				void this.enqueue(entry, () => {
+					try {
+						const snapshot = serializer.serialize({ scrollback: 2000 });
+						const encoding = snapshot.isWellFormed() ? "utf8" : "utf16le";
+						entry.exitedSnapshot = Buffer.from(snapshot, encoding);
+						entry.exitedEncoding = encoding;
+						screen.dispose();
+						entry.screen = undefined;
+						entry.serializer = undefined;
+					} catch {
+						// Keep the existing headless screen if serialization cannot be compacted.
+					}
 					entry.summary = {
 						...entry.summary,
 						status: "exited",
@@ -288,7 +302,9 @@ export class TerminalManager {
 			}
 			entry.attachments.add(attachment);
 			if (!entry.controller && entry.summary.status === "running" && !entry.closing) entry.controller = attachment;
-			const vt = entry.serializer.serialize({ scrollback: 2000 });
+			const vt =
+				entry.exitedSnapshot?.toString(entry.exitedEncoding) ?? entry.serializer?.serialize({ scrollback: 2000 });
+			if (vt === undefined) throw new Error("Terminal screen is unavailable");
 			attachment.ready = true;
 			attachment.snapshotSeq = entry.seq;
 			attachment.sentSeq = entry.seq;
@@ -310,7 +326,7 @@ export class TerminalManager {
 		for (const entry of entries) {
 			for (const attachment of [...entry.attachments]) this.detach(entry, attachment, true);
 			for (const listener of entry.listeners) listener.dispose();
-			entry.screen.dispose();
+			entry.screen?.dispose();
 		}
 		this.terminals.clear();
 		if (results.some((result) => result.status === "rejected"))
@@ -378,7 +394,7 @@ export class TerminalManager {
 			if (entry.controller !== attachment || entry.closing || entry.summary.status !== "running") return;
 			if (entry.summary.cols === command.cols && entry.summary.rows === command.rows) return;
 			entry.pty.resize(command.cols, command.rows);
-			entry.screen.resize(command.cols, command.rows);
+			entry.screen?.resize(command.cols, command.rows);
 			entry.summary = { ...entry.summary, cols: command.cols, rows: command.rows };
 			this.publish(entry, {
 				type: "resized",

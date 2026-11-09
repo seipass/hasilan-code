@@ -34,8 +34,8 @@ function bounded(zoom: Zoom, box?: { width: number; height: number }, size?: { w
  * visible first, then zoom, pan, pixel-accurate inspection on click, and a way out to
  * the raw file. Zoom anchors on the pointer so the pixel under the cursor stays put.
  */
-export function ImagePreview({ path, src, size, mime, revision }: {
-	path: string; src: string; size: number; mime?: string; revision: string;
+export function ImagePreview({ path, src, size, mime, revision, visible }: {
+	path: string; src: string; size: number; mime?: string; revision: string; visible: boolean;
 }) {
 	const [zoom, setZoom] = useState<Zoom>({ scale: 1, x: 0, y: 0 });
 	const [natural, setNatural] = useState<{ width: number; height: number }>();
@@ -64,6 +64,15 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 		setLoaded(ready);
 		if (element && ready) setNatural({ width: element.naturalWidth, height: element.naturalHeight });
 	}, [path, revision]);
+
+	useEffect(() => {
+		if (!visible) { setLoaded(false); return; }
+		const element = image.current;
+		if (element?.complete && element.naturalWidth > 0) {
+			setNatural({ width: element.naturalWidth, height: element.naturalHeight });
+			setLoaded(true);
+		}
+	}, [visible]);
 
 	// The pane box without its padding, plus the image's laid-out (unscaled) size.
 	const measure = useCallback(() => {
@@ -233,7 +242,7 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 		>
 			{!loaded && !failed && <p className="image-viewer-status" role="status">読み込み中…</p>}
 			{failed && <p className="image-viewer-status error" role="alert">画像を表示できません。ファイルが破損しているか、形式が未対応です。</p>}
-			<img
+			{visible && <img
 				ref={image}
 				className="image-viewer-image"
 				style={{ opacity: loaded ? 1 : 0, transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})` }}
@@ -245,7 +254,7 @@ export function ImagePreview({ path, src, size, mime, revision }: {
 				}}
 				onError={() => setFailed(true)}
 				src={src}
-			/>
+			/>}
 		</div>
 		<p className="image-viewer-meta">
 			<span>{path.split(/[\\/]/).at(-1)}</span>
