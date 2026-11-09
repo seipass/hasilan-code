@@ -107,12 +107,14 @@ window.addEventListener(
 		} else if (mode === "text" && textAnchor) {
 			const end = document.caretRangeFromPoint(event.clientX, event.clientY);
 			if (end)
-				window.getSelection()?.setBaseAndExtent(
-					textAnchor.startContainer,
-					textAnchor.startOffset,
-					end.startContainer,
-					end.startOffset,
-				);
+				window
+					.getSelection()
+					?.setBaseAndExtent(
+						textAnchor.startContainer,
+						textAnchor.startOffset,
+						end.startContainer,
+						end.startOffset,
+					);
 		} else if (mode === "region" && start)
 			box({
 				x: Math.min(start.x, event.clientX),

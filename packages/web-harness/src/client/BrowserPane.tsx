@@ -17,6 +17,25 @@ export interface BrowserSelection {
 export interface BrowserAnnotation { selection: BrowserSelection; image: string; note: string }
 export interface BrowserAnnotationDelivery { annotation: BrowserAnnotation; accepted: boolean }
 
+function addressCandidate(input: string) {
+	const value = input.trim();
+	if (!value) return undefined;
+	const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?:[:/?#]|$)/i.test(value);
+	const explicit = /^(?:https?:|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
+	const authority = value.split(/[/?#]/, 1)[0];
+	const looksLikeHost = local || (!/\s/.test(authority) && /[.。．｡]|:\d+$|^\[/.test(authority));
+	try {
+		if (explicit || looksLikeHost || value.startsWith("//")) {
+			const url = new URL(explicit ? value : `${local ? "http" : "https"}://${value.replace(/^\/\//, "")}`);
+			if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return undefined;
+			return { url: url.href, label: url.href, detail: "ウェブサイトを開く", icon: "arrowUpRight" as const };
+		}
+		return { url: `https://duckduckgo.com/?q=${encodeURIComponent(value)}`, label: value, detail: "DuckDuckGo で検索", icon: "search" as const };
+	} catch {
+		return undefined;
+	}
+}
+
 export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 	const container = useRef<HTMLDivElement>(null);
 	const browser = useRef<WebviewTag>(null);
@@ -24,6 +43,8 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 	const historyListId = useId();
 	const [pageAddress, setPageAddress] = useState(initialUrl ?? "");
 	const [draftAddress, setDraftAddress] = useState<string>();
+	const [addressFocused, setAddressFocused] = useState(false);
+	const [activeSuggestion, setActiveSuggestion] = useState(0);
 	const address = draftAddress ?? pageAddress;
 	const [ready, setReady] = useState(false);
 	const [annotating, setAnnotating] = useState(false);
@@ -35,6 +56,17 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [historyQuery, setHistoryQuery] = useState("");
 	const [navigation, setNavigation] = useState({ back: false, forward: false, loading: false });
+	const query = draftAddress?.trim().toLowerCase() ?? "";
+	const primary = addressCandidate(query ? draftAddress ?? "" : "");
+	const suggestions = query ? [
+		...(primary ? [primary] : []),
+		...history
+			.filter((entry) => entry.url !== primary?.url && `${entry.title} ${entry.url}`.toLowerCase().includes(query))
+			.slice(0, 5)
+			.map((entry) => ({ url: entry.url, label: entry.title, detail: entry.url, icon: "arrowUpRight" as const })),
+	] : [];
+	const selectedSuggestion = Math.min(activeSuggestion, suggestions.length - 1);
+	const suggestionsOpen = ready && addressFocused && suggestions.length > 0;
 	useEffect(() => {
 		const host = container.current;
 		if (!host) return;
@@ -84,20 +116,15 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 		const value = destination.trim();
 		if (!ready || !view || !value) return;
 		try {
-			const local = /^(?:localhost|127\.0\.0\.1|\[::1\])(?:[:/?#]|$)/i.test(value);
-			const explicit = /^[a-z][a-z\d+.-]*:\/\//i.test(value);
-			const host = local || /^[^\s/]+[.:][^\s/]+/.test(value);
-			const url = explicit || host
-				? new URL(explicit ? value : `${local ? "http" : "https"}://${value}`)
-				: new URL(`https://duckduckgo.com/?q=${encodeURIComponent(value)}`);
-			if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error();
+			const candidate = addressCandidate(value);
+			if (!candidate) throw new Error();
 			view.send("hasilan:browser-clear");
 			setSelection(undefined); setImage(""); setAnnotating(false); setError("");
-			setPageAddress(url.href);
+			setPageAddress(candidate.url);
 			setDraftAddress(undefined);
 			addressInput.current?.blur();
 			view.focus();
-			void view.loadURL(url.href).catch((reason: unknown) => {
+			void view.loadURL(candidate.url).catch((reason: unknown) => {
 				if (!(reason instanceof Error && reason.message.includes("ERR_ABORTED"))) setError("ページを開けませんでした。");
 			});
 		} catch { setError("有効なURLを入力してください。"); }
@@ -119,23 +146,39 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 			addressInput.current?.select();
 		}
 	}}>
-		<form className="browser-toolbar" onSubmit={(event) => { event.preventDefault(); navigate(); }}>
+		<form className="browser-toolbar" onSubmit={(event) => { event.preventDefault(); navigate(suggestionsOpen ? suggestions[selectedSuggestion]?.url : address); }}>
 			<button type="button" aria-label="戻る" title="戻る" disabled={!ready || !navigation.back} onClick={() => browser.current?.goBack()}><Icon name="chevronLeft" size="control" /></button>
 			<button type="button" aria-label="進む" title="進む" disabled={!ready || !navigation.forward} onClick={() => browser.current?.goForward()}><Icon name="chevronRight" size="control" /></button>
 			<button type="button" aria-label={navigation.loading ? "読み込みを中止" : "再読み込み"} title={navigation.loading ? "読み込みを中止" : "再読み込み"} disabled={!ready} onClick={() => navigation.loading ? browser.current?.stop() : browser.current?.reload()}><Icon name={navigation.loading ? "close" : "refresh"} size="control" /></button>
 			<button type="button" aria-pressed={annotating} title="クリックで要素、ドラッグで範囲、Shiftを押しながらドラッグでテキスト" disabled={!ready || !pageAddress} onClick={toggleAnnotation}>注釈</button>
 			<div className="browser-address">
-				<input ref={addressInput} aria-label="アドレス" placeholder="URLを入力または検索" spellCheck={false} autoComplete="off" list={historyListId} value={address}
-					onFocus={(event) => event.currentTarget.select()}
-					onChange={(event) => setDraftAddress(event.target.value)}
+				<input ref={addressInput} aria-label="アドレス" placeholder="URLを入力または検索" spellCheck={false} autoComplete="off" role="combobox" aria-autocomplete="list"
+					aria-expanded={suggestionsOpen} aria-controls={suggestionsOpen ? historyListId : undefined}
+					aria-activedescendant={suggestionsOpen ? `${historyListId}-${selectedSuggestion}` : undefined} value={address}
+					onFocus={(event) => { setAddressFocused(true); event.currentTarget.select(); }}
+					onBlur={() => setAddressFocused(false)}
+					onChange={(event) => { setDraftAddress(event.target.value); setActiveSuggestion(0); }}
 					onKeyDown={(event) => {
+						if (event.nativeEvent.isComposing) return;
+						if (suggestionsOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+							event.preventDefault();
+							const direction = event.key === "ArrowDown" ? 1 : -1;
+							setActiveSuggestion((selectedSuggestion + direction + suggestions.length) % suggestions.length);
+							return;
+						}
 						if (event.key !== "Escape") return;
 						event.stopPropagation();
 						setDraftAddress(undefined);
 						requestAnimationFrame(() => addressInput.current?.select());
 					}} />
-				<datalist id={historyListId}>{history.slice(0, 30).map((entry) => <option key={entry.url} value={entry.url} label={entry.title} />)}</datalist>
 				<button type="submit" aria-label="開く" title="開く" disabled={!ready || !address.trim()}><Icon name="arrowUpRight" size="control" /></button>
+				{suggestionsOpen && <ul id={historyListId} className="browser-address-suggestions" role="listbox" aria-label="アドレス候補">
+					{suggestions.map((entry, index) => <li key={entry.url} id={`${historyListId}-${index}`} role="option"
+						aria-selected={selectedSuggestion === index} onMouseDown={(event) => event.preventDefault()} onClick={() => navigate(entry.url)}>
+						<Icon name={entry.icon} size="inline" />
+						<span><strong>{entry.label}</strong><small>{entry.detail}</small></span>
+					</li>)}
+				</ul>}
 			</div>
 			<button type="button" aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)}>履歴</button>
 		</form>

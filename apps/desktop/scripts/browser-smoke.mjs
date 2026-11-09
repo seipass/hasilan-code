@@ -60,12 +60,14 @@ try {
 	assert.deepEqual(await app.evaluate(() => globalThis.externalLinks), [url]);
 	await page.getByRole("link", { name: "テストリンク" }).click();
 	await page.getByRole("button", { name: "内蔵ブラウザ" }).click();
-	await expect(page.getByRole("textbox", { name: "アドレス" })).toHaveValue(url);
+	await expect(page.getByRole("combobox", { name: "アドレス" })).toHaveValue(url);
 	await page.getByRole("button", { name: "ブラウザを閉じる" }).click();
 	await page.getByRole("button", { name: "新しいタブを開く" }).click();
 	await page.getByRole("button", { name: "ブラウザ", exact: true }).click();
-	await page.getByRole("textbox", { name: "アドレス" }).fill(url);
-	await page.getByRole("button", { name: "開く", exact: true }).click();
+	const address = page.getByRole("combobox", { name: "アドレス" });
+	await address.fill(url.slice("http://".length));
+	await expect(page.getByRole("option", { name: /ウェブサイトを開く/ })).toBeVisible();
+	await address.press("Enter");
 	await expect
 		.poll(
 			() =>
@@ -112,7 +114,7 @@ try {
 	await expect(page.getByRole("list", { name: "ブラウザ注釈" })).toContainText("文字を変更");
 	await page.getByRole("tab", { name: "ファイルを選択" }).click();
 	await page.getByRole("tab", { name: "ブラウザ" }).click();
-	await expect(page.getByRole("textbox", { name: "アドレス" })).toHaveValue(url);
+	await expect(address).toHaveValue(url);
 	console.log("Browser probe passed: navigation, selection, screenshot, annotation and removal.");
 } finally {
 	await app?.close();
