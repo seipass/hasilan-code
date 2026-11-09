@@ -19,6 +19,7 @@
 		"web:dev": "node scripts/dev-hasilan.mjs",
 		"build:desktop": "npm run compile --workspace=@hasilan-code/desktop",
 		"desktop": "npm run start --workspace=@hasilan-code/desktop --",
+		"desktop:dev": "npm run build:desktop && npm run desktop",
 		"pack:desktop": "npm run pack --workspace=@hasilan-code/desktop --",
 		"check:desktop": "npm run typecheck --workspace=@hasilan-code/desktop",
 		"smoke:desktop": "node apps/desktop/scripts/smoke.mjs",

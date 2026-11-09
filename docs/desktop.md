@@ -35,8 +35,7 @@ Windows 環境では、[GitHub Releases](https://github.com/seipass/hasilan-code
 npm ci --ignore-scripts
 # 新規チェックアウト等で Pi SDK が未ビルドの場合
 npm run build:hasilan
-npm run build:desktop
-npm run desktop
+npm run desktop:dev
 ```
 
 `build:desktop` は共有サーバー、Web UI、Electron シェルをビルドします（Pi SDK のモデルカタログは変更しません）。Electron バイナリは固定バージョンおよび npm の SHA-256 チェックサムを用いて取得され、`apps/desktop/.runtime/electron/` に展開されます。
