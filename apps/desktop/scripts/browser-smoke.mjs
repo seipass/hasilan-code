@@ -80,7 +80,6 @@ try {
 		)
 		.toBe(true);
 	await page.getByRole("button", { name: "注釈", exact: true }).click();
-	await page.getByRole("button", { name: "要素", exact: true }).click();
 	const rect = await app.evaluate(async ({ webContents }) => {
 		const guest = webContents.getAllWebContents().find((item) => item.getType() === "webview");
 		return guest.executeJavaScript("document.querySelector('#target').getBoundingClientRect().toJSON()");
@@ -93,7 +92,7 @@ try {
 	await expect(page.getByRole("list", { name: "ブラウザ注釈" })).toContainText("見出しを大きく");
 	await page.getByRole("button", { name: "注釈 1 を削除" }).click();
 	await expect(page.getByRole("list", { name: "ブラウザ注釈" })).toHaveCount(0);
-	await page.getByRole("button", { name: "範囲", exact: true }).click();
+	await page.getByRole("button", { name: "注釈", exact: true }).click();
 	await page.mouse.move(view.x + 20, view.y + 20);
 	await page.mouse.down();
 	await page.mouse.move(view.x + 150, view.y + 90, { steps: 5 });
@@ -101,11 +100,13 @@ try {
 	await page.getByRole("textbox", { name: "注釈" }).fill("範囲を変更");
 	await page.getByRole("button", { name: "入力欄に追加" }).click();
 	await expect(page.getByRole("list", { name: "ブラウザ注釈" })).toContainText("範囲を変更");
-	await page.getByRole("button", { name: "テキスト", exact: true }).click();
+	await page.getByRole("button", { name: "注釈", exact: true }).click();
+	await page.keyboard.down("Shift");
 	await page.mouse.move(view.x + rect.x + 4, view.y + rect.y + 10);
 	await page.mouse.down();
 	await page.mouse.move(view.x + rect.x + 110, view.y + rect.y + 10, { steps: 5 });
 	await page.mouse.up();
+	await page.keyboard.up("Shift");
 	await page.getByRole("textbox", { name: "注釈" }).fill("文字を変更");
 	await page.getByRole("button", { name: "入力欄に追加" }).click();
 	await expect(page.getByRole("list", { name: "ブラウザ注釈" })).toContainText("文字を変更");

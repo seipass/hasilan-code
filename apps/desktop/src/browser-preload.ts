@@ -5,9 +5,13 @@ let mode: Mode | undefined;
 let start: { x: number; y: number } | undefined;
 let marker: HTMLDivElement | undefined;
 let suppressClick = false;
+let inspecting = false;
+let textAnchor: Range | null = null;
 
 function clear(): void {
 	mode = undefined;
+	inspecting = false;
+	textAnchor = null;
 	start = undefined;
 	marker?.remove();
 	marker = undefined;
@@ -66,16 +70,26 @@ function finish(rect: { x: number; y: number; width: number; height: number }, e
 		text: text?.slice(0, 4000),
 	});
 	mode = undefined;
+	inspecting = false;
 }
 
 ipcRenderer.on("hasilan:browser-select", (_event, value: unknown) => {
 	clear();
+	if (value === "inspect") {
+		inspecting = true;
+		mode = "element";
+	}
 	if (value === "element" || value === "text" || value === "region") mode = value;
 });
 ipcRenderer.on("hasilan:browser-clear", clear);
 window.addEventListener(
 	"keydown",
 	(event) => {
+		if (event.isTrusted && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			ipcRenderer.sendToHost("hasilan:browser-focus-address");
+		}
 		if (event.isTrusted && mode && event.key === "Escape") {
 			clear();
 			ipcRenderer.sendToHost("hasilan:browser-cancel");
@@ -90,6 +104,15 @@ window.addEventListener(
 		if (mode === "element") {
 			const target = document.elementFromPoint(event.clientX, event.clientY);
 			if (target) box(target.getBoundingClientRect());
+		} else if (mode === "text" && textAnchor) {
+			const end = document.caretRangeFromPoint(event.clientX, event.clientY);
+			if (end)
+				window.getSelection()?.setBaseAndExtent(
+					textAnchor.startContainer,
+					textAnchor.startOffset,
+					end.startContainer,
+					end.startOffset,
+				);
 		} else if (mode === "region" && start)
 			box({
 				x: Math.min(start.x, event.clientX),
@@ -104,6 +127,16 @@ window.addEventListener(
 	"pointerdown",
 	(event) => {
 		if (!event.isTrusted) return;
+		if (inspecting && event.button === 0) {
+			mode = event.shiftKey ? "text" : "region";
+			if (mode === "text") {
+				textAnchor = document.caretRangeFromPoint(event.clientX, event.clientY);
+				window.getSelection()?.removeAllRanges();
+				suppressClick = true;
+				event.preventDefault();
+				event.stopImmediatePropagation();
+			}
+		}
 		if ((mode === "region" || mode === "element") && event.button === 0) {
 			suppressClick = true;
 			if (mode === "region") start = { x: event.clientX, y: event.clientY };
@@ -132,13 +165,26 @@ window.addEventListener(
 				height: Math.abs(start.y - event.clientY),
 			};
 			if (rect.width >= 4 && rect.height >= 4) finish(rect);
-			else {
+			else if (inspecting) {
+				const target = document.elementFromPoint(event.clientX, event.clientY);
+				if (target) {
+					mode = "element";
+					finish(target.getBoundingClientRect(), target);
+				} else {
+					clear();
+					ipcRenderer.sendToHost("hasilan:browser-cancel");
+				}
+			} else {
 				clear();
 				ipcRenderer.sendToHost("hasilan:browser-cancel");
 			}
 		} else if (mode === "text") {
+			textAnchor = null;
 			const selection = window.getSelection();
-			if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+			if (!selection || selection.isCollapsed || !selection.rangeCount) {
+				if (inspecting) mode = "element";
+				return;
+			}
 			const range = selection.getRangeAt(0);
 			const node = range.commonAncestorContainer;
 			finish(

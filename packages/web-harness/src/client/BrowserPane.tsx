@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
 import { Icon } from "./Icon.tsx";
 import { usePreferenceState } from "./preferences.ts";
@@ -20,11 +20,13 @@ export interface BrowserAnnotationDelivery { annotation: BrowserAnnotation; acce
 export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 	const container = useRef<HTMLDivElement>(null);
 	const browser = useRef<WebviewTag>(null);
-	const currentAddress = useRef(initialUrl ?? "");
-	const [address, setAddress] = useState(initialUrl ?? "");
+	const addressInput = useRef<HTMLInputElement>(null);
+	const historyListId = useId();
+	const [pageAddress, setPageAddress] = useState(initialUrl ?? "");
+	const [draftAddress, setDraftAddress] = useState<string>();
+	const address = draftAddress ?? pageAddress;
 	const [ready, setReady] = useState(false);
-	const [mode, setMode] = useState<BrowserSelection["kind"]>();
-	const [annotationOpen, setAnnotationOpen] = useState(false);
+	const [annotating, setAnnotating] = useState(false);
 	const [selection, setSelection] = useState<BrowserSelection>();
 	const [image, setImage] = useState("");
 	const [note, setNote] = useState("");
@@ -46,10 +48,9 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 		const updateNavigation = () => setNavigation({ back: view.canGoBack(), forward: view.canGoForward(), loading: view.isLoading() });
 		const navigate = (event: Electron.DidNavigateEvent | Electron.DidNavigateInPageEvent) => {
 			if ("isMainFrame" in event && !event.isMainFrame) return;
-			currentAddress.current = event.url === "about:blank" ? "" : event.url;
-			setAddress(currentAddress.current);
+			setPageAddress(event.url === "about:blank" ? "" : event.url);
 			updateNavigation();
-			setMode(undefined); setSelection(undefined); setImage(""); setError("");
+			setAnnotating(false); setSelection(undefined); setImage(""); setError("");
 		};
 		const loaded = () => {
 			updateNavigation();
@@ -58,10 +59,11 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 			setHistory((previous) => [{ url: url.slice(0, 8192), title: (view.getTitle() || url).slice(0, 512), visitedAt: Date.now() }, ...previous.filter((entry) => entry.url !== url)].slice(0, 200));
 		};
 		const message = (event: Electron.IpcMessageEvent) => {
-			if (event.channel === "hasilan:browser-cancel") { setMode(undefined); return; }
+			if (event.channel === "hasilan:browser-focus-address") { addressInput.current?.focus(); addressInput.current?.select(); return; }
+			if (event.channel === "hasilan:browser-cancel") { setAnnotating(false); return; }
 			if (event.channel !== "hasilan:browser-selection") return;
 			const selected = event.args[0] as BrowserSelection;
-			setMode(undefined); setError("");
+			setAnnotating(false); setError("");
 			void view.capturePage().then((capture) => {
 				if (view.getURL() !== selected.url) throw new Error("Page changed");
 				setSelection(selected); setImage(capture.toDataURL());
@@ -83,49 +85,65 @@ export function BrowserPane({ initialUrl }: { initialUrl?: string }) {
 		if (!ready || !view || !value) return;
 		try {
 			const local = /^(?:localhost|127\.0\.0\.1|\[::1\])(?:[:/?#]|$)/i.test(value);
-			const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`);
+			const explicit = /^[a-z][a-z\d+.-]*:\/\//i.test(value);
+			const host = local || /^[^\s/]+[.:][^\s/]+/.test(value);
+			const url = explicit || host
+				? new URL(explicit ? value : `${local ? "http" : "https"}://${value}`)
+				: new URL(`https://duckduckgo.com/?q=${encodeURIComponent(value)}`);
 			if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error();
-			browser.current?.send("hasilan:browser-clear"); setSelection(undefined); setImage(""); setMode(undefined); setError("");
-			setHistoryOpen(false);
+			view.send("hasilan:browser-clear");
+			setSelection(undefined); setImage(""); setAnnotating(false); setError("");
+			setPageAddress(url.href);
+			setDraftAddress(undefined);
+			addressInput.current?.blur();
+			view.focus();
 			void view.loadURL(url.href).catch((reason: unknown) => {
 				if (!(reason instanceof Error && reason.message.includes("ERR_ABORTED"))) setError("ページを開けませんでした。");
 			});
 		} catch { setError("有効なURLを入力してください。"); }
 	}
-	function select(next: BrowserSelection["kind"]) {
+	function toggleAnnotation() {
 		if (!ready) return;
-		setSelection(undefined); setImage(""); setMode(next); setError("");
-		browser.current?.send("hasilan:browser-select", next);
+		setSelection(undefined); setImage(""); setError("");
+		setAnnotating(!annotating);
+		if (annotating) browser.current?.send("hasilan:browser-clear");
+		else {
+			browser.current?.send("hasilan:browser-select", "inspect");
+			browser.current?.focus();
+		}
 	}
-	return <section className="browser-pane" aria-label="ブラウザ">
+	return <section className="browser-pane" aria-label="ブラウザ" onKeyDown={(event) => {
+		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
+			event.preventDefault();
+			addressInput.current?.focus();
+			addressInput.current?.select();
+		}
+	}}>
 		<form className="browser-toolbar" onSubmit={(event) => { event.preventDefault(); navigate(); }}>
 			<button type="button" aria-label="戻る" title="戻る" disabled={!ready || !navigation.back} onClick={() => browser.current?.goBack()}><Icon name="chevronLeft" size="control" /></button>
 			<button type="button" aria-label="進む" title="進む" disabled={!ready || !navigation.forward} onClick={() => browser.current?.goForward()}><Icon name="chevronRight" size="control" /></button>
 			<button type="button" aria-label={navigation.loading ? "読み込みを中止" : "再読み込み"} title={navigation.loading ? "読み込みを中止" : "再読み込み"} disabled={!ready} onClick={() => navigation.loading ? browser.current?.stop() : browser.current?.reload()}><Icon name={navigation.loading ? "close" : "refresh"} size="control" /></button>
+			<button type="button" aria-pressed={annotating} title="クリックで要素、ドラッグで範囲、Shiftを押しながらドラッグでテキスト" disabled={!ready || !pageAddress} onClick={toggleAnnotation}>注釈</button>
 			<div className="browser-address">
-				<input aria-label="アドレス" placeholder="URLを入力" spellCheck={false} value={address}
+				<input ref={addressInput} aria-label="アドレス" placeholder="URLを入力または検索" spellCheck={false} autoComplete="off" list={historyListId} value={address}
 					onFocus={(event) => event.currentTarget.select()}
-					onChange={(event) => setAddress(event.target.value)}
+					onChange={(event) => setDraftAddress(event.target.value)}
 					onKeyDown={(event) => {
 						if (event.key !== "Escape") return;
 						event.stopPropagation();
-						setAddress(currentAddress.current);
-						event.currentTarget.blur();
+						setDraftAddress(undefined);
+						requestAnimationFrame(() => addressInput.current?.select());
 					}} />
+				<datalist id={historyListId}>{history.slice(0, 30).map((entry) => <option key={entry.url} value={entry.url} label={entry.title} />)}</datalist>
 				<button type="submit" aria-label="開く" title="開く" disabled={!ready || !address.trim()}><Icon name="arrowUpRight" size="control" /></button>
 			</div>
-			<button type="button" aria-expanded={historyOpen} onClick={() => { setAnnotationOpen(false); setHistoryOpen((value) => !value); }}>履歴</button>
-			<button type="button" aria-expanded={annotationOpen} onClick={() => { setHistoryOpen(false); setAnnotationOpen((value) => !value); }}>注釈</button>
+			<button type="button" aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)}>履歴</button>
 		</form>
-		{historyOpen && <section className="browser-history" aria-label="閲覧履歴"><header><strong>閲覧履歴</strong><button type="button" onClick={() => setHistory([])}>すべて削除</button><button type="button" aria-label="履歴を閉じる" onClick={() => setHistoryOpen(false)}><Icon name="close" size="inline" /></button></header><input aria-label="履歴を検索" placeholder="タイトル・URLで検索" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} /><ul>{history.filter((entry) => `${entry.title} ${entry.url}`.toLowerCase().includes(historyQuery.toLowerCase())).map((entry) => <li key={entry.url}><button type="button" onClick={() => navigate(entry.url)}><strong>{entry.title}</strong><small>{entry.url}</small><time>{new Date(entry.visitedAt).toLocaleString()}</time></button><button type="button" aria-label={`${entry.title}を履歴から削除`} onClick={() => setHistory((previous) => previous.filter((item) => item.url !== entry.url))}><Icon name="close" size="inline" /></button></li>)}</ul>{!history.length && <p>閲覧履歴はありません。</p>}</section>}
-		{(annotationOpen || mode) && <div className="browser-annotation-tools" role="group" aria-label="注釈の対象">
-			<button type="button" disabled={!ready} aria-pressed={mode === "element"} onClick={() => select("element")}>要素</button>
-			<button type="button" disabled={!ready} aria-pressed={mode === "text"} onClick={() => select("text")}>テキスト</button>
-			<button type="button" disabled={!ready} aria-pressed={mode === "region"} onClick={() => select("region")}>範囲</button>
-			{mode && <span role="status">{mode === "element" ? "要素をクリック" : mode === "text" ? "テキストを選択" : "範囲をドラッグ"} · Escでキャンセル</span>}
-		</div>}
 		{error && <p className="browser-error" role="alert">{error}</p>}
-		<div ref={container} className="browser-content" />
+		<div className="browser-body">
+			<div ref={container} className="browser-content" />
+		{historyOpen && <section className="browser-history" aria-label="閲覧履歴"><header><strong>閲覧履歴</strong><button type="button" onClick={() => setHistory([])}>すべて削除</button><button type="button" aria-label="履歴を閉じる" onClick={() => setHistoryOpen(false)}><Icon name="close" size="inline" /></button></header><input aria-label="履歴を検索" placeholder="タイトル・URLで検索" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} /><ul>{history.filter((entry) => `${entry.title} ${entry.url}`.toLowerCase().includes(historyQuery.toLowerCase())).map((entry) => <li key={entry.url}><button type="button" onClick={() => navigate(entry.url)}><strong>{entry.title}</strong><small>{entry.url}</small><time>{new Date(entry.visitedAt).toLocaleString()}</time></button><button type="button" aria-label={`${entry.title}を履歴から削除`} onClick={() => setHistory((previous) => previous.filter((item) => item.url !== entry.url))}><Icon name="close" size="inline" /></button></li>)}</ul>{!history.length && <p>閲覧履歴はありません。</p>}</section>}
+		</div>
 		{selection && image && <form className="browser-comment" onSubmit={(event) => {
 			event.preventDefault();
 			if (!note.trim()) return;
