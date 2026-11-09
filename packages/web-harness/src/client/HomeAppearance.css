@@ -1,7 +1,15 @@
 .workspace-surface { position: relative; isolation: isolate; }
 .home-backdrop-anchor { flex: none; height: 0; }
 .home-backdrop-anchor .home-backdrop { top: auto; }
-.home-backdrop { position: absolute; inset: 0 0 auto; height: min(100%, calc(70% + 120px)); overflow: hidden; pointer-events: none; z-index: -1; mask-image: linear-gradient(to bottom, #000 42%, #000c 60%, #0005 80%, transparent); }
+.home-backdrop {
+	position: absolute;
+	inset: 0 0 auto;
+	height: min(100%, calc(70% + 120px));
+	overflow: hidden;
+	pointer-events: none;
+	z-index: -1;
+	mask-image: linear-gradient(to bottom, transparent, #0009 min(24px, 5%), #000 min(60px, 12%), #000 42%, #000c 60%, #0005 80%, transparent);
+}
 .home-backdrop img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center top; animation: motion-label-enter 180ms ease; }
 .home-backdrop::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 35%, var(--surface)); backdrop-filter: blur(56px); mask-image: linear-gradient(to bottom, transparent 28%, #000 75%); }
 .home-appearance > h3 { margin: 0 0 5px; }
