@@ -8,6 +8,8 @@ export interface DesktopWindowState {
 	maximized: boolean;
 	fullscreen: boolean;
 	focused: boolean;
+	canGoBack: boolean;
+	canGoForward: boolean;
 }
 
 export function readActivity(value: unknown): Activity | undefined {

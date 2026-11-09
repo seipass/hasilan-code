@@ -36,6 +36,27 @@ html[data-desktop-platform] .sidebar-toggle { top: calc(15px + var(--desktop-tit
 .desktop-titlebar[hidden] { display: none; }
 .desktop-titlebar-icon { width: 20px; height: 20px; margin-left: 8px; zoom: calc(1 / var(--desktop-zoom)); pointer-events: none; }
 html[data-desktop-platform="darwin"] .desktop-titlebar-icon { margin-left: 80px; }
+.desktop-history-controls {
+	display: flex;
+	gap: 2px;
+	margin-left: 8px;
+	zoom: calc(1 / var(--desktop-zoom));
+	-webkit-app-region: no-drag;
+}
+.desktop-history-controls > .window-icon {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--on-surface, #e0e0e0);
+}
+.desktop-history-controls > .window-icon:enabled:hover { background: rgb(255 255 255 / 10%); }
+.desktop-history-controls > .window-icon:disabled { opacity: .35; }
+.desktop-history-controls svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .desktop-window-controls {
 	position: absolute;
 	top: 0;

@@ -115,7 +115,7 @@ if (process.isMainFrame) {
 		controls.className = "desktop-window-controls";
 		controls.setAttribute("role", "group");
 		controls.setAttribute("aria-label", "ウィンドウ操作");
-		const addButton = (action: string, label: string, icon: string) => {
+		const addButton = (action: string, label: string, icon: string, parent = controls) => {
 			const button = document.createElement("button");
 			button.type = "button";
 			button.className = `window-icon window-${action}`;
@@ -124,9 +124,27 @@ if (process.isMainFrame) {
 			button.innerHTML = icon;
 			button.firstElementChild?.setAttribute("aria-hidden", "true");
 			button.addEventListener("click", () => ipcRenderer.send("hasilan:window-action", action));
-			controls.append(button);
+			parent.append(button);
 			return button;
 		};
+		const navigation = document.createElement("div");
+		navigation.className = "desktop-history-controls";
+		navigation.setAttribute("role", "group");
+		navigation.setAttribute("aria-label", "画面履歴");
+		const back = addButton(
+			"back",
+			"戻る",
+			'<svg viewBox="0 0 16 16"><path d="M13 8H3m0 0 4-4M3 8l4 4"/></svg>',
+			navigation,
+		);
+		const forward = addButton(
+			"forward",
+			"進む",
+			'<svg viewBox="0 0 16 16"><path d="M3 8h10m0 0-4-4m4 4-4 4"/></svg>',
+			navigation,
+		);
+		back.disabled = forward.disabled = true;
+		titlebar.append(navigation);
 		addButton("minimize", "最小化", minimizeIcon);
 		const maximize = addButton("toggle-maximize", "最大化", maximizeIcon);
 		addButton("close", "ウィンドウを閉じる", closeIcon);
@@ -140,6 +158,8 @@ if (process.isMainFrame) {
 			root.style.setProperty("--desktop-titlebar-height", `${fullscreen ? 0 : 35 / zoom}px`);
 		};
 		const applyState = (state: DesktopWindowState) => {
+			back.disabled = !state.canGoBack;
+			forward.disabled = !state.canGoForward;
 			titlebar.hidden = state.fullscreen;
 			controls.dataset.focused = String(state.focused);
 			controls.dataset.maximized = String(state.maximized);

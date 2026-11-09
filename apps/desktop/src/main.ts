@@ -53,6 +53,7 @@ let updateBusy = false;
 let updateError = false;
 const shellAssets = join(app.getAppPath(), "dist");
 const fallbackPage = join(shellAssets, "startup.html");
+const fallbackUrl = pathToFileURL(fallbackPage).href;
 const boundsPath = join(app.getPath("userData"), "window.json");
 
 function showWindow(): void {
@@ -259,14 +260,12 @@ async function start(): Promise<void> {
 	});
 	window.once("ready-to-show", showWindow);
 	installContextMenu(window.webContents, false);
+	const history = window.webContents.navigationHistory;
 	const trustedWindowRequest = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => {
 		if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;
 		try {
 			const url = new URL(event.senderFrame.url);
-			return (
-				url.origin === host?.origin ||
-				(url.protocol === "file:" && url.href.split("?")[0] === pathToFileURL(fallbackPage).href)
-			);
+			return url.origin === host?.origin || (url.protocol === "file:" && url.href.split("?")[0] === fallbackUrl);
 		} catch {
 			return false;
 		}
@@ -275,10 +274,26 @@ async function start(): Promise<void> {
 		maximized: window.isMaximized(),
 		fullscreen: window.isFullScreen(),
 		focused: window.isFocused(),
+		canGoBack: history.canGoBack(),
+		canGoForward: history.canGoForward(),
 	});
 	const publishWindowState = () => {
 		if (!window.isDestroyed()) window.webContents.send("hasilan:window-state", windowState());
 	};
+	window.webContents.on("did-navigate", (_event, url) => {
+		if (url.split("?")[0] === fallbackUrl) {
+			history.clear();
+		} else {
+			const entries = history.getAllEntries();
+			for (let index = entries.length - 1; index >= 0; index--) {
+				if (entries[index].url.split("?")[0] === fallbackUrl) history.removeEntryAtIndex(index);
+			}
+		}
+		publishWindowState();
+	});
+	window.webContents.on("did-navigate-in-page", (_event, _url, isMainFrame) => {
+		if (isMainFrame) publishWindowState();
+	});
 	ipcMain.handle("hasilan:window-state", (event) => {
 		if (!trustedWindowRequest(event)) throw new Error("Window request is unavailable");
 		return windowState();
@@ -290,6 +305,8 @@ async function start(): Promise<void> {
 			if (window.isMaximized()) window.unmaximize();
 			else window.maximize();
 		} else if (action === "close") window.close();
+		else if (action === "back" && history.canGoBack()) history.goBack();
+		else if (action === "forward" && history.canGoForward()) history.goForward();
 	});
 	ipcMain.on("hasilan:open-external", (event, value: unknown) => {
 		if (!trustedWindowRequest(event) || typeof value !== "string") return;
