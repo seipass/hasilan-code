@@ -6,27 +6,66 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-REPLACE'; img-src 'self'">
   <title>Hasilan Code</title>
   <style>
-    :root { color-scheme:dark; font-family:system-ui,sans-serif; background:#1e1e2e; color:#cdd6f4 }
-    body { margin:0; min-height:100vh; display:grid; place-items:center }
-    main { max-width:560px; padding:48px; text-align:center }
-    img { width:64px; height:64px }
-    h1 { font-size:23px; margin:16px 0 24px; font-weight:600 }
-    p { color:#a6adc8; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere }
-    a { display:inline-block; color:#1e1e2e; background:#cba6f7; padding:10px 22px; border-radius:8px; text-decoration:none; margin-top:16px }
-    [hidden] { display:none }
+    :root {
+      color-scheme: dark;
+      font-family: "Yu Gothic UI", system-ui, sans-serif;
+      background: #141414;
+      color: #f0f0f0;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(ellipse 380px 260px at 50% 42%, #202430, transparent);
+    }
+    main { width: min(440px, calc(100% - 48px)); padding-block: 56px; text-align: center }
+    img { display: block; width: 56px; height: 56px; margin-inline: auto; border-radius: 14px }
+    h1 { margin: 18px 0 30px; font-size: 22px; font-weight: 650; letter-spacing: -.025em }
+    .status-panel {
+      display: grid;
+      justify-items: start;
+      gap: 12px;
+      padding: 16px 18px;
+      border: 1px solid #35363b;
+      border-radius: 12px;
+      background: #1c1d21;
+      text-align: start;
+    }
+    [role="status"] { width: 100%; min-width: 0 }
+    .status-label { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; font-size: 12px; font-weight: 650 }
+    .status-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #a9b8ff }
+    [data-failed] .status-label::before { background: #f4a7a7 }
+    p { margin: 0; color: #b9bac2; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere }
+    [data-failed] p { max-height: 30vh; overflow: auto; width: 100% }
+    a { color: #f0f0f0; background: #2b2d35; border: 1px solid #434550; border-radius: 7px; padding: 7px 12px; font-size: 13px; text-decoration: none }
+    a:hover { background: #353843 }
+    a:focus-visible { outline: 2px solid #a9b8ff; outline-offset: 3px }
+    [hidden] { display: none }
   </style>
 </head>
 <body>
   <main>
     <img src="icon.png" alt="">
     <h1>Hasilan Code</h1>
-    <p id="message" role="status">起動しています…</p>
-    <a id="retry" href="hasilan-desktop:retry" hidden>もう一度起動</a>
+    <section class="status-panel">
+      <div role="status">
+        <div class="status-label" id="status-label">起動中</div>
+        <p id="message">ワークスペースを準備しています…</p>
+      </div>
+      <a id="retry" href="hasilan-desktop:retry" hidden>もう一度起動</a>
+    </section>
   </main>
   <script>
 const query = new URLSearchParams(location.search);
-document.getElementById("message").textContent = query.get("message") || "起動しています…";
-document.getElementById("retry").hidden = query.get("failed") !== "true";
+const failed = query.get("failed") === "true";
+const message = query.get("message");
+if (message) document.getElementById("message").textContent = message;
+if (failed) {
+  document.body.dataset.failed = "";
+  document.getElementById("status-label").textContent = "起動エラー";
+  document.getElementById("retry").hidden = false;
+}
   </script>
 </body>
 </html>

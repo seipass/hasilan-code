@@ -107,7 +107,7 @@ if (process.isMainFrame) {
 		titlebar.setAttribute("aria-label", "タイトルバー");
 		const appIcon = document.createElement("img");
 		appIcon.className = "desktop-titlebar-icon";
-		appIcon.src = "/icon.svg";
+		appIcon.src = location.protocol === "file:" ? "./icon.png" : "/icon.svg";
 		appIcon.alt = "";
 		appIcon.draggable = false;
 		titlebar.append(appIcon);
