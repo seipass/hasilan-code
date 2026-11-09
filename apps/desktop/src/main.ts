@@ -368,6 +368,10 @@ async function start(): Promise<void> {
 		}
 		navigate(event, url);
 	});
+	const pendingBrowserRestores = new WeakMap<
+		Electron.WebContents,
+		NonNullable<ReturnType<typeof readBrowserHistory>>
+	>();
 	window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
 		const prefix = "about:blank#resume=";
 		const restore = params.src?.startsWith(prefix) ? readBrowserHistory(params.src.slice(prefix.length)) : undefined;
@@ -391,16 +395,19 @@ async function start(): Promise<void> {
 			// History must be restored before Electron starts the guest's first navigation.
 			params.src = "";
 			app.once("web-contents-created", (_event, guest) => {
-				guest.once("did-attach", () => {
-					void guest.navigationHistory.restore(restore).catch(() => {
-						if (!guest.isDestroyed())
-							void guest.loadURL(restore.entries[restore.index].url).catch(() => undefined);
-					});
-				});
+				pendingBrowserRestores.set(guest, restore);
 			});
 		}
 	});
 	window.webContents.on("did-attach-webview", (_event, contents) => {
+		const restore = pendingBrowserRestores.get(contents);
+		pendingBrowserRestores.delete(contents);
+		if (restore) {
+			void contents.navigationHistory.restore(restore).catch(() => {
+				if (!contents.isDestroyed())
+					void contents.loadURL(restore.entries[restore.index].url).catch(() => undefined);
+			});
+		}
 		installContextMenu(contents, true);
 		contents.setWindowOpenHandler(({ url }) => {
 			const target = externalLink(url);
