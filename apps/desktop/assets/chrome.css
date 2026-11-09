@@ -20,10 +20,6 @@ html[data-desktop-platform] .sidebar::before {
 	pointer-events: none;
 }
 html[data-desktop-platform] .sidebar-toggle { top: calc(15px + var(--desktop-titlebar-height)); }
-html[data-desktop-platform] .workspace-surface > .home-backdrop {
-	top: calc(-1 * var(--desktop-titlebar-height));
-	height: min(calc(100% + var(--desktop-titlebar-height)), calc(70% + 120px + var(--desktop-titlebar-height)));
-}
 .desktop-titlebar {
 	position: fixed;
 	top: 0;
