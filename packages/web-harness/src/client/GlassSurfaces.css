@@ -78,6 +78,7 @@
 	.right-panel::before { top: -62px; }
 	.topbar { position: relative; z-index: 1; }
 	.app-shell .detail-resize-slot { position: relative; width: 0; overflow: visible; z-index: 2; }
+	.app-shell:not(.inspector-open) .detail-resize-slot { visibility: hidden; }
 	.detail-resize-slot .panel-resize { position: absolute; inset: 0 auto 0 -4px; width: 8px; }
 	.detail-resize-slot .panel-resize::after { top: 12px; bottom: 12px; left: 3px; width: 1px; }
 }
