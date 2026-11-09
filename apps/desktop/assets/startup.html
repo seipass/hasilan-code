@@ -21,11 +21,12 @@
     }
     main { width: min(440px, calc(100% - 48px)); padding-block: 56px; text-align: center }
     img { display: block; width: 56px; height: 56px; margin-inline: auto; border-radius: 14px }
-    h1 { margin: 18px 0 30px; font-size: 22px; font-weight: 650; letter-spacing: -.025em }
+    main > p { margin-top: 16px }
     .status-panel {
       display: grid;
       justify-items: start;
       gap: 12px;
+      margin-top: 16px;
       padding: 16px 18px;
       border: 1px solid #35363b;
       border-radius: 12px;
@@ -34,10 +35,9 @@
     }
     [role="status"] { width: 100%; min-width: 0 }
     .status-label { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; font-size: 12px; font-weight: 650 }
-    .status-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #a9b8ff }
-    [data-failed] .status-label::before { background: #f4a7a7 }
+    .status-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #f4a7a7 }
     p { margin: 0; color: #b9bac2; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere }
-    [data-failed] p { max-height: 30vh; overflow: auto; width: 100% }
+    #message { max-height: 30vh; overflow: auto }
     a { color: #f0f0f0; background: #2b2d35; border: 1px solid #434550; border-radius: 7px; padding: 7px 12px; font-size: 13px; text-decoration: none }
     a:hover { background: #353843 }
     a:focus-visible { outline: 2px solid #a9b8ff; outline-offset: 3px }
@@ -47,24 +47,21 @@
 <body>
   <main>
     <img src="icon.png" alt="">
-    <h1>Hasilan Code</h1>
-    <section class="status-panel">
+    <p id="loading" role="status">読み込み中…</p>
+    <section id="error" class="status-panel" hidden>
       <div role="status">
-        <div class="status-label" id="status-label">起動中</div>
-        <p id="message">ワークスペースを準備しています…</p>
+        <div class="status-label">起動エラー</div>
+        <p id="message"></p>
       </div>
-      <a id="retry" href="hasilan-desktop:retry" hidden>もう一度起動</a>
+      <a href="hasilan-desktop:retry">もう一度起動</a>
     </section>
   </main>
   <script>
 const query = new URLSearchParams(location.search);
-const failed = query.get("failed") === "true";
-const message = query.get("message");
-if (message) document.getElementById("message").textContent = message;
-if (failed) {
-  document.body.dataset.failed = "";
-  document.getElementById("status-label").textContent = "起動エラー";
-  document.getElementById("retry").hidden = false;
+if (query.get("failed") === "true") {
+  document.getElementById("message").textContent = query.get("message") || "起動に失敗しました。";
+  document.getElementById("loading").hidden = true;
+  document.getElementById("error").hidden = false;
 }
   </script>
 </body>
