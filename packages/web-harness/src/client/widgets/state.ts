@@ -13,6 +13,8 @@ export const WIDGET_KINDS = [
 	"notes",
 ] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
+export const TOPBAR_WIDGETS = ["notes", "weather", "earthquake", "usage"] as const;
+export type TopbarWidget = (typeof TOPBAR_WIDGETS)[number];
 export const WIDGET_LABELS: Record<WidgetKind, string> = {
 	weather: "天気",
 	usage: "使用量",
@@ -32,6 +34,7 @@ export interface WidgetTimer {
 
 export interface WidgetPreferences {
 	order: WidgetKind[];
+	display?: Partial<Record<TopbarWidget, "icon" | "mini">>;
 	place: WeatherPlace | null;
 	countdown: WidgetTimer;
 	countup: WidgetTimer;
@@ -78,6 +81,12 @@ export function parseWidgetPreferences(raw: string | null): WidgetPreferences {
 		const item = objectValue(value);
 		if (!item || !Array.isArray(item.order)) return defaults;
 		const place = objectValue(item.place);
+		const storedDisplay = objectValue(item.display);
+		const display: WidgetPreferences["display"] = {};
+		for (const kind of TOPBAR_WIDGETS) {
+			const size = storedDisplay?.[kind];
+			if (size === "icon" || size === "mini") display[kind] = size;
+		}
 		return {
 			order: [
 				...new Set(
@@ -104,6 +113,7 @@ export function parseWidgetPreferences(raw: string | null): WidgetPreferences {
 							longitude: place.longitude,
 						}
 					: null,
+			display: Object.keys(display).length ? display : undefined,
 			countdown: storedTimer(item.countdown, defaults.countdown),
 			countup: storedTimer(item.countup, defaults.countup),
 			note: typeof item.note === "string" ? item.note.slice(0, 50_000) : "",

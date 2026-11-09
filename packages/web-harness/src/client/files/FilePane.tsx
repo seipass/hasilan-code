@@ -14,6 +14,7 @@ export interface FileTarget { path: string; line?: number; requestId: string }
 interface FilePaneProps {
 	workspaceId: string; activePath?: string; refreshToken: number; visible: boolean; treeVisible: boolean;
 	children: ReactNode;
+	onTreeClose: () => void;
 	onOpen: (path: string, line?: number) => void;
 }
 const MIN_PREVIEW_WIDTH = 300;
@@ -54,9 +55,8 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen,
 	</ul>;
 }
 
-export function FilePane({ workspaceId, activePath, refreshToken, visible, treeVisible, children, onOpen }: FilePaneProps) {
+export function FilePane({ workspaceId, activePath, refreshToken, visible, treeVisible, children, onTreeClose, onOpen }: FilePaneProps) {
 	const mobile = useMobileLayout();
-	const [treeOpen, setTreeOpen] = useState(false);
 	const [filter, setFilter] = useState("");
 	const [refreshing, setRefreshing] = useState(false);
 	const [localRefresh, setLocalRefresh] = useState(0);
@@ -80,7 +80,6 @@ export function FilePane({ workspaceId, activePath, refreshToken, visible, treeV
 	const minTreeWidth = Math.floor(treeMinimum * minimumScale);
 	const maxTreeWidth = Math.max(minTreeWidth, Math.min(MAX_TREE_WIDTH, contentWidth - minPreviewWidth));
 	const displayedTreeWidth = Math.max(minTreeWidth, Math.min(maxTreeWidth, treeWidth));
-	useEffect(() => { if (!mobile || !visible || !treeVisible) setTreeOpen(false); }, [mobile, visible, treeVisible]);
 	useEffect(() => {
 		const openQuick = () => setQuickOpen(true);
 		window.addEventListener("hasilan:quick-open", openQuick);
@@ -114,10 +113,9 @@ export function FilePane({ workspaceId, activePath, refreshToken, visible, treeV
 			<button type="button" className="files-tree-action" aria-label="ファイル一覧を更新" title="ファイル一覧を更新" disabled={refreshing} onClick={() => { void refreshTree(); }}>{refreshing ? "…" : <Icon name="refresh" size="inline" />}</button>
 			<button type="button" className="files-tree-action" aria-label="ファイル名から開く" title="ファイル名から開く（Ctrl / Cmd + P）" onClick={() => setQuickOpen(true)}><Icon name="search" size="inline" /></button>
 		</div>
-		<Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${localRefresh}`} activePath={activePath} visible={visible && treeVisible && (!mobile || treeOpen)} onOpen={(path) => { onOpen(path); setTreeOpen(false); }} open={treePreferences.open} filter={filter} onToggle={(path) => setTreePreferences((previous) => ({ ...previous, open: previous.open.includes(path) ? previous.open.filter((value) => value !== path) : [...previous.open, path] }))} />
+		<Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${localRefresh}`} activePath={activePath} visible={visible && treeVisible} onOpen={(path) => { onOpen(path); if (mobile) onTreeClose(); }} open={treePreferences.open} filter={filter} onToggle={(path) => setTreePreferences((previous) => ({ ...previous, open: previous.open.includes(path) ? previous.open.filter((value) => value !== path) : [...previous.open, path] }))} />
 	</nav>;
 	return <section className="files-pane" ref={pane} aria-label="作業ビューア">
-		{mobile && treeVisible && <button type="button" className="files-tree-toggle" aria-haspopup="dialog" aria-expanded={treeOpen} aria-controls={treeId} onClick={() => setTreeOpen(true)}><Icon name="folder" size="control" />ファイル一覧を開く</button>}
 		<div ref={layout} className="files-layout" style={{ gridTemplateColumns: mobile || !treeVisible ? "minmax(0, 1fr)" : `minmax(0, 1fr) ${splitWidth}px minmax(0, ${displayedTreeWidth}px)` }}>
 			<div className="files-preview">{children}</div>
 			{!mobile && treeVisible && <div className="files-splitter" role="separator" tabIndex={0} aria-label="ファイルツリーの幅" aria-orientation="vertical" aria-controls={treeId} aria-valuemin={minTreeWidth} aria-valuemax={maxTreeWidth} aria-valuenow={displayedTreeWidth} aria-valuetext={`${displayedTreeWidth} ピクセル`} data-resizing={resizing} onPointerDown={(event) => {
@@ -132,7 +130,7 @@ export function FilePane({ workspaceId, activePath, refreshToken, visible, treeV
 				event.preventDefault(); const step = event.shiftKey ? 48 : 16;
 				resizeTree(event.key === "Home" ? minTreeWidth : event.key === "End" ? maxTreeWidth : displayedTreeWidth + (event.key === "ArrowLeft" ? step : -step));
 			}} />}
-			{mobile ? <MobileSheet open={treeOpen && visible && treeVisible} side="right" title="ファイル一覧" onClose={() => setTreeOpen(false)}>{tree}</MobileSheet> : <Presence show={treeVisible}>{tree}</Presence>}
+			{mobile ? <MobileSheet open={visible && treeVisible} side="right" title="ファイル一覧" onClose={onTreeClose}>{tree}</MobileSheet> : <Presence show={treeVisible}>{tree}</Presence>}
 		</div>
 		<QuickOpen workspaceId={workspaceId} open={quickOpen} onClose={() => setQuickOpen(false)} onOpen={(path, line) => onOpen(path, line)} />
 	</section>;

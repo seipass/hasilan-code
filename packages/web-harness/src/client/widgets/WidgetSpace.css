@@ -1,9 +1,11 @@
-.topbar-actions.has-widgets { min-width: 0; height: 100%; margin-right: -12px; padding: 0 12px; align-items: center; gap: 8px; }
+.topbar-actions.has-widgets { min-width: 0; max-width: 100%; height: 100%; flex: 0 1 auto; align-items: center; gap: 4px; }
 .topbar-actions.has-widgets > .quiet-button { flex: none; }
 .widget-space { display: flex; flex: 1; align-items: center; min-width: 0; height: 100%; gap: 6px; }
 .widget-space[hidden] { display: none; }
 .widget-strip { display: flex; align-items: center; flex: 1; min-width: 0; height: 100%; gap: 4px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 .widget-chip { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; max-width: 170px; min-height: 44px; padding: 6px 9px; border: 1px solid transparent; border-radius: 9px; background: transparent; text-align: left; }
+.widget-chip[data-size="icon"] { justify-content: center; width: 32px; min-height: 32px; padding: 4px; }
+.file-tree-toggle[aria-expanded="true"] { background: var(--surface-hover); }
 .widget-chip:hover { background: color-mix(in srgb, var(--surface-hover) 55%, transparent); }
 .widget-chip:focus-visible { outline-offset: -2px; }
 .widget-chip[aria-expanded="true"] { background: color-mix(in srgb, var(--primary) 13%, transparent); border-color: var(--border); }
@@ -149,11 +151,9 @@
 .widget-music label { margin-top: 18px; }
 .widget-timeline { display: flex; justify-content: space-between; margin-top: 5px; font-size: var(--text-xs); color: var(--on-surface-muted); font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) {
-	/* Phone widths cannot show a useful slice of the widget strip; keep the title and the panel toggle. */
 	.topbar-leading { flex: 1 1 auto; min-width: 0; }
-	.topbar-actions.has-widgets { width: auto; min-width: 0; margin-right: 0; padding: 0; flex: 0 0 auto; }
+	.topbar-actions.has-widgets { width: auto; min-width: 0; margin-right: 0; padding: 0; }
 	.topbar-actions.has-widgets > .quiet-button { display: inline-flex; }
-	.widget-space, .widget-strip, .widget-edit { display: none; }
 	.widget-chip { max-width: 120px; padding-inline: 7px; }
 	.widget-form input, .widget-notes textarea { font-size: var(--text-lg); }
 	.widget-settings-list button { width: 40px; height: 44px; }

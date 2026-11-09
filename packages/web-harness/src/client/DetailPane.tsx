@@ -7,7 +7,7 @@ import { type DetailTab, detailTabsReducer, emptyDetailTabs } from "./detail-tab
 import { restoreDetailTabs, saveDetailTabs } from "./detail-preferences.ts";
 import { useSyncExternalStore } from "react";
 import { discardDraft, draftKey, draftStatusVersion, isDraftDirty, subscribeDraftStatus } from "./files/file-drafts.ts";
-import { FilePane, type FileTarget } from "./files/FilePane.tsx";
+import type { FileTarget } from "./files/FilePane.tsx";
 import { FilePreview } from "./files/FilePreview.tsx";
 import { Icon } from "./Icon.tsx";
 import { Select } from "./Select.tsx";
@@ -23,7 +23,7 @@ import "./DetailPane.css";
 export type DetailView = "tabs" | "team" | "tools";
 
 
-export function DetailPane({ workspaceId, target, browserTarget, refreshToken, visible, view, onViewChange, team, tools }: {
+export function DetailPane({ workspaceId, target, browserTarget, refreshToken, visible, view, onViewChange, onActiveFileChange, team, tools }: {
 	workspaceId: string;
 	target?: FileTarget;
 	browserTarget?: { id: string; url: string };
@@ -31,6 +31,7 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 	visible: boolean;
 	view: DetailView;
 	onViewChange: (view: DetailView) => void;
+	onActiveFileChange?: (path: string | undefined) => void;
 	team: ReactNode;
 	tools: ReactNode;
 }) {
@@ -230,6 +231,8 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 	}
 	const selectedFiles = layout.tabs.filter((tab) => tab.kind === "file" && layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single"));
 	const activeFile = selectedFiles.find((tab) => tab.pane === layout.focused) ?? selectedFiles[0];
+	const activePath = activeFile?.kind === "file" ? activeFile.file?.path : undefined;
+	useEffect(() => { onActiveFileChange?.(activePath); }, [activePath, onActiveFileChange]);
 	const bodyIdentity = layout.selected.map((id) => { const tab = layout.tabs.find((entry) => entry.id === id); return `${id}:${tab?.kind}:${tab?.kind === "file" ? tab.file?.path ?? "empty" : ""}`; }).join("|");
 	return <div className="detail-workspace">
 		<header className="detail-toolbar" inert={!restored}>
@@ -284,7 +287,6 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 		</header>
 		<Presence show={!!error}><div className="detail-error" role="alert">{error}{listFailed && <button type="button" onClick={() => { setError(undefined); setListAttempt((value) => value + 1); }}>端末一覧を再取得</button>}<button type="button" aria-label="エラーを閉じる" onClick={() => setError(undefined)}><Icon name="close" size="inline" /></button></div></Presence>
 		<div className="detail-views"><Presence show={view === "tabs"} keepMounted><div className="detail-resource-area">
-			<FilePane workspaceId={workspaceId} activePath={activeFile?.kind === "file" ? activeFile.file?.path : undefined} refreshToken={refreshToken} visible={visible && view === "tabs"} treeVisible onOpen={openFile}>
 			<MotionSwap identity={bodyIdentity} enabled={!dragging && !modeChanged} className="detail-tab-transition"><SplitLayout preferenceKey={`pi-web-split:${workspaceId}`} mode={layout.mode} label="作業タブ" dragging={!!dragging && layout.tabs.length > 1} onEdgeDrop={(edge) => { if (dragged.current) dispatch({ type: "edge", id: dragged.current, edge }); endDrag(); }}>
 				{layout.tabs.map((tab) => {
 					const selected = layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single");
@@ -296,7 +298,6 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 				})}
 				{([0, 1] as const).map((pane) => !layout.tabs.some((tab) => tab.pane === pane) && <div key={`empty-${pane}`} className="detail-tab-body split-tab-body" data-pane={pane} hidden={pane === 1 && layout.mode === "single"} onPointerDownCapture={() => dispatch({ type: "focus", pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(pane); } }}>{choices(undefined, pane)}</div>)}
 			</SplitLayout></MotionSwap>
-			</FilePane>
 		</div></Presence>
 		<Presence show={view === "team"} keepMounted><div id={`${id}-team`} className="detail-auxiliary">{team}</div></Presence>
 		<Presence show={view === "tools"} keepMounted><div id={`${id}-tools`} className="detail-auxiliary detail-tools">{tools}</div></Presence></div>

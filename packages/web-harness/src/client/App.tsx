@@ -12,7 +12,7 @@ import { userText } from "./MessageActions.tsx";
 import { ChatPane } from "./ChatPane.tsx";
 import { CanvasPane } from "./CanvasPane.tsx";
 import { DetailPane, type DetailView } from "./DetailPane.tsx";
-import type { FileTarget } from "./files/FilePane.tsx";
+import { FilePane, type FileTarget } from "./files/FilePane.tsx";
 import { GoalPanel } from "./GoalPanel.tsx";
 import { HomeBackdrop, useHomeBackground } from "./HomeAppearance.tsx";
 import { HomeDashboard } from "./HomeDashboard.tsx";
@@ -91,6 +91,8 @@ export function App() {
 	const [bodyMatches, setBodyMatches] = useState<{ sessionId: string; snippet: string; role: string }[]>([]);
 	const [rightTab, setRightTab] = usePreferenceState<DetailView>("pi-web-right-tab", "tabs");
 	const [rightOpen, setRightOpen] = usePreferenceState("pi-web-right-open", false);
+	const [fileTreeOpen, setFileTreeOpen] = useState(false);
+	const [activeFilePath, setActiveFilePath] = useState<string>();
 	const [notificationsEnabled, setNotificationsEnabled] = usePreferenceState("pi-web-notifications", false);
 	const [rightWidth, setRightWidth] = usePreferenceState("pi-web-right-width", 660);
 	const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -249,7 +251,7 @@ export function App() {
 	// The entry is dropped again when the last overlay closes through the UI, so a normal
 	// back press still leaves the conversation exactly once.
 	const narrowViewport = viewport.width <= 900;
-	const overlayCount = (sessionAction ? 1 : 0) + (importOpen ? 1 : 0) + (settingsOpen ? 1 : 0) + (modelOpen ? 1 : 0) + (narrowViewport && rightOpen ? 1 : 0) + (narrowViewport && sidebarOpen ? 1 : 0);
+	const overlayCount = (sessionAction ? 1 : 0) + (importOpen ? 1 : 0) + (settingsOpen ? 1 : 0) + (modelOpen ? 1 : 0) + (narrowViewport && rightOpen ? 1 : 0) + (narrowViewport && sidebarOpen ? 1 : 0) + (narrowViewport && fileTreeOpen ? 1 : 0);
 	const backGuard = useRef(false);
 	const overlayOpen = useRef(false);
 	overlayOpen.current = overlayCount > 0;
@@ -558,10 +560,11 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}><Icon name="settings" size="control" />設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className={`topbar-actions${rightOpen ? " has-widgets" : ""}`} style={{ width: rightOpen && viewport.width > 900 ? `calc(${panelWidth} - var(--desktop-controls-right, 0px))` : undefined }}><WidgetSpace visible={rightOpen} usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions has-widgets"><WidgetSpace visible usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
 			<HomeBackdrop background={homeBackgroundVisible ? background : undefined} />
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
+			<FilePane workspaceId={workspaceId ?? ""} activePath={activeFilePath} refreshToken={filesVersion} visible={!!workspaceId} treeVisible={!!workspaceId && fileTreeOpen} onTreeClose={() => setFileTreeOpen(false)} onOpen={openFile}>
 			<div className="main-layout"><main className="chat-column" inert={(rightOpen || sidebarOpen) && viewport.width <= 900}><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
 				<Presence show={!!routedConversation && routedConversation.sessionId === sessionId} collapse><div className="composer-notice" role="status"><span>{routedConversation?.message}</span><button type="button" aria-label="通知を閉じる" onClick={() => setRoutedConversation(undefined)}><Icon name="close" size="inline" /></button></div></Presence>
 				{canvasOpened && <Presence show={mode === "canvas"} keepMounted><div className="mode-page" inert={mode !== "canvas"}>
@@ -572,12 +575,13 @@ export function App() {
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
 					<div className="right-panel-body detail-panel-body">
-						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
+						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab} onActiveFileChange={setActiveFilePath}
 							team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>
 				</aside>
 			</div>
+			</FilePane>
 		</div>{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} onSessionRestored={async () => {
 			const [folders, sessions] = await Promise.all([api<Workspace[]>("/api/workspaces"), api<SessionSummary[]>("/api/sessions")]);
 			setWorkspaces(folders);
