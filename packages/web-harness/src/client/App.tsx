@@ -70,7 +70,6 @@ export function App() {
 	const [projections, setProjections] = useState<Record<string, WorkspaceProjection>>({});
 	const [initialSessions, setInitialSessions] = useState<SessionSummary[]>([]);
 	const [error, setError] = useState<string>();
-	const [routedConversation, setRoutedConversation] = useState<{ sessionId: string; message: string }>();
 	const [catalog, setCatalog] = useState<ModelCatalog>();
 	const [catalogVersion, setCatalogVersion] = useState(0);
 	const [draftSelection, setDraftSelection] = usePreferenceState<{ model?: Model; thinkingLevel?: ThinkingLevel }>("pi-web-model-selection", {});
@@ -417,7 +416,6 @@ export function App() {
 				draftSession.current = undefined;
 				setWorkspaceId(routed.workspace.workspaceId); setSessionId(routed.sessionId);
 				setExpandedWorkspaces((previous) => ({ ...previous, [routed.workspace.workspaceId]: true }));
-				setRoutedConversation({ sessionId: routed.sessionId, message: routed.continued ? `続行した会話: ${routed.title} · ${routed.workspace.path}` : `開始したワークスペース: ${routed.workspace.path}` });
 				setFileTarget(undefined); setDraftInsertion(undefined); setHistoryQuery(""); setModelOpen(false);
 				if (window.innerWidth < 900) setSidebarOpen(false);
 				result = { disposition: routed.disposition };
@@ -566,7 +564,6 @@ export function App() {
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
 			<FilePane workspaceId={workspaceId ?? ""} activePath={activeFilePath} refreshToken={filesVersion} visible={!!workspaceId} treeVisible={!!workspaceId && fileTreeOpen} onTreeClose={() => setFileTreeOpen(false)} onOpen={openFile}>
 			<div className="main-layout"><main className="chat-column" inert={(rightOpen || sidebarOpen) && viewport.width <= 900}><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
-				<Presence show={!!routedConversation && routedConversation.sessionId === sessionId} collapse><div className="composer-notice" role="status"><span>{routedConversation?.message}</span><button type="button" aria-label="通知を閉じる" onClick={() => setRoutedConversation(undefined)}><Icon name="close" size="inline" /></button></div></Presence>
 				{canvasOpened && <Presence show={mode === "canvas"} keepMounted><div className="mode-page" inert={mode !== "canvas"}>
 					{workspaceId && <CanvasPane key={workspaceId} workspaceId={workspaceId} destinationControl={<label className="canvas-destination"><span className="sr-only">入力欄に追加する設計の送信先</span><Select aria-label="入力欄に追加する設計の送信先" value={canvasTarget} onChange={(value) => setCanvasTarget(value === "swarm" ? "swarm" : "chat")}><option value="chat">会話</option><option value="swarm">Hyakki-Yako</option></Select></label>} onComposeDesign={composeCanvasDesign} onDirtyChange={setCanvasDirty} />}
 				</div></Presence>}

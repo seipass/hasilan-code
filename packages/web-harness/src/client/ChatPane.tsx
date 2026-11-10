@@ -56,7 +56,6 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const widthDrag = useRef<{ id: number; x: number; width: number } | undefined>(undefined);
 	const [sending, setSending] = useState(false);
 	const [error, setError] = useState<string>();
-	const [notice, setNotice] = useState<string>();
 	const { attachments, reading, error: attachmentError, addFiles, remove } = useComposerAttachments(draftKey);
 	const [browserAnnotations, setBrowserAnnotations] = useState<BrowserAnnotation[]>(() => annotationDrafts.get(draftKey) ?? []);
 	const [dragging, setDragging] = useState(false);
@@ -109,7 +108,6 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 		if (!draftInsertion || insertedDraft.current === draftInsertion.id) return;
 		insertedDraft.current = draftInsertion.id;
 		setWorkspaceCandidates(undefined);
-		setNotice(undefined);
 		setText((current) => {
 			if (!current.trim()) return draftInsertion.text;
 			// Keep a leading command first when attaching a design to an existing draft.
@@ -156,8 +154,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 			setError("添付は10件、合計20 MBまでです。不要な添付や注釈を削除してください。"); return;
 		}
 		submitting.current = true;
-		setSending(true); setError(undefined); setNotice(undefined);
-		if (destination?.kind === "auto") setNotice("判断モデルがワークスペースと会話を選択しています…");
+		setSending(true); setError(undefined);
 		const submitted = text;
 		const submittedAttachments = attachments;
 		const submittedAnnotations = browserAnnotations;
@@ -167,24 +164,20 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 			const result = await onSend([submitted, annotationText].filter(Boolean).join("\n\n"), busy ? mode : "prompt", [...submittedAttachments.map(({ name, mimeType, data }) => ({ name, mimeType, data })), ...annotationImages], destination);
 			if (result.destinationCandidates) {
 				setWorkspaceCandidates(result.destinationCandidates); setWorkspaceIndex(0);
-				setNotice("続ける会話、または新しい会話の開始先を選んでください。");
 				return;
 			}
-			setWorkspaceCandidates(undefined); setNotice(undefined);
+			setWorkspaceCandidates(undefined);
 			setText((current) => current === submitted ? "" : current);
 			remove(submittedAttachments.map((attachment) => attachment.id));
 			annotationDrafts.delete(draftKey);
 			setBrowserAnnotations([]);
-			if (result.notice) setNotice(result.notice);
-			else if (busy && result.disposition) setNotice(result.disposition === "queued" ? "追加の指示を予約しました。" : "追加の指示を送信しました。");
 			setFollowRequest((value) => value + 1);
-		} catch (reason) { setNotice(undefined); setError(errorMessage(reason)); }
+		} catch (reason) { setError(errorMessage(reason)); }
 		finally { submitting.current = false; setSending(false); }
 	}
 	async function attach(files: File[]) {
 		if (submitting.current) return;
 		setWorkspaceCandidates(undefined);
-		setNotice(undefined);
 		setError(undefined);
 		try { await addFiles(files); input.current?.focus(); }
 		catch (reason) { setError(errorMessage(reason)); }
@@ -235,7 +228,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 		{loading && <div className="conversation conversation-loading" role="status">会話を読み込んでいます…</div>}
 		<Presence show={!!session?.parentSessionId} collapse><div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session?.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div></Presence>
 		<Presence show={session?.availability === "missing"} collapse><div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div></Presence>
-		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); setNotice("前の依頼を入力欄に戻しました。編集して送信すると新しい依頼になります。"); input.current?.focus(); }} />}
+		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); input.current?.focus(); }} />}
 		<div className="composer-area">
 			<Presence show={pendingInputs.length > 0} collapse><div ref={pendingList} className="pending-input-list" role="list" aria-label="予約中の追加指示">
 				<MotionItems items={pendingInputs} itemKey={(pendingInput) => pendingInput.inputId}>{(pendingInput) => {
@@ -269,7 +262,6 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 				}}</MotionItems>
 			</div></Presence>
 			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath} aria-label={workspacePath}>{workspaceLabel(workspacePath, [])}</code>}</div></Presence>
-			<Presence show={!!notice} collapse><div className="composer-notice" role="status"><span>{notice}</span><button type="button" aria-label="通知を閉じる" title="通知を閉じる" onClick={() => setNotice(undefined)}><Icon name="close" size="inline" /></button></div></Presence>
 			<Presence show={!!goalControl}><div className="motion-contents">{goalControl}</div></Presence>
 			<form className={`composer command-picker-anchor${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return;
@@ -280,16 +272,16 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 			}}>
 				<Presence show={pickerOpen}><div className="motion-contents"><CommandPicker id={pickerId} commands={suggestions} activeIndex={activeCommand} onActive={setCommandIndex} onChoose={chooseCommand} below={dashboardVisible} /></div></Presence>
 				<Presence show={workspacePickerOpen}><div className="motion-contents"><CommandPicker id={workspacePickerId} label="送信先の会話" below commands={(workspaceCandidates ?? []).map((candidate) => ({ command: destinationKey(candidate), label: candidate.kind === "session" ? candidate.title : "＋ 新しい会話で開始", description: candidate.kind === "session" ? `${candidate.name}${candidate.updatedAt ? ` · ${new Date(candidate.updatedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""} · ${candidate.path}` : `${candidate.name} · ${candidate.path}` }))} activeIndex={activeWorkspace} onActive={setWorkspaceIndex} disabled={sending || reading} onChoose={(key) => { const candidate = workspaceCandidates?.find((entry) => destinationKey(entry) === key); if (workspacePickerOpen && candidate) void submit(candidate); }} /></div></Presence>
-				<Presence show={attachments.length > 0} collapse><ComposerAttachments attachments={attachments} disabled={sending} onRemove={(id) => { setWorkspaceCandidates(undefined); setNotice(undefined); remove([id]); }} /></Presence>
+				<Presence show={attachments.length > 0} collapse><ComposerAttachments attachments={attachments} disabled={sending} onRemove={(id) => { setWorkspaceCandidates(undefined); remove([id]); }} /></Presence>
 				{browserAnnotations.length > 0 && <ul className="browser-annotation-list" aria-label="ブラウザ注釈">{browserAnnotations.map((annotation, index) => <li key={`${annotation.selection.url}:${index}`}><img src={annotation.image} alt="選択箇所のスクリーンショット" /><span><strong>{annotation.selection.title || annotation.selection.url}</strong><small>{annotation.note}</small></span><button type="button" aria-label={`注釈 ${index + 1} を削除`} disabled={sending} onClick={() => setBrowserAnnotations((current) => { const next = current.filter((_, itemIndex) => itemIndex !== index); if (next.length) annotationDrafts.set(draftKey, next); else annotationDrafts.delete(draftKey); return next; })}><Icon name="close" size="inline" /></button></li>)}</ul>}
 				<input ref={fileInput} type="file" multiple hidden aria-label="添付ファイルを選択" disabled={sending || reading} onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void attach(files); }} />
 				<label className="sr-only" htmlFor="message">メッセージ</label>
 				<div className="composer-input-row">
-					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setNotice(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={2} disabled={sending} onKeyDown={(event) => {
+					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={2} disabled={sending} onKeyDown={(event) => {
 						if (event.nativeEvent.isComposing) return;
 						if (matchesAppKeybinding(event, "composer.routeWorkspace")) { event.preventDefault(); if (canRouteWorkspace && !event.repeat) void submit({ kind: "auto" }); return; }
 						if (matchesAppKeybinding(event, "composer.followUp")) { event.preventDefault(); if (busy && !event.repeat) void submit(undefined, "followUp"); return; }
-						if (workspacePickerOpen && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setWorkspaceCandidates(undefined); setNotice(undefined); return; }
+						if (workspacePickerOpen && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setWorkspaceCandidates(undefined); return; }
 						if (workspacePickerOpen && workspaceCandidates && !event.ctrlKey && !event.metaKey && !event.altKey) {
 							if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 								event.preventDefault();
