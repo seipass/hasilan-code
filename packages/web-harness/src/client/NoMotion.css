@@ -24,8 +24,14 @@
 	.conversation .context-entry > summary::before {
 		transition: transform 220ms cubic-bezier(.2, .75, .25, 1) !important;
 	}
+	.workspace-accordion > summary::before {
+		transition: transform 220ms cubic-bezier(.4, 0, .2, 1) !important;
+	}
 	@supports (interpolate-size: allow-keywords) {
 		.conversation .context-entry::details-content {
+			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
+		}
+		.workspace-accordion::details-content {
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
 		}
 	}
