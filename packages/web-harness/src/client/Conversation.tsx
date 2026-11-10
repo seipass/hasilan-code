@@ -13,6 +13,8 @@ import { usePreferenceState } from "./preferences.ts";
 import type { ChatMessage, ToolCall } from "./types.ts";
 import { Icon } from "./Icon.tsx";
 import { UserMessageContent } from "./UserMessageContent.tsx";
+import { FileChanges } from "./FileChanges.tsx";
+import { fileChanges, type FileChangeSummary } from "./file-changes.ts";
 import "./Conversation.css";
 
 const ESTIMATED_HEIGHT = 220;
@@ -49,8 +51,9 @@ interface MessageProps {
 	onRetry?: (messageId: string) => void;
 	onEdit?: (messageId: string, text: string) => void;
 	expansions: Map<string, boolean[]>;
+	changes?: FileChangeSummary[];
 }
-const Message = memo(function Message({ rowKey, grouped, message, tools, onFile, onRetry, onEdit, expansions }: MessageProps) {
+const Message = memo(function Message({ rowKey, grouped, message, tools, onFile, onRetry, onEdit, expansions, changes }: MessageProps) {
 	const element = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		const row = element.current;
@@ -87,6 +90,7 @@ const Message = memo(function Message({ rowKey, grouped, message, tools, onFile,
 					<MessageActions message={message} content={content} onRetry={onRetry ? () => onRetry(message.messageId) : undefined} onEdit={onEdit ? (text) => onEdit(message.messageId, text) : undefined} />
 				</div>}
 			</article>}
+		{!!changes?.length && <FileChanges files={changes} />}
 	</div>;
 }, (previous, next) =>
 	previous.rowKey === next.rowKey &&
@@ -98,6 +102,7 @@ const Message = memo(function Message({ rowKey, grouped, message, tools, onFile,
 	previous.onRetry === next.onRetry &&
 	previous.onEdit === next.onEdit &&
 	previous.expansions === next.expansions &&
+	previous.changes === next.changes &&
 	previous.tools.length === next.tools.length &&
 	previous.tools.every((tool, index) => tool === next.tools[index]));
 
@@ -175,6 +180,18 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 		const items = conversationRows(allMessages, tools, activeRunId);
 		return activityBeta ? turnActivityRows(items, activeRunId) : items;
 	}, [allMessages, tools, activeRunId, activityBeta]);
+	const changesByRow = useMemo(() => {
+		const lastByRun = new Map<string, string>();
+		for (const row of rows) {
+			if (row.kind === "message" && row.message.runId && row.message.runId !== activeRunId && !row.message.contextInjection && !row.message.importedContext && hasAssistantText(row.message)) lastByRun.set(row.message.runId, row.key);
+		}
+		const result = new Map<string, FileChangeSummary[]>();
+		for (const [runId, key] of lastByRun) {
+			const changes = fileChanges(tools, runId);
+			if (changes.length) result.set(key, changes);
+		}
+		return result;
+	}, [rows, tools, activeRunId]);
 	// Retrying only makes sense on the newest reply; older replies cannot be regenerated in place.
 	const lastAssistantKey = useMemo(() => {
 		for (let index = rows.length - 1; index >= 0; index--) {
@@ -261,7 +278,7 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 				{rows.slice(start, end).map((row) => row.kind === "computer"
 					? <div key={row.key} className="virtual-message" data-message-id={row.key}><ComputerActivity group={row.group} onFile={openFile} /></div>
 					: row.kind === "activity" ? <ActivityBlock key={row.key} block={row} onFile={openFile} expansions={expansions.current} opened={openedActivity.current} />
-					: <Message key={row.key} rowKey={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current}
+					: <Message key={row.key} rowKey={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current} changes={changesByRow.get(row.key)}
 						onRetry={onRetry && row.key === lastAssistantKey ? retryMessage : undefined}
 						onEdit={onEdit ? editMessage : undefined} />)}
 				<div className="history-spacer" aria-hidden="true" style={{ height: total - offsets[end] }} />
