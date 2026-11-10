@@ -97,9 +97,9 @@
 /* Devin sidebar: 300px dock, 8px outer inset, 30px rows and 24px action slots. */
 .app-shell { --sidebar-width: 300px; }
 .sidebar { padding-inline: 8px; border-radius: 0 10px 10px 0; }
-.sidebar-brand { min-height: 32px; margin-bottom: 8px; padding-inline: 2px; }
-.sidebar .brand { width: 28px; height: 28px; padding: 0; justify-content: center; }
-.sidebar .brand-symbol { width: 24px; height: 24px; }
+.sidebar-brand { min-height: 32px; margin-bottom: 8px; padding-inline: 64px 2px; justify-content: flex-start; }
+.sidebar .brand { width: 96px; height: 28px; padding: 0; justify-content: center; }
+.sidebar .brand-symbol { width: 96px; height: auto; }
 .sidebar-conversation-actions { grid-template-columns: minmax(0, 1fr) 30px; gap: 4px; }
 .new-conversation { justify-content: flex-start; gap: 8px; min-height: 30px; padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; font-weight: 400; }
 .new-conversation > span { color: var(--on-surface-secondary); line-height: 18px; }

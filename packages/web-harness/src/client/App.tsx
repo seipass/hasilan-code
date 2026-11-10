@@ -530,7 +530,7 @@ export function App() {
 		<button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><Icon name={sidebarOpen ? "chevronLeft" : "menu"} size="chrome" /></button>
 		<button className="navigation-scrim" aria-label="履歴を閉じる" title="履歴を閉じる" aria-hidden={!sidebarOpen} inert={!sidebarOpen} tabIndex={-1} onClick={() => setSidebarOpen(false)} />
 		<aside ref={sidebarRef} id="conversation-history" className="sidebar" aria-label="会話の履歴" aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
-			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={() => newConversation()}><img className="brand-symbol" src="/icon.svg" alt="" /></button></div>
+			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={() => newConversation()}><img className="brand-symbol" src="/code-logo.svg" alt="" /></button></div>
 			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><Icon name="plus" size="control" />新しい会話</button>
 			<button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" title="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></div>
 			<label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>
