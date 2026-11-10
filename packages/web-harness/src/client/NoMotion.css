@@ -1,4 +1,4 @@
-/* Disable decorative motion, including native dialogs and accordion contents. */
+/* Motion is enabled per interaction after its layout and interruption behavior are verified. */
 *, *::before, *::after {
 	animation: none !important;
 	transition: none !important;
@@ -14,4 +14,11 @@
 .turn-activity-label {
 	background-image: none !important;
 	-webkit-text-fill-color: currentColor !important;
+}
+
+/* Color feedback never changes layout and can reverse naturally during rapid pointer movement. */
+@media (prefers-reduced-motion: no-preference) {
+	:where(button:not(:disabled), a[href], summary, [role="button"]:not([aria-disabled="true"]), [role="tab"], input, textarea, select) {
+		transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease !important;
+	}
 }
