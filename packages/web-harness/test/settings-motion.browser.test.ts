@@ -59,6 +59,19 @@ createRoot(document.getElementById("root")).render(<Fixture />);
 		await dialog.waitFor();
 		await expect.poll(() => dialog.evaluate((node) => node.getAnimations().length)).toBeGreaterThan(0);
 		expect(await anchor.boundingBox()).toEqual(position);
+		await dialog.evaluate(async (node) => {
+			await Promise.all(node.getAnimations().map((animation) => animation.finished));
+		});
+		await dialog.getByRole("heading", { name: "プロバイダーの認証" }).waitFor();
+		const tabs = dialog.getByRole("tablist");
+		const tabPosition = await tabs.boundingBox();
+		await dialog.getByRole("tab", { name: "検索" }).click();
+		const searchPanel = dialog.locator('section[role="tabpanel"][id$="-search-panel"]');
+		await searchPanel.waitFor();
+		await expect.poll(() => searchPanel.evaluate((node) => node.getAnimations().length)).toBeGreaterThan(0);
+		expect(await tabs.boundingBox()).toEqual(tabPosition);
+		await dialog.getByRole("tab", { name: "プロバイダー" }).click();
+		await dialog.getByRole("heading", { name: "プロバイダーの認証" }).waitFor();
 		await dialog.getByRole("button", { name: "設定を閉じる" }).click();
 		await expect.poll(() => page.getByRole("dialog").count()).toBe(0);
 		expect(await anchor.boundingBox()).toEqual(position);
@@ -86,6 +99,9 @@ createRoot(document.getElementById("root")).render(<Fixture />);
 
 		await page.emulateMedia({ reducedMotion: "reduce" });
 		await page.getByRole("button", { name: "Open settings" }).click();
+		await page.getByRole("heading", { name: "プロバイダーの認証" }).waitFor();
+		await page.getByRole("tab", { name: "検索" }).click();
+		expect(await searchPanel.evaluate((node) => getComputedStyle(node).animationName)).toBe("none");
 		await page.getByRole("button", { name: "設定を閉じる" }).click();
 		await expect.poll(() => page.getByRole("dialog").count()).toBe(0);
 	} finally {

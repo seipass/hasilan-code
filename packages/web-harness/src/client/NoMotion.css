@@ -46,7 +46,15 @@
 	.settings-dialog.settings-dialog {
 		transition: opacity 170ms ease, transform 170ms cubic-bezier(.2, .75, .25, 1) !important;
 	}
+	.settings-panels > .settings-content:not([hidden]):not([data-motion-exit="true"]) {
+		animation: settings-panel-appear 140ms ease-out !important;
+	}
 	@starting-style {
 		.dialog-backdrop:has(> .settings-dialog) { opacity: 0; }
 	}
+}
+
+@keyframes settings-panel-appear {
+	from { opacity: .5; }
+	to { opacity: 1; }
 }
