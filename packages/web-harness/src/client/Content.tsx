@@ -61,10 +61,21 @@ export function Content({ value, onFile, activeThinking = false, colorPreview = 
 }
 function Thinking({ text, summary, redacted, onFile, initiallyOpen }: { text: string; summary?: string; redacted: boolean; onFile: (path: string, line?: number) => void; initiallyOpen: boolean }) {
 	const [open, setOpen] = useState(initiallyOpen);
+	const [bodyPresent, setBodyPresent] = useState(initiallyOpen);
 	const [result, setResult] = useState<{ operation: "translate" | "summarize"; text?: string; source: string; error?: string }>();
 	const [busy, setBusy] = useState(false);
 	const pending = useRef<AbortController | undefined>(undefined);
 	useEffect(() => () => pending.current?.abort(), []);
+	useEffect(() => {
+		if (open || !bodyPresent) return;
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !CSS.supports("interpolate-size", "allow-keywords")) {
+			setBodyPresent(false);
+			return;
+		}
+		// Keep the body until the native closing transition finishes, then release long thoughts.
+		const timeout = window.setTimeout(() => setBodyPresent(false), 300);
+		return () => window.clearTimeout(timeout);
+	}, [open, bodyPresent]);
 	async function transform(operation: "translate" | "summarize") {
 		const source = text || summary || "";
 		if (!source.trim()) return;
@@ -89,5 +100,5 @@ function Thinking({ text, summary, redacted, onFile, initiallyOpen }: { text: st
 	}
 	const preview = tail.reverse().join("");
 	const previewTail = preview.length > 180 ? `…${preview.slice(-180)}` : preview;
-	return <details className="thinking" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}><summary><span className="thinking-title">{summary && !text ? "推論の要約" : "思考"}</span><span className="thinking-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><button type="button" title="思考を翻訳" aria-label="思考を翻訳" disabled={busy || !(text || summary)} onClick={() => { void transform("translate"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h12M9 3v3c0 5-3 8-6 9M5 9c1 3 4 5 7 6M13 20l4-10 4 10M14.5 17h5" /></svg></button><button type="button" title="思考を要約" aria-label="思考を要約" disabled={busy || !(text || summary)} onClick={() => { void transform("summarize"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 11h16M4 16h10M4 21h7" /></svg></button></span><span className="thinking-preview"><span>{previewTail || (redacted ? "暗号化された推論（原記録に保持）" : "")}</span></span></summary>{open && <>{result ? <div className="text-transform-result"><div className="text-transform-header"><strong>{result.operation === "translate" ? "翻訳" : "要約"}</strong><button type="button" onClick={() => { pending.current?.abort(); setBusy(false); setResult(undefined); }}>原文を表示</button></div>{busy ? <p role="status">処理中…</p> : result.error ? <p role="alert" className="error">{result.error}</p> : <Markdown text={result.text ?? ""} onFile={onFile} />}{result.source !== (text || summary || "") && <p className="muted">実行時の内容を表示しています。</p>}</div> : <>{text && <Markdown text={text} onFile={onFile} />}{summary && <div className="thinking-summary"><strong>保存された要約</strong><Markdown text={summary} onFile={onFile} /></div>}</>}{redacted && <p className="muted">暗号化された内容は復号していません。元のデータを保存しています。</p>}</>}</details>;
+	return <details className="thinking" open={open} onToggle={(event) => { const next = event.currentTarget.open; if (next) setBodyPresent(true); setOpen(next); }} onTransitionEnd={(event) => { if (!open && event.target === event.currentTarget && event.propertyName === "height" && event.nativeEvent.pseudoElement === "::details-content") setBodyPresent(false); }}><summary onClick={(event) => { event.preventDefault(); if (!open) setBodyPresent(true); setOpen((current) => !current); }}><span className="thinking-title">{summary && !text ? "推論の要約" : "思考"}</span><span className="thinking-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><button type="button" title="思考を翻訳" aria-label="思考を翻訳" disabled={busy || !(text || summary)} onClick={() => { void transform("translate"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h12M9 3v3c0 5-3 8-6 9M5 9c1 3 4 5 7 6M13 20l4-10 4 10M14.5 17h5" /></svg></button><button type="button" title="思考を要約" aria-label="思考を要約" disabled={busy || !(text || summary)} onClick={() => { void transform("summarize"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 11h16M4 16h10M4 21h7" /></svg></button></span><span className="thinking-preview"><span>{previewTail || (redacted ? "暗号化された推論（原記録に保持）" : "")}</span></span></summary>{bodyPresent && <>{result ? <div className="text-transform-result"><div className="text-transform-header"><strong>{result.operation === "translate" ? "翻訳" : "要約"}</strong><button type="button" onClick={() => { pending.current?.abort(); setBusy(false); setResult(undefined); }}>原文を表示</button></div>{busy ? <p role="status">処理中…</p> : result.error ? <p role="alert" className="error">{result.error}</p> : <Markdown text={result.text ?? ""} onFile={onFile} />}{result.source !== (text || summary || "") && <p className="muted">実行時の内容を表示しています。</p>}</div> : <>{text && <Markdown text={text} onFile={onFile} />}{summary && <div className="thinking-summary"><strong>保存された要約</strong><Markdown text={summary} onFile={onFile} /></div>}</>}{redacted && <p className="muted">暗号化された内容は復号していません。元のデータを保存しています。</p>}</>}</details>;
 }
