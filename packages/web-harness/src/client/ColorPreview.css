@@ -1,0 +1,2 @@
+.color-preview { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.color-preview-swatch { display: inline-block; flex: none; width: 11px; height: 11px; border: 1px solid #8888; border-radius: 2px; vertical-align: baseline; }

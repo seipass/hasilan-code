@@ -3,14 +3,16 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isVisionImage } from "../shared/attachments.ts";
 import { api, errorMessage } from "./api.ts";
+import { ColorPreviewSpan, rehypeColorPreview } from "./ColorPreview.tsx";
 import "./TextTransform.css";
 
 export function record(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function Markdown({ text, onFile }: { text: string; onFile: (path: string, line?: number) => void }) {
-	return <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={{
+export function Markdown({ text, onFile, colorPreview = false }: { text: string; onFile: (path: string, line?: number) => void; colorPreview?: boolean }) {
+	return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={colorPreview ? [rehypeColorPreview] : []} skipHtml components={{
+		span: ColorPreviewSpan,
 		table: ({ children }) => <div className="markdown-table-scroll" tabIndex={0} role="region" aria-label="表"><table>{children}</table></div>,
 		a: ({ href, children }) => {
 			if (!href) return <span>{children}</span>;
@@ -26,11 +28,11 @@ export function Markdown({ text, onFile }: { text: string; onFile: (path: string
 	}}>{text}</ReactMarkdown>;
 }
 
-export function Content({ value, onFile, activeThinking = false }: { value: unknown; onFile: (path: string, line?: number) => void; activeThinking?: boolean }) {
-	if (typeof value === "string") return <Markdown text={value} onFile={onFile} />;
-	if (Array.isArray(value)) return <>{value.map((part: unknown, index: number) => <Content key={index} value={part} onFile={onFile} activeThinking={activeThinking && index === value.length - 1} />)}</>;
+export function Content({ value, onFile, activeThinking = false, colorPreview = false }: { value: unknown; onFile: (path: string, line?: number) => void; activeThinking?: boolean; colorPreview?: boolean }) {
+	if (typeof value === "string") return <Markdown text={value} onFile={onFile} colorPreview={colorPreview} />;
+	if (Array.isArray(value)) return <>{value.map((part: unknown, index: number) => <Content key={index} value={part} onFile={onFile} activeThinking={activeThinking && index === value.length - 1} colorPreview={colorPreview} />)}</>;
 	if (!record(value)) return value === undefined || value === null ? null : <pre>{String(value)}</pre>;
-	if (value.type === "text" && typeof value.text === "string") return <Markdown text={value.text} onFile={onFile} />;
+	if (value.type === "text" && typeof value.text === "string") return <Markdown text={value.text} onFile={onFile} colorPreview={colorPreview} />;
 	if (value.type === "thinking" && typeof value.thinking === "string") return <Thinking text={value.thinking} summary={typeof value.summary === "string" ? value.summary : undefined} redacted={value.redacted === true} onFile={onFile} initiallyOpen={activeThinking} />;
 	if (value.type === "fileAttachment" && typeof value.path === "string" && value.path.startsWith(".hasilan-code/attachments/") && typeof value.name === "string") {
 		const path = value.path;

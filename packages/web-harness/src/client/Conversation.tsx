@@ -75,7 +75,7 @@ const Message = memo(function Message({ rowKey, grouped, message, tools, onFile,
 		</details> : message.importedContext ? <details className="message context-entry"><summary><span className="context-entry-label">参照履歴</span></summary><div className="context-entry-body"><div className="message-content"><Content value={message.content} onFile={onFile} /></div></div></details> :
 			<article className={`message role-${message.role} ${message.partial ? "partial" : ""}`}>
 				{message.role !== "assistant" && message.role !== "user" && message.role !== "system" && <div className="message-label">{message.role}</div>}
-				<div className="message-content"><Content value={content} onFile={onFile} activeThinking={activeThinking} />{calls.map((part, index) => {
+				<div className="message-content"><Content value={content} onFile={onFile} activeThinking={activeThinking} colorPreview={message.role === "assistant"} />{calls.map((part, index) => {
 					const tool = tools[index];
 					if (tool?.name === "computer") return null;
 					return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>;
