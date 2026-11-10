@@ -37,6 +37,7 @@ function addressCandidate(input: string) {
 }
 
 export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visible: boolean }) {
+	const pane = useRef<HTMLElement>(null);
 	const container = useRef<HTMLDivElement>(null);
 	const browser = useRef<WebviewTag>(null);
 	const addressInput = useRef<HTMLInputElement>(null);
@@ -72,6 +73,17 @@ export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visi
 	] : [];
 	const selectedSuggestion = Math.min(activeSuggestion, suggestions.length - 1);
 	const suggestionsOpen = ready && addressFocused && suggestions.length > 0;
+	useEffect(() => {
+		const navigateHistory = (event: Event) => {
+			const view = browser.current;
+			if (!visible || !ready || !view || !pane.current?.contains(document.activeElement)) return;
+			const direction = (event as CustomEvent<unknown>).detail;
+			if (direction === "browser-backward" && view.canGoBack()) view.goBack();
+			else if (direction === "browser-forward" && view.canGoForward()) view.goForward();
+		};
+		window.addEventListener("hasilan:browser-side-navigation", navigateHistory);
+		return () => window.removeEventListener("hasilan:browser-side-navigation", navigateHistory);
+	}, [visible, ready]);
 	useEffect(() => {
 		if (visible && sleeping) setSleeping(false);
 	}, [visible, sleeping]);
@@ -171,7 +183,7 @@ export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visi
 			browser.current?.focus();
 		}
 	}
-	return <section className="browser-pane" aria-label="ブラウザ" onKeyDown={(event) => {
+	return <section ref={pane} className="browser-pane" aria-label="ブラウザ" onKeyDown={(event) => {
 		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
 			event.preventDefault();
 			addressInput.current?.focus();

@@ -433,6 +433,10 @@ async function start(): Promise<void> {
 	window.on("app-command", (event, command) => {
 		if (command !== "browser-backward" && command !== "browser-forward") return;
 		const focused = webContents.getFocusedWebContents();
+		if (focused === window.webContents) {
+			window.webContents.send("hasilan:browser-side-navigation", command);
+			return;
+		}
 		if (focused?.getType() !== "webview" || focused.hostWebContents !== window.webContents) return;
 		event.preventDefault();
 		const history = focused.navigationHistory;

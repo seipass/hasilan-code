@@ -10,6 +10,10 @@ import type { DesktopWindowState } from "./protocol.ts";
 // IPC stays in the isolated preload; no Electron API is exposed to page JavaScript.
 if (process.isMainFrame) {
 	webFrame.insertCSS(chromeStyles);
+	ipcRenderer.on("hasilan:browser-side-navigation", (_event, command: unknown) => {
+		if (command === "browser-backward" || command === "browser-forward")
+			window.dispatchEvent(new CustomEvent("hasilan:browser-side-navigation", { detail: command }));
+	});
 	window.addEventListener("DOMContentLoaded", () => {
 		const root = document.documentElement;
 		root.dataset.desktopPlatform = process.platform;
