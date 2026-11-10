@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "./api.ts";
 import { FontAppearance } from "./FontAppearance.tsx";
 import { HOME_BACKGROUND_KEY, type HomeBackground, parseHomeBackground, prepareHomeBackground, saveHomeBackground } from "./home-background.ts";
-import { preferences, usePreferenceString } from "./preferences.ts";
+import { preferences, usePreferenceState, usePreferenceString } from "./preferences.ts";
 import { Presence } from "./Motion.tsx";
 import "./HomeAppearance.css";
 
@@ -26,6 +26,7 @@ export function HomeBackdrop({ background }: { background?: HomeBackground }) {
 }
 
 export function HomeAppearance({ background, onChange }: { background?: HomeBackground; onChange: (next: HomeBackground | undefined) => void }) {
+	const [dashboardEnabled, setDashboardEnabled] = usePreferenceState("pi-web-home-dashboard", true);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string>();
 	const input = useRef<HTMLInputElement>(null);
@@ -39,7 +40,7 @@ export function HomeAppearance({ background, onChange }: { background?: HomeBack
 		} catch (reason) { if (mounted.current) setError(errorMessage(reason)); }
 		finally { if (mounted.current) setBusy(false); }
 	}
-	return <><FontAppearance /><div className="home-appearance" aria-busy={busy}>
+	return <><FontAppearance /><div className="settings-section"><h3>ホーム画面のウィジェット</h3><label className="settings-toggle"><input type="checkbox" checked={dashboardEnabled} onChange={(event) => setDashboardEnabled(event.currentTarget.checked)} /><span>ホーム画面にウィジェットを表示</span></label></div><div className="home-appearance" aria-busy={busy}>
 		<h3>ホーム画面の背景</h3>
 		<p>選んだ画像をホーム画面の上半分に表示します。</p>
 		<div className="home-background-preview" aria-label="背景のプレビュー">

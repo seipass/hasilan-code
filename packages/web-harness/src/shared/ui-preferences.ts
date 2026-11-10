@@ -110,6 +110,7 @@ export function uiPreferenceLimit(key: string): number | undefined {
 			"pi-web-chat-width",
 			"pi-web-notifications",
 			"pi-web-beta-turn-activity",
+			"pi-web-home-dashboard",
 			"pi-web-ui-font",
 		].includes(key)
 	)
@@ -150,6 +151,7 @@ export function validUiPreference(key: string, value: unknown): value is string 
 			key === "pi-web-sidebar-open" ||
 			key === "pi-web-right-open" ||
 			key === "pi-web-notifications" ||
+			key === "pi-web-home-dashboard" ||
 			key === "pi-web-beta-turn-activity"
 		)
 			return typeof parsed === "boolean";
