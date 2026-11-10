@@ -8,7 +8,7 @@ export interface AnimatedView {
 }
 
 /** Commands ease to their target; direct gestures cancel the tween and use the visible position. */
-export function useAnimatedView(initial: AnimatedView) {
+export function useAnimatedView(initial: AnimatedView, enabled = animationsEnabled) {
 	const [view, update] = useState(initial);
 	const current = useRef(view);
 	const frame = useRef(0);
@@ -22,7 +22,7 @@ export function useAnimatedView(initial: AnimatedView) {
 			cancelAnimationFrame(frame.current);
 			const before = current.current;
 			const target = typeof change === "function" ? change(before) : change;
-			if (!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			if (!enabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
 				setView(target);
 				return;
 			}
@@ -40,7 +40,7 @@ export function useAnimatedView(initial: AnimatedView) {
 			};
 			frame.current = requestAnimationFrame(tick);
 		},
-		[setView],
+		[enabled, setView],
 	);
 	useEffect(() => () => cancelAnimationFrame(frame.current), []);
 	return { view, setView, animateView, viewRef: current };

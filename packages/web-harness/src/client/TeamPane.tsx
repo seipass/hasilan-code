@@ -81,7 +81,7 @@ function TeamGraph({ agents, snapshot, focusedId, focus, overview, inspector, sw
 		}
 		return waiting;
 	}, [graph]);
-	const { view, setView, animateView, viewRef } = useAnimatedView({ x: 0, y: 0, zoom: 1 });
+	const { view, setView, animateView, viewRef } = useAnimatedView({ x: 0, y: 0, zoom: 1 }, true);
 	const [dragging, setDragging] = useState(false);
 	const { zoom } = view;
 	const viewport = useRef<HTMLDivElement>(null);

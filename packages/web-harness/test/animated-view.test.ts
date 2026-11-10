@@ -72,6 +72,13 @@ describe("animated graph commands", () => {
 		expect(motion.viewRef.current).toEqual({ x: 100, y: 80, zoom: 2 });
 		expect(frames.size).toBe(0);
 	});
+	it("allows a verified view to opt in while other animations remain disabled", () => {
+		hooks.animationsEnabled = false;
+		const motion = useAnimatedView({ x: 0, y: 0, zoom: 1 }, true);
+		motion.animateView({ x: 100, y: 80, zoom: 2 });
+		expect(motion.viewRef.current).toEqual({ x: 0, y: 0, zoom: 1 });
+		expect(frames.size).toBe(1);
+	});
 	it("stops outstanding animation frames on unmount", () => {
 		const motion = useAnimatedView({ x: 0, y: 0, zoom: 1 });
 		motion.animateView({ x: 100, y: 80, zoom: 2 });
