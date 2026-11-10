@@ -4,7 +4,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("switches pages and closes overlays without animation calls or transition events", async () => {
+it("switches pages and closes overlays without animation when reduced motion is requested", async () => {
 	const bundle = await build({
 		stdin: {
 			resolveDir: fileURLToPath(new URL("../", import.meta.url)),
@@ -61,7 +61,7 @@ createRoot(document.getElementById("root")).render(<Fixture />);`,
 		.join("\n");
 	const browser = await chromium.launch({ headless: true });
 	try {
-		const page = await browser.newPage({ reducedMotion: "no-preference" });
+		const page = await browser.newPage({ reducedMotion: "reduce" });
 		await page.route("**/api/**", (route) =>
 			route.fulfill({
 				json: route.request().url().endsWith("/models")

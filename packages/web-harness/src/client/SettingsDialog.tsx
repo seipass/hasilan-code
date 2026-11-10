@@ -1,6 +1,5 @@
 import { Select } from "./Select.tsx";
-import { animationsEnabled } from "./motion-policy.ts";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { SessionArchivePanel } from "./SessionArchivePanel.tsx";
 import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
 import { api, command, errorMessage } from "./api.ts";
@@ -77,11 +76,25 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 	const titleId = useId();
 	const tabsId = useId();
 	const keyId = useId();
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+	const closed = useRef(false);
+	const finishClose = useCallback(() => {
+		if (closed.current) return;
+		closed.current = true;
+		onCloseRef.current();
+	}, []);
 	const requestClose = () => {
 		if (closing || busy) return;
-		if ((!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches)) onClose();
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) finishClose();
 		else setClosing(true);
 	};
+	useEffect(() => {
+		if (!closing) return;
+		// A hidden window or a missing transition event must not leave an inert dialog open.
+		const timeout = window.setTimeout(finishClose, 500);
+		return () => window.clearTimeout(timeout);
+	}, [closing, finishClose]);
 	useEffect(() => {
 		const previous = document.activeElement;
 		dialog.current?.querySelector<HTMLButtonElement>("button")?.focus();
@@ -161,7 +174,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 	}, [tab]);
 
 	return <div className="dialog-backdrop" data-closing={closing} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
-		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onTransitionEnd={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity") onClose(); }} onTransitionCancel={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity" && (!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches)) onClose(); }} onKeyDown={(event) => {
+		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onTransitionEnd={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity") finishClose(); }} onTransitionCancel={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) finishClose(); }} onKeyDown={(event) => {
 			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); requestClose(); }
 			if (event.key !== "Tab") return;
 			const controls = [...(dialog.current?.querySelectorAll<HTMLElement>("button:not(:disabled):not([tabindex='-1']), input:not(:disabled), select:not(:disabled), summary, a[href]") ?? [])].filter((element) => !element.matches(":disabled") && !element.closest("[inert]") && element.getClientRects().length > 0);

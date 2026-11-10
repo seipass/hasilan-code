@@ -29,4 +29,18 @@
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
 		}
 	}
+	.dialog-backdrop:has(> .settings-dialog) {
+		opacity: 1;
+		transition: opacity 170ms ease !important;
+	}
+	.dialog-backdrop[data-closing="true"]:has(> .settings-dialog) {
+		opacity: 0;
+		background-color: #00000066;
+	}
+	.settings-dialog.settings-dialog {
+		transition: opacity 170ms ease, transform 170ms cubic-bezier(.2, .75, .25, 1) !important;
+	}
+	@starting-style {
+		.dialog-backdrop:has(> .settings-dialog) { opacity: 0; }
+	}
 }
