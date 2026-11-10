@@ -154,7 +154,9 @@ export function Presence({ show, children, keepMounted = false, collapse = false
 					: { width: style.width, marginLeft: style.marginLeft, marginRight: style.marginRight, paddingLeft: style.paddingLeft, paddingRight: style.paddingRight });
 				interrupted.current.set(node, snapshot);
 			}
-			animations.forEach((animation) => animation.cancel());
+			// Native dialog transitions reverse themselves when reopened; cancelling them
+			// here would reset the visible opacity and position before showModal().
+			animatedNodes.forEach((animation) => animation.cancel());
 			restorePosition?.();
 		};
 	}, [show, present, collapse, axis]);

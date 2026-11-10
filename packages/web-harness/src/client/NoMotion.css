@@ -56,6 +56,12 @@
 			transition: opacity 240ms cubic-bezier(.4, 0, .2, 1), visibility 0s !important;
 		}
 	}
+	.session-import-dialog.motion-dialog {
+		transition: opacity 180ms ease, transform 180ms cubic-bezier(.4, 0, .2, 1), display 180ms allow-discrete, overlay 180ms allow-discrete !important;
+	}
+	.session-import-dialog.motion-dialog::backdrop {
+		transition: opacity 180ms ease, display 180ms allow-discrete, overlay 180ms allow-discrete !important;
+	}
 	@supports (interpolate-size: allow-keywords) {
 		.conversation .context-entry::details-content {
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
