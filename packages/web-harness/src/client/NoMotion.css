@@ -21,4 +21,12 @@
 	:where(button:not(:disabled), a[href], summary, [role="button"]:not([aria-disabled="true"]), [role="tab"], input, textarea, select) {
 		transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease !important;
 	}
+	.conversation .context-entry > summary::before {
+		transition: transform 220ms cubic-bezier(.2, .75, .25, 1) !important;
+	}
+	@supports (interpolate-size: allow-keywords) {
+		.conversation .context-entry::details-content {
+			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
+		}
+	}
 }
