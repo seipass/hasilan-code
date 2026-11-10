@@ -23,6 +23,9 @@
 }
 .turn-activity-items { padding-inline-start: 12px; border-inline-start: 1px solid var(--border-subtle); }
 .turn-activity-items .message { margin-bottom: 8px; }
+.message.context-entry { margin-bottom: 8px; }
+.message.context-entry > summary { padding: 4px 6px; }
+.message.context-entry > .context-entry-body { padding: 6px; }
 .virtual-message { display: flow-root; min-width: 0; }
 .virtual-conversation .virtual-message .message:last-child { animation: none; }
 /* Reduced-motion's global duration must not start a height transition on geometry spacers. */
