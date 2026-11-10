@@ -8,7 +8,7 @@ export interface TurnActivity {
 	kind: "activity";
 	key: string;
 	runId?: string;
-	items: MessageRow[];
+	items: ConversationRow[];
 	active: boolean;
 }
 
@@ -32,12 +32,14 @@ function activityLabel(name: string, input?: unknown): string {
 }
 
 export function turnActivityLabel(block: TurnActivity): string {
-	const tools = block.items.flatMap((row) => row.tools).filter((tool): tool is ToolCall => tool !== undefined);
+	const tools = block.items
+		.flatMap((row) => (row.kind === "message" ? row.tools : row.group.tools))
+		.filter((tool): tool is ToolCall => tool !== undefined);
 	if (block.active) {
 		const running = tools.findLast((tool) => tool.status === "running");
 		if (running) return activityLabel(running.name, running.input);
 		const last = block.items.at(-1);
-		if (last?.message.partial && Array.isArray(last.message.content)) {
+		if (last?.kind === "message" && last.message.partial && Array.isArray(last.message.content)) {
 			const part: unknown = last.message.content.at(-1);
 			if (
 				record(part) &&
@@ -151,5 +153,62 @@ export function turnActivityRows(rows: ConversationRow[], activeRunId?: string):
 			active: true,
 		});
 	}
-	return output;
+	// Once a reply is complete, consolidate the preceding activity and progress messages
+	// from the same run without crossing user messages or imported context.
+	const settled: (ConversationRow | TurnActivity)[] = [];
+	let start = 0;
+	while (start < output.length) {
+		const first = output[start];
+		const runId =
+			first.kind === "computer"
+				? first.group.runId
+				: first.kind === "activity"
+					? first.runId
+					: first.message.role === "assistant" && !first.message.contextInjection && !first.message.importedContext
+						? first.message.runId
+						: undefined;
+		if (!runId || runId === activeRunId) {
+			settled.push(first);
+			start++;
+			continue;
+		}
+		let end = start;
+		while (end < output.length) {
+			const row = output[end];
+			const id =
+				row.kind === "computer"
+					? row.group.runId
+					: row.kind === "activity"
+						? row.runId
+						: row.message.role === "assistant" && !row.message.contextInjection && !row.message.importedContext
+							? row.message.runId
+							: undefined;
+			if (id !== runId) break;
+			end++;
+		}
+		const group = output.slice(start, end);
+		const last = group.at(-1);
+		const final =
+			last?.kind === "message" &&
+			!last.message.partial &&
+			((typeof last.message.content === "string" && !!last.message.content.trim()) ||
+				(Array.isArray(last.message.content) &&
+					last.message.content.some(
+						(part) =>
+							record(part) &&
+							part.type === "text" &&
+							typeof part.text === "string" &&
+							part.text.trim() &&
+							!isCommentary(part),
+					)));
+		const previous = group.slice(0, -1);
+		if (final && previous.length) {
+			const items = previous.flatMap((row): ConversationRow[] => (row.kind === "activity" ? row.items : [row]));
+			if (items.length)
+				settled.push({ kind: "activity", key: `activity:${items[0].key}`, runId, items, active: false });
+			settled.push(last);
+		} else settled.push(...group);
+		start = end;
+	}
+	return settled;
 }

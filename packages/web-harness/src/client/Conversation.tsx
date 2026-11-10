@@ -127,8 +127,9 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 				}
 			}}>
 				<summary><span className="turn-activity-label" role={block.active ? "status" : undefined}>{label}</span></summary>
-				{open && <div className="turn-activity-items">{block.items.map((row) =>
-					<Message key={row.key} rowKey={row.key} grouped message={row.message} tools={row.tools} onFile={onFile} expansions={expansions} />,
+				{open && <div className="turn-activity-items">{block.items.map((row) => row.kind === "computer"
+					? <ComputerActivity key={row.key} group={row.group} onFile={onFile} />
+					: <Message key={row.key} rowKey={row.key} grouped message={row.message} tools={row.tools} onFile={onFile} expansions={expansions} />,
 				)}</div>}
 			</details>}
 	</div>;

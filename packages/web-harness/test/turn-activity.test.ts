@@ -60,4 +60,30 @@ describe("beta chat activity", () => {
 		expect(finished.active).toBe(false);
 		expect(turnActivityLabel(finished)).toBe("ファイル確認 1件");
 	});
+
+	it("combines progress and computer activity before a completed answer without crossing turns", () => {
+		const commentary = {
+			type: "text",
+			text: "確認しています。",
+			textSignature: JSON.stringify({ phase: "commentary" }),
+		};
+		const progress = assistant("progress", [commentary]);
+		const computer = { ...read, name: "computer", callId: "screen", key: "r1/screen" };
+		const screenshot = assistant("screen", [{ type: "toolCall", id: computer.callId, name: computer.name }]);
+		const answer = assistant("answer", [{ type: "text", text: "完了しました。" }]);
+		const user: ChatMessage = { role: "user", messageId: "user", content: "次の依頼", partial: false };
+		const next = { ...assistant("next", [{ type: "text", text: "別の回答" }]), runId: "r2" };
+		const result = turnActivityRows(
+			conversationRows([investigation, progress, screenshot, answer, user, next], [read, computer]),
+		);
+		expect(result).toHaveLength(4);
+		expect(result[0]).toMatchObject({
+			kind: "activity",
+			active: false,
+			items: [{ kind: "message" }, { kind: "message", message: { content: [commentary] } }, { kind: "computer" }],
+		});
+		expect(result[1]).toMatchObject({ kind: "message", message: { content: [{ text: "完了しました。" }] } });
+		expect(result[2]).toMatchObject({ kind: "message", message: { role: "user" } });
+		expect(result[3]).toMatchObject({ kind: "message", message: { runId: "r2" } });
+	});
 });
