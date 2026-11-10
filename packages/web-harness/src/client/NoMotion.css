@@ -30,6 +30,9 @@
 	.workspace-accordion > summary::before {
 		transition: transform 220ms cubic-bezier(.4, 0, .2, 1) !important;
 	}
+	.tool-card > summary::after {
+		transition: transform 220ms cubic-bezier(.4, 0, .2, 1) !important;
+	}
 	@supports (interpolate-size: allow-keywords) {
 		.conversation .context-entry::details-content {
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
@@ -38,6 +41,9 @@
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
 		}
 		.workspace-accordion::details-content {
+			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
+		}
+		.tool-card::details-content {
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
 		}
 	}
