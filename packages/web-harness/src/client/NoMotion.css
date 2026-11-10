@@ -36,6 +36,9 @@
 	.goal-panel > summary::before {
 		transition: transform 220ms cubic-bezier(.4, 0, .2, 1) !important;
 	}
+	.team-graph-edge.is-waiting {
+		animation: team-edge-flow 900ms linear infinite !important;
+	}
 	@supports (interpolate-size: allow-keywords) {
 		.conversation .context-entry::details-content {
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
