@@ -39,6 +39,23 @@
 	.team-graph-edge.is-waiting {
 		animation: team-edge-flow 900ms linear infinite !important;
 	}
+	.sidebar {
+		transition: margin-left 240ms cubic-bezier(.4, 0, .2, 1), transform 240ms cubic-bezier(.4, 0, .2, 1), visibility 0s !important;
+	}
+	.sidebar-closed .sidebar {
+		transition: margin-left 240ms cubic-bezier(.4, 0, .2, 1), transform 240ms cubic-bezier(.4, 0, .2, 1), visibility 0s linear 240ms !important;
+	}
+	.topbar-leading {
+		transition: padding-left 240ms cubic-bezier(.4, 0, .2, 1) !important;
+	}
+	@media (max-width: 900px) {
+		.navigation-scrim {
+			transition: opacity 240ms cubic-bezier(.4, 0, .2, 1), visibility 0s linear 240ms !important;
+		}
+		.sidebar-open .navigation-scrim {
+			transition: opacity 240ms cubic-bezier(.4, 0, .2, 1), visibility 0s !important;
+		}
+	}
 	@supports (interpolate-size: allow-keywords) {
 		.conversation .context-entry::details-content {
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;
