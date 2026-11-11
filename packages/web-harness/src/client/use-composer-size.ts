@@ -14,7 +14,7 @@ export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text
 			const before = element.getBoundingClientRect().height;
 			motion.current?.cancel();
 			element.style.height = "auto";
-			const height = Math.max(48, Math.min(element.scrollHeight, 220));
+			const height = Math.max(32, Math.min(element.scrollHeight, 220));
 			element.style.height = `${height}px`;
 			if (
 				animate &&

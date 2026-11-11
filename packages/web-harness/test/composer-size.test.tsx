@@ -41,7 +41,7 @@ afterEach(() => { cleanup?.(); unmount?.(); vi.unstubAllGlobals(); });
 
 it("sets the initial composer height immediately and animates later edits", () => {
 	render();
-	expect(input.style.height).toBe("48px");
+	expect(input.style.height).toBe("32px");
 	expect(input.animate).not.toHaveBeenCalled();
 	input.scrollHeight = 96;
 	render("multiple\nlines");
