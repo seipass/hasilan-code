@@ -4,7 +4,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 import { expect, it } from "vitest";
 
-it("resizes the composer continuously while preserving input focus", async () => {
+it("resizes the composer without animation while preserving input focus", async () => {
 	const bundle = await build({
 		stdin: {
 			resolveDir: fileURLToPath(new URL("../", import.meta.url)),
@@ -12,12 +12,13 @@ it("resizes the composer continuously while preserving input focus", async () =>
 			contents: `
 import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { useComposerSize } from "./src/client/use-composer-size.ts";
 function Fixture() {
  const [text, setText] = useState("");
  const input = useRef(null);
  useComposerSize(input, text);
- window.setDraft = setText;
+ window.setDraft = value => flushSync(() => setText(value));
  return <div className="composer-area"><form className="composer"><div className="composer-input-row"><textarea ref={input} aria-label="Draft" value={text} onChange={event => setText(event.target.value)} rows={2} /></div><div id="toolbar">Toolbar</div></form></div>;
 }
 createRoot(document.getElementById("root")).render(<Fixture />);
@@ -46,6 +47,7 @@ createRoot(document.getElementById("root")).render(<Fixture />);
 			const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 			const height = () => input.getBoundingClientRect().height;
 			input.focus();
+			const initial = height();
 			setDraft("One\nTwo\nThree\nFour\nFive\nSix\nSeven\nEight");
 			const opening: number[] = [];
 			for (let index = 0; index < 6; index++) {
@@ -55,11 +57,19 @@ createRoot(document.getElementById("root")).render(<Fixture />);
 			const beforeEdit = height();
 			setDraft("One\nTwo\nThree\nFour");
 			await frame();
-			return { opening, beforeEdit, afterEdit: height(), focused: document.activeElement === input };
+			return {
+				initial,
+				opening,
+				beforeEdit,
+				afterEdit: height(),
+				animations: input.getAnimations().length,
+				focused: document.activeElement === input,
+			};
 		});
-		expect(new Set(result.opening.map(Math.round)).size).toBeGreaterThan(2);
-		expect(result.opening.at(-1)).toBeGreaterThan(result.opening[0]);
-		expect(Math.abs(result.afterEdit - result.beforeEdit), JSON.stringify(result)).toBeLessThan(30);
+		expect(new Set(result.opening.map(Math.round)).size).toBe(1);
+		expect(result.opening[0]).toBeGreaterThan(result.initial);
+		expect(result.afterEdit).toBeLessThan(result.beforeEdit);
+		expect(result.animations).toBe(0);
 		expect(result.focused).toBe(true);
 		const input = page.getByRole("textbox", { name: "Draft" });
 		await input.fill("First line");

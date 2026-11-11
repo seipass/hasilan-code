@@ -10,9 +10,9 @@ html body .composer-meta {
 html body .composer-meta .model-control { min-width: 0; max-width: calc(100% - 36px); }
 html body .composer-meta .model-trigger { max-width: 100%; }
 html body .composer-meta .model-trigger-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-html body .composer { padding: 7px 8px; }
+html body .composer { padding: 7px 8px; transition: none; animation: none; }
 html body .composer-input-row { display: flex; align-items: flex-end; gap: 6px; min-height: 32px; }
-html body .composer-input-row textarea { flex: 1 1 auto; width: 0; min-width: 0; min-height: 32px; padding: 6px 2px; line-height: 20px; }
+html body .composer-input-row textarea { flex: 1 1 auto; width: 0; min-width: 0; min-height: 32px; padding: 6px 2px; line-height: 20px; transition: none; animation: none; }
 html body .composer-input-row .composer-attach-button { width: 32px; height: 32px; }
 html body .composer-input-row .composer-delivery { flex: none; align-self: flex-end; gap: 4px; margin: 0; }
 /* On a line break the draft takes the full width above its controls. */

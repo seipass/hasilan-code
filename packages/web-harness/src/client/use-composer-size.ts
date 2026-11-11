@@ -1,7 +1,6 @@
-import { type RefObject, useLayoutEffect, useRef } from "react";
+import { type RefObject, useLayoutEffect } from "react";
 
 export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text: string, home = false) {
-	const motion = useRef<Animation | undefined>(undefined);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: Text edits must remeasure wrapping even when the element and its width are unchanged.
 	useLayoutEffect(() => {
 		const element = ref.current;
@@ -9,34 +8,18 @@ export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text
 		element.style.scrollbarGutter = "stable";
 		element.style.overflowY = "auto";
 		let width = element.clientWidth;
-		const resize = (animate: boolean) => {
-			const initialized = element.style.height !== "";
-			const before = element.getBoundingClientRect().height;
-			motion.current?.cancel();
+		const resize = () => {
 			element.style.height = "auto";
 			const height = Math.max(32, Math.min(element.scrollHeight, 220));
 			element.style.height = `${height}px`;
-			if (
-				animate &&
-				initialized &&
-				before !== height &&
-				!window.matchMedia("(prefers-reduced-motion: reduce)").matches
-			) {
-				const animation = element.animate([{ height: `${before}px` }, { height: `${height}px` }], {
-					duration: 180,
-					easing: "cubic-bezier(.4, 0, .2, 1)",
-				});
-				motion.current = animation;
-			}
 		};
-		resize(true);
+		resize();
 		const observer = new ResizeObserver(() => {
 			if (element.clientWidth === width) return;
 			width = element.clientWidth;
-			resize(false);
+			resize();
 		});
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, [ref, text, home]);
-	useLayoutEffect(() => () => motion.current?.cancel(), []);
 }
