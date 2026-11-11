@@ -523,13 +523,35 @@ async function executeToolCalls(
 	emit: AgentEventSink,
 ): Promise<ExecutedToolCallBatch> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
-	const hasSequentialToolCall = toolCalls.some(
-		(tc) => currentContext.tools?.find((t) => t.name === tc.name)?.executionMode === "sequential",
-	);
-	if (config.toolExecution === "sequential" || hasSequentialToolCall) {
+	if (config.toolExecution === "sequential") {
 		return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
 	}
-	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
+	// A sequential call is a barrier: independent calls on either side can still
+	// run together, but no call may cross the exclusive operation.
+	const messages: ToolResultMessage[] = [];
+	let allTerminate = true;
+	let index = 0;
+	while (index < toolCalls.length) {
+		const sequential =
+			currentContext.tools?.find((tool) => tool.name === toolCalls[index].name)?.executionMode === "sequential";
+		let end = index + 1;
+		if (!sequential) {
+			while (
+				end < toolCalls.length &&
+				currentContext.tools?.find((tool) => tool.name === toolCalls[end].name)?.executionMode !== "sequential"
+			)
+				end++;
+		}
+		const batch = toolCalls.slice(index, end);
+		const result = sequential
+			? await executeToolCallsSequential(currentContext, assistantMessage, batch, config, signal, emit)
+			: await executeToolCallsParallel(currentContext, assistantMessage, batch, config, signal, emit);
+		messages.push(...result.messages);
+		allTerminate &&= result.terminate;
+		index = end;
+		if (signal?.aborted) break;
+	}
+	return { messages, terminate: messages.length > 0 && allTerminate };
 }
 
 type ExecutedToolCallBatch = {
