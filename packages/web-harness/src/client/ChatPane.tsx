@@ -145,7 +145,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 		});
 		return () => cancelAnimationFrame(frame);
 	}, [draftKey, empty, loading, surface]);
-	useComposerSize(input, text);
+	useComposerSize(input, text, canRouteWorkspace);
 	async function submit(destination?: ComposerDestination, mode: "steer" | "followUp" = "steer") {
 		if ((!text.trim() && !attachments.length && !browserAnnotations.length) || reading || submitting.current || attachmentError || !slashInput && (!connected || session?.availability === "missing")) return;
 		const annotationSizes = browserAnnotations.map(({ image }) => Math.floor((image.length - image.indexOf(",") - 1) * 3 / 4));
@@ -262,11 +262,11 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 			</div></Presence>
 			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath} aria-label={workspacePath}>{workspaceLabel(workspacePath, [])}</code>}</div></Presence>
 			<Presence show={!!goalControl}><div className="motion-contents">{goalControl}</div></Presence>
-			<div className="composer-meta">
+			{!canRouteWorkspace && <div className="composer-meta">
 				<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage" aria-label={`${contextTokens == null ? "—" : compactTokens(contextTokens)} / ${compactTokens(contextLimit ?? 0)}${usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}`}><svg className="context-usage-ring" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><circle cx="10" cy="10" r="7" pathLength="100" strokeDasharray={`${Math.min(100, Math.max(0, usage?.percent ?? 0))} 100`} /></svg><span className="context-usage-tooltip" role="tooltip">{contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit ?? 0)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span></span>} /></div></Presence>
 				{modelControl}
-			</div>
-			<form className={`composer command-picker-anchor${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
+			</div>}
+			<form className={`composer command-picker-anchor${canRouteWorkspace ? " composer-home" : ""}${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return;
 				event.preventDefault(); event.dataTransfer.dropEffect = sending || reading ? "none" : "copy"; setDragging(!sending && !reading);
 			}} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }} onDrop={(event) => {
@@ -279,9 +279,10 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 				{browserAnnotations.length > 0 && <ul className="browser-annotation-list" aria-label="ブラウザ注釈">{browserAnnotations.map((annotation, index) => <li key={`${annotation.selection.url}:${index}`}><img src={annotation.image} alt="選択箇所のスクリーンショット" /><span><strong>{annotation.selection.title || annotation.selection.url}</strong><small>{annotation.note}</small></span><button type="button" aria-label={`注釈 ${index + 1} を削除`} disabled={sending} onClick={() => setBrowserAnnotations((current) => { const next = current.filter((_, itemIndex) => itemIndex !== index); if (next.length) annotationDrafts.set(draftKey, next); else annotationDrafts.delete(draftKey); return next; })}><Icon name="close" size="inline" /></button></li>)}</ul>}
 				<input ref={fileInput} type="file" multiple hidden aria-label="添付ファイルを選択" disabled={sending || reading} onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void attach(files); }} />
 				<label className="sr-only" htmlFor="message">メッセージ</label>
-				<div className="composer-input-row">
-					<button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}><Icon name="plus" size="primary" /></button>
-					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={1} disabled={sending} onKeyDown={(event) => {
+				<div className={`composer-input-row${canRouteWorkspace ? " is-home" : text.includes("\n") ? " is-multiline" : ""}${canRouteWorkspace && shownWidth <= 420 ? " is-compact" : ""}`}>
+					<button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}>{canRouteWorkspace ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 11-8.4 8.4a5 5 0 0 1-7.1-7.1L13 3.8a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.4a1.6 1.6 0 0 1-2.3-2.3L15 6.2" /></svg> : <Icon name="plus" size="primary" />}</button>
+					{canRouteWorkspace && <div className="composer-home-model">{modelControl}</div>}
+					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={canRouteWorkspace ? 2 : 1} disabled={sending} onKeyDown={(event) => {
 						if (event.nativeEvent.isComposing) return;
 						if (matchesAppKeybinding(event, "composer.routeWorkspace")) { event.preventDefault(); if (canRouteWorkspace && !event.repeat) void submit({ kind: "auto" }); return; }
 						if (matchesAppKeybinding(event, "composer.followUp")) { event.preventDefault(); if (busy && !event.repeat) void submit(undefined, "followUp"); return; }

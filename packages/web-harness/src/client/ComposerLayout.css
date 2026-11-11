@@ -15,7 +15,22 @@ html body .composer-input-row { display: flex; align-items: flex-end; gap: 6px; 
 html body .composer-input-row textarea { flex: 1 1 auto; width: 0; min-width: 0; min-height: 32px; padding: 6px 2px; line-height: 20px; }
 html body .composer-input-row .composer-attach-button { width: 32px; height: 32px; }
 html body .composer-input-row .composer-delivery { flex: none; align-self: flex-end; gap: 4px; margin: 0; }
+/* On a line break the draft takes the full width above its controls. */
+html body .composer-input-row.is-multiline,
+html body .composer-input-row.is-home { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 6px; }
+html body .composer-input-row:is(.is-multiline, .is-home) textarea { grid-column: 1 / -1; grid-row: 1; width: 100%; }
+html body .composer-input-row:is(.is-multiline, .is-home) .composer-attach-button { grid-column: 1; grid-row: 2; }
+html body .composer-input-row:is(.is-multiline, .is-home) .composer-delivery { grid-column: 3; grid-row: 2; }
+html body .composer-home { padding: 12px; }
+html body .composer-input-row.is-home textarea { min-height: 54px; padding: 4px 6px 4px 4px; }
+html body .composer-home-model { grid-column: 2; grid-row: 2; min-width: 0; align-self: center; }
+html body .composer-input-row.is-home.is-compact .composer-home-model { justify-self: end; }
+html body .composer-input-row.is-home.is-compact .model-trigger { display: grid; place-items: center; width: 28px; height: 28px; min-height: 28px; padding: 0; }
+html body .composer-input-row.is-home.is-compact .model-trigger :is(.model-trigger-name, .model-trigger-thinking, .model-trigger-chevron) { display: none; }
+html body .composer-input-row.is-home.is-compact .model-trigger .model-trigger-icon { display: block; }
 @media (max-width: 520px) {
 	html body .composer { padding: 7px 8px; }
+	html body .composer-home { padding: 12px 9px 9px; }
+	html body .composer-input-row.is-home textarea { min-height: 44px; }
 	html body .composer-meta .model-trigger { max-width: 100%; }
 }

@@ -1,6 +1,6 @@
 import { type RefObject, useLayoutEffect, useRef } from "react";
 
-export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text: string) {
+export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text: string, home = false) {
 	const motion = useRef<Animation | undefined>(undefined);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: Text edits must remeasure wrapping even when the element and its width are unchanged.
 	useLayoutEffect(() => {
@@ -37,6 +37,6 @@ export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text
 		});
 		observer.observe(element);
 		return () => observer.disconnect();
-	}, [ref, text]);
+	}, [ref, text, home]);
 	useLayoutEffect(() => () => motion.current?.cancel(), []);
 }
