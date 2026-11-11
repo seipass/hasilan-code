@@ -1273,9 +1273,12 @@ export class SessionRegistry {
 						throw new HarnessError("Configured model is unavailable; select a model in the composer");
 					// SDK `tools` is a registration allowlist, not merely the active loadout.
 					// Coordination can become active when a conversation joins a workspace team.
-					const reserved = descriptor.tools
+					const selectedTools = descriptor.tools?.includes("bash")
+						? [...new Set([...descriptor.tools, "shell_process"])]
+						: descriptor.tools;
+					const reserved = selectedTools
 						? ["team", ...(!descriptor.parentSessionId ? ["goal"] : [])].filter(
-								(name) => !descriptor.tools!.includes(name),
+								(name) => !selectedTools.includes(name),
 							)
 						: [];
 					const { session } = await createAgentSession({
@@ -1287,7 +1290,7 @@ export class SessionRegistry {
 						settingsManager,
 						resourceLoader: loader,
 						customTools: this.options.customTools?.(descriptor),
-						tools: descriptor.tools ? [...descriptor.tools, ...reserved] : undefined,
+						tools: selectedTools ? [...selectedTools, ...reserved] : undefined,
 					});
 					if (descriptor.thinkingLevel) session.setThinkingLevel(descriptor.thinkingLevel);
 					await session.bindExtensions({});
@@ -1300,7 +1303,7 @@ export class SessionRegistry {
 						const messages = appendRuntimeContext(live.manager, context.messages, descriptor, this.state);
 						return messages === context.messages ? prepared : { ...prepared, context: { ...context, messages } };
 					};
-					if (reserved.length) session.setActiveToolsByName(descriptor.tools!);
+					if (reserved.length) session.setActiveToolsByName(selectedTools!);
 					const managedSession = session as unknown as {
 						queueManagedInput(text: string, mode: "steer" | "followUp", inputId: string): Promise<unknown>;
 						hasQueuedInput(inputId: string): boolean;

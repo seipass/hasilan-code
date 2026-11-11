@@ -56,6 +56,7 @@ import { JevComputer } from "./tools/computer/jev.ts";
 import { createHashlineTools } from "./tools/hashline/index.ts";
 import { LazyBrowserManager } from "./tools/lazy-browser.ts";
 import { SearchService } from "./tools/search.ts";
+import { ShellProcessManager } from "./tools/shell-process.ts";
 import { UiPreferencesStore } from "./ui-preferences.ts";
 import { WidgetData } from "./widget-data.ts";
 import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
@@ -100,6 +101,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
 	const artifacts = new ArtifactStore();
 	const browser = new LazyBrowserManager(artifacts);
+	const shellProcesses = new ShellProcessManager();
 	const computer = new ComputerManager(new PythonDesktop(agentDir), artifacts);
 	const jevComputer = new JevComputer(computer, modelRuntime, () => ({
 		jev: settings.get().jev.model,
@@ -117,21 +119,32 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		workspaceFiles: files,
 		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
 		// Pi validates each tool's declared schema before execution; erase only the registry's heterogeneous generic boundary.
-		customTools: (descriptor) =>
-			[
+		customTools: (descriptor) => {
+			const shellSettings = createHarnessSettings(descriptor.cwd, agentDir);
+			return [
 				...createHashlineTools(files, descriptor.workspaceId),
+				...(!descriptor.tools || descriptor.tools.includes("bash")
+					? [
+							shellProcesses.createTool(descriptor.sessionId, descriptor.cwd, {
+								shellPath: shellSettings.getShellPath(),
+								commandPrefix: shellSettings.getShellCommandPrefix(),
+							}),
+						]
+					: []),
 				browser.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				computer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				jevComputer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				search.createTool(),
 				teams.createTool(descriptor.sessionId),
 				teams.createGoalTool(descriptor.sessionId),
-			] as unknown as ToolDefinition[],
+			] as unknown as ToolDefinition[];
+		},
 	});
 	teams = new TeamManager(registry, {
 		agentDir,
 		getLimits: () => settings.get().teams,
 		onStopSession: async (id) => {
+			shellProcesses.closeSession(id);
 			await Promise.all([browser.closeSession(id), computer.closeSession(id)]);
 		},
 	});
@@ -284,6 +297,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					}
 					if (parts.length === 3 && method === "DELETE") {
 						const deletedSessionIds = await registry.deleteSession(id);
+						for (const sessionId of deletedSessionIds) shellProcesses.closeSession(sessionId);
 						await Promise.allSettled(deletedSessionIds.map((sessionId) => browser.closeSession(sessionId)));
 						await Promise.allSettled(deletedSessionIds.map((sessionId) => computer.closeSession(sessionId)));
 						for (const sessionId of deletedSessionIds) artifacts.deleteSession(sessionId);
@@ -492,6 +506,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		if (shuttingDown) return;
 		shuttingDown = true;
 		folderPickerAbort.abort();
+		shellProcesses.close();
 		// Attempt every cleanup even when a device or PTY refuses to close.
 		const owners = await Promise.allSettled([authLogin.close(), teams.close()]);
 		const results = await Promise.allSettled([
