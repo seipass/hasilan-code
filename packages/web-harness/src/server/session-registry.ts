@@ -45,6 +45,7 @@ import {
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
 import { createHarnessSettings } from "./config.ts";
+import { modelGuidance } from "./model-guidance.ts";
 import { projectAttachmentContent } from "./prompt-attachments.ts";
 import { appendRuntimeContext } from "./runtime-context.ts";
 import { listArchivedSessions, readArchivedSession, transcriptPathKey } from "./session-archive.ts";
@@ -1250,10 +1251,11 @@ export class SessionRegistry {
 										images: [...(event.images ?? []), ...images],
 									};
 								});
-								pi.on("before_agent_start", (event) => {
+								pi.on("before_agent_start", (event, ctx) => {
 									event.systemPromptOptions.defaultPreamble =
 										"You are an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files.";
 									event.systemPromptOptions.includeDocumentation = false;
+									event.systemPromptOptions.promptGuidelines.push(...modelGuidance(ctx.model?.id));
 									event.systemPromptOptions.selectedTools.sort();
 								});
 							},
