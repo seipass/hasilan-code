@@ -65,6 +65,11 @@
 	backdrop-filter: var(--glass-filter);
 }
 .right-panel :is(.files-pane, .detail-toolbar, .detail-new-tab, .detail-file-empty, .files-tree, .files-view-mode, .files-viewer, .files-splitter, .detail-auxiliary, .team-pane, .team-graph, .team-graph-viewport) { background-color: transparent; }
+/* The independently toggled file tree uses the same glass as the detail panel. */
+.workspace-surface > .files-pane .files-layout > .files-tree {
+	background: var(--glass-panel);
+	backdrop-filter: var(--glass-filter);
+}
 /* The containing detail view already handles entrance and exit. */
 .right-panel .team-pane { animation: none; }
 .right-panel .detail-tab[data-active="true"] {
