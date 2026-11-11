@@ -90,6 +90,30 @@ const keybindingsSchema = Type.Object(
 	},
 	{ additionalProperties: false },
 );
+const themeVariantSchema = Type.Object(
+	{
+		background: Type.String({ pattern: "^#[0-9a-fA-F]{6}$" }),
+		foreground: Type.String({ pattern: "^#[0-9a-fA-F]{6}$" }),
+		accent: Type.String({ pattern: "^#[0-9a-fA-F]{6}$" }),
+		contrast: Type.Integer({ minimum: 0, maximum: 100 }),
+	},
+	{ additionalProperties: false },
+);
+export const appearanceSchema = Type.Object(
+	{
+		mode: Type.Union([Type.Literal("system"), Type.Literal("dark"), Type.Literal("light")]),
+		dark: themeVariantSchema,
+		light: themeVariantSchema,
+		codeTheme: Type.Union([Type.Literal("auto"), Type.Literal("dark"), Type.Literal("light")]),
+		contentFont: Type.String({ maxLength: 200, pattern: "^[^\\u0000-\\u001f\\u007f]*$" }),
+		codeFont: Type.String({ maxLength: 200, pattern: "^[^\\u0000-\\u001f\\u007f]*$" }),
+		uiSize: Type.Integer({ minimum: 11, maximum: 20 }),
+		codeSize: Type.Integer({ minimum: 10, maximum: 24 }),
+		translucentSidebar: Type.Boolean(),
+	},
+	{ additionalProperties: false },
+);
+export type Appearance = Static<typeof appearanceSchema>;
 
 /** Keys are explicit so this store cannot become a second credentials/settings API. */
 export function uiPreferenceLimit(key: string): number | undefined {
@@ -112,6 +136,7 @@ export function uiPreferenceLimit(key: string): number | undefined {
 			"pi-web-beta-turn-activity",
 			"pi-web-home-dashboard",
 			"pi-web-ui-font",
+			"pi-web-appearance",
 		].includes(key)
 	)
 		return 4096;
@@ -130,6 +155,7 @@ export function validUiPreference(key: string, value: unknown): value is string 
 	if (key.startsWith("pi-web-draft:") || key === "pi-web-selected-session" || key === "pi-web-workspace") return true;
 	try {
 		const parsed: unknown = JSON.parse(value);
+		if (key === "pi-web-appearance") return Check(appearanceSchema, parsed);
 		if (key === "pi-web-browser-history")
 			return Check(
 				Type.Array(

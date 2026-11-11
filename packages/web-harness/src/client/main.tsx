@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { errorMessage } from "./api.ts";
 import { ApplicationFont } from "./FontAppearance.tsx";
+import { ApplicationTheme } from "./ThemeAppearance.tsx";
 import { anyDraftDirty } from "./files/file-drafts.ts";
 import { preferences } from "./preferences.ts";
 import { trackVisualViewport } from "./visual-viewport.ts";
@@ -22,7 +23,7 @@ async function start(): Promise<void> {
 		let legacy: Storage | undefined;
 		try { legacy = window.localStorage; } catch { /* Browser storage is optional. */ }
 		await preferences.initialize(legacy);
-		application.render(<StrictMode><ApplicationFont /><App /></StrictMode>);
+		application.render(<StrictMode><ApplicationFont /><ApplicationTheme /><App /></StrictMode>);
 	} catch (reason) {
 		application.render(<div className="global-error" role="alert"><span>設定を読み込めません: {errorMessage(reason)}</span><button type="button" onClick={() => { void start(); }}>再試行</button></div>);
 	}

@@ -1,0 +1,23 @@
+.theme-appearance { display: grid; gap: 14px; }
+.theme-appearance h3, .theme-appearance h4, .theme-appearance p { margin: 0; }
+.theme-modes, .theme-variants, .theme-heading, .theme-heading > div { display: flex; align-items: center; gap: 6px; }
+.theme-heading { justify-content: space-between; margin-top: 8px; }
+.theme-modes button[aria-pressed="true"], .theme-variants button[aria-pressed="true"] { background: var(--surface-hover); border-color: var(--border-strong); }
+.theme-color-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.theme-color-grid label { gap: 6px; }
+.theme-color-grid label span { display: flex; align-items: center; gap: 8px; }
+.theme-color-grid input[type="color"] { width: 36px; height: 30px; padding: 2px; cursor: pointer; }
+.theme-color-grid code { font-size: var(--text-xs); color: var(--on-surface-secondary); }
+.theme-range { display: grid; grid-template-columns: 1fr auto; }
+.theme-range input { grid-column: 1 / -1; width: 100%; }
+.theme-size-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.theme-import { display: grid; gap: 8px; }
+.theme-import textarea { resize: vertical; width: 100%; }
+.theme-appearance > button, .theme-import > button { justify-self: start; }
+.message-content, .files-markdown { font-family: var(--font-content, inherit); }
+:root .file-editor-body .cm-editor, :root .files-source-lines, :root .message-content pre, :root .files-markdown pre { background: var(--code-surface, var(--surface-sunken)); color: var(--code-text, var(--on-surface)); }
+:root .file-editor-body .cm-content { caret-color: var(--code-text, var(--on-surface)); }
+:root .file-editor-body .cm-editor :is(.cm-cursor, .cm-dropCursor) { border-left-color: var(--code-text, var(--on-surface)); }
+:root .file-editor-body .cm-editor .cm-gutters { background: var(--code-surface, var(--surface-panel)); color: color-mix(in srgb, var(--code-text, var(--on-surface)) 65%, var(--code-surface, var(--surface-panel))); }
+:root[data-translucent-sidebar="true"] .sidebar { background: color-mix(in srgb, var(--surface-panel) 82%, transparent); backdrop-filter: blur(24px); }
+@media (max-width: 560px) { .theme-color-grid { grid-template-columns: 1fr; } }
