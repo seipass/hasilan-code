@@ -33,7 +33,9 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 	const [error, setError] = useState<string>();
 	const [showModels, setShowModels] = useState(!value);
 	const [preview, setPreview] = useState<ThinkingLevel>();
-	const dragging = useRef(false);
+	const [dragProgress, setDragProgress] = useState<number>();
+	const pointer = useRef<{ id: number; startX: number; left: number; travel: number } | undefined>(undefined);
+	const thumb = useRef<HTMLDivElement>(null);
 	const heading = useRef<HTMLButtonElement>(null);
 	const menu = useRef<HTMLDivElement>(null);
 	const currentLevel = preview ?? thinkingLevel ?? (selectedModel && levels.length === 1 ? levels[0] : undefined);
@@ -122,13 +124,40 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 				<span className="model-menu-current-name">{selectedModel?.name ?? value?.name ?? value?.id ?? "モデルを選択"}</span>
 				<Icon name="chevronRight" size="inline" />
 			</button>
-			{selectedModel && levels.length > 1 && <div className="model-effort-control" style={{ "--effort-progress": effortIndex / (levels.length - 1) } as CSSProperties}>
+			{selectedModel && levels.length > 1 && <div className="model-effort-control" data-dragging={dragProgress !== undefined} style={{ "--effort-progress": dragProgress ?? effortIndex / (levels.length - 1) } as CSSProperties}>
 				<div className="model-effort-track" aria-hidden="true"><div className="model-effort-fill" /><div className="model-effort-ticks">{levels.map((level, index) => <span key={level} data-filled={index <= effortIndex} />)}</div></div>
+				<div ref={thumb} className="model-effort-thumb" aria-hidden="true" />
 				<input type="range" className="model-effort-slider" aria-label="推論レベル" aria-valuetext={currentLevel ? EFFORT_LABELS[currentLevel] : "自動"} min={0} max={levels.length - 1} step={1} value={effortIndex} disabled={disabled} aria-disabled={busy || undefined}
-					onPointerDown={(event) => { if (event.button !== 0 || busy) { event.preventDefault(); return; } dragging.current = true; event.currentTarget.setPointerCapture(event.pointerId); }}
-					onPointerUp={(event) => { if (!dragging.current) return; dragging.current = false; void commitEffort(levels[event.currentTarget.valueAsNumber]); }}
-					onLostPointerCapture={() => { if (dragging.current) { dragging.current = false; setPreview(undefined); } }}
-					onChange={(event) => { if (busy) return; const level = levels[event.currentTarget.valueAsNumber]; if (dragging.current) setPreview(level); else void commitEffort(level); }} />
+					onPointerDown={(event) => {
+						if (event.button !== 0 || busy || pointer.current) { event.preventDefault(); return; }
+						const bounds = event.currentTarget.getBoundingClientRect();
+						const thumbWidth = thumb.current?.offsetWidth ?? 0;
+						pointer.current = { id: event.pointerId, startX: event.clientX, left: bounds.left + thumbWidth / 2, travel: Math.max(1, bounds.width - thumbWidth) };
+						event.currentTarget.setPointerCapture(event.pointerId);
+					}}
+					onPointerMove={(event) => {
+						const active = pointer.current;
+						if (active?.id !== event.pointerId || (dragProgress === undefined && Math.abs(event.clientX - active.startX) < 3)) return;
+						setDragProgress(Math.max(0, Math.min(1, (event.clientX - active.left) / active.travel)));
+					}}
+					onPointerUp={(event) => {
+						if (pointer.current?.id !== event.pointerId) return;
+						pointer.current = undefined;
+						setDragProgress(undefined);
+						void commitEffort(levels[event.currentTarget.valueAsNumber]);
+					}}
+					onLostPointerCapture={(event) => {
+						if (pointer.current?.id !== event.pointerId) return;
+						pointer.current = undefined;
+						setDragProgress(undefined);
+						setPreview(undefined);
+					}}
+					onChange={(event) => {
+						if (busy) return;
+						const level = levels[event.currentTarget.valueAsNumber];
+						if (pointer.current) setPreview(level);
+						else void commitEffort(level);
+					}} />
 			</div>}
 		</div>}
 		{disabled && <p className="fine-print">実行が終わるとモデルを変更できます。</p>}

@@ -20,6 +20,20 @@
 	:where(button:not(:disabled), a[href], summary, [role="button"]:not([aria-disabled="true"]), [role="tab"], input, textarea, select) {
 		transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease !important;
 	}
+	.model-effort-control[data-dragging="false"] {
+		transition: --effort-progress 260ms cubic-bezier(.2, .75, .2, 1) !important;
+	}
+	.model-effort-thumb {
+		transition: transform 290ms cubic-bezier(.22, 1.55, .36, 1), box-shadow 200ms ease-out !important;
+	}
+	.model-effort-control:has(.model-effort-slider:not(:disabled):active) .model-effort-thumb {
+		transform: translate(-50%, -50%) scale(1.12, 1.08);
+		box-shadow: 0 1px 4px #0005, 0 0 0 4px color-mix(in srgb, var(--link, #3b82f6), transparent 68%);
+		transition-duration: 130ms !important;
+	}
+	.model-effort-ticks > span {
+		transition: background-color 160ms ease !important;
+	}
 	.conversation .context-entry > summary::before {
 		transition: transform 220ms cubic-bezier(.2, .75, .25, 1) !important;
 	}
