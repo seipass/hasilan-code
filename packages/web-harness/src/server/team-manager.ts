@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { AgentSessionEvent, ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
+import { type AgentCategory, type AgentModels, agentCategorySchema } from "../shared/agent-categories.ts";
 
 import { attachmentPrompt, type PromptAttachment } from "../shared/attachments.ts";
 import {
@@ -18,6 +19,8 @@ import {
 	type SwarmStatus,
 	type WorkspaceSwarmStart,
 } from "../shared/swarm.ts";
+import type { WorkOverviewItem } from "../shared/work-overview.ts";
+import type { AgentWorktrees } from "./agent-worktrees.ts";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
 import { loadTeamProfiles } from "./team-profiles.ts";
 import { validateWorkflow, type WorkflowTask } from "./team-workflow.ts";
@@ -38,6 +41,7 @@ export interface TeamRecord {
 	scope?: "workspace";
 }
 export interface AgentRecord {
+	category?: AgentCategory;
 	agentId: string;
 	teamId: string;
 	parentAgentId?: string;
@@ -79,6 +83,8 @@ export interface PendingInput {
 	contextInjection?: ContextInjection;
 }
 export interface TeamOptions {
+	agentWorktrees?: AgentWorktrees;
+	getAgentModels?: () => AgentModels;
 	getLimits?: () => { maxConcurrentAgents: number; maxDepth: number };
 	agentDir?: string;
 	onStopSession?: (sessionId: string) => Promise<void>;
@@ -98,6 +104,7 @@ export interface TeamSnapshot {
 	runs: RunRecord[];
 }
 export interface SpawnTask {
+	category?: AgentCategory;
 	name: string;
 	task: string;
 	responsibility?: string;
@@ -148,6 +155,7 @@ const terminalStatus: Record<RunStatus, boolean> = {
 };
 const MANAGER_RESPONSIBILITY = "目標・優先順位・担当範囲を調整し、成果の受け入れと最終判断を担当する。";
 const taskSchema = Type.Object({
+	category: Type.Optional(agentCategorySchema),
 	name: Type.String({
 		minLength: 1,
 		description:
@@ -180,6 +188,11 @@ const teamParameters = Type.Union([
 	}),
 	Type.Object({ action: Type.Literal("profiles") }),
 	Type.Object({ action: Type.Literal("list") }),
+	Type.Object({
+		action: Type.Literal("work"),
+		agentId: Type.String(),
+		op: Type.Union([Type.Literal("diff"), Type.Literal("adopt"), Type.Literal("discard"), Type.Literal("restore")]),
+	}),
 	Type.Object({ action: Type.Literal("send"), agentId: Type.String(), message: Type.String({ minLength: 1 }) }),
 	Type.Object({
 		action: Type.Literal("describe"),
@@ -358,6 +371,11 @@ export class TeamManager {
 	private assertOpen(agent: AgentRecord): void {
 		if (!this.accepting || this.fenced.has(agent.agentId))
 			throw new HarnessError("Agent is stopping; input is not accepted", 409);
+		const descriptor = this.registry.descriptor(agent.sessionId);
+		if (descriptor.worktree && descriptor.availability !== "ready")
+			throw new HarnessError("The isolated agent workspace is unavailable", 409);
+		if (descriptor.worktree?.status === "discarded")
+			throw new HarnessError("Restore the discarded worktree before running this agent", 409);
 	}
 	private assertTarget(caller: AgentRecord, target: AgentRecord): void {
 		if (caller.teamId !== target.teamId) throw new HarnessError("Agent belongs to another team", 403);
@@ -375,6 +393,8 @@ export class TeamManager {
 	}
 	private newRun(agent: AgentRecord, task: string, inputKind?: "context", requestedByAgentId?: string): RunRecord {
 		if (this.current(agent)) throw new HarnessError("Session is busy", 409);
+		const worktree = this.registry.descriptor(agent.sessionId).worktree;
+		if (worktree?.status === "adopted") worktree.status = "active";
 		const run: RunRecord = {
 			runId: nextId("r", this.registry.state.runs, "runId"),
 			agentId: agent.agentId,
@@ -993,7 +1013,7 @@ export class TeamManager {
 							typeof input === "object" &&
 							"action" in input &&
 							typeof input.action === "string" &&
-							["spawn", "workflow", "send", "profiles"].includes(input.action)
+							["spawn", "workflow", "send", "profiles", "work"].includes(input.action)
 						);
 					});
 					const rootIndex = this.registry.state.runs.indexOf(run);
@@ -1255,6 +1275,7 @@ export class TeamManager {
 			const tools = this.registry.delegationTools(sessionId);
 			const team = this.registry.state.teams.find((entry) => entry.teamId === parent.teamId)!;
 			const continuingTeam = team.scope === "workspace" && parent.agentId === team.rootAgentId;
+			const agentModels = this.options.getAgentModels?.() ?? {};
 			const names = new Set<string>();
 			const assignments = resolved.map((task) => {
 				if (!continuingTeam) return { task, agent: undefined };
@@ -1273,7 +1294,8 @@ export class TeamManager {
 						throw new HarnessError(`${name} is busy; use team send with agentId ${agent.agentId}`, 409);
 					const member = this.registry.descriptor(agent.sessionId);
 					if (
-						(task.model &&
+						(!agentModels[task.category ?? agent.category ?? "other"] &&
+							task.model &&
 							(task.model.provider !== member.model?.provider || task.model.id !== member.model?.id)) ||
 						(task.responsibility !== undefined && task.responsibility.trim() !== agent.responsibility) ||
 						(task.systemPrompt !== undefined && task.systemPrompt !== (member.systemPrompt ?? "")) ||
@@ -1306,13 +1328,19 @@ export class TeamManager {
 			for (const assignment of assignments) {
 				const { task } = assignment;
 				let agent = assignment.agent;
+				const category = task.category ?? agent?.category ?? "other";
+				const configured = agentModels[category];
+				const model = configured
+					? { provider: configured.provider, id: configured.id }
+					: (task.model ?? descriptor.model);
 				if (!agent) {
 					const child = await this.registry.createWithinMutation({
 						workspaceId: descriptor.workspaceId,
 						parentSessionId: sessionId,
 						role: task.name,
 						systemPrompt: task.systemPrompt,
-						model: task.model ?? descriptor.model,
+						model,
+						thinkingLevel: configured?.thinkingLevel,
 						tools: task.tools ?? tools,
 					});
 					agent = {
@@ -1325,7 +1353,10 @@ export class TeamManager {
 						...(task.responsibility ? { responsibility: task.responsibility.trim() } : {}),
 					};
 					this.registry.state.agents.push(agent);
+				} else if (configured && model) {
+					await this.registry.setModelWithinMutation(agent.sessionId, model, configured.thinkingLevel);
 				}
+				agent.category = category;
 				const run = this.newRun(
 					agent,
 					task.context ? `${task.task}\n\nContext:\n${task.context}` : task.task,
@@ -1924,6 +1955,89 @@ export class TeamManager {
 		const workspaceId = this.registry.descriptor(agent.sessionId).workspaceId;
 		for (const listener of this.listeners) listener({ type: "team_changed", workspaceId });
 	}
+	workOverview(): WorkOverviewItem[] {
+		const { agents, runs, sessions, workspaces } = this.registry.state;
+		const workspacePaths = new Map(workspaces.map((workspace) => [workspace.id, workspace.path]));
+		const sessionAgents = new Map(agents.map((agent) => [agent.sessionId, agent]));
+		const latestRuns = new Map(runs.map((run) => [run.agentId, run]));
+		const currentRuns = new Map(runs.filter((run) => !terminalStatus[run.status]).map((run) => [run.agentId, run]));
+		return sessions
+			.map((session): WorkOverviewItem => {
+				const agent = sessionAgents.get(session.sessionId);
+				const run = agent && (currentRuns.get(agent.agentId) ?? latestRuns.get(agent.agentId));
+				return {
+					sessionId: session.sessionId,
+					workspaceId: session.workspaceId,
+					workspacePath: workspacePaths.get(session.workspaceId) ?? "",
+					parentSessionId: session.parentSessionId,
+					name: session.parentSessionId
+						? (agent?.name ?? session.role ?? "担当AI")
+						: (session.title ?? run?.task.slice(0, 140) ?? "新しい会話"),
+					task: run?.task.slice(0, 220),
+					category: agent?.category,
+					status: run?.status ?? "idle",
+					worktree: session.worktree?.status,
+					updatedAt: run?.settledAt ?? run?.startedAt,
+				};
+			})
+			.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+	}
+
+	async agentWork(sessionId: string, op: "diff" | "adopt" | "discard" | "restore", callerSessionId?: string) {
+		return this.registry.mutate(async () => {
+			const target = this.agentForSession(sessionId);
+			const caller = callerSessionId ? this.agentForSession(callerSessionId) : undefined;
+			if (caller ? target.parentAgentId !== caller.agentId : op !== "diff")
+				throw new HarnessError("Only the assigning agent can manage this worktree", 403);
+			const descriptor = this.registry.descriptor(sessionId);
+			const worktree = descriptor.worktree;
+			const service = this.options.agentWorktrees;
+			if (!worktree || !service) throw new HarnessError("This agent has no isolated Git worktree", 409);
+			if (
+				this.current(target) ||
+				(op !== "diff" &&
+					this.registry.state.agents.some((child) => this.ancestor(target.agentId, child) && this.current(child)))
+			)
+				throw new HarnessError("Wait for the agent and its delegated work to settle", 409);
+			if (op === "diff") {
+				const { diff, truncated, changed } = await service.changes(worktree);
+				return { status: worktree.status, diff, truncated, changed };
+			}
+			if (op === "discard" || op === "restore") {
+				if (op === "restore" && worktree.status !== "discarded")
+					throw new HarnessError("Only discarded work can be restored", 409);
+				const previous = worktree.status;
+				worktree.status = op === "discard" ? "discarded" : "active";
+				try {
+					await this.registry.persist();
+				} catch (error) {
+					worktree.status = previous;
+					throw error;
+				}
+				this.changed(target);
+				return { status: worktree.status };
+			}
+			if (worktree.status === "discarded") throw new HarnessError("Restore discarded work before adopting it", 409);
+			if (!caller) throw new HarnessError("Only the assigning agent can adopt this worktree", 403);
+			const receiving = this.registry.descriptor(caller.sessionId);
+			if (receiving.availability !== "ready" || receiving.worktree?.status === "discarded")
+				throw new HarnessError("The receiving workspace is unavailable", 409);
+			let result: Awaited<ReturnType<AgentWorktrees["changes"]>>;
+			try {
+				result = await service.changes(worktree, receiving.cwd);
+			} catch (error) {
+				throw new HarnessError(
+					`Could not adopt the diff: ${error instanceof Error ? error.message : String(error)}`,
+					409,
+				);
+			}
+			worktree.baseline = result.baseline;
+			worktree.status = "adopted";
+			await this.registry.persist();
+			this.changed(target);
+			return { status: worktree.status, changed: result.changed };
+		});
+	}
 	createTool(sessionId: string): ToolDefinition<typeof teamParameters> {
 		return {
 			name: "team",
@@ -1934,6 +2048,10 @@ export class TeamManager {
 				"Manage a durable workspace roster, not task-shaped agents. New specialists need a responsibility describing continuing ownership, separate from task. Inspect list before creating anyone; send work or questions directly to existing members. Specialists choose their own execution and may spawn bounded helpers. Use handoff to transfer your current assignment to an idle specialist, including context, deliverable, and acceptance; after transfer, finish your turn without duplicating their work. Wait follows ownership transfers. Use describe as manager to deliberately change an idle specialist's responsibility. Only the workspace manager owns priorities and final acceptance; it never implements.",
 			executionMode: "sequential",
 			parameters: teamParameters,
+			promptGuidelines: [
+				"Each newly spawned agent in a Git workspace works in its own checkout. After it settles, inspect its patch with team action work, op diff, and the agentId. Use op adopt to apply accepted changes to your checkout, discard to park rejected changes, or restore to reconsider a parked patch. Decide and perform these operations yourself. Never ask the user to click a review button for routine acceptance. Adopt prerequisite code before assigning work that must build on it. Apply failures leave the patch available for review.",
+				"Set each spawn/workflow task's category according to its work: orchestration, coding, design, writing, research, strategy, advisor, or other. The category selects the user's configured model and thinking level.",
+			],
 			execute: async (_callId, params: Static<typeof teamParameters>, signal) => {
 				let result: unknown;
 				switch (params.action) {
@@ -1957,6 +2075,18 @@ export class TeamManager {
 								);
 								if (descendants.some((child) => this.current(child)))
 									throw new HarnessError("Await all delegated work before completing Hyakki-Yako", 409);
+								for (const child of descendants) {
+									if (child.parentAgentId !== agent.agentId) continue;
+									const worktree = this.registry.descriptor(child.sessionId).worktree;
+									if (
+										worktree?.status === "active" &&
+										(await this.options.agentWorktrees?.changes(worktree))?.changed
+									)
+										throw new HarnessError(
+											`Review and adopt or discard ${child.name}'s isolated changes before completing Hyakki-Yako`,
+											409,
+										);
+								}
 								const initial = this.registry.state.runs.findIndex((run) => run.runId === swarm.rootRunId);
 								if (
 									!this.registry.state.runs.some(
@@ -1993,12 +2123,18 @@ export class TeamManager {
 							tools,
 						}));
 						break;
+					case "work":
+						result = await this.agentWork(this.agentById(params.agentId).sessionId, params.op, sessionId);
+						break;
 					case "list": {
 						const agent = this.agentForSession(sessionId);
 						result = {
-							agents: this.snapshot(this.registry.descriptor(sessionId).workspaceId).agents.filter(
-								(entry) => entry.teamId === agent.teamId,
-							),
+							agents: this.snapshot(this.registry.descriptor(sessionId).workspaceId)
+								.agents.filter((entry) => entry.teamId === agent.teamId)
+								.map((entry) => ({
+									...entry,
+									worktree: this.registry.descriptor(entry.sessionId).worktree?.status,
+								})),
 						};
 						break;
 					}

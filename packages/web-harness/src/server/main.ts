@@ -28,6 +28,7 @@ import { goalActionSchema } from "../shared/goals.ts";
 import { workspaceSwarmStartSchema } from "../shared/swarm.ts";
 import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
 import { readAccountUsage } from "./account-usage.ts";
+import { AgentWorktrees } from "./agent-worktrees.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
 import { CanvasStore, CanvasStoreError } from "./canvas-store.ts";
@@ -112,8 +113,12 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const githubDashboard = new GithubDashboardReader();
 	let events: EventHub | undefined;
 	const files = new WorkspaceFiles({ onChanged: (event) => events?.publish("workspace", event.workspaceId, event) });
+	const agentWorktrees = new AgentWorktrees(agentDir);
+	const isolatedFiles = new WorkspaceFiles();
 	let teams: TeamManager;
 	const registry = new SessionRegistry({
+		agentWorktrees,
+		isolatedFiles,
 		agentDir,
 		modelRuntime,
 		workspaceFiles: files,
@@ -122,7 +127,10 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		customTools: (descriptor) => {
 			const shellSettings = createHarnessSettings(descriptor.cwd, agentDir);
 			return [
-				...createHashlineTools(files, descriptor.workspaceId),
+				...createHashlineTools(
+					descriptor.worktree ? isolatedFiles : files,
+					descriptor.worktree ? descriptor.sessionId : descriptor.workspaceId,
+				),
 				...(!descriptor.tools || descriptor.tools.includes("bash")
 					? [
 							shellProcesses.createTool(descriptor.sessionId, descriptor.cwd, {
@@ -141,6 +149,8 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		},
 	});
 	teams = new TeamManager(registry, {
+		agentWorktrees,
+		getAgentModels: () => settings.get().agentModels ?? {},
 		agentDir,
 		getLimits: () => settings.get().teams,
 		onStopSession: async (id) => {
@@ -223,6 +233,9 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 				};
 				if (await uiPreferences.handle(request, response, url)) return true;
 				if (url.pathname === "/api/home/github" && method === "GET") return reply(await githubDashboard.read());
+				if (url.pathname === "/api/work" && method === "GET") return reply(teams.workOverview());
+				if (parts[1] === "work" && parts.length === 4 && parts[3] === "diff" && method === "GET")
+					return reply(await teams.agentWork(parts[2], "diff"));
 				if (url.pathname.startsWith("/api/widgets/")) {
 					if (method !== "GET") throw new HttpError(405, "Method is not allowed");
 					return reply(await widgets.query(url));

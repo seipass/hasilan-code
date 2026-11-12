@@ -5,6 +5,7 @@ import { getSupportedThinkingLevels } from "@hasilan-code/pi-ai";
 import type { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { Check } from "typebox/value";
+import { type AgentModels, agentModelsSchema } from "../shared/agent-categories.ts";
 import { type JevSelection, type JevStatus, jevSelectionSchema } from "../shared/workspace-routing.ts";
 
 export const searchProviderSchema = Type.Union([
@@ -36,6 +37,7 @@ function normalizeRustxngUrl(value: string): string {
 }
 export const settingsPatchSchema = Type.Object(
 	{
+		agentModels: Type.Optional(agentModelsSchema),
 		jev: Type.Optional(
 			Type.Object({ model: Type.Union([jevSelectionSchema, Type.Null()]) }, { additionalProperties: false }),
 		),
@@ -74,6 +76,7 @@ export const settingsPatchSchema = Type.Object(
 );
 export type SettingsPatch = Static<typeof settingsPatchSchema>;
 export interface HarnessSettings {
+	agentModels?: AgentModels;
 	jev?: { model?: JevSelection };
 	jevComputer?: { textModel: JevSelection };
 	translation?: { language: string; model?: JevSelection };
@@ -98,6 +101,7 @@ export type SettingsModelRuntime = Pick<
 const settingsFileSchema = Type.Object(
 	{
 		schemaVersion: Type.Literal(1),
+		agentModels: Type.Optional(agentModelsSchema),
 		jev: Type.Optional(Type.Object({ model: jevSelectionSchema }, { additionalProperties: false })),
 		jevComputer: Type.Optional(Type.Object({ textModel: jevSelectionSchema }, { additionalProperties: false })),
 		translation: Type.Optional(
@@ -205,6 +209,7 @@ export class SettingsService {
 						teams: { maxConcurrentAgents: 4, maxDepth: 3 },
 					}
 				: {
+						...(savedSettings.agentModels ? { agentModels: savedSettings.agentModels } : {}),
 						search: savedSettings.search,
 						...(savedSettings.translation ? { translation: savedSettings.translation } : {}),
 						teams: savedSettings.teams,
@@ -220,6 +225,7 @@ export class SettingsService {
 
 	get(): SettingsSnapshot {
 		return {
+			...(this.settings.agentModels ? { agentModels: structuredClone(this.settings.agentModels) } : {}),
 			translation: {
 				...(this.settings.translation ?? { language: "日本語" }),
 				...(this.settings.translation?.model ? { model: { ...this.settings.translation.model } } : {}),
@@ -251,6 +257,18 @@ export class SettingsService {
 		if (!Check(settingsPatchSchema, patch))
 			return Promise.reject(new Error("Invalid settings; concurrency must be 1..32 and depth 1..8"));
 		return this.enqueue(async () => {
+			for (const selection of Object.values(patch.agentModels ?? {})) {
+				const model = this.modelRuntime
+					.getModels()
+					.find((entry) => entry.provider === selection.provider && entry.id === selection.id);
+				if (
+					!model ||
+					!this.modelRuntime.hasConfiguredAuth(model.provider) ||
+					!getSupportedThinkingLevels(model).includes(selection.thinkingLevel)
+				) {
+					throw new Error("認証済みのモデルと、対応するThinkingレベルを選択してください。");
+				}
+			}
 			const rustxngUrl =
 				patch.search?.rustxngUrl === undefined ? undefined : normalizeRustxngUrl(patch.search.rustxngUrl);
 			if (patch.translation && !patch.translation.language.trim()) throw new Error("母国語を入力してください。");
@@ -283,6 +301,11 @@ export class SettingsService {
 			)
 				throw new Error("利用できる判断モデルを選択してください。");
 			const next: HarnessSettings = {
+				...(patch.agentModels
+					? { agentModels: patch.agentModels }
+					: this.settings.agentModels
+						? { agentModels: this.settings.agentModels }
+						: {}),
 				...(patch.translation
 					? {
 							translation: {

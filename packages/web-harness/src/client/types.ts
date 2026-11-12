@@ -1,4 +1,5 @@
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
+import type { AgentModels } from "../shared/agent-categories.ts";
 import type { PromptAttachment } from "../shared/attachments.ts";
 import type { ComputerStatus } from "../shared/computer.ts";
 import type { Goal } from "../shared/goals.ts";
@@ -6,6 +7,8 @@ import type { HistoryMessage, HistoryPosition, HistoryTool } from "../shared/ses
 import type { Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
 import type { JevStatus } from "../shared/workspace-routing.ts";
+
+export type { ThinkingLevel };
 
 export interface Workspace {
 	workspaceId: string;
@@ -105,6 +108,7 @@ export interface WorkspaceProjection {
 	teams: TeamSnapshot;
 }
 export interface Settings {
+	agentModels?: AgentModels;
 	translation: { language: string; model?: Model };
 	jev?: JevStatus;
 	jevComputer?: { textModel: Model };

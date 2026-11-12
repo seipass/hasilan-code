@@ -32,6 +32,7 @@ import { parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
 import { WidgetSpace } from "./widgets/WidgetSpace.tsx";
+import { WorkOverview } from "./WorkOverview.tsx";
 import { workspaceLabel } from "./workspace-label.ts";
 import { sendWorkspacePrompt } from "./workspace-send.ts";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
@@ -78,6 +79,7 @@ export function App() {
 	function setDraftModel(model: Model | undefined) { setDraftSelection((previous) => ({ ...previous, model: model ? { provider: model.provider, id: model.id } : undefined })); }
 	function setDraftThinking(thinkingLevel: ThinkingLevel | undefined) { setDraftSelection((previous) => ({ ...previous, thinkingLevel })); }
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [workOpen, setWorkOpen] = useState(false);
 	const [importOpen, setImportOpen] = useState(false);
 	const [sessionAction, setSessionAction] = useState<SessionActionTarget>();
 	const closeSessionAction = useCallback(() => setSessionAction(undefined), []);
@@ -251,7 +253,7 @@ export function App() {
 	// The entry is dropped again when the last overlay closes through the UI, so a normal
 	// back press still leaves the conversation exactly once.
 	const narrowViewport = viewport.width <= 900;
-	const overlayCount = (sessionAction ? 1 : 0) + (importOpen ? 1 : 0) + (settingsOpen ? 1 : 0) + (modelOpen ? 1 : 0) + (narrowViewport && rightOpen ? 1 : 0) + (narrowViewport && sidebarOpen ? 1 : 0) + (narrowViewport && fileTreeOpen ? 1 : 0);
+	const overlayCount = (sessionAction ? 1 : 0) + (importOpen ? 1 : 0) + (settingsOpen ? 1 : 0) + (workOpen ? 1 : 0) + (modelOpen ? 1 : 0) + (narrowViewport && rightOpen ? 1 : 0) + (narrowViewport && sidebarOpen ? 1 : 0) + (narrowViewport && fileTreeOpen ? 1 : 0);
 	const backGuard = useRef(false);
 	const overlayOpen = useRef(false);
 	overlayOpen.current = overlayCount > 0;
@@ -261,6 +263,7 @@ export function App() {
 			if (sessionAction) { closeSessionAction(); return true; }
 			if (importOpen) { setImportOpen(false); return true; }
 			if (settingsOpen) { setSettingsOpen(false); return true; }
+			if (workOpen) { setWorkOpen(false); return true; }
 			if (modelOpen) { setModelOpen(false); return true; }
 			if (narrowViewport && rightOpen) { setRightOpen(false); return true; }
 			if (narrowViewport && sidebarOpen) { setSidebarOpen(false); return true; }
@@ -300,18 +303,20 @@ export function App() {
 			if (window.history.state?.piOverlay) window.history.back();
 		}
 	}, [overlayCount]);
-	function selectSession(id: string) {
+	function selectSession(id: string, knownWorkspaceId?: string) {
 		if (commandPending.current) return;
-		const summary = summaries.find((entry) => entry.sessionId === id);
-		if (summary && summary.workspaceId !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
+		const targetWorkspaceId = knownWorkspaceId ?? summaries.find((entry) => entry.sessionId === id)?.workspaceId;
+		const changingWorkspace = targetWorkspaceId && targetWorkspaceId !== workspaceId;
+		if (changingWorkspace && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
 		setDraftInsertion(undefined);
-		if (summary && summary.workspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
+		if (changingWorkspace) { setCanvasDirty(false); setCanvasOpened(false); }
 		draftSession.current = undefined;
-		if (summary) setWorkspaceId(summary.workspaceId);
-		if (summary) setExpandedWorkspaces((previous) => ({ ...previous, [summary.workspaceId]: true }));
+		if (targetWorkspaceId) setWorkspaceId(targetWorkspaceId);
+		if (targetWorkspaceId) setExpandedWorkspaces((previous) => ({ ...previous, [targetWorkspaceId]: true }));
 		setMode("chat");
 		setSessionId(id); setError(undefined); setFileTarget(undefined); setModelOpen(false);
 		if (window.innerWidth < 900) setSidebarOpen(false);
+		return true;
 	}
 	function selectWorkspace(id: string) {
 		if (commandPending.current) return;
@@ -559,7 +564,7 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}><Icon name="settings" size="control" />設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions has-widgets"><WidgetSpace visible usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions has-widgets"><WidgetSpace visible usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button><button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
 			<div className="home-backdrop-anchor"><HomeBackdrop background={homeBackgroundVisible ? background : undefined} /></div>
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
@@ -585,6 +590,7 @@ export function App() {
 			setWorkspaces(folders);
 			setInitialSessions(sessions);
 		}} />}
+		{workOpen && <WorkOverview onClose={() => setWorkOpen(false)} onSession={(id, folder) => { if (selectSession(id, folder)) setWorkOpen(false); }} />}
 		<Presence show={!!sessionAction}><div className="motion-contents">{sessionAction && <SessionActions key={sessionAction.session.sessionId} target={sessionAction} onClose={closeSessionAction} onRename={renameSession} onDelete={deleteSession} canMoveUp={actionIndex > 0} canMoveDown={actionIndex >= 0 && actionIndex < actionOrder.length - 1} onMove={(direction) => {
 			const destination = actionIndex + direction;
 			if (!actionSession || actionIndex < 0 || destination < 0 || destination >= actionOrder.length) return;

@@ -1,4 +1,5 @@
 import { Select } from "./Select.tsx";
+import { AgentModelSettings } from "./AgentModelSettings.tsx";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { SessionArchivePanel } from "./SessionArchivePanel.tsx";
 import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
@@ -293,6 +294,15 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 					</fieldset>
 				</section></Presence>
 				<Presence show={tab === "agents"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-agents-panel`} aria-labelledby={`${tabsId}-agents-tab`}>
+					<h3>サブエージェント</h3>
+					<AgentModelSettings models={settings.agentModels ?? {}} catalog={catalog} busy={busy}
+						changed={JSON.stringify(settings.agentModels ?? {}) !== JSON.stringify(savedSettings?.agentModels ?? {})}
+						onChange={(agentModels) => setSettings((current) => current && ({ ...current, agentModels }))}
+						onSave={() => { void perform(async () => {
+							const saved = await command<Settings>("/api/settings", { agentModels: settings.agentModels ?? {} }, "PATCH");
+							setSettings((current) => current && ({ ...current, agentModels: saved.agentModels }));
+							setSavedSettings((current) => current && ({ ...current, agentModels: saved.agentModels }));
+						}, "担当タスク別のモデルを保存しました。", "担当タスク別のモデルを保存できませんでした。"); }} />
 					<h3>判断モデル · ワークスペース・会話の自動選択</h3>
 					<form onSubmit={(event) => {
 						event.preventDefault();

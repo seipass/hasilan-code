@@ -44,6 +44,7 @@ import {
 } from "../shared/session-import.ts";
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
+import type { AgentWorktree, AgentWorktrees } from "./agent-worktrees.ts";
 import { createHarnessSettings } from "./config.ts";
 import { modelGuidance } from "./model-guidance.ts";
 import { projectAttachmentContent } from "./prompt-attachments.ts";
@@ -70,6 +71,7 @@ export interface WorkspaceDirectoryService {
 	ignoreHarnessDirectory?(id: string): Promise<void>;
 }
 export interface SessionDescriptor {
+	worktree?: AgentWorktree;
 	sessionId: string;
 	workspaceId: string;
 	cwd: string;
@@ -142,6 +144,8 @@ export interface ExecutionAdapter {
 	dispose(): void;
 }
 export interface RegistryOptions {
+	agentWorktrees?: AgentWorktrees;
+	isolatedFiles?: WorkspaceDirectoryService;
 	agentDir: string;
 	workspaceFiles: WorkspaceDirectoryService;
 	modelRuntime?: ModelRuntime;
@@ -510,6 +514,13 @@ export class SessionRegistry {
 			descriptor.cwd = this.getWorkspaceRoot(descriptor.workspaceId);
 			const materialized = !!descriptor.path && existsSync(descriptor.path);
 			descriptor.availability = descriptor.materialized && !materialized ? "missing" : "ready";
+			if (descriptor.worktree) {
+				try {
+					await this.registerWorktree(descriptor);
+				} catch {
+					descriptor.availability = "missing";
+				}
+			}
 		}
 		if (savedModes) await this.persist();
 	}
@@ -859,6 +870,14 @@ export class SessionRegistry {
 			const selected = this.options.modelRuntime.getModel(model.provider, model.id);
 			if (selected) descriptor.thinkingLevel = clampThinkingLevel(selected, descriptor.thinkingLevel);
 		}
+		if (options.parentSessionId && this.options.agentWorktrees) {
+			const parent = this.descriptor(options.parentSessionId);
+			const worktree = await this.options.agentWorktrees.create(parent.cwd);
+			if (worktree) {
+				descriptor.worktree = worktree;
+				await this.registerWorktree(descriptor);
+			}
+		}
 		const manager = this.newManager(descriptor);
 		descriptor.path = manager.getSessionFile();
 		this.state.sessions.push(descriptor);
@@ -866,6 +885,16 @@ export class SessionRegistry {
 		await this.persist();
 		this.changed(descriptor.sessionId);
 		return structuredClone(descriptor);
+	}
+	private async registerWorktree(descriptor: SessionDescriptor): Promise<void> {
+		if (!descriptor.worktree || !this.options.agentWorktrees || !this.options.isolatedFiles)
+			throw new Error("Agent worktree service is unavailable");
+		const cwd = await this.options.agentWorktrees.cwd(
+			descriptor.worktree,
+			this.getWorkspaceRoot(descriptor.workspaceId),
+		);
+		const registered = await this.options.isolatedFiles.register(cwd, descriptor.sessionId);
+		descriptor.cwd = registered.path;
 	}
 	descriptor(id: string): SessionDescriptor {
 		const descriptor = this.state.sessions.find((entry) => entry.sessionId === id);
@@ -1175,6 +1204,8 @@ export class SessionRegistry {
 	}
 	async assertModelReady(id: string): Promise<void> {
 		const descriptor = this.descriptor(id);
+		if (descriptor.worktree?.status === "discarded")
+			throw new HarnessError("Restore the discarded worktree before running this agent", 409);
 		if (descriptor.availability !== "ready") throw new HarnessError("Conversation file is missing", 409);
 		if (this.options.adapterFactory) return;
 		if (!descriptor.model) throw new HarnessError("No model selected; choose a model in the composer");
@@ -1639,20 +1670,28 @@ export class SessionRegistry {
 	}
 	async setModel(id: string, selection: ModelSelection): Promise<void> {
 		await this.mutate(async () => {
-			if (this.get(id).currentRun) throw new HarnessError("Change the model only while the session is idle", 409);
-			const descriptor = this.descriptor(id);
-			const adapter = this.live.get(id)?.adapter;
-			if (adapter) await adapter.setModel(selection);
-			else if (this.options.modelRuntime && !this.options.modelRuntime.getModel(selection.provider, selection.id))
-				throw new HarnessError("Model not found");
-			descriptor.model = { ...selection };
-			const selected = this.options.modelRuntime?.getModel(selection.provider, selection.id);
-			if (selected && descriptor.thinkingLevel)
-				descriptor.thinkingLevel =
-					adapter?.getThinkingLevel?.() ?? clampThinkingLevel(selected, descriptor.thinkingLevel);
+			await this.setModelWithinMutation(id, selection);
 			await this.persist();
 			this.changed(id);
 		});
+	}
+	async setModelWithinMutation(id: string, selection: ModelSelection, thinkingLevel?: ThinkingLevel): Promise<void> {
+		if (this.get(id).currentRun) throw new HarnessError("Change the model only while the session is idle", 409);
+		const descriptor = this.descriptor(id);
+		const adapter = this.live.get(id)?.adapter;
+		const selected = this.options.modelRuntime?.getModel(selection.provider, selection.id);
+		if (!selected && this.options.modelRuntime) throw new HarnessError("Model not found");
+		const changed = descriptor.model?.provider !== selection.provider || descriptor.model.id !== selection.id;
+		if (adapter && changed) await adapter.setModel(selection);
+		descriptor.model = { ...selection };
+		if (thinkingLevel) {
+			const level = selected ? clampThinkingLevel(selected, thinkingLevel) : thinkingLevel;
+			adapter?.setThinkingLevel?.(level);
+			descriptor.thinkingLevel = adapter?.getThinkingLevel?.() ?? level;
+		} else if (selected && descriptor.thinkingLevel) {
+			descriptor.thinkingLevel =
+				adapter?.getThinkingLevel?.() ?? clampThinkingLevel(selected, descriptor.thinkingLevel);
+		}
 	}
 	async setThinkingLevel(id: string, level: ThinkingLevel): Promise<void> {
 		await this.mutate(async () => {
