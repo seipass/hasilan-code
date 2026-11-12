@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HistoryPosition } from "../shared/session-history.ts";
 import { ComputerActivity } from "./ComputerActivity.tsx";
 import { conversationRows } from "./computer-activity.ts";
@@ -163,9 +163,11 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const [activityBeta] = usePreferenceState("pi-web-beta-turn-activity", false);
 	const anchor = useRef<{ id: string; offset: number } | undefined>(undefined);
 	const following = useRef(true);
-	const programmaticTop = useRef(-1);
+	const lastScrollTop = useRef(0);
+	const lastFollowRequest = useRef(followRequest);
 	const origin = useRef(24);
 	const observer = useRef<ResizeObserver | undefined>(undefined);
+	const observedRows = useRef(new Set<HTMLElement>());
 	const fileCallback = useRef(onFile);
 	fileCallback.current = onFile;
 	const openFile = useCallback((path: string, line?: number) => fileCallback.current(path, line), []);
@@ -205,69 +207,104 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 		for (const row of rows) result.push(result[result.length - 1] + (heights.current.get(row.key) ?? (row.kind === "computer" ? 430 : row.kind === "activity" ? 42 : ESTIMATED_HEIGHT)));
 		return result;
 	}, [rows, measureVersion]);
+	const rowIndexes = useMemo(() => new Map(rows.map((row, index) => [row.key, index])), [rows]);
 	const total = offsets[offsets.length - 1];
 	const topInset = history?.before || loading || error ? 40 : 0;
-	const top = following.current ? Math.max(0, total - viewport.height) : Math.max(0, viewport.top - origin.current);
+	const savedAnchor = anchor.current;
+	const anchorIndex = savedAnchor ? rowIndexes.get(savedAnchor.id) : undefined;
+	const top = Math.max(0, following.current ? total - viewport.height : savedAnchor && anchorIndex !== undefined ? offsets[anchorIndex] + savedAnchor.offset : viewport.top - origin.current);
 	const start = Math.max(0, rowAt(offsets, Math.max(0, top - OVERSCAN)));
 	const end = Math.min(rows.length, rowAt(offsets, top + viewport.height + OVERSCAN) + 1);
 	const geometry = useRef({ rows, offsets });
-	geometry.current = { rows, offsets };
 	const updateViewport = useCallback(() => {
 		const element = scroller.current;
 		if (!element) return;
-		setViewport((previous) => previous.top === element.scrollTop && previous.height === element.clientHeight ? previous : { top: element.scrollTop, height: element.clientHeight });
+		const { scrollTop: top, clientHeight: height } = element;
+		setViewport((previous) => previous.top === top && previous.height === height ? previous : { top, height });
 	}, []);
-	useLayoutEffect(() => {
+	const captureScroll = useCallback((element: HTMLDivElement) => {
+		const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
+		lastScrollTop.current = element.scrollTop;
+		following.current = remaining <= 2;
+		setNearBottom(remaining < 80);
+		const current = geometry.current;
+		const y = element.scrollTop - origin.current;
+		const index = Math.max(0, rowAt(current.offsets, Math.max(0, y)));
+		const row = current.rows[index];
+		anchor.current = row ? { id: row.key, offset: y - current.offsets[index] } : undefined;
+	}, []);
+	const followLatest = useCallback(() => {
+		following.current = true;
+		anchor.current = undefined;
+		setNearBottom(true);
 		const element = scroller.current;
-		if (!element) return;
-		if (rowsStart.current) origin.current = rowsStart.current.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
-		if (following.current) element.scrollTop = element.scrollHeight;
-		else if (anchor.current) {
-			const index = rows.findIndex((row) => row.key === anchor.current?.id);
-			if (index >= 0) element.scrollTop = origin.current + offsets[index] + anchor.current.offset;
-			else {
-				const previousKey = anchor.current.id;
-				const regrouped = rows.findIndex((row) => row.kind === "activity" && row.items.some((item) => item.key === previousKey || `activity:${item.key}` === previousKey));
-				if (regrouped >= 0) element.scrollTop = origin.current + offsets[regrouped];
-				else { following.current = true; element.scrollTop = element.scrollHeight; setNearBottom(true); }
-			}
+		if (element) {
+			element.scrollTop = element.scrollHeight;
+			lastScrollTop.current = element.scrollTop;
 		}
-		programmaticTop.current = element.scrollTop;
 		updateViewport();
-	}, [rows, offsets, topInset, fallback, viewport.height, updateViewport]);
+	}, [updateViewport]);
 	useLayoutEffect(() => {
 		const element = scroller.current;
 		if (!element) return;
 		const resize = observeConversation(element, heights.current, () => setMeasureVersion((version) => version + 1), updateViewport);
 		observer.current = resize;
-		return () => { resize.disconnect(); observer.current = undefined; };
+		return () => { resize.disconnect(); observer.current = undefined; observedRows.current.clear(); };
 	}, [updateViewport]);
 	useLayoutEffect(() => {
-		const resize = observer.current;
-		const elements = scroller.current?.querySelectorAll(".virtual-message");
-		elements?.forEach((row) => resize?.observe(row));
-		return () => elements?.forEach((row) => resize?.unobserve(row));
-	}, [start, end, rows]);
-	useEffect(() => {
-		following.current = true;
-		setNearBottom(true);
-		if (scroller.current) { scroller.current.scrollTop = scroller.current.scrollHeight; programmaticTop.current = scroller.current.scrollTop; }
+		const element = scroller.current;
+		if (!element) return;
+		// A stream update can commit before the browser dispatches the user's scroll event.
+		const clampedTop = Math.min(lastScrollTop.current, Math.max(0, element.scrollHeight - element.clientHeight));
+		if (Math.abs(element.scrollTop - clampedTop) > 0.5) captureScroll(element);
+		const mountedRows = new Set(element.querySelectorAll<HTMLElement>(".virtual-message"));
+		for (const row of observedRows.current) if (!mountedRows.has(row)) observer.current?.unobserve(row);
+		let measured = false;
+		for (const row of mountedRows) {
+			if (observedRows.current.has(row)) continue;
+			observer.current?.observe(row);
+			const id = row.dataset.messageId;
+			const height = row.getBoundingClientRect().height;
+			if (id && height > 0 && heights.current.get(id) !== height) {
+				heights.current.set(id, height);
+				measured = true;
+			}
+		}
+		observedRows.current = mountedRows;
+		// Replace spacer estimates before the newly mounted rows can move visible content for a frame.
+		if (measured) {
+			setMeasureVersion((version) => version + 1);
+			return;
+		}
+		if (rowsStart.current) origin.current = rowsStart.current.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
+		if (following.current) element.scrollTop = element.scrollHeight;
+		else if (anchor.current) {
+			const index = rowIndexes.get(anchor.current.id);
+			if (index !== undefined) element.scrollTop = origin.current + offsets[index] + anchor.current.offset;
+			else {
+				const previousKey = anchor.current.id;
+				const regrouped = rows.findIndex((row) => row.kind === "activity" && row.items.some((item) => item.key === previousKey || `activity:${item.key}` === previousKey));
+				if (regrouped >= 0) {
+					anchor.current = { id: rows[regrouped].key, offset: 0 };
+					element.scrollTop = origin.current + offsets[regrouped];
+				}
+			}
+		}
+		lastScrollTop.current = element.scrollTop;
+		geometry.current = { rows, offsets };
 		updateViewport();
-	}, [followRequest, updateViewport]);
+	}, [rows, offsets, rowIndexes, start, end, topInset, fallback, latestError, viewport.height, captureScroll, updateViewport]);
+	useLayoutEffect(() => {
+		if (lastFollowRequest.current === followRequest) return;
+		lastFollowRequest.current = followRequest;
+		followLatest();
+	}, [followRequest, followLatest]);
 	return <>
 		<div className="conversation virtual-conversation" ref={scroller} onScroll={() => {
 			const element = scroller.current;
 			if (!element) return;
-			if (Math.abs(element.scrollTop - programmaticTop.current) <= 1) return;
-			programmaticTop.current = -1;
-			const remaining = element.scrollHeight - element.scrollTop - element.clientHeight;
-			following.current = remaining <= 2;
-			setNearBottom(remaining < 80);
-			const current = geometry.current;
-			const y = element.scrollTop - origin.current;
-			const index = Math.max(0, rowAt(current.offsets, Math.max(0, y)));
-			const row = current.rows[index];
-			if (row) anchor.current = { id: row.key, offset: y - current.offsets[index] };
+			if (Math.abs(element.scrollTop - lastScrollTop.current) <= 0.5) return;
+			captureScroll(element);
 			updateViewport();
 			if (element.scrollTop < 160 && history?.before && !loading && !error) void onLoadOlder?.();
 		}}>
@@ -285,6 +322,6 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>
 			</div>
 		</div>
-		<Presence show={!nearBottom}><button className="back-to-bottom" aria-label="最新のメッセージへ" title="最新のメッセージへ" onClick={() => { following.current = true; setNearBottom(true); if (scroller.current) { scroller.current.scrollTop = scroller.current.scrollHeight; programmaticTop.current = scroller.current.scrollTop; } updateViewport(); }}><Icon name="send" style={{ transform: "rotate(180deg)" }} /></button></Presence>
+		<Presence show={!nearBottom}><button className="back-to-bottom" aria-label="最新のメッセージへ" title="最新のメッセージへ" onClick={followLatest}><Icon name="send" style={{ transform: "rotate(180deg)" }} /></button></Presence>
 	</>;
 });

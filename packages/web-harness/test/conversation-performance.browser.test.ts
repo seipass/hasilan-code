@@ -66,3 +66,77 @@ createRoot(document.getElementById("root")).render(<Fixture />);`,
 		await browser.close();
 	}
 }, 30000);
+
+it("keeps the visible message stationary when scrolling away from live output and mounting older rows", async () => {
+	const bundle = await build({
+		stdin: {
+			resolveDir: fileURLToPath(new URL("../", import.meta.url)),
+			loader: "tsx",
+			contents: `
+import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
+import { Conversation } from "./src/client/Conversation.tsx";
+const replies = Array.from({ length: 40 }, (_, index) => ({
+ messageId: "reply-" + index, role: "assistant", content: "Reply " + index,
+}));
+function Fixture() {
+ const [stream, setStream] = useState("Streaming");
+ useEffect(() => {
+  const next = () => flushSync(() => setStream(text => text + " next"));
+  window.addEventListener("stream-next", next);
+  return () => window.removeEventListener("stream-next", next);
+ }, []);
+ return <Conversation messages={[...replies, { messageId: "live", role: "assistant", partial: true, content: stream }]}
+  tools={[]} activeRunId="live-run" onFile={() => {}} followRequest={0} />;
+}
+createRoot(document.getElementById("root")).render(<Fixture />);`,
+		},
+		bundle: true,
+		write: false,
+		jsx: "automatic",
+		loader: { ".css": "empty" },
+		format: "iife",
+		define: { "process.env.NODE_ENV": '"production"' },
+	});
+	const browser = await chromium.launch({ headless: true });
+	try {
+		const page = await browser.newPage();
+		await page.setContent(`<style>
+.conversation { height: 480px; overflow: auto; overflow-anchor: none; }
+.virtual-message { display: flow-root; }
+.message { margin: 0; min-height: 100px; }
+[data-message-id="reply-28"] { height: 740px; }
+.back-to-bottom { position: absolute; }
+</style><div id="root"></div>`);
+		await page.addScriptTag({ content: bundle.outputFiles[0].text });
+		await page.getByText("Streaming", { exact: true }).waitFor();
+		await expect
+			.poll(() => page.locator(".conversation").evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
+			.toBe(0);
+		const actual = await page.locator(".conversation").evaluate((element) => {
+			const reply = element.querySelector('[data-message-id="reply-38"]')!;
+			element.scrollTop -= 100;
+			const beforeStream = reply.getBoundingClientRect().top;
+			window.dispatchEvent(new Event("stream-next"));
+			const afterStream = reply.getBoundingClientRect().top;
+			let olderJump: number | undefined;
+			for (let step = 0; step < 20; step++) {
+				const visible = [...element.querySelectorAll(".virtual-message")].find(
+					(row) => row.getBoundingClientRect().bottom > element.getBoundingClientRect().top + 110,
+				)!;
+				element.scrollTop -= 90;
+				const expectedTop = visible.getBoundingClientRect().top;
+				window.dispatchEvent(new Event("stream-next"));
+				if (element.querySelector('[data-message-id="reply-28"]')) {
+					olderJump = visible.getBoundingClientRect().top - expectedTop;
+					break;
+				}
+			}
+			return { streamJump: afterStream - beforeStream, olderJump };
+		});
+		expect(actual).toEqual({ streamJump: 0, olderJump: 0 });
+	} finally {
+		await browser.close();
+	}
+}, 30000);
