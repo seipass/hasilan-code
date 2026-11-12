@@ -1,23 +1,19 @@
-.session-overview { display: none; }
-
-@container chat (min-width: 1100px) {
-	.chat-page-transition > .motion-swap-content:has(> .session-overview) { flex-direction: row; }
-	.session-overview {
-		display: block;
-		flex: 0 0 248px;
-		min-width: 0;
-		align-self: flex-start;
-		max-height: calc(100% - 32px);
-		overflow: auto;
-		overscroll-behavior: contain;
-		margin: 16px 18px 16px 0;
-		padding: 12px;
-		border: 1px solid var(--border-subtle);
-		border-radius: 14px;
-		background: var(--surface-panel);
-		color: var(--on-surface-secondary);
-		font-size: var(--text-sm);
-	}
+.session-overview {
+	position: absolute;
+	z-index: 2;
+	inset-block-start: 16px;
+	inset-inline-end: 18px;
+	max-width: 248px;
+	max-height: calc(100% - 32px);
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 12px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 14px;
+	background: var(--surface-panel);
+	box-shadow: 0 8px 24px #0003;
+	color: var(--on-surface-secondary);
+	font-size: var(--text-sm);
 }
 
 .session-overview > header { display: flex; align-items: center; gap: 8px; padding: 4px 6px 9px; color: var(--on-surface); font-weight: 600; }

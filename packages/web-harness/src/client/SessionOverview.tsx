@@ -35,7 +35,8 @@ function sessionSources(messages: ChatMessage[]): Source[] {
 	return [...sources.values()];
 }
 
-export function SessionOverview({ session, team, onFile, onSession, onAttach, attachDisabled }: {
+export function SessionOverview({ width, session, team, onFile, onSession, onAttach, attachDisabled }: {
+	width: number;
 	session: SessionDetail;
 	team?: TeamSnapshot;
 	onFile: (path: string) => void;
@@ -53,7 +54,7 @@ export function SessionOverview({ session, team, onFile, onSession, onAttach, at
 	const active = agents.filter((agent) => agent.currentRun).length;
 	const added = changes.reduce((total, file) => total + file.added, 0);
 	const removed = changes.reduce((total, file) => total + file.removed, 0);
-	return <aside className="session-overview" aria-label="会話の概要">
+	return <aside className="session-overview" aria-label="会話の概要" style={{ width }}>
 		<header title={session.cwd}><Icon name="folder" size="inline" /><span>{workspaceLabel(session.cwd, [])}</span></header>
 		{changes.length > 0 && <details className="session-overview-changes" onToggle={(event) => setShowChanges(event.currentTarget.open)}>
 			<summary className="session-overview-row" title="読み込み済み履歴に記録された変更">

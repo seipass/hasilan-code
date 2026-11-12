@@ -137,6 +137,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	}, []);
 	const clampWidth = (value: number) => clampChatWidth(value, paneWidth);
 	const shownWidth = clampWidth(chatWidth);
+	const overviewWidth = Math.floor((paneWidth - shownWidth) / 2) - 32;
 	// A fresh conversation should be ready to type in; the sidebar button keeps focus otherwise.
 	useEffect(() => {
 		if (loading || surface || !empty) return;
@@ -206,7 +207,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const hasContextLimit = contextLimit !== undefined && contextLimit > 0;
 	const pendingInputs = session?.pendingInput.filter((input) => !input.fromAgentId && !input.completionRunId) ?? [];
 	useLayoutMotion(pendingList, pendingInputs, true, true);
-	return <><section ref={pane} className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}${dashboardVisible ? " has-home-dashboard" : ""}`} aria-label="会話" style={{ "--chat-content-width": `${shownWidth}px` } as CSSProperties}>
+	return <section ref={pane} className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}${dashboardVisible ? " has-home-dashboard" : ""}`} aria-label="会話" style={{ "--chat-content-width": `${shownWidth}px` } as CSSProperties}>
 {!surface && !empty && <div className="chat-width-handle" role="separator" tabIndex={0} aria-label="チャットの幅" aria-orientation="vertical" aria-valuemin={CHAT_MIN_WIDTH} aria-valuemax={clampWidth(CHAT_MAX_WIDTH)} aria-valuenow={shownWidth} title="ドラッグしてチャットの幅を変更" onPointerDown={(event) => {
 			if (event.button !== 0) return;
 			event.preventDefault();
@@ -325,7 +326,6 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 			<Presence show={!!(error || attachmentError)} collapse><p className="composer-error" role="alert">{error ?? attachmentError}</p></Presence>
 		</div>
 		{dashboardVisible && homeDashboard}
-	</section>
-		{!surface && !empty && session?.availability === "ready" && <SessionOverview session={session} team={team} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} />}
-	</>;
+		{!surface && !empty && paneWidth >= 1100 && overviewWidth >= 160 && session?.availability === "ready" && <SessionOverview width={overviewWidth} session={session} team={team} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} />}
+	</section>;
 }
