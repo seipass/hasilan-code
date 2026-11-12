@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { type Browser, chromium } from "playwright";
@@ -15,9 +16,11 @@ beforeAll(async () => {
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ModelPicker } from "./src/client/ModelPicker.tsx";
+import { ModelMenu } from "./src/client/ModelMenu.tsx";
 const models = Array.from({ length: 1000 }, (_, index) => ({
  provider: index < 800 ? "fixture" : "other", id: "model-" + index,
  name: (index % 2 ? "Beta " : "Alpha ") + String(index).padStart(4, "0"), contextWindow: 10000,
+ thinkingLevels: index === 2 ? ["low", "high"] : ["low", "medium", "high", "max"],
 }));
 const catalog = { models, providers: [
  { id: "fixture", name: "Connected", configured: true },
@@ -28,7 +31,19 @@ function Fixture() {
  return <><ModelPicker catalog={catalog} compact={document.body.dataset.compact === "true"} value={value} onChange={setValue} />
  <output aria-label="Selected model">{value.id}</output></>;
 }
-createRoot(document.getElementById("root")).render(<Fixture />);`,
+function MenuFixture() {
+ const [value, setValue] = useState(catalog.models[0]);
+ const [thinking, setThinking] = useState("medium");
+ const [commits, setCommits] = useState(0);
+ const [open, setOpen] = useState(false);
+ return <><button className="model-trigger" onClick={() => setOpen(!open)}>モデル設定</button>
+ {open && <ModelMenu catalog={catalog} value={value} thinkingLevel={thinking} disabled={false}
+  onChange={async selection => { setValue(selection); setThinking("low"); }}
+  onThinkingChange={async level => { setCommits(count => count + 1); setThinking(level); }}
+  onSettings={() => {}} onClose={() => setOpen(false)} />}
+ <output aria-label="Thinking writes">{commits}:{thinking}</output></>;
+}
+createRoot(document.getElementById("root")).render(document.body.dataset.menu ? <MenuFixture /> : <Fixture />);`,
 		},
 		bundle: true,
 		write: false,
@@ -115,3 +130,47 @@ it.each([true, false])(
 	},
 	30000,
 );
+
+it("switches between the effort slider and model list and saves once after dragging", async () => {
+	const page = await browser.newPage({ viewport: { width: 1120, height: 740 } });
+	try {
+		await page.setContent(
+			'<style>.model-trigger { position: absolute; right: 80px; bottom: 100px; } .model-picker-results { overflow: auto; }</style><body data-menu="true"><div id="root"></div></body>',
+		);
+		await page.addStyleTag({
+			content: await readFile(new URL("../src/client/ModelMenu.css", import.meta.url), "utf8"),
+		});
+		await page.addScriptTag({ content: script });
+		const trigger = page.getByRole("button", { name: "モデル設定" });
+		await trigger.click();
+		const dialog = page.getByRole("dialog", { name: "モデル・Thinking" });
+		const slider = dialog.getByRole("slider", { name: "推論レベル" });
+		const writes = page.getByLabel("Thinking writes");
+		expect(await slider.getAttribute("aria-valuetext")).toBe("中");
+		const bounds = await slider.boundingBox();
+		if (!bounds) throw new Error("Missing effort slider");
+		const y = bounds.y + bounds.height / 2;
+		await page.mouse.move(bounds.x + bounds.width / 3, y);
+		await page.mouse.down();
+		await page.mouse.move(bounds.x + bounds.width - 5, y, { steps: 5 });
+		await expect.poll(() => slider.getAttribute("aria-valuetext")).toBe("最大");
+		expect(await writes.textContent()).toBe("0:medium");
+		await page.mouse.up();
+		await expect.poll(() => writes.textContent()).toBe("1:max");
+		await slider.press("ArrowLeft");
+		await expect.poll(() => writes.textContent()).toBe("2:high");
+		await dialog.getByRole("button", { name: "モデル一覧を開く" }).click();
+		const search = dialog.getByRole("combobox", { name: "モデルを検索" });
+		await search.fill("Alpha 0002");
+		await search.press("Enter");
+		await expect
+			.poll(() => dialog.getByRole("button", { name: "モデル一覧を開く" }).textContent())
+			.toContain("Alpha 0002");
+		expect(await slider.getAttribute("max")).toBe("1");
+		await slider.press("Escape");
+		await dialog.waitFor({ state: "hidden" });
+		expect(await trigger.evaluate((element) => document.activeElement === element)).toBe(true);
+	} finally {
+		await page.close();
+	}
+}, 30000);
