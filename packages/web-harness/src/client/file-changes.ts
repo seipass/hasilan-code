@@ -13,7 +13,7 @@ function object(value: unknown): value is Record<string, unknown> {
 }
 
 /** Collect only recorded successful file-tool results; shell commands have no reliable per-turn diff. */
-export function fileChanges(tools: ToolCall[], runId: string): FileChangeSummary[] {
+export function fileChanges(tools: ToolCall[], runId?: string): FileChangeSummary[] {
 	const files = new Map<string, FileChangeSummary>();
 	const add = (path: string, patch: string) => {
 		const file = files.get(path) ?? { path, patches: [], added: 0, removed: 0, truncated: false };
@@ -24,7 +24,7 @@ export function fileChanges(tools: ToolCall[], runId: string): FileChangeSummary
 		files.set(path, file);
 	};
 	for (const tool of tools) {
-		if (tool.runId !== runId || tool.status !== "success") continue;
+		if (tool.status !== "success" || (runId !== undefined && tool.runId !== runId)) continue;
 		const result = object(tool.result) ? tool.result : undefined;
 		const details = result && object(result.details) ? result.details : result;
 		const input = object(tool.input) ? tool.input : undefined;

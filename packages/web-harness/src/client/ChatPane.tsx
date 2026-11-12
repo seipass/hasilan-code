@@ -11,8 +11,9 @@ import { ComposerAttachments, useComposerAttachments } from "./ComposerAttachmen
 import { Conversation } from "./Conversation.tsx";
 import { MotionItems, Presence, useLayoutMotion } from "./Motion.tsx";
 import { usePreferenceState, usePreferenceText } from "./preferences.ts";
+import { SessionOverview } from "./SessionOverview.tsx";
 import { COMPOSER_COMMANDS } from "./slash-command.ts";
-import type { PendingInputAction, SessionDetail } from "./types.ts";
+import type { PendingInputAction, SessionDetail, TeamSnapshot } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { useComposerSize } from "./use-composer-size.ts";
 import { workspaceLabel } from "./workspace-label.ts";
@@ -25,8 +26,9 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, homeDashboard, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
+export function ChatPane({ session, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, homeDashboard, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
+	team?: TeamSnapshot;
 	loading?: boolean;
 	workspacePath?: string;
 	contextWindow?: number;
@@ -204,7 +206,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 	const hasContextLimit = contextLimit !== undefined && contextLimit > 0;
 	const pendingInputs = session?.pendingInput.filter((input) => !input.fromAgentId && !input.completionRunId) ?? [];
 	useLayoutMotion(pendingList, pendingInputs, true, true);
-	return <section ref={pane} className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}${dashboardVisible ? " has-home-dashboard" : ""}`} aria-label="会話" style={{ "--chat-content-width": `${shownWidth}px` } as CSSProperties}>
+	return <><section ref={pane} className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}${dashboardVisible ? " has-home-dashboard" : ""}`} aria-label="会話" style={{ "--chat-content-width": `${shownWidth}px` } as CSSProperties}>
 {!surface && !empty && <div className="chat-width-handle" role="separator" tabIndex={0} aria-label="チャットの幅" aria-orientation="vertical" aria-valuemin={CHAT_MIN_WIDTH} aria-valuemax={clampWidth(CHAT_MAX_WIDTH)} aria-valuenow={shownWidth} title="ドラッグしてチャットの幅を変更" onPointerDown={(event) => {
 			if (event.button !== 0) return;
 			event.preventDefault();
@@ -323,5 +325,7 @@ export function ChatPane({ session, loading = false, workspacePath, contextWindo
 			<Presence show={!!(error || attachmentError)} collapse><p className="composer-error" role="alert">{error ?? attachmentError}</p></Presence>
 		</div>
 		{dashboardVisible && homeDashboard}
-	</section>;
+	</section>
+		{!surface && !empty && session?.availability === "ready" && <SessionOverview session={session} team={team} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} />}
+	</>;
 }
