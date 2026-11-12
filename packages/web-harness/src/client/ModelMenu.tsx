@@ -110,8 +110,7 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 	const content = <>
 		{showModels ? <div className="model-menu-list-view">
 			<header className="model-menu-list-header">
-				{value && <button type="button" aria-label="推論レベルに戻る" disabled={busy} onClick={() => selectView(false)}><Icon name="chevronLeft" size="control" /></button>}
-				<span>モデルを選択</span>
+				{value ? <button type="button" aria-label="モデル選択、推論レベルに戻る" disabled={busy} onClick={() => selectView(false)}><Icon name="chevronLeft" size="control" />モデル選択</button> : <span>モデル選択</span>}
 			</header>
 			<section className="model-menu-models" aria-label="モデル選択">
 				<ModelPicker catalog={available} value={value} onChange={(selection) => { void choose(selection); }} disabled={busy || disabled} autoFocus={!mobile} compact />

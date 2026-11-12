@@ -2,7 +2,7 @@
 	padding: 4px;
 	border-radius: 12px;
 	box-shadow: 0 8px 28px #0005;
-	overflow: auto;
+	overflow: hidden;
 	transform-origin: bottom center;
 }
 
@@ -69,16 +69,18 @@
 .model-effort-slider::-moz-range-thumb { box-sizing: border-box; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 1px solid #0003; box-shadow: 0 1px 3px #0003; }
 .model-effort-slider:focus-visible { outline: 2px solid var(--focus-ring, var(--primary)); outline-offset: 2px; }
 .model-effort-slider[aria-disabled="true"], .model-effort-slider:disabled { cursor: default; }
-.model-menu-list-header { display: flex; gap: 4px; align-items: center; min-height: 28px; padding-inline: 4px; color: var(--on-surface-muted); font-size: var(--text-xs); }
-.model-menu-list-header button { display: grid; place-items: center; width: 26px; min-height: 26px; padding: 0; border: 0; background: transparent; }
-.model-menu-list-view .model-picker { padding: 2px 0 0; }
-.model-menu-list-view .model-picker-results { max-height: min(316px, 44dvh); animation: none; }
+.model-menu-list-view { display: flex; flex-direction: column; min-height: 0; }
+.model-menu-list-header { display: flex; flex: none; align-items: center; min-height: 28px; padding-inline: 4px; color: var(--on-surface-muted); font-size: var(--text-xs); }
+.model-menu-list-header button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 28px; padding: 0 4px; border: 0; background: transparent; color: inherit; text-align: left; }
+.model-menu-list-view .model-menu-models { flex: 1 1 auto; }
+.model-menu-list-view .model-compact-search { flex: none; }
+.model-menu-list-view .model-picker { flex: 1 1 auto; padding: 2px 0 0; }
+.model-menu-list-view .model-picker-results { flex: 1 1 auto; max-height: min(316px, 44dvh); animation: none; }
 .model-menu-list-view .model-compact-search input { min-height: 28px; }
 .model-menu-list-view .model-settings-link { margin-top: 4px; }
 .model-popover > :is(.fine-print, .composer-error) { margin: 4px 8px; }
 .mobile-model-menu { padding: 8px 16px 16px; }
 .mobile-model-menu .model-menu-current, .mobile-model-menu .model-menu-list-header button { min-height: 44px; }
-.mobile-model-menu .model-menu-list-header button { width: 44px; }
 .mobile-model-menu .model-effort-control { height: 44px; }
 .mobile-model-menu .model-effort-track { inset-block: 10px; }
 .mobile-model-menu .model-compact-search input, .mobile-model-menu .model-picker-option { min-height: 44px; }

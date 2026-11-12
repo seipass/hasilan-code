@@ -29,7 +29,7 @@ export function ModelPicker({ catalog, value, onChange, disabled = false, autoFo
 	const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(() => new Set());
 	const singleProvider = catalog?.providers.length === 1 ? catalog.providers[0].id : "";
 	useEffect(() => { setProvider(singleProvider); }, [singleProvider]);
-	useEffect(() => { if (autoFocus && !disabled) search.current?.focus(); }, [autoFocus, disabled, catalog]);
+	useEffect(() => { if (autoFocus && !disabled) search.current?.focus({ preventScroll: true }); }, [autoFocus, disabled, catalog]);
 	const indexedModels = useMemo(() => {
 		const providers = new Map(catalog?.providers.map((entry) => [entry.id, entry]));
 		return (catalog?.models ?? []).map((model) => ({
@@ -69,23 +69,30 @@ export function ModelPicker({ catalog, value, onChange, disabled = false, autoFo
 	const currentPage = Math.floor(activeIndex / PAGE_SIZE);
 	const visible = useMemo(() => matches.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE), [matches, currentPage]);
 	useContentMotion(results, compact ? matches : visible);
-	useEffect(() => { document.getElementById(`${resultsId}-${activeIndex}`)?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [activeIndex, resultsId, matches]);
+	useEffect(() => {
+		const list = results.current;
+		const option = document.getElementById(`${resultsId}-${activeIndex}`);
+		if (!list || !option) return;
+		const listBounds = list.getBoundingClientRect();
+		const optionBounds = option.getBoundingClientRect();
+		if (optionBounds.top < listBounds.top) list.scrollTop += optionBounds.top - listBounds.top;
+		else if (optionBounds.bottom > listBounds.bottom) list.scrollTop += optionBounds.bottom - listBounds.bottom;
+	}, [activeIndex, resultsId, matches]);
 	const showCompactSearch = compact && (catalog?.models.length ?? 0) > 4;
 	useEffect(() => {
 		if (!compact || !autoFocus || disabled || showCompactSearch || !catalog) return;
 		const selected = matches.findIndex((model) => model.provider === value?.provider && model.id === value.id);
 		setCursor(Math.max(selected, 0));
-		document.getElementById(`${resultsId}-${Math.max(selected, 0)}`)?.focus();
+		document.getElementById(`${resultsId}-${Math.max(selected, 0)}`)?.focus({ preventScroll: true });
 	}, [compact, autoFocus, disabled, showCompactSearch, catalog, resultsId, value?.provider, value?.id]);
-	if (compact) return <fieldset className="model-picker model-picker-compact" disabled={disabled} aria-labelledby={labelId} onKeyDown={(event) => {
+	if (compact) return <div className="model-picker model-picker-compact" role="group" aria-label="モデル一覧" onKeyDown={(event) => {
 		if (event.target instanceof HTMLInputElement || !matches.length || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
 		event.preventDefault();
 		const next = (activeIndex + (event.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length;
 		setCursor(next);
-		document.getElementById(`${resultsId}-${next}`)?.focus();
+		document.getElementById(`${resultsId}-${next}`)?.focus({ preventScroll: true });
 	}}>
-		<legend id={labelId} className="sr-only">モデルを選択</legend>
-		{showCompactSearch && <label htmlFor={searchId} className="model-compact-search"><span className="sr-only">モデルを検索</span><input ref={search} id={searchId} type="search" role="combobox" aria-autocomplete="list" aria-expanded={matches.length > 0} aria-controls={resultsId} aria-activedescendant={matches.length ? `${resultsId}-${activeIndex}` : undefined} autoComplete="off" placeholder="モデルを検索" value={query} onChange={(event) => { setQuery(event.target.value); if (event.target.value) setCollapsedProviders(new Set()); }} onKeyDown={(event) => {
+		{showCompactSearch && <label htmlFor={searchId} className="model-compact-search"><span className="sr-only">モデルを検索</span><input ref={search} id={searchId} type="search" role="combobox" disabled={disabled} aria-autocomplete="list" aria-expanded={matches.length > 0} aria-controls={resultsId} aria-activedescendant={matches.length ? `${resultsId}-${activeIndex}` : undefined} autoComplete="off" placeholder="モデルを検索" value={query} onChange={(event) => { setQuery(event.target.value); if (event.target.value) setCollapsedProviders(new Set()); }} onKeyDown={(event) => {
 			if (event.nativeEvent.isComposing) return;
 			if (event.key === "Escape" && query) { event.preventDefault(); event.stopPropagation(); setQuery(""); }
 			else if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setCursor(Math.max(0, Math.min(matches.length - 1, activeIndex + (event.key === "ArrowDown" ? 1 : -1)))); }
@@ -93,14 +100,14 @@ export function ModelPicker({ catalog, value, onChange, disabled = false, autoFo
 		}} /></label>}
 		{!catalog ? <p role="status">モデル一覧を読み込み中…</p> : <>{filteredModels.length === 0 && <p role="status">{catalog.models.length === 0 ? "利用できるモデルがありません。" : "一致するモデルはありません。"}</p>}<ul ref={results} id={resultsId} className="model-picker-results" role="listbox" aria-label="モデル">
 			{groups.map(([providerId, models]) => <li role="presentation" key={providerId}>
-				<button type="button" className="model-group-heading" aria-expanded={!collapsedProviders.has(providerId)} onClick={() => setCollapsedProviders((current) => { const next = new Set(current); if (next.has(providerId)) next.delete(providerId); else next.add(providerId); return next; })}>{collapsedProviders.has(providerId) ? "▸" : "▾"} {models[0].providerName}</button>
+				<button type="button" className="model-group-heading" disabled={disabled} aria-expanded={!collapsedProviders.has(providerId)} onClick={() => setCollapsedProviders((current) => { const next = new Set(current); if (next.has(providerId)) next.delete(providerId); else next.add(providerId); return next; })}>{collapsedProviders.has(providerId) ? "▸" : "▾"} {models[0].providerName}</button>
 				{!collapsedProviders.has(providerId) && models.map((model) => {
 				const index = matchIndices.get(`${model.provider}/${model.id}`) ?? 0;
 				const selected = value?.provider === model.provider && value.id === model.id;
-				return <button key={`${model.provider}/${model.id}`} id={`${resultsId}-${index}`} type="button" role="option" className="model-picker-option" aria-selected={selected} data-highlighted={activeIndex === index} onMouseMove={() => setCursor(index)} onClick={() => onChange({ provider: model.provider, id: model.id })}>{model.name ?? model.id}{selected && <span className="model-selected-mark motion-label" aria-label="選択中">✓</span>}</button>;
+				return <button key={`${model.provider}/${model.id}`} id={`${resultsId}-${index}`} type="button" role="option" className="model-picker-option" disabled={disabled} aria-selected={selected} data-highlighted={activeIndex === index} onClick={() => onChange({ provider: model.provider, id: model.id })}>{model.name ?? model.id}{selected && <span className="model-selected-mark motion-label" aria-label="選択中">✓</span>}</button>;
 			})}</li>)}
 		</ul></>}
-	</fieldset>;
+	</div>;
 	return <fieldset className="model-picker" disabled={disabled} aria-labelledby={labelId}>
 		<legend id={labelId} className={autoFocus ? "sr-only" : undefined}>モデルを選択</legend>
 		<div className="model-picker-filters">
