@@ -38,6 +38,7 @@ This table covers providers with a single primary API-key variable. Providers th
 | Google Gemini | `GEMINI_API_KEY` |
 | GitHub Copilot | `COPILOT_GITHUB_TOKEN` |
 | Mistral | `MISTRAL_API_KEY` |
+| Mistral Vibe (unofficial) | `MISTRAL_VIBE_API_KEY` |
 | Groq | `GROQ_API_KEY` |
 | Cerebras | `CEREBRAS_API_KEY` |
 | xAI | `XAI_API_KEY` |
@@ -245,3 +246,10 @@ gcloud auth application-default login
 ```
 
 To use a service-account key file instead, set `GOOGLE_APPLICATION_CREDENTIALS` along with the project and location.
+
+### Mistral Vibe (unofficial)
+
+Mistral Vibe uses a dedicated key, separate from the ordinary `mistral` provider. In Hasilan Code's provider settings, select **Mistral Vibe (unofficial)** and paste your key from **Mistral Studio → Code → Vibe CLI**. Alternatively, set `MISTRAL_VIBE_API_KEY` before starting Hasilan Code. The key is stored in Hasilan Code's own credential store rather than Pi's default directory.
+
+The provider discovers chat-capable models from `GET https://api.mistral.ai/v1/models` and offers `mistral-vibe-cli-latest` as a fallback. Discovery does not send inference requests. The displayed price is unknown (zero placeholder), **not an indication that requests are free or covered by a Vibe plan**. Check your Mistral plan, included quota, and pay-as-you-go settings before use.
+

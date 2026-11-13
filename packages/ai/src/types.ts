@@ -110,6 +110,7 @@ export type KnownProvider =
 	| "zai"
 	| "zai-coding-cn"
 	| "mistral"
+	| "mistral-vibe"
 	| "minimax"
 	| "minimax-cn"
 	| "moonshotai"
