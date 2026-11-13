@@ -64,8 +64,20 @@ function scheduleMarkerUpdate(): void {
 	markerFrame = requestAnimationFrame(() => {
 		markerFrame = undefined;
 		const rect = markerBounds?.();
-		if (rect) box(rect);
-		else if (marker) marker.hidden = true;
+		if (rect) {
+			box(rect);
+			ipcRenderer.sendToHost(
+				"hasilan:browser-selection-position",
+				selectionId,
+				{
+					x: rect.x,
+					y: rect.y,
+					width: rect.width,
+					height: rect.height,
+				},
+				{ width: innerWidth, height: innerHeight },
+			);
+		} else if (marker) marker.hidden = true;
 	});
 }
 
@@ -120,12 +132,14 @@ function finish(rect: MarkerRect, element?: Element, range?: Range, text?: strin
 			element.isConnected && element.getClientRects().length ? element.getBoundingClientRect() : undefined;
 	else markerBounds = regionBounds(rect);
 	box(rect);
+	selectionId++;
 	if (mode === "element" && (element instanceof HTMLElement || element instanceof SVGElement))
-		selected = { element, id: ++selectionId, url: location.href, originalStyle: null, previewing: false };
+		selected = { element, id: selectionId, url: location.href, originalStyle: null, previewing: false };
 	const style = selected && getComputedStyle(selected.element);
 	const inline = selected?.element.style;
 	const parent = selected?.element.parentElement;
 	ipcRenderer.sendToHost("hasilan:browser-selection", {
+		id: selectionId,
 		kind: mode,
 		url: location.href,
 		title: document.title.slice(0, 500),

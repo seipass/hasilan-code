@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
 import { type BrowserControl, type BrowserStyles, browserPreviewStyles } from "../shared/browser-adjustments.ts";
 import { api, errorMessage } from "./api.ts";
 import { BrowserAdjustmentControls } from "./BrowserAdjustmentControls.tsx";
 import { BrowserCssEditor } from "./BrowserCssEditor.tsx";
+import { browserCommentPosition } from "./browser-comment-position.ts";
 import { Icon } from "./Icon.tsx";
 import { usePreferenceState } from "./preferences.ts";
 import type { Model } from "./types.ts";
@@ -50,6 +51,8 @@ function addressCandidate(input: string) {
 export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: string; visible: boolean; model?: Model }) {
 	const pane = useRef<HTMLElement>(null);
 	const container = useRef<HTMLDivElement>(null);
+	const commentForm = useRef<HTMLFormElement>(null);
+	const selectionEpoch = useRef(0);
 	const browser = useRef<WebviewTag>(null);
 	const addressInput = useRef<HTMLInputElement>(null);
 	const historyListId = useId();
@@ -61,6 +64,8 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 	const [ready, setReady] = useState(false);
 	const [annotating, setAnnotating] = useState(false);
 	const [selection, setSelection] = useState<BrowserSelection>();
+	const [anchor, setAnchor] = useState<{ id: number; rect: BrowserSelection["rect"]; viewport: BrowserSelection["viewport"] }>();
+	const [commentSize, setCommentSize] = useState<{ area: BrowserSelection["viewport"]; bubble: BrowserSelection["viewport"] }>();
 	const [image, setImage] = useState("");
 	const [note, setNote] = useState("");
 	const [controls, setControls] = useState<BrowserControl[]>();
@@ -70,6 +75,9 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 	const [suggesting, setSuggesting] = useState(false);
 	const suggestionRequest = useRef<AbortController | undefined>(undefined);
 	function resetAdjustments() {
+		selectionEpoch.current++;
+		setAnchor(undefined);
+		setCommentSize(undefined);
 		suggestionRequest.current?.abort();
 		suggestionRequest.current = undefined;
 		setControls(undefined);
@@ -78,6 +86,25 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		setIntent("");
 		setSuggesting(false);
 	}
+	const commentOpen = !!selection && !!image;
+	useLayoutEffect(() => {
+		const form = commentForm.current;
+		const content = container.current;
+		if (!commentOpen || !form || !content) return;
+		const measure = () => setCommentSize({
+			area: { width: content.clientWidth, height: content.clientHeight },
+			bubble: { width: form.offsetWidth, height: form.offsetHeight },
+		});
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(content);
+		observer.observe(form);
+		return () => observer.disconnect();
+	}, [commentOpen]);
+	const commentAnchor = anchor ?? selection;
+	const commentPosition = commentSize && commentAnchor
+		? browserCommentPosition(commentAnchor, commentSize.area, commentSize.bubble)
+		: undefined;
 	useEffect(() => () => suggestionRequest.current?.abort(), []);
 	const [error, setError] = useState("");
 	const [history, setHistory] = usePreferenceState<{ url: string; title: string; visitedAt: number }[]>("pi-web-browser-history", []);
@@ -166,13 +193,24 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 			if (event.channel === "hasilan:browser-focus-address") { addressInput.current?.focus(); addressInput.current?.select(); return; }
 			if (event.channel === "hasilan:browser-cancel") { setAnnotating(false); return; }
 			if (event.channel === "hasilan:browser-adjustment-stale") { resetAdjustments(); setSelection(undefined); setImage(""); setNote(""); setError("要素が変わりました。もう一度選択してください。"); return; }
+			if (event.channel === "hasilan:browser-selection-position") {
+				const [id, rect, viewport] = event.args as [number, BrowserSelection["rect"], BrowserSelection["viewport"]];
+				setAnchor((current) => current?.id === id ? { id, rect, viewport } : current);
+				return;
+			}
 			if (event.channel !== "hasilan:browser-selection") return;
-			const selected = event.args[0] as BrowserSelection;
+			const selected = event.args[0] as BrowserSelection & { id: number };
+			const epoch = ++selectionEpoch.current;
+			setAnchor({ id: selected.id, rect: selected.rect, viewport: selected.viewport });
 			setAnnotating(false); setError("");
 			void view.capturePage().then((capture) => {
+				if (epoch !== selectionEpoch.current || browser.current !== view) return;
 				if (view.getURL() !== selected.url) throw new Error("Page changed");
 				setSelection(selected); setImage(capture.toDataURL());
-			}).catch(() => setError("スクリーンショットを取得できませんでした。もう一度選択してください。"));
+			}).catch(() => {
+				if (epoch === selectionEpoch.current && browser.current === view)
+					setError("スクリーンショットを取得できませんでした。もう一度選択してください。");
+			});
 		};
 		view.addEventListener("dom-ready", ready);
 		view.addEventListener("did-navigate", navigate);
@@ -256,6 +294,15 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		setError("");
 		return true;
 	}
+	function closeComment() {
+		browser.current?.send("hasilan:browser-clear");
+		resetAdjustments();
+		setSelection(undefined);
+		setImage("");
+		setNote("");
+		setError("");
+		browser.current?.focus();
+	}
 	return <section ref={pane} className="browser-pane" aria-label="ブラウザ" onKeyDown={(event) => {
 		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
 			event.preventDefault();
@@ -301,10 +348,13 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		</form>
 		{error && <p className="browser-error" role="alert">{error}</p>}
 		<div className="browser-body">
-			<div ref={container} className="browser-content" />
-		{historyOpen && <section className="browser-history" aria-label="閲覧履歴"><header><strong>閲覧履歴</strong><button type="button" onClick={() => setHistory([])}>すべて削除</button><button type="button" aria-label="履歴を閉じる" onClick={() => setHistoryOpen(false)}><Icon name="close" size="inline" /></button></header><input aria-label="履歴を検索" placeholder="タイトル・URLで検索" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} /><ul>{history.filter((entry) => `${entry.title} ${entry.url}`.toLowerCase().includes(historyQuery.toLowerCase())).map((entry) => <li key={entry.url}><button type="button" onClick={() => navigate(entry.url)}><strong>{entry.title}</strong><small>{entry.url}</small><time>{new Date(entry.visitedAt).toLocaleString()}</time></button><button type="button" aria-label={`${entry.title}を履歴から削除`} onClick={() => setHistory((previous) => previous.filter((item) => item.url !== entry.url))}><Icon name="close" size="inline" /></button></li>)}</ul>{!history.length && <p>閲覧履歴はありません。</p>}</section>}
-		</div>
-		{selection && image && <form className="browser-comment" onSubmit={(event) => {
+			<div className="browser-viewport">
+				<div ref={container} className="browser-content" />
+		{selection && image && <form ref={commentForm} className="browser-comment" aria-label="注釈を編集" style={commentPosition} onKeyDown={(event) => {
+			if (event.key !== "Escape" || event.nativeEvent.isComposing || event.defaultPrevented) return;
+			event.stopPropagation();
+			closeComment();
+		}} onSubmit={(event) => {
 			event.preventDefault();
 			const changes = Object.entries(adjustedRef.current).map(([key, value]) =>
 				value === null ? `インラインの ${key} を削除` : `${key}: ${value};`);
@@ -315,7 +365,10 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 			if (!delivery.accepted) { setError("入力欄に追加できません。会話を開き、添付数と容量を確認してください。"); return; }
 			browser.current?.send("hasilan:browser-clear"); resetAdjustments(); setSelection(undefined); setImage(""); setNote("");
 		}}>
-			{selection.adjustmentId !== undefined && <div className="browser-adjustment-request">
+			<label>注釈<textarea autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="この箇所への指示" /></label>
+			{selection.adjustmentId !== undefined && <details className="browser-comment-tools">
+				<summary>見た目を調整</summary>
+			<div className="browser-adjustment-request">
 				<input aria-label="調整したいこと" placeholder="例: ボタンを目立たせたい（任意）" maxLength={1000} value={intent} onChange={(event) => setIntent(event.target.value)}
 					onKeyDown={(event) => {
 						if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
@@ -325,21 +378,24 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 				<button type="button" disabled={suggesting || !model} title={!model ? "会話のモデルを選択してください" : undefined} onClick={() => void suggestAdjustments()}>
 					{suggesting ? "調整項目を作成中…" : controls ? "項目を作り直す" : "AI で調整項目を作る"}
 				</button>
-			</div>}
+			</div>
 			{controls && <BrowserAdjustmentControls controls={controls} styles={selection.styles} adjusted={adjusted} onChange={(styles) => {
 				const next = { ...adjustedRef.current };
 				for (const key of Object.keys(styles)) delete next[key];
 				return updatePreview({ ...next, ...styles });
 			}} />}
-			{selection.adjustmentId !== undefined && <BrowserCssEditor computed={selection.styles} inline={selection.inlineStyles} adjusted={adjusted} onApply={(property, value) => {
+			<BrowserCssEditor computed={selection.styles} inline={selection.inlineStyles} adjusted={adjusted} onApply={(property, value) => {
 				const next = { ...adjustedRef.current };
 				delete next[property];
 				if (value !== undefined) Object.defineProperty(next, property, { value, enumerable: true, configurable: true });
 				return updatePreview(next);
-			}} />}
+			}} />
 			{Object.keys(adjusted).length > 0 && <div><button type="button" onClick={() => updatePreview({})}>元の表示に戻す</button></div>}
-			<label>注釈<textarea autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="この箇所への指示" /></label>
-			<div><button type="button" onClick={() => { browser.current?.send("hasilan:browser-clear"); resetAdjustments(); setSelection(undefined); setImage(""); setNote(""); }}>キャンセル</button><button type="submit" disabled={!note.trim() && !Object.keys(adjusted).length}>入力欄に追加</button></div>
+			</details>}
+			<div><button type="button" onClick={closeComment}>キャンセル</button><button type="submit" disabled={!note.trim() && !Object.keys(adjusted).length}>入力欄に追加</button></div>
 		</form>}
+			</div>
+		{historyOpen && <section className="browser-history" aria-label="閲覧履歴"><header><strong>閲覧履歴</strong><button type="button" onClick={() => setHistory([])}>すべて削除</button><button type="button" aria-label="履歴を閉じる" onClick={() => setHistoryOpen(false)}><Icon name="close" size="inline" /></button></header><input aria-label="履歴を検索" placeholder="タイトル・URLで検索" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} /><ul>{history.filter((entry) => `${entry.title} ${entry.url}`.toLowerCase().includes(historyQuery.toLowerCase())).map((entry) => <li key={entry.url}><button type="button" onClick={() => navigate(entry.url)}><strong>{entry.title}</strong><small>{entry.url}</small><time>{new Date(entry.visitedAt).toLocaleString()}</time></button><button type="button" aria-label={`${entry.title}を履歴から削除`} onClick={() => setHistory((previous) => previous.filter((item) => item.url !== entry.url))}><Icon name="close" size="inline" /></button></li>)}</ul>{!history.length && <p>閲覧履歴はありません。</p>}</section>}
+		</div>
 	</section>;
 }

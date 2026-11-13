@@ -30,14 +30,19 @@
 	.browser-toolbar > button:last-child { margin-inline-start: auto; }
 }
 .browser-toolbar button[aria-pressed="true"] { background: var(--primary-container); color: var(--primary); }
+.browser-viewport { position: relative; isolation: isolate; display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
 .browser-content { display: flex; flex: 1; min-height: 0; min-width: 0; background: white; }
 .browser-webview { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .browser-error { margin: 0; padding: 6px; color: var(--danger); font-size: var(--text-sm); }
-.browser-comment { display: grid; flex: none; max-height: 55%; overflow: auto; gap: 8px; padding: 10px; border-top: 1px solid var(--border-subtle); background: var(--surface-panel); }
+.browser-comment { position: absolute; z-index: 1; top: 8px; left: 8px; display: grid; box-sizing: border-box; width: min(360px, calc(100% - 16px)); max-height: min(60%, calc(100% - 16px)); overflow: auto; overscroll-behavior: contain; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-panel); box-shadow: 0 8px 28px #0005; }
 .browser-comment label { gap: 4px; font-size: var(--text-sm); }
 .browser-comment textarea { min-height: 58px; resize: vertical; }
 .browser-comment > div { display: flex; justify-content: flex-end; gap: 6px; }
 .browser-comment button { font-size: var(--text-sm); }
+.browser-comment-tools { min-width: 0; font-size: var(--text-sm); }
+.browser-comment-tools > summary { cursor: pointer; color: var(--on-surface-secondary); }
+.browser-comment-tools[open] > :not(summary) { margin-block-start: 8px; }
+.browser-comment-tools > .browser-adjustment-request { display: flex; gap: 6px; }
 .browser-adjustment-request { flex-wrap: wrap; }
 .browser-adjustment-request input { flex: 1 1 160px; min-width: 0; }
 .browser-adjustments { display: grid; gap: 5px; min-width: 0; margin: 0; padding: 8px; border: 1px solid var(--border-subtle); border-radius: 8px; }
