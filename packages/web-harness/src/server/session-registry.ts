@@ -468,6 +468,7 @@ export class SessionRegistry {
 	private readonly live = new Map<string, LiveSession>();
 	private readonly usageSummaries = new Map<string, ModelUsage[]>();
 	private readonly historyReaders = new Map<string, number>();
+	private readonly toolResultCache = new WeakMap<ProjectedTool, string>();
 	private readonly listeners = new Set<(event: RegistryEvent) => void>();
 	private readonly executionListeners = new Set<(sessionId: string, event: AgentSessionEvent) => void>();
 	private saveQueue: Promise<void> = Promise.resolve();
@@ -1064,6 +1065,15 @@ export class SessionRegistry {
 			if (error instanceof HistoryCursorError) throw new HarnessError(error.message, 409);
 			throw error;
 		}
+	}
+	toolResult(id: string, key: string): string | undefined {
+		const tool = this.ensureLive(id)?.projection.toolCalls.find((entry) => entry.key === key);
+		if (!tool || tool.status === "running" || tool.result === undefined) return undefined;
+		const cached = this.toolResultCache.get(tool);
+		if (cached !== undefined) return cached;
+		const json = JSON.stringify(tool.result);
+		this.toolResultCache.set(tool, json);
+		return json;
 	}
 	/** Transport reads immutable message/tool references; callers must not mutate this view. */
 	projection(id: string): SessionSnapshot {

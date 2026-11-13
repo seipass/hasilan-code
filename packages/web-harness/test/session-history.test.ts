@@ -112,6 +112,35 @@ describe("session history pages and streaming", () => {
 		expect(prepended.messages[50]).toBe(current.messages[0]);
 		expect(prependHistory(prepended, older)).toBe(prepended);
 	});
+	it("defers a large completed shell result in both snapshots and streaming updates", () => {
+		const source = transcript();
+		source.messages[124].content = [{ type: "toolCall", id: "call", name: "bash" }];
+		source.toolCalls = [
+			{
+				key: "tool",
+				sessionId: source.sessionId,
+				callId: "call",
+				name: "bash",
+				input: { command: "run" },
+				status: "running",
+			},
+		];
+		const initial = historyPage(source);
+		const baseline = historyBaseline(source);
+		const output = "長いログ".repeat(25_000);
+		source.toolCalls[0] = {
+			...source.toolCalls[0],
+			status: "error",
+			result: { structuredContent: { exit_code: 7, output } },
+		};
+		const patch = historyPatch(baseline, source);
+		if (!patch) throw new Error("Unexpected reset");
+		const projected = historyPage(source).toolCalls[0];
+		expect(projected).toMatchObject({ resultDeferred: true, result: { structuredContent: { exit_code: 7 } } });
+		expect(applyHistoryPatch(initial, patch).toolCalls[0]).toEqual(projected);
+		expect(JSON.stringify(projected).length).toBeLessThan(512);
+		expect(source.toolCalls[0].result).toEqual({ structuredContent: { exit_code: 7, output } });
+	});
 	it("retains unchanged row references and clears optional metadata when a run settles", () => {
 		const source = { ...transcript(), currentRun: { status: "running" } as { status: string } | undefined };
 		const current = historyPage(source);

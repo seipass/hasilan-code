@@ -25,6 +25,7 @@ import {
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
 import { goalActionSchema } from "../shared/goals.ts";
+import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
 import { workspaceSwarmStartSchema } from "../shared/swarm.ts";
 import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
 import { readAccountUsage } from "./account-usage.ts";
@@ -330,6 +331,21 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 								url.searchParams.get("base"),
 							),
 						);
+					}
+					if (parts[3] === "tool-result" && parts.length === 4 && method === "GET") {
+						const key = url.searchParams.get("key");
+						const offset = Number(url.searchParams.get("offset") ?? 0);
+						if (!key || !Number.isSafeInteger(offset) || offset < 0)
+							throw new HttpError(400, "無効なツール結果の参照です。");
+						const json = registry.toolResult(id, key);
+						if (json === undefined) throw new HttpError(404, "ツール結果がありません。");
+						if (offset >= json.length) throw new HttpError(416, "無効な読み込み位置です。");
+						const end = Math.min(json.length, offset + TOOL_RESULT_PAGE_CHARS);
+						return reply({
+							chunk: json.slice(offset, end),
+							total: json.length,
+							next: end < json.length ? end : undefined,
+						});
 					}
 					if (parts[3] === "goal" && parts.length === 4) {
 						if (method === "GET") return reply(await teams.goal(id, { op: "get" }));

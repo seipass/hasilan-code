@@ -25,6 +25,7 @@ export interface HistoryTool {
 	name: string;
 	input: unknown;
 	result?: unknown;
+	resultDeferred?: boolean;
 	status: "running" | "success" | "error" | "cancelled" | "incomplete";
 	sourceStatus?: string;
 	importedOrigin?: ImportedMessageOrigin;
@@ -73,6 +74,40 @@ export function displayMessages(source: HistorySource): HistoryMessage[] {
 
 export class HistoryCursorError extends Error {}
 
+const TOOL_INLINE_LIMIT = 8_192;
+export const TOOL_RESULT_PAGE_CHARS = 64 * 1024;
+const projectedTools = new WeakMap<HistoryTool, HistoryTool>();
+
+function transportTool(tool: HistoryTool): HistoryTool {
+	// Diff summaries and the computer activity timeline use structured results without opening a card.
+	if (
+		tool.status === "running" ||
+		tool.result === undefined ||
+		(tool.name !== "read" && tool.name !== "bash" && tool.name !== "terminal")
+	)
+		return tool;
+	const cached = projectedTools.get(tool);
+	if (cached) return cached;
+	const json = JSON.stringify(tool.result);
+	if (json.length <= TOOL_INLINE_LIMIT) {
+		projectedTools.set(tool, tool);
+		return tool;
+	}
+	const result =
+		typeof tool.result === "object" &&
+		tool.result !== null &&
+		"structuredContent" in tool.result &&
+		typeof tool.result.structuredContent === "object" &&
+		tool.result.structuredContent !== null &&
+		"exit_code" in tool.result.structuredContent &&
+		typeof tool.result.structuredContent.exit_code === "number"
+			? { structuredContent: { exit_code: tool.result.structuredContent.exit_code } }
+			: undefined;
+	const projected = { ...tool, result, resultDeferred: true };
+	projectedTools.set(tool, projected);
+	return projected;
+}
+
 export function historyPage<T extends HistorySource>(source: T, before?: string): T & { history: HistoryPosition } {
 	const all = displayMessages(source);
 	const end = before === undefined ? all.length : all.findIndex((message) => message.messageId === before);
@@ -97,10 +132,12 @@ export function historyPage<T extends HistorySource>(source: T, before?: string)
 	return {
 		...source,
 		messages,
-		toolCalls: source.toolCalls.filter(
-			(tool) =>
-				calls.has(`${tool.runId ?? ""}/${tool.callId}`) || (before === undefined && tool.status === "running"),
-		),
+		toolCalls: source.toolCalls
+			.filter(
+				(tool) =>
+					calls.has(`${tool.runId ?? ""}/${tool.callId}`) || (before === undefined && tool.status === "running"),
+			)
+			.map(transportTool),
 		history: { start, total: all.length, before: start > 0 ? messages[0]?.messageId : undefined },
 	};
 }
@@ -139,7 +176,7 @@ export function historyPatch<T extends HistorySource>(
 		messages: messages.flatMap((message, index) =>
 			baseline.messages[index] === message ? [] : [{ index, message }],
 		),
-		toolCalls: source.toolCalls.filter((tool) => baseline.tools.get(tool.key) !== tool),
+		toolCalls: source.toolCalls.filter((tool) => baseline.tools.get(tool.key) !== tool).map(transportTool),
 		removedTools: [...baseline.tools.keys()].filter((key) => !next.tools.has(key)),
 		total: messages.length,
 	};

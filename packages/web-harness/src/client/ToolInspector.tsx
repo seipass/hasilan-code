@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { api, errorMessage } from "./api.ts";
 import { Content, record } from "./Content.tsx";
 import { browserView } from "./tools/browser.tsx";
 import { computerView } from "./tools/computer.tsx";
@@ -103,6 +104,43 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 }
 
 function ToolBody({ tool, onFile }: { tool: ToolCall; onFile: (path: string, line?: number) => void }) {
+	if (tool.resultDeferred) return <DeferredToolBody key={tool.key} tool={tool} onFile={onFile} />;
+	return <ToolResult tool={tool} onFile={onFile} />;
+}
+
+function DeferredToolBody({ tool, onFile }: { tool: ToolCall; onFile: (path: string, line?: number) => void }) {
+	const [loaded, setLoaded] = useState<{ result: unknown }>();
+	const [progress, setProgress] = useState(0);
+	const [error, setError] = useState("");
+	const [attempt, setAttempt] = useState(0);
+	const { sessionId, key } = tool;
+	useEffect(() => {
+		const controller = new AbortController();
+		const chunks: string[] = [];
+		const load = async () => {
+			let offset = 0;
+			while (!controller.signal.aborted) {
+				const query = new URLSearchParams({ key, offset: String(offset) });
+				const page = await api<{ chunk: string; total: number; next?: number }>(`/api/sessions/${encodeURIComponent(sessionId)}/tool-result?${query}`, { signal: controller.signal });
+				if (controller.signal.aborted) return;
+				chunks.push(page.chunk);
+				if (page.next === undefined) {
+					setLoaded({ result: JSON.parse(chunks.join("")) as unknown });
+					return;
+				}
+				if (page.next <= offset || page.next !== offset + page.chunk.length) throw new Error("ツール結果の読み込み位置が進みませんでした。");
+				offset = page.next;
+				setProgress(Math.floor(offset * 100 / page.total));
+			}
+		};
+		void load().catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
+		return () => controller.abort();
+	}, [attempt, key, sessionId]);
+	if (loaded) return <ToolResult tool={{ ...tool, result: loaded.result }} onFile={onFile} />;
+	return <div className="tool-body">{error ? <><p role="alert">{error}</p><button type="button" onClick={() => { setError(""); setProgress(0); setAttempt(attempt + 1); }}>再試行</button></> : <p role="status">ツール結果を読み込み中…{progress > 0 && ` ${progress}%`}</p>}</div>;
+}
+
+function ToolResult({ tool, onFile }: { tool: ToolCall; onFile: (path: string, line?: number) => void }) {
 	const result = record(tool.result) ? tool.result : undefined;
 	const details = result && record(result.details) ? result.details : result;
 	const structured = result && record(result.structuredContent) ? result.structuredContent : undefined;
