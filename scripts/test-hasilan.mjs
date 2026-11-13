@@ -6,6 +6,13 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const vitest = join(root, "node_modules/vitest/dist/cli.js");
 const web = join(root, "packages/web-harness");
+// Exercise Mistral Vibe's AuthContext, model discovery, and inference stream
+// with offline HTTP fixtures on every CI platform.
+execFileSync(process.execPath, [vitest, "--run", "test/mistral-vibe-provider.test.ts"], {
+	cwd: join(root, "packages/ai"),
+	stdio: "inherit",
+	env: { ...process.env, PI_OFFLINE: "1", PI_NO_LOCAL_LLM: "1" },
+});
 const files = readdirSync(join(web, "test"))
 	.filter(
 		(name) =>
