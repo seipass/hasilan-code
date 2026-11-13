@@ -1,8 +1,5 @@
 import { ipcRenderer } from "electron";
-import {
-	BROWSER_ADJUSTMENT_PROPERTIES,
-	browserPreviewStyles,
-} from "../../../packages/web-harness/src/shared/browser-adjustments.ts";
+import { browserPreviewStyles } from "../../../packages/web-harness/src/shared/browser-adjustments.ts";
 
 type Mode = "element" | "text" | "region";
 type MarkerRect = { x: number; y: number; width: number; height: number };
@@ -14,28 +11,16 @@ let markerFrame: number | undefined;
 let suppressClick = false;
 let inspecting = false;
 let textAnchor: Range | null = null;
-let selected: { element: HTMLElement | SVGElement; id: number; url: string } | undefined;
+let selected:
+	| { element: HTMLElement | SVGElement; id: number; url: string; originalStyle: string | null; previewing: boolean }
+	| undefined;
 let selectionId = 0;
-const originalStyles = new Map<string, { value: string; priority: string }>();
-const shorthandParts: Readonly<Record<string, readonly string[]>> = {
-	"border-radius": [
-		"border-top-left-radius",
-		"border-top-right-radius",
-		"border-bottom-right-radius",
-		"border-bottom-left-radius",
-	],
-	"border-width": ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"],
-	"border-color": ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"],
-	"border-style": ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"],
-	gap: ["row-gap", "column-gap"],
-};
-
 function resetStyles(): void {
-	if (selected) {
-		for (const [property, { value, priority }] of originalStyles)
-			selected.element.style.setProperty(property, value, priority);
-	}
-	originalStyles.clear();
+	if (!selected?.previewing) return;
+	const { element, originalStyle } = selected;
+	if (originalStyle === null) element.removeAttribute("style");
+	else element.setAttribute("style", originalStyle);
+	selected.previewing = false;
 }
 
 function clear(): void {
@@ -136,8 +121,9 @@ function finish(rect: MarkerRect, element?: Element, range?: Range, text?: strin
 	else markerBounds = regionBounds(rect);
 	box(rect);
 	if (mode === "element" && (element instanceof HTMLElement || element instanceof SVGElement))
-		selected = { element, id: ++selectionId, url: location.href };
+		selected = { element, id: ++selectionId, url: location.href, originalStyle: null, previewing: false };
 	const style = selected && getComputedStyle(selected.element);
+	const inline = selected?.element.style;
 	const parent = selected?.element.parentElement;
 	ipcRenderer.sendToHost("hasilan:browser-selection", {
 		kind: mode,
@@ -151,11 +137,8 @@ function finish(rect: MarkerRect, element?: Element, range?: Range, text?: strin
 			: undefined,
 		text: text?.slice(0, 4000),
 		adjustmentId: selected?.id,
-		styles:
-			style &&
-			Object.fromEntries(
-				BROWSER_ADJUSTMENT_PROPERTIES.map((key) => [key, style.getPropertyValue(key).slice(0, 80)]),
-			),
+		styles: style && Object.fromEntries(Array.from(style, (key) => [key, style.getPropertyValue(key)])),
+		inlineStyles: inline && Object.fromEntries(Array.from(inline, (key) => [key, inline.getPropertyValue(key)])),
 		tag: selected?.element.localName,
 		parentLayout: parent && getComputedStyle(parent).display,
 		children: selected?.element.childElementCount,
@@ -180,21 +163,21 @@ ipcRenderer.on("hasilan:browser-adjustment", (_event, id: unknown, input: unknow
 		ipcRenderer.sendToHost("hasilan:browser-adjustment-stale");
 		return;
 	}
-	if (input === null) resetStyles();
-	else {
-		const declarations = browserPreviewStyles(input);
-		if (!declarations) return;
-		const style = selected.element.style;
-		for (const property of Object.keys(declarations)) {
-			for (const part of shorthandParts[property] ?? [property]) {
-				if (!originalStyles.has(part))
-					originalStyles.set(part, {
-						value: style.getPropertyValue(part),
-						priority: style.getPropertyPriority(part),
-					});
-			}
+	const declarations = browserPreviewStyles(input);
+	if (
+		!declarations ||
+		Object.entries(declarations).some(([property, value]) => value !== null && !CSS.supports(property, value))
+	)
+		return;
+	resetStyles();
+	if (Object.keys(declarations).length) {
+		const { element } = selected;
+		selected.originalStyle = element.getAttribute("style");
+		selected.previewing = true;
+		for (const [property, value] of Object.entries(declarations)) {
+			if (value === null) element.style.removeProperty(property);
+			else element.style.setProperty(property, value, "important");
 		}
-		for (const [property, value] of Object.entries(declarations)) style.setProperty(property, value, "important");
 	}
 	scheduleMarkerUpdate();
 });

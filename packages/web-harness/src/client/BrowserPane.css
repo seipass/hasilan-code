@@ -50,6 +50,15 @@
 .browser-adjustment-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; font-size: var(--text-sm); }
 .browser-adjustment-options > div { display: flex; flex-wrap: wrap; gap: 4px; }
 .browser-adjustment-options button[aria-pressed="true"] { background: var(--primary-container); color: var(--primary); }
+.browser-adjustments .browser-adjustment-value { grid-column: 2 / -1; }
+.browser-css-editor { min-width: 0; font-size: var(--text-sm); }
+.browser-css-editor summary { cursor: pointer; }
+.browser-css-fields { display: flex; flex-wrap: wrap; gap: 4px; margin-block: 6px; }
+.browser-css-fields input { min-width: 0; flex: 1 1 110px; }
+.browser-css-editor ul { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; }
+.browser-css-editor li { display: flex; align-items: center; gap: 4px; }
+.browser-css-declaration { display: flex; gap: 6px; min-width: 0; flex: 1; text-align: start; }
+.browser-css-declaration :is(code, span) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .browser-annotation-list { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0 0 8px; padding: 0; }
 .browser-annotation-list li { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 260px; padding: 4px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-panel); }
 .browser-annotation-list img { width: 44px; height: 38px; object-fit: cover; border-radius: 6px; }

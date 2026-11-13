@@ -6,12 +6,11 @@ function colorHex(color: string): string {
 	return rgb ? `#${rgb.slice(1, 4).map((value) => Math.min(255, Number(value)).toString(16).padStart(2, "0")).join("")}` : "#000000";
 }
 
-export function BrowserAdjustmentControls({ controls, styles, adjusted, onChange, onReset }: {
+export function BrowserAdjustmentControls({ controls, styles, adjusted, onChange }: {
 	controls: BrowserControl[];
 	styles?: BrowserStyles;
 	adjusted: BrowserStyles;
-	onChange: (styles: BrowserStyles) => void;
-	onReset: () => void;
+	onChange: (styles: BrowserStyles) => boolean;
 }) {
 	const current = { ...styles, ...adjusted };
 	return <fieldset className="browser-adjustments">
@@ -19,8 +18,8 @@ export function BrowserAdjustmentControls({ controls, styles, adjusted, onChange
 		{controls.map((control) => {
 			if ("options" in control) {
 				const matches = (option: (typeof control.options)[number]) => Object.entries(option.styles).every(([key, value]) => {
-					const currentValue = (current as Record<string, string>)[key];
-					return value === currentValue || (value.startsWith("#") && !!currentValue && colorHex(currentValue) === value.toLowerCase());
+					const currentValue = current[key];
+					return value === currentValue || (value?.startsWith("#") && !!currentValue && colorHex(currentValue) === value.toLowerCase());
 				});
 				if (control.kind === "toggle") {
 					const [off, on] = control.options;
@@ -41,6 +40,23 @@ export function BrowserAdjustmentControls({ controls, styles, adjusted, onChange
 				return <label key={control.label}><span>{control.label}</span>
 					<input type="color" value={colorHex(color)} onChange={(event) => onChange({ [control.property]: event.target.value })} />
 					<output>{color || "—"}</output>
+				</label>;
+			}
+			if (control.kind === "text") {
+				const value = current[control.property] ?? "";
+				return <label key={control.label}><span>{control.label}</span>
+					<input key={value} aria-label={control.label} className="browser-adjustment-value" defaultValue={value}
+						onBlur={(event) => {
+							const field = event.currentTarget;
+							const next = field.value.trim();
+							if (next !== value && (!next || !onChange({ [control.property]: next }))) field.value = value;
+						}}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+								event.preventDefault();
+								event.currentTarget.blur();
+							}
+						}} />
 				</label>;
 			}
 			const { property, min, max, step, unit } = control;
@@ -69,6 +85,5 @@ export function BrowserAdjustmentControls({ controls, styles, adjusted, onChange
 				<output>{current[property] || "—"}</output>
 			</label>;
 		})}
-		<button type="button" disabled={!Object.keys(adjusted).length} onClick={onReset}>元の表示に戻す</button>
 	</fieldset>;
 }

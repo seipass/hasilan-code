@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
-import type { BrowserControl, BrowserStyles } from "../shared/browser-adjustments.ts";
+import { type BrowserControl, type BrowserStyles, browserPreviewStyles } from "../shared/browser-adjustments.ts";
 import { api, errorMessage } from "./api.ts";
 import { BrowserAdjustmentControls } from "./BrowserAdjustmentControls.tsx";
+import { BrowserCssEditor } from "./BrowserCssEditor.tsx";
 import { Icon } from "./Icon.tsx";
 import { usePreferenceState } from "./preferences.ts";
 import type { Model } from "./types.ts";
@@ -19,6 +20,7 @@ export interface BrowserSelection {
 	text?: string;
 	adjustmentId?: number;
 	styles?: BrowserStyles;
+	inlineStyles?: BrowserStyles;
 	tag?: string;
 	parentLayout?: string;
 	children?: number;
@@ -63,6 +65,7 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 	const [note, setNote] = useState("");
 	const [controls, setControls] = useState<BrowserControl[]>();
 	const [adjusted, setAdjusted] = useState<BrowserStyles>({});
+	const adjustedRef = useRef<BrowserStyles>({});
 	const [intent, setIntent] = useState("");
 	const [suggesting, setSuggesting] = useState(false);
 	const suggestionRequest = useRef<AbortController | undefined>(undefined);
@@ -70,6 +73,7 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		suggestionRequest.current?.abort();
 		suggestionRequest.current = undefined;
 		setControls(undefined);
+		adjustedRef.current = {};
 		setAdjusted({});
 		setIntent("");
 		setSuggesting(false);
@@ -214,10 +218,22 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		suggestionRequest.current = controller;
 		setSuggesting(true); setError("");
 		try {
-			const element = JSON.stringify({
-				tag: selection.tag, label: selection.label?.slice(0, 240), selector: selection.selector?.slice(0, 240),
-				rect: selection.rect, styles: { ...selection.styles, ...adjusted }, parentLayout: selection.parentLayout, children: selection.children,
-			}).slice(0, 4000);
+			const { styles, inlineStyles, tag, parentLayout, children } = selection;
+			const elementContext = {
+				tag, label: selection.label?.slice(0, 240), selector: selection.selector?.slice(0, 240),
+				rect: selection.rect, styles: {} as BrowserStyles, parentLayout, children,
+			};
+			const relevant = Object.entries(styles ?? {}).filter(([key]) =>
+				/^(display$|position$|(?:align|justify|flex|grid|padding|margin|font|border|background|text)-|color$|opacity$|.*gap$|box-shadow$|transform$)/.test(key));
+			const candidates = { ...inlineStyles, ...adjusted, ...Object.fromEntries(relevant.filter(([key]) =>
+				!Object.hasOwn(inlineStyles ?? {}, key) && !Object.hasOwn(adjusted, key))) };
+			let element = JSON.stringify(elementContext);
+			for (const [key, value] of Object.entries(candidates)) {
+				elementContext.styles[key] = value?.slice(0, 160) ?? null;
+				const next = JSON.stringify(elementContext);
+				if (next.length > 4000) break;
+				element = next;
+			}
 			const result = await api<{ controls: BrowserControl[] }>("/api/browser-adjustments", {
 				method: "POST", body: JSON.stringify({ provider: model.provider, id: model.id, element, intent: intent.trim() }), signal: controller.signal,
 			});
@@ -227,6 +243,18 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		} finally {
 			if (suggestionRequest.current === controller) { suggestionRequest.current = undefined; setSuggesting(false); }
 		}
+	}
+	function updatePreview(next: BrowserStyles): boolean {
+		if (selection?.adjustmentId === undefined) return false;
+		if (!browserPreviewStyles(next) || Object.entries(next).some(([property, value]) => value !== null && !CSS.supports(property, value))) {
+			setError("このCSSプロパティと値の組み合わせは適用できません。");
+			return false;
+		}
+		browser.current?.send("hasilan:browser-adjustment", selection.adjustmentId, next);
+		adjustedRef.current = next;
+		setAdjusted(next);
+		setError("");
+		return true;
 	}
 	return <section ref={pane} className="browser-pane" aria-label="ブラウザ" onKeyDown={(event) => {
 		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "l") {
@@ -278,7 +306,8 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		</div>
 		{selection && image && <form className="browser-comment" onSubmit={(event) => {
 			event.preventDefault();
-			const changes = Object.entries(adjusted).map(([key, value]) => `${key}: ${value};`);
+			const changes = Object.entries(adjustedRef.current).map(([key, value]) =>
+				value === null ? `インラインの ${key} を削除` : `${key}: ${value};`);
 			if (!note.trim() && !changes.length) return;
 			const comment = [note.trim(), changes.length ? `プレビューした CSS:\n${changes.join("\n")}` : ""].filter(Boolean).join("\n\n");
 			const delivery: BrowserAnnotationDelivery = { annotation: { selection, image, note: comment }, accepted: false };
@@ -298,9 +327,17 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 				</button>
 			</div>}
 			{controls && <BrowserAdjustmentControls controls={controls} styles={selection.styles} adjusted={adjusted} onChange={(styles) => {
-				browser.current?.send("hasilan:browser-adjustment", selection.adjustmentId, styles);
-				setAdjusted((current) => ({ ...current, ...styles }));
-			}} onReset={() => { browser.current?.send("hasilan:browser-adjustment", selection.adjustmentId, null); setAdjusted({}); }} />}
+				const next = { ...adjustedRef.current };
+				for (const key of Object.keys(styles)) delete next[key];
+				return updatePreview({ ...next, ...styles });
+			}} />}
+			{selection.adjustmentId !== undefined && <BrowserCssEditor computed={selection.styles} inline={selection.inlineStyles} adjusted={adjusted} onApply={(property, value) => {
+				const next = { ...adjustedRef.current };
+				delete next[property];
+				if (value !== undefined) Object.defineProperty(next, property, { value, enumerable: true, configurable: true });
+				return updatePreview(next);
+			}} />}
+			{Object.keys(adjusted).length > 0 && <div><button type="button" onClick={() => updatePreview({})}>元の表示に戻す</button></div>}
 			<label>注釈<textarea autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="この箇所への指示" /></label>
 			<div><button type="button" onClick={() => { browser.current?.send("hasilan:browser-clear"); resetAdjustments(); setSelection(undefined); setImage(""); setNote(""); }}>キャンセル</button><button type="submit" disabled={!note.trim() && !Object.keys(adjusted).length}>入力欄に追加</button></div>
 		</form>}
