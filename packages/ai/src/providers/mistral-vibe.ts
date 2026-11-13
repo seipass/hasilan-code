@@ -17,7 +17,7 @@ function fingerprint(key: string): string {
 
 function credentialKey(credential?: Credential): string | undefined {
 	const envKey = typeof process !== "undefined" ? process.env.MISTRAL_VIBE_API_KEY?.trim() : undefined;
-	return (credential?.type === "api_key" ? credential.key.trim() : undefined) || envKey;
+	return (credential?.type === "api_key" ? credential.key?.trim() : undefined) || envKey;
 }
 
 /** Mistral does not return pricing metadata. Zero here is a placeholder, not free inference. */
