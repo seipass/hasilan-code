@@ -143,4 +143,73 @@ describe("Mistral Vibe provider", () => {
 		expect((await models.getAvailable("mistral-vibe")).some((model) => model.id === "model-two")).toBe(true);
 	});
 
+
+	it("retains a same-key AuthContext catalog and persisted cache when discovery fails", async () => {
+		const key = "stable-context-key";
+		let discoveryFails = false;
+		const fetcher = vi.fn(async () => discoveryFails
+			? new Response("Service unavailable", { status: 503 })
+			: Response.json({
+				data: [{ id: "known-model", capabilities: { completion_chat: true } }],
+			}));
+		const store = new InMemoryModelsStore();
+		const models = createModels({
+			authContext: {
+				env: async (name) => name === "MISTRAL_VIBE_API_KEY" ? key : undefined,
+				fileExists: async () => false,
+			},
+			modelsStore: store,
+		});
+		models.setProvider(mistralVibeProvider(fetcher));
+
+		expect((await models.refresh({ providers: ["mistral-vibe"] })).errors.size).toBe(0);
+		const saved = await store.read("mistral-vibe");
+		expect(saved?.models.some((model) => model.id === "known-model")).toBe(true);
+		expect((await models.getAvailable("mistral-vibe")).some((model) => model.id === "known-model")).toBe(true);
+
+		// The offline restoration phase must not discard ambient-auth models.
+		await models.refresh({ providers: ["mistral-vibe"], allowNetwork: false });
+		expect(models.getModel("mistral-vibe", "known-model")).toBeDefined();
+		expect(await store.read("mistral-vibe")).toEqual(saved);
+
+		// A forced network refresh that fails must leave the previous state intact.
+		discoveryFails = true;
+		const failed = await models.refresh({ providers: ["mistral-vibe"], force: true });
+		expect(failed.errors.get("mistral-vibe")?.message).toContain("503");
+		expect(models.getModel("mistral-vibe", "known-model")).toBeDefined();
+		expect((await models.getAvailable("mistral-vibe")).some((model) => model.id === "known-model")).toBe(true);
+		expect(await store.read("mistral-vibe")).toEqual(saved);
+	});
+
+	it("invalidates the previous catalog on key rotation, even if discovery fails", async () => {
+		let currentKey = "first";
+		const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+			if (new Headers(init?.headers).get("authorization") === "Bearer second") {
+				return new Response("Service unavailable", { status: 503 });
+			}
+			return Response.json({
+				data: [{ id: "first-model", capabilities: { completion_chat: true } }],
+			});
+		});
+		const store = new InMemoryModelsStore();
+		const models = createModels({
+			authContext: {
+				env: async (name) => name === "MISTRAL_VIBE_API_KEY" ? currentKey : undefined,
+				fileExists: async () => false,
+			},
+			modelsStore: store,
+		});
+		models.setProvider(mistralVibeProvider(fetcher));
+
+		expect((await models.refresh({ providers: ["mistral-vibe"] })).errors.size).toBe(0);
+		expect(models.getModel("mistral-vibe", "first-model")).toBeDefined();
+		currentKey = "second";
+
+		const failed = await models.refresh({ providers: ["mistral-vibe"], force: true });
+		expect(failed.errors.get("mistral-vibe")?.message).toContain("503");
+		expect(models.getModel("mistral-vibe", "first-model")).toBeUndefined();
+		expect((await models.getAvailable("mistral-vibe")).some((model) => model.id === "first-model")).toBe(false);
+		expect(await store.read("mistral-vibe")).toBeUndefined();
+	});
+
 });

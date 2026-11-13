@@ -162,6 +162,11 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 		},
 		async refreshModels(context) {
 			const key = credentialKey(context.credential);
+			// The first refresh phase runs without network access and can receive no
+			// credential when the key comes from an injected AuthContext. Keep the
+			// last known catalog until the resolved credential is available in phase two.
+			// Otherwise every refresh deletes the cache before discovering the same key.
+			if (!context.allowNetwork && !key) return;
 			const nextScope = key ? await fingerprint(key) : undefined;
 			if (currentScope !== nextScope) {
 				const restored =
