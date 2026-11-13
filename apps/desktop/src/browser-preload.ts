@@ -44,13 +44,13 @@ function box(rect: MarkerRect): void {
 			position: "fixed",
 			pointerEvents: "none",
 			zIndex: "2147483647",
-			border: "2px solid #1688ff",
-			background: "#1688ff22",
+			outline: "2px solid #1688ff",
 			boxSizing: "border-box",
 		});
 		document.documentElement.append(marker);
 	}
 	marker.hidden = false;
+	marker.style.background = markerBounds ? "transparent" : "#1688ff22";
 	Object.assign(marker.style, {
 		left: `${rect.x}px`,
 		top: `${rect.y}px`,
