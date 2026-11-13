@@ -1,7 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
+import type { BrowserAdjustment } from "../shared/browser-adjustments.ts";
+import { api, errorMessage } from "./api.ts";
+import { BrowserAdjustmentControls } from "./BrowserAdjustmentControls.tsx";
 import { Icon } from "./Icon.tsx";
 import { usePreferenceState } from "./preferences.ts";
+import type { Model } from "./types.ts";
 import "./BrowserPane.css";
 
 export interface BrowserSelection {
@@ -13,6 +17,9 @@ export interface BrowserSelection {
 	selector?: string;
 	label?: string;
 	text?: string;
+	adjustmentId?: number;
+	styles?: Partial<Record<BrowserAdjustment, string>>;
+	layout?: string;
 }
 export interface BrowserAnnotation { selection: BrowserSelection; image: string; note: string }
 export interface BrowserAnnotationDelivery { annotation: BrowserAnnotation; accepted: boolean }
@@ -36,7 +43,7 @@ function addressCandidate(input: string) {
 	}
 }
 
-export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visible: boolean }) {
+export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: string; visible: boolean; model?: Model }) {
 	const pane = useRef<HTMLElement>(null);
 	const container = useRef<HTMLDivElement>(null);
 	const browser = useRef<WebviewTag>(null);
@@ -52,6 +59,18 @@ export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visi
 	const [selection, setSelection] = useState<BrowserSelection>();
 	const [image, setImage] = useState("");
 	const [note, setNote] = useState("");
+	const [properties, setProperties] = useState<BrowserAdjustment[]>();
+	const [adjusted, setAdjusted] = useState<Partial<Record<BrowserAdjustment, number>>>({});
+	const [suggesting, setSuggesting] = useState(false);
+	const suggestionRequest = useRef<AbortController | undefined>(undefined);
+	function resetAdjustments() {
+		suggestionRequest.current?.abort();
+		suggestionRequest.current = undefined;
+		setProperties(undefined);
+		setAdjusted({});
+		setSuggesting(false);
+	}
+	useEffect(() => () => suggestionRequest.current?.abort(), []);
 	const [error, setError] = useState("");
 	const [history, setHistory] = usePreferenceState<{ url: string; title: string; visitedAt: number }[]>("pi-web-browser-history", []);
 	const [historyOpen, setHistoryOpen] = useState(false);
@@ -113,7 +132,8 @@ export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visi
 			if ("isMainFrame" in event && !event.isMainFrame) return;
 			setPageAddress(event.url === "about:blank" ? "" : event.url);
 			updateNavigation();
-			setAnnotating(false); setSelection(undefined); setImage(""); setError("");
+			view.send("hasilan:browser-clear");
+			resetAdjustments(); setAnnotating(false); setSelection(undefined); setImage(""); setNote(""); setError("");
 		};
 		const loaded = () => {
 			updateNavigation();
@@ -137,6 +157,7 @@ export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visi
 			}
 			if (event.channel === "hasilan:browser-focus-address") { addressInput.current?.focus(); addressInput.current?.select(); return; }
 			if (event.channel === "hasilan:browser-cancel") { setAnnotating(false); return; }
+			if (event.channel === "hasilan:browser-adjustment-stale") { resetAdjustments(); setSelection(undefined); setImage(""); setNote(""); setError("要素が変わりました。もう一度選択してください。"); return; }
 			if (event.channel !== "hasilan:browser-selection") return;
 			const selected = event.args[0] as BrowserSelection;
 			setAnnotating(false); setError("");
@@ -163,7 +184,7 @@ export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visi
 			const candidate = addressCandidate(value);
 			if (!candidate) throw new Error();
 			view.send("hasilan:browser-clear");
-			setSelection(undefined); setImage(""); setAnnotating(false); setError("");
+			resetAdjustments(); setSelection(undefined); setImage(""); setNote(""); setAnnotating(false); setError("");
 			setPageAddress(candidate.url);
 			setDraftAddress(undefined);
 			addressInput.current?.blur();
@@ -175,12 +196,29 @@ export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visi
 	}
 	function toggleAnnotation() {
 		if (!ready) return;
-		setSelection(undefined); setImage(""); setError("");
+		resetAdjustments(); setSelection(undefined); setImage(""); setNote(""); setError("");
 		setAnnotating(!annotating);
 		if (annotating) browser.current?.send("hasilan:browser-clear");
 		else {
 			browser.current?.send("hasilan:browser-select", "inspect");
 			browser.current?.focus();
+		}
+	}
+	async function suggestAdjustments() {
+		if (!model || !selection?.adjustmentId || suggestionRequest.current) return;
+		const controller = new AbortController();
+		suggestionRequest.current = controller;
+		setSuggesting(true); setError("");
+		try {
+			const element = JSON.stringify({ selector: selection.selector, label: selection.label, rect: selection.rect, styles: selection.styles, layout: selection.layout }).slice(0, 4000);
+			const result = await api<{ properties: BrowserAdjustment[] }>("/api/browser-adjustments", {
+				method: "POST", body: JSON.stringify({ provider: model.provider, id: model.id, element }), signal: controller.signal,
+			});
+			if (!controller.signal.aborted) setProperties(result.properties);
+		} catch (reason) {
+			if (!controller.signal.aborted) setError(errorMessage(reason));
+		} finally {
+			if (suggestionRequest.current === controller) { suggestionRequest.current = undefined; setSuggesting(false); }
 		}
 	}
 	return <section ref={pane} className="browser-pane" aria-label="ブラウザ" onKeyDown={(event) => {
@@ -233,11 +271,21 @@ export function BrowserPane({ initialUrl, visible }: { initialUrl?: string; visi
 		</div>
 		{selection && image && <form className="browser-comment" onSubmit={(event) => {
 			event.preventDefault();
-			if (!note.trim()) return;
-			const delivery: BrowserAnnotationDelivery = { annotation: { selection, image, note: note.trim() }, accepted: false };
+			const changes = Object.entries(adjusted).map(([key, value]) => `${key}: ${value}${key === "opacity" ? "" : "px"};`);
+			if (!note.trim() && !changes.length) return;
+			const comment = [note.trim(), changes.length ? `プレビューした CSS:\n${changes.join("\n")}` : ""].filter(Boolean).join("\n\n");
+			const delivery: BrowserAnnotationDelivery = { annotation: { selection, image, note: comment }, accepted: false };
 			window.dispatchEvent(new CustomEvent<BrowserAnnotationDelivery>("hasilan:browser-annotation", { detail: delivery }));
 			if (!delivery.accepted) { setError("入力欄に追加できません。会話を開き、添付数と容量を確認してください。"); return; }
-			browser.current?.send("hasilan:browser-clear"); setSelection(undefined); setImage(""); setNote("");
-		}}><label>注釈<textarea autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="この箇所への指示" /></label><div><button type="button" onClick={() => { browser.current?.send("hasilan:browser-clear"); setSelection(undefined); setImage(""); }}>キャンセル</button><button type="submit" disabled={!note.trim()}>入力欄に追加</button></div></form>}
+			browser.current?.send("hasilan:browser-clear"); resetAdjustments(); setSelection(undefined); setImage(""); setNote("");
+		}}>
+			{selection.adjustmentId !== undefined && <div><button type="button" disabled={suggesting || !model || !!properties} title={!model ? "会話のモデルを選択してください" : undefined} onClick={() => void suggestAdjustments()}>{suggesting ? "調整項目を作成中…" : "AI で調整項目を作る"}</button></div>}
+			{properties && <BrowserAdjustmentControls properties={properties} styles={selection.styles} adjusted={adjusted} onChange={(property, value) => {
+				browser.current?.send("hasilan:browser-adjustment", selection.adjustmentId, property, value);
+				setAdjusted((current) => ({ ...current, [property]: value }));
+			}} onReset={() => { browser.current?.send("hasilan:browser-adjustment", selection.adjustmentId, null); setAdjusted({}); }} />}
+			<label>注釈<textarea autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="この箇所への指示" /></label>
+			<div><button type="button" onClick={() => { browser.current?.send("hasilan:browser-clear"); resetAdjustments(); setSelection(undefined); setImage(""); setNote(""); }}>キャンセル</button><button type="submit" disabled={!note.trim() && !Object.keys(adjusted).length}>入力欄に追加</button></div>
+		</form>}
 	</section>;
 }

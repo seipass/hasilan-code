@@ -18,15 +18,17 @@ import { preferences, usePreferenceString } from "./preferences.ts";
 import { type PaneIndex, SplitActions, SplitLayout } from "./SplitLayout.tsx";
 import { TerminalView, type TerminalViewState } from "./terminal/TerminalPane.tsx";
 import { TabGestureHints } from "./TabGestureHints.tsx";
+import type { Model } from "./types.ts";
 import "./DetailPane.css";
 
 export type DetailView = "tabs" | "team" | "tools";
 
 
-export function DetailPane({ workspaceId, target, browserTarget, refreshToken, visible, view, onViewChange, onActiveFileChange, team, tools }: {
+export function DetailPane({ workspaceId, target, browserTarget, browserModel, refreshToken, visible, view, onViewChange, onActiveFileChange, team, tools }: {
 	workspaceId: string;
 	target?: FileTarget;
 	browserTarget?: { id: string; url: string };
+	browserModel?: Model;
 	refreshToken: number;
 	visible: boolean;
 	view: DetailView;
@@ -293,7 +295,7 @@ export function DetailPane({ workspaceId, target, browserTarget, refreshToken, v
 					const active = visible && view === "tabs" && selected;
 					if (tab.kind === "terminal") return <TerminalView key={tab.summary.terminalId} summary={tab.summary} pane={tab.pane} selected={selected} visible={active} id={`${id}-body-${tab.id}`} labelledBy={`${id}-tab-${tab.id}`} focusRequest={focusRequest.id === tab.id ? focusRequest.number : 0} onSummary={updateSummary} onState={updateViewState} onActivate={() => dispatch({ type: "focus", pane: tab.pane })} dragging={!!dragging} onTabDrop={() => dropOnPane(tab.pane)} />;
 					return <div key={tab.id} hidden={!selected} className="detail-tab-body split-tab-body" data-pane={tab.pane} data-focused={layout.focused === tab.pane} onPointerDownCapture={() => dispatch({ type: "focus", pane: tab.pane })} onFocusCapture={() => dispatch({ type: "focus", pane: tab.pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(tab.pane); } }}>
-						{tab.kind === "file" ? tab.file ? <FilePreview workspaceId={workspaceId} file={tab.file} transformRequest={transformRequest?.id === tab.id ? transformRequest : undefined} onTransformHandled={(requestId) => setTransformRequest((current) => current?.requestId === requestId ? undefined : current)} refreshKey={`${refreshToken}:${tab.requestId ?? ""}`} visible={active} id={`${id}-body-${tab.id}`} labelledBy={`${id}-tab-${tab.id}`} onOpen={openFile} onChange={(_path, patch) => dispatch({ type: "patchFile", id: tab.id, patch })} /> : <div className="detail-file-empty" id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>ファイルを選択してください。</div> : tab.kind === "browser" ? <BrowserPane initialUrl={tab.url} visible={active} /> : <div id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>{choices(tab, tab.pane)}</div>}
+						{tab.kind === "file" ? tab.file ? <FilePreview workspaceId={workspaceId} file={tab.file} transformRequest={transformRequest?.id === tab.id ? transformRequest : undefined} onTransformHandled={(requestId) => setTransformRequest((current) => current?.requestId === requestId ? undefined : current)} refreshKey={`${refreshToken}:${tab.requestId ?? ""}`} visible={active} id={`${id}-body-${tab.id}`} labelledBy={`${id}-tab-${tab.id}`} onOpen={openFile} onChange={(_path, patch) => dispatch({ type: "patchFile", id: tab.id, patch })} /> : <div className="detail-file-empty" id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>ファイルを選択してください。</div> : tab.kind === "browser" ? <BrowserPane initialUrl={tab.url} visible={active} model={browserModel} /> : <div id={`${id}-body-${tab.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${tab.id}`}>{choices(tab, tab.pane)}</div>}
 					</div>;
 				})}
 				{([0, 1] as const).map((pane) => !layout.tabs.some((tab) => tab.pane === pane) && <div key={`empty-${pane}`} className="detail-tab-body split-tab-body" data-pane={pane} hidden={pane === 1 && layout.mode === "single"} onPointerDownCapture={() => dispatch({ type: "focus", pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(pane); } }}>{choices(undefined, pane)}</div>)}

@@ -579,7 +579,7 @@ export function App() {
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
 					<div className="right-panel-body detail-panel-body">
 						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab} onActiveFileChange={setActiveFilePath}
-							team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
+							browserModel={model} team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>
 				</aside>

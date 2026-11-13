@@ -1,4 +1,9 @@
 import { ipcRenderer } from "electron";
+import {
+	BROWSER_ADJUSTMENTS,
+	type BrowserAdjustment,
+	isBrowserAdjustment,
+} from "../../../packages/web-harness/src/shared/browser-adjustments.ts";
 
 type Mode = "element" | "text" | "region";
 let mode: Mode | undefined;
@@ -7,8 +12,21 @@ let marker: HTMLDivElement | undefined;
 let suppressClick = false;
 let inspecting = false;
 let textAnchor: Range | null = null;
+let selected: { element: HTMLElement | SVGElement; id: number; url: string } | undefined;
+let selectionId = 0;
+const originalStyles = new Map<BrowserAdjustment, { value: string; priority: string }>();
+
+function resetStyles(): void {
+	if (selected) {
+		for (const [property, { value, priority }] of originalStyles)
+			selected.element.style.setProperty(property, value, priority);
+	}
+	originalStyles.clear();
+}
 
 function clear(): void {
+	resetStyles();
+	selected = undefined;
 	mode = undefined;
 	inspecting = false;
 	textAnchor = null;
@@ -57,6 +75,9 @@ function selector(element: Element): string {
 
 function finish(rect: { x: number; y: number; width: number; height: number }, element?: Element, text?: string): void {
 	box(rect);
+	if (mode === "element" && (element instanceof HTMLElement || element instanceof SVGElement))
+		selected = { element, id: ++selectionId, url: location.href };
+	const style = selected && getComputedStyle(selected.element);
 	ipcRenderer.sendToHost("hasilan:browser-selection", {
 		kind: mode,
 		url: location.href,
@@ -68,6 +89,10 @@ function finish(rect: { x: number; y: number; width: number; height: number }, e
 			? (element.getAttribute("aria-label") || element.textContent || "").trim().slice(0, 500)
 			: undefined,
 		text: text?.slice(0, 4000),
+		adjustmentId: selected?.id,
+		styles:
+			style && Object.fromEntries(Object.keys(BROWSER_ADJUSTMENTS).map((key) => [key, style.getPropertyValue(key)])),
+		layout: style?.display,
 	});
 	mode = undefined;
 	inspecting = false;
@@ -82,6 +107,26 @@ ipcRenderer.on("hasilan:browser-select", (_event, value: unknown) => {
 	if (value === "element" || value === "text" || value === "region") mode = value;
 });
 ipcRenderer.on("hasilan:browser-clear", clear);
+ipcRenderer.on("hasilan:browser-adjustment", (_event, id: unknown, property: unknown, value: unknown) => {
+	if (!selected || selected.id !== id || selected.url !== location.href || !selected.element.isConnected) {
+		resetStyles();
+		ipcRenderer.sendToHost("hasilan:browser-adjustment-stale");
+		return;
+	}
+	if (property === null) resetStyles();
+	else if (isBrowserAdjustment(property) && typeof value === "number" && Number.isFinite(value)) {
+		const { min, max, unit } = BROWSER_ADJUSTMENTS[property];
+		if (value < min || value > max) return;
+		const style = selected.element.style;
+		if (!originalStyles.has(property))
+			originalStyles.set(property, {
+				value: style.getPropertyValue(property),
+				priority: style.getPropertyPriority(property),
+			});
+		style.setProperty(property, `${value}${unit}`, "important");
+	}
+	box(selected.element.getBoundingClientRect());
+});
 let edited = false;
 window.addEventListener(
 	"input",

@@ -32,6 +32,7 @@ import { readAccountUsage } from "./account-usage.ts";
 import { AgentWorktrees } from "./agent-worktrees.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
+import { browserAdjustmentSchema, suggestBrowserAdjustments } from "./browser-adjustments.ts";
 import { CanvasStore, CanvasStoreError } from "./canvas-store.ts";
 import { CLI_HELP, type CliOptions, openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
@@ -405,6 +406,23 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					response.once("close", abort);
 					try {
 						return reply(await transformText(input, settings, modelRuntime, files, controller.signal));
+					} finally {
+						response.off("close", abort);
+					}
+				}
+				if (url.pathname === "/api/browser-adjustments" && method === "POST") {
+					const input = await readJson(request, browserAdjustmentSchema, 32 * 1024);
+					const controller = new AbortController();
+					const abort = () => controller.abort();
+					response.once("close", abort);
+					try {
+						return reply(
+							await suggestBrowserAdjustments(
+								input,
+								modelRuntime,
+								AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),
+							),
+						);
 					} finally {
 						response.off("close", abort);
 					}
