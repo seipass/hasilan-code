@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@hasilan-code/pi-ai/compat";
-import type { AgentSessionEvent, SessionManager } from "@hasilan-code/pi-coding-agent";
+import type { AgentSessionEvent, ExtensionToolContext, SessionManager } from "@hasilan-code/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 import {
 	type ExecutionAdapter,
@@ -922,6 +922,59 @@ describe("team run boundaries", () => {
 		expect(waited.runs[0]).toMatchObject({ runId: child.runId, result: "first result", status: "completed" });
 		expect(f.registry.get(child.sessionId).currentRun?.runId).not.toBe(child.runId);
 	});
+	it("keeps completion previews short and retrieves the saved report and logs by run", async () => {
+		const f = await fixture();
+		await f.teams.prompt(f.session.sessionId, { text: "root", mode: "prompt" });
+		const parent = await running(f.adapters, f.session.sessionId);
+		const {
+			agents: [child],
+		} = await f.teams.spawn(f.session.sessionId, [{ name: "child", task: "investigate" }]);
+		const adapter = await running(f.adapters, child.sessionId);
+		const report = `Start ${"details ".repeat(500)} End`;
+		adapter.manager.appendMessage({
+			role: "toolResult",
+			toolCallId: "read-log",
+			toolName: "bash",
+			content: [{ type: "text", text: "original command log" }],
+			isError: false,
+			timestamp: Date.now(),
+		});
+		adapter.finish(report);
+		await expect.poll(() => f.registry.get(child.sessionId).latestRun?.status).toBe("completed");
+		const waited = await f.teams.wait(f.session.sessionId, [child.agentId]);
+		expect(waited.runs[0].result).toContain("chars truncated");
+		await expect
+			.poll(() => parent.contextInjections.some((entry) => entry.content.includes("chars truncated")))
+			.toBe(true);
+		expect(f.registry.get(child.sessionId).latestRun?.result).toBe(report);
+
+		const tool = f.teams.createTool(f.session.sessionId);
+		const context = {} as ExtensionToolContext;
+		const first = await tool.execute(
+			"report",
+			{ action: "result", runId: child.runId },
+			undefined,
+			undefined,
+			context,
+		);
+		expect(first.details).toMatchObject({ text: report.slice(0, 2000), nextOffset: 2000 });
+		const logs = await tool.execute(
+			"logs",
+			{ action: "result", runId: child.runId, view: "logs" },
+			undefined,
+			undefined,
+			context,
+		);
+		expect(logs.details).toMatchObject({ logs: [{ logIndex: 0, tool: "bash", isError: false }] });
+		const log = await tool.execute(
+			"log",
+			{ action: "result", runId: child.runId, view: "log", logIndex: 0 },
+			undefined,
+			undefined,
+			context,
+		);
+		expect(log.details).toMatchObject({ text: "original command log" });
+	});
 	it("rejects self, ancestor, cross-team and dependency-cycle waits and stops", async () => {
 		const f = await fixture();
 		const rootAgent = await f.teams.ensureRoot(f.session.sessionId);
@@ -1077,7 +1130,7 @@ describe("team run boundaries", () => {
 			started.push(adapter.descriptor.role ?? "");
 			if (adapter.descriptor.role === "review") {
 				expect(started).toContain("implementation");
-				expect(text).toContain("implementation:\nimplemented");
+				expect(text).toMatch(/implementation \(runId: .+\):\nimplemented/);
 			}
 			return adapter.descriptor.role === "implementation" ? "implemented" : "done";
 		});

@@ -69,6 +69,7 @@ export {
 	type TruncationResult,
 	truncateHead,
 	truncateLine,
+	truncateMiddle,
 	truncateTail,
 } from "./truncate.ts";
 export {

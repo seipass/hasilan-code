@@ -886,11 +886,14 @@ export class SettingsManager {
 		enabled: boolean;
 		reserveTokens: number;
 		keepRecentTokens: number;
+		maxContextTokens?: number;
 	} {
+		const maxContextTokens = this.settings.compaction?.maxContextTokens;
 		return {
 			enabled: this.getCompactionEnabled(),
 			reserveTokens: this.getCompactionReserveTokens(model),
 			keepRecentTokens: this.getCompactionKeepRecentTokens(model),
+			...(maxContextTokens === undefined ? {} : { maxContextTokens }),
 		};
 	}
 

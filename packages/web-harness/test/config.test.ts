@@ -34,6 +34,7 @@ describe("independent Hasilan configuration", () => {
 		});
 		await writeFile(piFile, piContents);
 		const settings = createHarnessSettings(cwd, agentDir);
+		expect(settings.getCompactionSettings().maxContextTokens).toBe(96_000);
 		expect(settings.getDefaultModel()).toBeUndefined();
 		expect(settings.getSkillPaths()).not.toContain("pi-skill");
 		settings.setDefaultModelAndProvider("hasilan-provider", "hasilan-model");

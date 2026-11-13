@@ -55,6 +55,7 @@ import { importedRecord, storeImport } from "./session-import/persistence.ts";
 import { type ImportAsset, projectImport } from "./session-import/projection.ts";
 import { SessionUsage } from "./session-usage.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
+import { limitToolContext } from "./tool-context.ts";
 
 export interface ModelSelection {
 	provider: string;
@@ -620,7 +621,11 @@ export class SessionRegistry {
 		const projected = manager
 			.buildSessionProjection()
 			.entries.filter((entry) => boundary < 0 || !imported.messages.length || ownEntries.has(entry.sourceEntry.id));
-		const context = projected.flatMap((entry) => entry.messages);
+		const context = projected.flatMap(({ sourceEntry, messages }) =>
+			sourceEntry.type === "message" && sourceEntry.message.role === "toolResult" && messages.length
+				? [sourceEntry.message]
+				: messages,
+		);
 		// Keep one timestamp per projected message so the conversation can show when it happened.
 		const contextTimestamps = projected.flatMap((entry) => entry.messages.map(() => entry.sourceEntry.timestamp));
 		const contextUsage = projected.flatMap((entry) =>
@@ -1075,6 +1080,19 @@ export class SessionRegistry {
 		this.toolResultCache.set(tool, json);
 		return json;
 	}
+	teamRunLogs(sessionId: string, run: RunRecord) {
+		if (!run.startedAt) return [];
+		const start = Date.parse(run.startedAt);
+		const end = run.settledAt ? Date.parse(run.settledAt) : Infinity;
+		return (this.ensureLive(sessionId)?.manager.getBranch() ?? []).flatMap((entry) =>
+			entry.type === "message" &&
+			entry.message.role === "toolResult" &&
+			entry.message.timestamp >= start &&
+			entry.message.timestamp <= end
+				? [entry.message]
+				: [],
+		);
+	}
 	/** Transport reads immutable message/tool references; callers must not mutate this view. */
 	projection(id: string): SessionSnapshot {
 		const descriptor = this.descriptor(id);
@@ -1279,6 +1297,7 @@ export class SessionRegistry {
 						projectConfigDirName: ".hasilan-code",
 						settingsManager,
 						extensionFactories: [
+							limitToolContext,
 							(pi) => {
 								// The SDK's managed queue accepts text only. Input hooks also run for
 								// that queue, so ordinary prompts and queued inputs load the same images.

@@ -18,5 +18,8 @@ export function getHarnessAgentDir(): string {
 
 /** Preserve SDK settings semantics while selecting the application's project namespace. */
 export function createHarnessSettings(cwd: string, agentDir: string): SettingsManager {
-	return SettingsManager.create(cwd, agentDir, { projectConfigDirName: ".hasilan-code" });
+	const settings = SettingsManager.create(cwd, agentDir, { projectConfigDirName: ".hasilan-code" });
+	if (settings.getSettings().compaction?.maxContextTokens === undefined)
+		settings.applyOverrides({ compaction: { maxContextTokens: 96_000 } });
+	return settings;
 }

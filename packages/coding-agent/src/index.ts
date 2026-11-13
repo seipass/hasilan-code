@@ -388,6 +388,7 @@ export {
 	type TruncationResult,
 	truncateHead,
 	truncateLine,
+	truncateMiddle,
 	truncateTail,
 	type WriteOperations,
 	type WriteToolInput,

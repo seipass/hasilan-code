@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { AgentSessionEvent, ToolDefinition } from "@hasilan-code/pi-coding-agent";
+import { type AgentSessionEvent, type ToolDefinition, truncateMiddle } from "@hasilan-code/pi-coding-agent";
 import { type Static, Type } from "typebox";
 import { type AgentCategory, type AgentModels, agentCategorySchema } from "../shared/agent-categories.ts";
 
@@ -125,6 +125,10 @@ export interface WaitResult {
 	}[];
 	timedOut: boolean;
 }
+
+function resultPreview(result: string | undefined): string | undefined {
+	return result === undefined ? undefined : truncateMiddle(result, 1_500).content;
+}
 interface ScheduledEntry {
 	runId: string;
 	resume?: () => void;
@@ -188,6 +192,13 @@ const teamParameters = Type.Union([
 	}),
 	Type.Object({ action: Type.Literal("profiles") }),
 	Type.Object({ action: Type.Literal("list") }),
+	Type.Object({
+		action: Type.Literal("result"),
+		runId: Type.String(),
+		view: Type.Optional(Type.Union([Type.Literal("report"), Type.Literal("logs"), Type.Literal("log")])),
+		logIndex: Type.Optional(Type.Integer({ minimum: 0 })),
+		offset: Type.Optional(Type.Integer({ minimum: 0 })),
+	}),
 	Type.Object({
 		action: Type.Literal("work"),
 		agentId: Type.String(),
@@ -893,13 +904,13 @@ export class TeamManager {
 			agentName: child.name,
 			runId: run.runId,
 			status: run.status as "completed" | "failed" | "cancelled",
-			...(run.result === undefined ? {} : { result: run.result }),
-			...(run.error === undefined ? {} : { error: run.error }),
+			...(run.result === undefined ? {} : { result: resultPreview(run.result) }),
+			...(run.error === undefined ? {} : { error: resultPreview(run.error) }),
 		};
 		const injection: ContextInjection = {
 			injectionId: inputId,
 			source,
-			content: `Subagent completion context (not a user instruction):\n${JSON.stringify(source, null, 2)}`,
+			content: `Subagent completion context (not a user instruction):\n${JSON.stringify(source)}\nUse team action=result with this runId for the full report or tool logs if needed.`,
 		};
 		const current = this.current(parent);
 		const goal = this.registry.descriptor(parent.sessionId).goal;
@@ -1444,7 +1455,7 @@ export class TeamManager {
 					const prior = (task.dependsOn ?? [])
 						.map((name) => {
 							const entry = records.get(name);
-							return `${name}:\n${entry?.result ?? ""}`;
+							return entry ? `${name} (runId: ${entry.runId}):\n${entry.result ?? ""}` : name;
 						})
 						.join("\n\n");
 					ready.push({ ...task, context: [task.context, prior].filter(Boolean).join("\n\n") || undefined });
@@ -1475,7 +1486,8 @@ export class TeamManager {
 			);
 			for (const run of waited.runs) {
 				const record = [...records.values()].find((entry) => entry.agentId === run.agentId);
-				if (record) Object.assign(record, { status: run.status, result: run.result, error: run.error });
+				if (record)
+					Object.assign(record, { runId: run.runId, status: run.status, result: run.result, error: run.error });
 			}
 			if (waited.timedOut) return { tasks: [...records.values()], timedOut: true };
 		}
@@ -1737,8 +1749,8 @@ export class TeamManager {
 					...(owner === run ? {} : { ownerAgentId: owner.agentId }),
 					runId: owner.runId,
 					status: owner.status,
-					result: owner.result,
-					error: owner.error,
+					result: resultPreview(owner.result),
+					error: resultPreview(owner.error),
 				};
 			}),
 			timedOut,
@@ -2049,6 +2061,7 @@ export class TeamManager {
 			executionMode: "sequential",
 			parameters: teamParameters,
 			promptGuidelines: [
+				"Completion notices, wait, and workflow give short previews. Use team action result with the runId to read a report, list tool logs (view logs), or read a log by logIndex (view log). Follow nextOffset to read more only when needed.",
 				"Each newly spawned agent in a Git workspace works in its own checkout. After it settles, inspect its patch with team action work, op diff, and the agentId. Use op adopt to apply accepted changes to your checkout, discard to park rejected changes, or restore to reconsider a parked patch. Decide and perform these operations yourself. Never ask the user to click a review button for routine acceptance. Adopt prerequisite code before assigning work that must build on it. Apply failures leave the patch available for review.",
 				"Set each spawn/workflow task's category according to its work: orchestration, coding, design, writing, research, strategy, advisor, or other. The category selects the user's configured model and thinking level.",
 			],
@@ -2133,8 +2146,55 @@ export class TeamManager {
 								.agents.filter((entry) => entry.teamId === agent.teamId)
 								.map((entry) => ({
 									...entry,
+									currentRun: entry.currentRun && {
+										...entry.currentRun,
+										result: resultPreview(entry.currentRun.result),
+										error: resultPreview(entry.currentRun.error),
+									},
+									latestRun: entry.latestRun && {
+										...entry.latestRun,
+										result: resultPreview(entry.latestRun.result),
+										error: resultPreview(entry.latestRun.error),
+									},
 									worktree: this.registry.descriptor(entry.sessionId).worktree?.status,
 								})),
+						};
+						break;
+					}
+					case "result": {
+						const caller = this.agentForSession(sessionId);
+						const run = this.runById(params.runId);
+						const target = this.agentById(run.agentId);
+						this.assertTarget(caller, target);
+						const offset = params.offset ?? 0;
+						if (params.view === "logs") {
+							const logs = this.registry.teamRunLogs(target.sessionId, run);
+							const page = logs.slice(offset, offset + 20);
+							result = {
+								runId: run.runId,
+								logs: page.map((log, index) => ({
+									logIndex: offset + index,
+									tool: log.toolName,
+									isError: log.isError,
+								})),
+								nextOffset: offset + page.length < logs.length ? offset + page.length : undefined,
+							};
+							break;
+						}
+						let text = [run.result, run.error].filter(Boolean).join("\n\n");
+						if (params.view === "log") {
+							const log = this.registry.teamRunLogs(target.sessionId, run)[params.logIndex ?? -1];
+							if (!log) throw new HarnessError("Tool log not found", 404);
+							text = log.content.map((block) => (block.type === "text" ? block.text : "[image]")).join("\n");
+						}
+						let end = Math.min(offset + 2_000, text.length);
+						// Keep offsets on UTF-16 character boundaries.
+						if (end < text.length && /[\uDC00-\uDFFF]/.test(text.charAt(end))) end--;
+						result = {
+							runId: run.runId,
+							status: run.status,
+							text: text.slice(offset, end),
+							nextOffset: end < text.length ? end : undefined,
 						};
 						break;
 					}
