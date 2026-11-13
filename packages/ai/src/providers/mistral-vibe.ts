@@ -80,8 +80,12 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 	let catalog: Model<"openai-completions">[] = [fallback];
 	let currentScope: string | undefined;
 	let activeKey: string | undefined;
+	// filterModels is synchronous, but AuthContext.env is async.
+	// Capture the effective key during auth resolution.
+	let lastResolvedKey: string | undefined;
 	let refreshedAt = 0;
 	const api = openAICompletionsApi();
+	const apiKeyAuth = envApiKeyAuth("Mistral Vibe API key", ["MISTRAL_VIBE_API_KEY"]);
 
 	const requestOptions = (model: Model<"openai-completions">, options: SimpleStreamOptions = {}): SimpleStreamOptions => {
 		const key = options.apiKey?.trim();
@@ -128,7 +132,14 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 		name: "Mistral Vibe (unofficial)",
 		baseUrl: BASE_URL,
 		auth: {
-			apiKey: envApiKeyAuth("Mistral Vibe API key", ["MISTRAL_VIBE_API_KEY"]),
+			apiKey: {
+				...apiKeyAuth,
+				async resolve(input) {
+					const result = await apiKeyAuth.resolve(input);
+					lastResolvedKey = result?.auth.apiKey?.trim();
+					return result;
+				},
+			},
 		},
 		models: [],
 		api: {
@@ -143,7 +154,8 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 		...base,
 		getModels: () => catalog,
 		filterModels: (models, credential) => {
-			const key = credentialKey(credential);
+			// checkAuth resolves the effective key before getAvailable invokes this filter.
+			const key = lastResolvedKey ?? credentialKey(credential);
 			return key && activeKey === key
 				? models
 				: models.filter((model) => model.id === FALLBACK_MODEL);
