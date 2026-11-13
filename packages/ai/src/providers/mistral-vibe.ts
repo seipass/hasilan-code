@@ -17,7 +17,7 @@ function fingerprint(key: string): string {
 
 function credentialKey(credential?: Credential): string | undefined {
 	const envKey = typeof process !== "undefined" ? process.env.MISTRAL_VIBE_API_KEY?.trim() : undefined;
-	return envKey || (credential?.type === "api_key" ? credential.key.trim() : undefined);
+	return (credential?.type === "api_key" ? credential.key.trim() : undefined) || envKey;
 }
 
 /** Mistral does not return pricing metadata. Zero here is a placeholder, not free inference. */
@@ -132,9 +132,9 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 		models: [],
 		api: {
 			...api,
-			stream: (model, context, options) => api.stream(model, context, requestOptions(model, options)),
+			stream: (model, context, options) => api.stream(model, context, requestOptions(model as Model<"openai-completions">, options)),
 			streamSimple: (model, context, options) =>
-				api.streamSimple(model, context, requestOptions(model, options)),
+				api.streamSimple(model, context, requestOptions(model as Model<"openai-completions">, options)),
 		},
 	});
 
