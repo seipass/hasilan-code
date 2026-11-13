@@ -5,9 +5,12 @@ import {
 } from "../../../packages/web-harness/src/shared/browser-adjustments.ts";
 
 type Mode = "element" | "text" | "region";
+type MarkerRect = { x: number; y: number; width: number; height: number };
 let mode: Mode | undefined;
 let start: { x: number; y: number } | undefined;
 let marker: HTMLDivElement | undefined;
+let markerBounds: (() => MarkerRect | undefined) | undefined;
+let markerFrame: number | undefined;
 let suppressClick = false;
 let inspecting = false;
 let textAnchor: Range | null = null;
@@ -42,11 +45,14 @@ function clear(): void {
 	inspecting = false;
 	textAnchor = null;
 	start = undefined;
+	markerBounds = undefined;
+	if (markerFrame !== undefined) cancelAnimationFrame(markerFrame);
+	markerFrame = undefined;
 	marker?.remove();
 	marker = undefined;
 }
 
-function box(rect: DOMRect | { x: number; y: number; width: number; height: number }): void {
+function box(rect: MarkerRect): void {
 	if (!marker) {
 		marker = document.createElement("div");
 		Object.assign(marker.style, {
@@ -59,12 +65,48 @@ function box(rect: DOMRect | { x: number; y: number; width: number; height: numb
 		});
 		document.documentElement.append(marker);
 	}
+	marker.hidden = false;
 	Object.assign(marker.style, {
 		left: `${rect.x}px`,
 		top: `${rect.y}px`,
 		width: `${rect.width}px`,
 		height: `${rect.height}px`,
 	});
+}
+
+function scheduleMarkerUpdate(): void {
+	if (!markerBounds || markerFrame !== undefined) return;
+	markerFrame = requestAnimationFrame(() => {
+		markerFrame = undefined;
+		const rect = markerBounds?.();
+		if (rect) box(rect);
+		else if (marker) marker.hidden = true;
+	});
+}
+
+// Scroll events from nested containers do not bubble.
+window.addEventListener("scroll", scheduleMarkerUpdate, { capture: true, passive: true });
+window.addEventListener("resize", scheduleMarkerUpdate);
+
+function regionBounds(rect: MarkerRect): () => MarkerRect {
+	const pageX = scrollX;
+	const pageY = scrollY;
+	const ancestors: { element: Element; x: number; y: number }[] = [];
+	let element = start && document.elementFromPoint(start.x, start.y);
+	while (element) {
+		if (element !== document.scrollingElement)
+			ancestors.push({ element, x: element.scrollLeft, y: element.scrollTop });
+		element = element.parentElement;
+	}
+	return () => {
+		let x = rect.x + pageX - scrollX;
+		let y = rect.y + pageY - scrollY;
+		for (const anchor of ancestors) {
+			x += anchor.x - anchor.element.scrollLeft;
+			y += anchor.y - anchor.element.scrollTop;
+		}
+		return { ...rect, x, y };
+	};
 }
 
 function selector(element: Element): string {
@@ -84,7 +126,14 @@ function selector(element: Element): string {
 	return parts.join(" > ");
 }
 
-function finish(rect: { x: number; y: number; width: number; height: number }, element?: Element, text?: string): void {
+function finish(rect: MarkerRect, element?: Element, range?: Range, text?: string): void {
+	if (range)
+		markerBounds = () =>
+			range.startContainer.isConnected && !range.collapsed ? range.getBoundingClientRect() : undefined;
+	else if (element)
+		markerBounds = () =>
+			element.isConnected && element.getClientRects().length ? element.getBoundingClientRect() : undefined;
+	else markerBounds = regionBounds(rect);
 	box(rect);
 	if (mode === "element" && (element instanceof HTMLElement || element instanceof SVGElement))
 		selected = { element, id: ++selectionId, url: location.href };
@@ -147,7 +196,7 @@ ipcRenderer.on("hasilan:browser-adjustment", (_event, id: unknown, input: unknow
 		}
 		for (const [property, value] of Object.entries(declarations)) style.setProperty(property, value, "important");
 	}
-	box(selected.element.getBoundingClientRect());
+	scheduleMarkerUpdate();
 });
 let edited = false;
 window.addEventListener(
@@ -278,6 +327,7 @@ window.addEventListener(
 			finish(
 				range.getBoundingClientRect(),
 				node instanceof Element ? node : (node.parentElement ?? undefined),
+				range.cloneRange(),
 				selection.toString(),
 			);
 		}
