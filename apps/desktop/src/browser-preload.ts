@@ -1,8 +1,7 @@
 import { ipcRenderer } from "electron";
 import {
-	BROWSER_ADJUSTMENTS,
-	type BrowserAdjustment,
-	isBrowserAdjustment,
+	BROWSER_ADJUSTMENT_PROPERTIES,
+	browserPreviewStyles,
 } from "../../../packages/web-harness/src/shared/browser-adjustments.ts";
 
 type Mode = "element" | "text" | "region";
@@ -14,7 +13,19 @@ let inspecting = false;
 let textAnchor: Range | null = null;
 let selected: { element: HTMLElement | SVGElement; id: number; url: string } | undefined;
 let selectionId = 0;
-const originalStyles = new Map<BrowserAdjustment, { value: string; priority: string }>();
+const originalStyles = new Map<string, { value: string; priority: string }>();
+const shorthandParts: Readonly<Record<string, readonly string[]>> = {
+	"border-radius": [
+		"border-top-left-radius",
+		"border-top-right-radius",
+		"border-bottom-right-radius",
+		"border-bottom-left-radius",
+	],
+	"border-width": ["border-top-width", "border-right-width", "border-bottom-width", "border-left-width"],
+	"border-color": ["border-top-color", "border-right-color", "border-bottom-color", "border-left-color"],
+	"border-style": ["border-top-style", "border-right-style", "border-bottom-style", "border-left-style"],
+	gap: ["row-gap", "column-gap"],
+};
 
 function resetStyles(): void {
 	if (selected) {
@@ -78,6 +89,7 @@ function finish(rect: { x: number; y: number; width: number; height: number }, e
 	if (mode === "element" && (element instanceof HTMLElement || element instanceof SVGElement))
 		selected = { element, id: ++selectionId, url: location.href };
 	const style = selected && getComputedStyle(selected.element);
+	const parent = selected?.element.parentElement;
 	ipcRenderer.sendToHost("hasilan:browser-selection", {
 		kind: mode,
 		url: location.href,
@@ -91,8 +103,13 @@ function finish(rect: { x: number; y: number; width: number; height: number }, e
 		text: text?.slice(0, 4000),
 		adjustmentId: selected?.id,
 		styles:
-			style && Object.fromEntries(Object.keys(BROWSER_ADJUSTMENTS).map((key) => [key, style.getPropertyValue(key)])),
-		layout: style?.display,
+			style &&
+			Object.fromEntries(
+				BROWSER_ADJUSTMENT_PROPERTIES.map((key) => [key, style.getPropertyValue(key).slice(0, 80)]),
+			),
+		tag: selected?.element.localName,
+		parentLayout: parent && getComputedStyle(parent).display,
+		children: selected?.element.childElementCount,
 	});
 	mode = undefined;
 	inspecting = false;
@@ -107,23 +124,28 @@ ipcRenderer.on("hasilan:browser-select", (_event, value: unknown) => {
 	if (value === "element" || value === "text" || value === "region") mode = value;
 });
 ipcRenderer.on("hasilan:browser-clear", clear);
-ipcRenderer.on("hasilan:browser-adjustment", (_event, id: unknown, property: unknown, value: unknown) => {
+ipcRenderer.on("hasilan:browser-adjustment", (_event, id: unknown, input: unknown) => {
 	if (!selected || selected.id !== id || selected.url !== location.href || !selected.element.isConnected) {
-		resetStyles();
+		if (selected?.id !== id) return;
+		clear();
 		ipcRenderer.sendToHost("hasilan:browser-adjustment-stale");
 		return;
 	}
-	if (property === null) resetStyles();
-	else if (isBrowserAdjustment(property) && typeof value === "number" && Number.isFinite(value)) {
-		const { min, max, unit } = BROWSER_ADJUSTMENTS[property];
-		if (value < min || value > max) return;
+	if (input === null) resetStyles();
+	else {
+		const declarations = browserPreviewStyles(input);
+		if (!declarations) return;
 		const style = selected.element.style;
-		if (!originalStyles.has(property))
-			originalStyles.set(property, {
-				value: style.getPropertyValue(property),
-				priority: style.getPropertyPriority(property),
-			});
-		style.setProperty(property, `${value}${unit}`, "important");
+		for (const property of Object.keys(declarations)) {
+			for (const part of shorthandParts[property] ?? [property]) {
+				if (!originalStyles.has(part))
+					originalStyles.set(part, {
+						value: style.getPropertyValue(part),
+						priority: style.getPropertyPriority(part),
+					});
+			}
+		}
+		for (const [property, value] of Object.entries(declarations)) style.setProperty(property, value, "important");
 	}
 	box(selected.element.getBoundingClientRect());
 });

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
-import type { BrowserAdjustment } from "../shared/browser-adjustments.ts";
+import type { BrowserControl, BrowserStyles } from "../shared/browser-adjustments.ts";
 import { api, errorMessage } from "./api.ts";
 import { BrowserAdjustmentControls } from "./BrowserAdjustmentControls.tsx";
 import { Icon } from "./Icon.tsx";
@@ -18,8 +18,10 @@ export interface BrowserSelection {
 	label?: string;
 	text?: string;
 	adjustmentId?: number;
-	styles?: Partial<Record<BrowserAdjustment, string>>;
-	layout?: string;
+	styles?: BrowserStyles;
+	tag?: string;
+	parentLayout?: string;
+	children?: number;
 }
 export interface BrowserAnnotation { selection: BrowserSelection; image: string; note: string }
 export interface BrowserAnnotationDelivery { annotation: BrowserAnnotation; accepted: boolean }
@@ -59,15 +61,17 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 	const [selection, setSelection] = useState<BrowserSelection>();
 	const [image, setImage] = useState("");
 	const [note, setNote] = useState("");
-	const [properties, setProperties] = useState<BrowserAdjustment[]>();
-	const [adjusted, setAdjusted] = useState<Partial<Record<BrowserAdjustment, number>>>({});
+	const [controls, setControls] = useState<BrowserControl[]>();
+	const [adjusted, setAdjusted] = useState<BrowserStyles>({});
+	const [intent, setIntent] = useState("");
 	const [suggesting, setSuggesting] = useState(false);
 	const suggestionRequest = useRef<AbortController | undefined>(undefined);
 	function resetAdjustments() {
 		suggestionRequest.current?.abort();
 		suggestionRequest.current = undefined;
-		setProperties(undefined);
+		setControls(undefined);
 		setAdjusted({});
+		setIntent("");
 		setSuggesting(false);
 	}
 	useEffect(() => () => suggestionRequest.current?.abort(), []);
@@ -210,11 +214,14 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		suggestionRequest.current = controller;
 		setSuggesting(true); setError("");
 		try {
-			const element = JSON.stringify({ selector: selection.selector, label: selection.label, rect: selection.rect, styles: selection.styles, layout: selection.layout }).slice(0, 4000);
-			const result = await api<{ properties: BrowserAdjustment[] }>("/api/browser-adjustments", {
-				method: "POST", body: JSON.stringify({ provider: model.provider, id: model.id, element }), signal: controller.signal,
+			const element = JSON.stringify({
+				tag: selection.tag, label: selection.label?.slice(0, 240), selector: selection.selector?.slice(0, 240),
+				rect: selection.rect, styles: { ...selection.styles, ...adjusted }, parentLayout: selection.parentLayout, children: selection.children,
+			}).slice(0, 4000);
+			const result = await api<{ controls: BrowserControl[] }>("/api/browser-adjustments", {
+				method: "POST", body: JSON.stringify({ provider: model.provider, id: model.id, element, intent: intent.trim() }), signal: controller.signal,
 			});
-			if (!controller.signal.aborted) setProperties(result.properties);
+			if (!controller.signal.aborted) setControls(result.controls);
 		} catch (reason) {
 			if (!controller.signal.aborted) setError(errorMessage(reason));
 		} finally {
@@ -271,7 +278,7 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 		</div>
 		{selection && image && <form className="browser-comment" onSubmit={(event) => {
 			event.preventDefault();
-			const changes = Object.entries(adjusted).map(([key, value]) => `${key}: ${value}${key === "opacity" ? "" : "px"};`);
+			const changes = Object.entries(adjusted).map(([key, value]) => `${key}: ${value};`);
 			if (!note.trim() && !changes.length) return;
 			const comment = [note.trim(), changes.length ? `プレビューした CSS:\n${changes.join("\n")}` : ""].filter(Boolean).join("\n\n");
 			const delivery: BrowserAnnotationDelivery = { annotation: { selection, image, note: comment }, accepted: false };
@@ -279,10 +286,20 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 			if (!delivery.accepted) { setError("入力欄に追加できません。会話を開き、添付数と容量を確認してください。"); return; }
 			browser.current?.send("hasilan:browser-clear"); resetAdjustments(); setSelection(undefined); setImage(""); setNote("");
 		}}>
-			{selection.adjustmentId !== undefined && <div><button type="button" disabled={suggesting || !model || !!properties} title={!model ? "会話のモデルを選択してください" : undefined} onClick={() => void suggestAdjustments()}>{suggesting ? "調整項目を作成中…" : "AI で調整項目を作る"}</button></div>}
-			{properties && <BrowserAdjustmentControls properties={properties} styles={selection.styles} adjusted={adjusted} onChange={(property, value) => {
-				browser.current?.send("hasilan:browser-adjustment", selection.adjustmentId, property, value);
-				setAdjusted((current) => ({ ...current, [property]: value }));
+			{selection.adjustmentId !== undefined && <div className="browser-adjustment-request">
+				<input aria-label="調整したいこと" placeholder="例: ボタンを目立たせたい（任意）" maxLength={1000} value={intent} onChange={(event) => setIntent(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+						event.preventDefault();
+						void suggestAdjustments();
+					}} />
+				<button type="button" disabled={suggesting || !model} title={!model ? "会話のモデルを選択してください" : undefined} onClick={() => void suggestAdjustments()}>
+					{suggesting ? "調整項目を作成中…" : controls ? "項目を作り直す" : "AI で調整項目を作る"}
+				</button>
+			</div>}
+			{controls && <BrowserAdjustmentControls controls={controls} styles={selection.styles} adjusted={adjusted} onChange={(styles) => {
+				browser.current?.send("hasilan:browser-adjustment", selection.adjustmentId, styles);
+				setAdjusted((current) => ({ ...current, ...styles }));
 			}} onReset={() => { browser.current?.send("hasilan:browser-adjustment", selection.adjustmentId, null); setAdjusted({}); }} />}
 			<label>注釈<textarea autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="この箇所への指示" /></label>
 			<div><button type="button" onClick={() => { browser.current?.send("hasilan:browser-clear"); resetAdjustments(); setSelection(undefined); setImage(""); setNote(""); }}>キャンセル</button><button type="submit" disabled={!note.trim() && !Object.keys(adjusted).length}>入力欄に追加</button></div>
