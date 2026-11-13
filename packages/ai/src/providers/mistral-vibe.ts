@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { openAICompletionsApi } from "../api/openai-completions.lazy.ts";
 import { envApiKeyAuth } from "../auth/helpers.ts";
 import type { Credential } from "../auth/types.ts";
-import { createProvider, type Provider } from "../models.ts";
+import { createProvider, isModelType, type Provider } from "../models.ts";
 import type { Model, SimpleStreamOptions } from "../types.ts";
 import { normalizeMistralStream } from "./mistral-vibe-transport.ts";
 
@@ -96,7 +96,7 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 			maxRetries: 0,
 			fetch: async (input, init) => {
 				const url = new URL(input instanceof Request ? input.url : String(input));
-				if (url.href !== BASE_URL + "/chat/completions") {
+				if (url.href !== `${BASE_URL}/chat/completions`) {
 					throw new Error("Mistral Vibe request destination blocked");
 				}
 				return normalizeMistralStream(await transport(input, { ...init, redirect: "error" }));
@@ -156,7 +156,7 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 						? context.stored.models.filter(
 								(model): model is Model<"openai-completions"> =>
 									model.provider === ID && model.api === "openai-completions" &&
-									(!model.type || model.type === "chat") && model.baseUrl === BASE_URL,
+									isModelType(model, "chat") && model.baseUrl === BASE_URL,
 							)
 						: [];
 				const result = await context.publish({
@@ -174,12 +174,12 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 				throw new Error("Mistral Vibe catalog endpoint override blocked");
 			}
 			if (!context.force && refreshedAt && Date.now() - refreshedAt < CATALOG_TTL) return;
-			const response = await fetcher(BASE_URL + "/models", {
-				headers: { Authorization: "Bearer " + key, Accept: "application/json" },
+			const response = await fetcher(`${BASE_URL}/models`, {
+				headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
 				signal: AbortSignal.any([context.signal, AbortSignal.timeout(8000)]),
 				redirect: "error",
 			});
-			if (!response.ok) throw new Error("Mistral Vibe model discovery failed (HTTP " + response.status + ")");
+			if (!response.ok) throw new Error(`Mistral Vibe model discovery failed (HTTP ${response.status})`);
 			const discovered = parseMistralVibeCatalog(await response.json());
 			const refreshed = [fallback, ...discovered.filter((model) => model.id !== FALLBACK_MODEL)];
 			await context.publish({

@@ -58,7 +58,7 @@ describe("Mistral Vibe provider", () => {
 			{ type: "thinking", thinking: [{ type: "text", text: "思考" }] },
 			{ type: "text", text: "回答" },
 		] } }] };
-		const bytes = new TextEncoder().encode("data: " + JSON.stringify(event) + "\n\ndata: [DONE]\n\n");
+		const bytes = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\ndata: [DONE]\n\n`);
 		const response = new Response(new ReadableStream({
 			start(controller) {
 				for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));

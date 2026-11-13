@@ -45,7 +45,7 @@ export function normalizeMistralStream(response: Response): Response {
 				if (choice?.delta && typeof choice.delta === "object") normalizeMistralDelta(choice.delta);
 			}
 		}
-		return "data: " + JSON.stringify(parsed);
+		return `data: ${JSON.stringify(parsed)}`;
 	};
 	const body = response.body
 		.pipeThrough(new TextDecoderStream())
@@ -54,7 +54,7 @@ export function normalizeMistralStream(response: Response): Response {
 				pending += chunk;
 				let index = pending.indexOf("\n");
 				while (index !== -1) {
-					controller.enqueue(normalizeLine(pending.slice(0, index).replace(/\r$/, "")) + "\n");
+					controller.enqueue(`${normalizeLine(pending.slice(0, index).replace(/\r$/, ""))}\n`);
 					pending = pending.slice(index + 1);
 					index = pending.indexOf("\n");
 				}
