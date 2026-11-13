@@ -1397,7 +1397,7 @@ export class SessionRegistry {
 							session.setActiveToolsByName(
 								[
 									...live.delegatedTools.filter((name) =>
-										["read", "grep", "glob", "web_search"].includes(name),
+										["read", "grep", "glob", "web_search", "edit", "bash", "shell_process"].includes(name),
 									),
 									"team",
 									...(descriptor.goal?.status === "active" ? ["goal"] : []),
@@ -1479,7 +1479,7 @@ export class SessionRegistry {
 									{
 										customType: "harness-swarm-continuation",
 										content:
-											"Continue managing the unfinished objective. Handle queued user input and member results first. Reuse existing members for corrections and next assignments with team send; delegate all implementation and verification. Explicitly complete or block with the team tool.",
+											"Continue managing the unfinished objective. Handle queued user input and member results first. Update planning records and integrate accepted changes directly when appropriate. Reuse existing members for substantial corrections and next assignments with team send. Explicitly complete or block with the team tool.",
 										display: false,
 										details: { swarmId: descriptor.swarm.id },
 									},

@@ -1,7 +1,7 @@
 import type { AgentMessage } from "@hasilan-code/pi-agent-core";
 import type { SessionManager } from "@hasilan-code/pi-coding-agent";
 import type { HarnessState, SessionDescriptor } from "./session-registry.ts";
-import { swarmContext } from "./swarm.ts";
+import { MANAGER_WORK_GUIDANCE, swarmContext } from "./swarm.ts";
 
 const CONTEXT_TYPE = "harness-runtime-context";
 
@@ -23,7 +23,7 @@ export function appendRuntimeContext(
 			`Workspace team identity: ${JSON.stringify({ teamId: team.teamId, agentId: member.agentId, name: member.name, kind: member === manager ? "manager" : specialist ? "specialist" : "helper", responsibility: member.responsibility ?? member.role, managerAgentId: manager.agentId })}`,
 			"This identity and role belong to the workspace, not to a single task or chat. Preserve role knowledge in this conversation; shared project files and handoff context are visible to teammates. Recheck current source facts instead of treating memory as authoritative.",
 			member === manager
-				? "You are the manager even outside active Hyakki-Yako. Own goals, priorities, responsibility boundaries, coordination, and final acceptance. Delegate all implementation and verification; never implement or run implementation commands yourself. Assign outcomes and acceptance criteria, not every execution step. Routine specialist coordination does not need to route through you."
+				? `You are the workspace manager even outside active Hyakki-Yako. ${descriptor.swarm?.status === "active" ? "Follow the active swarm instructions below." : MANAGER_WORK_GUIDANCE}`
 				: specialist
 					? "Own your continuing responsibility and choose how to deliver it. Consult existing specialists directly with team send and wait for their results when necessary. Use team handoff to transfer this assignment's ownership to an idle specialist; include facts, artifact paths, deliverable, and acceptance criteria, then end your turn without duplicating their work. You may spawn bounded helpers for focused work. Escalate conflicting priorities, changed responsibility boundaries, blockers, and important decisions to the manager. Report evidence and uncertainty, not invented success."
 					: "You are a bounded helper, not a new permanent specialist. Complete your assigned work and report to its requester; do not take over the manager's role or a specialist's continuing responsibility.",
