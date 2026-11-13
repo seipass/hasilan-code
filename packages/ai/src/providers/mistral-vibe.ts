@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { openAICompletionsApi } from "../api/openai-completions.lazy.ts";
 import { envApiKeyAuth } from "../auth/helpers.ts";
 import type { Credential } from "../auth/types.ts";
@@ -11,8 +10,9 @@ const BASE_URL = "https://api.mistral.ai/v1";
 const FALLBACK_MODEL = "mistral-vibe-cli-latest";
 const CATALOG_TTL = 60 * 60 * 1000;
 
-function fingerprint(key: string): string {
-	return createHash("sha256").update(key).digest("hex");
+async function fingerprint(key: string): Promise<string> {
+	const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(key));
+	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function credentialKey(credential?: Credential): string | undefined {
@@ -79,6 +79,7 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 	const fallback = mistralVibeModel(FALLBACK_MODEL);
 	let catalog: Model<"openai-completions">[] = [fallback];
 	let currentScope: string | undefined;
+	let activeKey: string | undefined;
 	let refreshedAt = 0;
 	const api = openAICompletionsApi();
 
@@ -88,7 +89,7 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 		if (model.baseUrl.replace(/\/$/, "") !== BASE_URL) throw new Error("Mistral Vibe endpoint override blocked");
 		if (
 			model.id !== FALLBACK_MODEL &&
-			(currentScope !== fingerprint(key) || !catalog.some((candidate) => candidate.id === model.id))
+			(activeKey !== key || !catalog.some((candidate) => candidate.id === model.id))
 		) throw new Error("Model not found in the current Mistral Vibe key's catalog");
 		const transport = options.fetch ?? fetcher;
 		return {
@@ -143,13 +144,13 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 		getModels: () => catalog,
 		filterModels: (models, credential) => {
 			const key = credentialKey(credential);
-			return key && currentScope === fingerprint(key)
+			return key && activeKey === key
 				? models
 				: models.filter((model) => model.id === FALLBACK_MODEL);
 		},
 		async refreshModels(context) {
 			const key = credentialKey(context.credential);
-			const nextScope = key ? fingerprint(key) : undefined;
+			const nextScope = key ? await fingerprint(key) : undefined;
 			if (currentScope !== nextScope) {
 				const restored =
 					nextScope && context.stored?.etag === nextScope
@@ -164,6 +165,7 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 					update: () => {
 						catalog = restored.length ? restored : [fallback];
 						currentScope = nextScope;
+						activeKey = key;
 						refreshedAt = 0;
 					},
 				});
@@ -187,6 +189,7 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 				update: () => {
 					catalog = refreshed;
 					currentScope = nextScope;
+					activeKey = key;
 					refreshedAt = Date.now();
 				},
 			});
