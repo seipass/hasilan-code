@@ -1,0 +1,18 @@
+.git-review[open] { display: flex; flex-direction: column; gap: 10px; width: min(900px, calc(100vw - 32px)); max-height: 85dvh; padding: 16px; color: var(--on-surface); background: var(--surface-panel); border: 1px solid var(--border); border-radius: 12px; }
+.git-review::backdrop { background: #0008; }
+.git-review header, .git-review footer, .git-review-modes, .git-review-refresh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.git-review header, .git-review footer { justify-content: space-between; }
+.git-review-modes button[aria-pressed="true"] { background: var(--surface-hover); border-color: var(--primary); }
+.git-review-refresh input { flex: 1; min-width: 0; }
+.git-review-files, .git-review-comments { min-height: 0; overflow: auto; }
+.git-review-files summary { padding: 8px; overflow-wrap: anywhere; cursor: pointer; border-bottom: 1px solid var(--border-subtle); }
+.git-review-lines { overflow: auto; max-height: 360px; background: var(--surface-sunken); }
+.git-review-lines > div > div { display: flex; align-items: baseline; gap: 8px; width: max-content; min-width: 100%; }
+.git-review-lines :is(button, span) { width: 75px; flex: none; padding: 1px 4px; font: inherit; font-size: var(--text-xs); text-align: right; }
+.git-review-lines code { white-space: pre; }
+.git-review-lines [data-kind="add"] { background: color-mix(in srgb, var(--success) 12%, transparent); }
+.git-review-lines [data-kind="remove"] { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.git-review-comment textarea { display: block; width: 100%; margin-block: 6px; }
+.git-review-comments li { margin-block: 4px; overflow-wrap: anywhere; }
+.git-review-comments span { margin-inline: 8px; white-space: pre-wrap; }
+.chat-review-trigger { position: absolute; inset: 8px 12px auto auto; z-index: 1; display: grid; place-items: center; padding: 5px; }

@@ -35,7 +35,7 @@ function sessionSources(messages: ChatMessage[]): Source[] {
 	return [...sources.values()];
 }
 
-export function SessionOverview({ width, session, team, onFile, onSession, onAttach, attachDisabled }: {
+export function SessionOverview({ width, session, team, onFile, onSession, onAttach, attachDisabled, onReview }: {
 	width: number;
 	session: SessionDetail;
 	team?: TeamSnapshot;
@@ -43,6 +43,7 @@ export function SessionOverview({ width, session, team, onFile, onSession, onAtt
 	onSession: (id: string) => void;
 	onAttach: () => void;
 	attachDisabled: boolean;
+	onReview: () => void;
 }) {
 	const [allSources, setAllSources] = useState(false);
 	const [showChanges, setShowChanges] = useState(false);
@@ -56,6 +57,7 @@ export function SessionOverview({ width, session, team, onFile, onSession, onAtt
 	const removed = changes.reduce((total, file) => total + file.removed, 0);
 	return <aside className="session-overview" aria-label="会話の概要" style={{ width }}>
 		<header title={session.cwd}><Icon name="folder" size="inline" /><span>{workspaceLabel(session.cwd, [])}</span></header>
+		<button type="button" className="session-overview-row" onClick={onReview}><Icon name="pencil" size="inline" /><span>変更をレビュー</span></button>
 		{changes.length > 0 && <details className="session-overview-changes" onToggle={(event) => setShowChanges(event.currentTarget.open)}>
 			<summary className="session-overview-row" title="読み込み済み履歴に記録された変更">
 				<Icon name="pencil" size="inline" /><span>変更</span>

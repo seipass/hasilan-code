@@ -9,6 +9,8 @@ import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH, clampChatWidth } from "./chat-width.ts"
 import { CommandPicker } from "./CommandPicker.tsx";
 import { ComposerAttachments, useComposerAttachments } from "./ComposerAttachments.tsx";
 import { Conversation } from "./Conversation.tsx";
+import { GitReview } from "./GitReview.tsx";
+import { fileChanges } from "./file-changes.ts";
 import { MotionItems, Presence, useLayoutMotion } from "./Motion.tsx";
 import { usePreferenceState, usePreferenceText } from "./preferences.ts";
 import { SessionOverview } from "./SessionOverview.tsx";
@@ -57,6 +59,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const [chatWidth, setChatWidth] = usePreferenceState("pi-web-chat-width", 744);
 	const widthDrag = useRef<{ id: number; x: number; width: number } | undefined>(undefined);
 	const [sending, setSending] = useState(false);
+	const [reviewOpen, setReviewOpen] = useState(false);
 	const [error, setError] = useState<string>();
 	const { attachments, reading, error: attachmentError, addFiles, remove } = useComposerAttachments(draftKey);
 	const [browserAnnotations, setBrowserAnnotations] = useState<BrowserAnnotation[]>(() => annotationDrafts.get(draftKey) ?? []);
@@ -326,6 +329,8 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 			<Presence show={!!(error || attachmentError)} collapse><p className="composer-error" role="alert">{error ?? attachmentError}</p></Presence>
 		</div>
 		{dashboardVisible && homeDashboard}
-		{!surface && !empty && paneWidth >= 1100 && overviewWidth >= 160 && session?.availability === "ready" && <SessionOverview width={overviewWidth} session={session} team={team} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} />}
+		{!surface && !empty && !(paneWidth >= 1100 && overviewWidth >= 160) && session?.availability === "ready" && <button type="button" className="chat-review-trigger" onClick={() => setReviewOpen(true)} title="変更をレビュー" aria-label="変更をレビュー"><Icon name="pencil" size="inline" /></button>}
+		{!surface && !empty && paneWidth >= 1100 && overviewWidth >= 160 && session?.availability === "ready" && <SessionOverview width={overviewWidth} session={session} team={team} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} onReview={() => setReviewOpen(true)} />}
+		{reviewOpen && session && <GitReview sessionId={session.sessionId} turn={session.latestRun ? fileChanges(session.toolCalls, session.latestRun.runId) : []} onClose={() => setReviewOpen(false)} onDraft={(value) => { setText((current) => [current.trimEnd(), value].filter(Boolean).join("\n\n")); setReviewOpen(false); requestAnimationFrame(() => input.current?.focus()); }} />}
 	</section>;
 }

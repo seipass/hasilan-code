@@ -38,6 +38,7 @@ import { EventHub } from "./events.ts";
 import { fileEditSchema, readEditableFile, saveEditableFile } from "./file-editor.ts";
 import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
+import { gitReview } from "./git-review.ts";
 import { GithubDashboardReader } from "./github-dashboard.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { mediaView, serveMedia } from "./media.ts";
@@ -320,6 +321,15 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 						const before = url.searchParams.get("before");
 						if (!before || before.length > 128) throw new HttpError(400, "before cursor is required");
 						return reply(registry.page(id, before));
+					}
+					if (parts[3] === "git-review" && parts.length === 4 && method === "GET") {
+						return reply(
+							await gitReview(
+								registry.descriptor(id).cwd,
+								url.searchParams.get("mode"),
+								url.searchParams.get("base"),
+							),
+						);
 					}
 					if (parts[3] === "goal" && parts.length === 4) {
 						if (method === "GET") return reply(await teams.goal(id, { op: "get" }));
