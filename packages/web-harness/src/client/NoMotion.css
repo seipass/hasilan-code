@@ -28,7 +28,7 @@
 	}
 	.model-effort-control:has(.model-effort-slider:not(:disabled):active) .model-effort-thumb {
 		transform: translate(-50%, -50%) scale(1.12, 1.08);
-		box-shadow: 0 1px 4px #0005, 0 0 0 4px color-mix(in srgb, var(--link, #3b82f6), transparent 68%);
+		box-shadow: 0 1px 3px #0004, 0 0 0 4px color-mix(in srgb, var(--primary) 24%, transparent);
 		transition-duration: 130ms !important;
 	}
 	.model-effort-ticks > span {

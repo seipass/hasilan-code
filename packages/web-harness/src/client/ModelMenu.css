@@ -1,7 +1,7 @@
 .composer-popover.model-popover {
 	padding: 4px;
-	border-radius: 12px;
-	box-shadow: 0 8px 28px #0005;
+	border-radius: var(--popup-radius);
+	box-shadow: var(--popup-shadow);
 	overflow: hidden;
 	transform-origin: bottom center;
 }
@@ -29,7 +29,7 @@
 .model-menu-current-name {
 	grid-column: 2;
 	font-size: var(--text-control);
-	font-weight: 500;
+	font-weight: 600;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -62,11 +62,11 @@
 .model-effort-fill {
 	width: var(--effort-center);
 	height: 100%;
-	background: linear-gradient(180deg, color-mix(in srgb, var(--link, #3b82f6), white 14%), var(--link, #3b82f6));
+	background: color-mix(in srgb, var(--primary) 72%, var(--surface-raised));
 }
 .model-effort-ticks { position: absolute; inset: 0 calc(var(--effort-thumb-radius) - 2px); display: flex; align-items: center; justify-content: space-between; }
 .model-effort-ticks > span { width: 4px; height: 4px; border-radius: 50%; background: var(--on-surface-muted); }
-.model-effort-ticks > span[data-filled="true"] { background: #fff6; }
+.model-effort-ticks > span[data-filled="true"] { background: color-mix(in srgb, var(--on-primary) 55%, transparent); }
 .model-effort-thumb {
 	position: absolute;
 	top: 50%;
@@ -74,9 +74,9 @@
 	width: var(--effort-thumb-size);
 	height: var(--effort-thumb-size);
 	border-radius: 50%;
-	border: 1px solid #0003;
-	background: #fff;
-	box-shadow: 0 1px 4px #0005;
+	border: 1px solid var(--surface);
+	background: var(--on-surface);
+	box-shadow: 0 1px 3px #0004;
 	transform: translate(-50%, -50%);
 	pointer-events: none;
 }
@@ -98,7 +98,7 @@
 .model-effort-slider::-webkit-slider-thumb { appearance: none; width: var(--effort-thumb-size); height: var(--effort-thumb-size); background: transparent; border: 0; }
 .model-effort-slider::-moz-range-track { background: transparent; }
 .model-effort-slider::-moz-range-thumb { width: var(--effort-thumb-size); height: var(--effort-thumb-size); background: transparent; border: 0; }
-.model-effort-slider:focus-visible { outline: 2px solid var(--focus-ring, var(--primary)); outline-offset: 2px; }
+.model-effort-slider:focus-visible { outline-offset: 2px; }
 .model-effort-slider[aria-disabled="true"], .model-effort-slider:disabled { cursor: default; }
 .model-menu-list-view { display: flex; flex-direction: column; min-height: 0; }
 .model-menu-list-header { display: flex; flex: none; align-items: center; min-height: 28px; padding-inline: 4px; color: var(--on-surface-muted); font-size: var(--text-xs); }

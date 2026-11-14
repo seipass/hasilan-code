@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Check } from "typebox/value";
 import { appearanceSchema, type Appearance } from "../shared/ui-preferences.ts";
 import { usePreferenceState } from "./preferences.ts";
@@ -101,7 +101,7 @@ export function ThemeAppearance() {
 		<div className="theme-variants" role="group" aria-label="編集するテーマ">{(["light", "dark"] as const).map((value) => <button type="button" key={value} aria-pressed={selected === value} onClick={() => setSelected(value)}>{value === "light" ? "ライト" : "ダーク"}</button>)}</div>
 		{showImport && <div className="theme-import"><label>テーマの文字列<textarea value={share} onChange={(event) => setShare(event.currentTarget.value)} rows={3} /></label><button type="button" onClick={() => { try { const data: unknown = JSON.parse(share); if (!data || typeof data !== "object" || !("colors" in data) || !("format" in data) || data.format !== "hasilan-theme-v1") throw new Error(); const next = { ...settings, [selected]: data.colors }; if (!Check(appearanceSchema, next)) throw new Error(); setSettings(next); setMessage("テーマを読み込みました。"); setShowImport(false); } catch { setMessage("有効なテーマ文字列を入力してください。"); } }}>適用</button></div>}
 		<div className="theme-color-grid">{([ ["background", "背景"], ["foreground", "文字"], ["accent", "アクセント"] ] as const).map(([key, label]) => <label key={key}>{label}<span><input type="color" aria-label={`${label}の色`} value={variant[key]} onChange={(event) => updateVariant({ [key]: event.currentTarget.value })} /><code>{variant[key]}</code></span></label>)}</div>
-		<label className="theme-range">コントラスト <output>{variant.contrast}</output><input type="range" min="0" max="100" value={variant.contrast} onChange={(event) => updateVariant({ contrast: Number(event.currentTarget.value) })} /></label>
+		<label className="theme-range">コントラスト <output>{variant.contrast}</output><input type="range" min="0" max="100" value={variant.contrast} style={{ "--theme-range-progress": `${variant.contrast}%` } as CSSProperties} onChange={(event) => updateVariant({ contrast: Number(event.currentTarget.value) })} /></label>
 		<button type="button" onClick={() => updateVariant(DEFAULT[selected])}>このテーマをリセット</button>
 		<label>コードのテーマ<Select aria-label="コードのテーマ" value={settings.codeTheme} onChange={(value) => update({ codeTheme: value as Appearance["codeTheme"] })}><option value="auto">画面に合わせる</option><option value="dark">ダーク</option><option value="light">ライト</option></Select></label>
 		<label>本文のフォント<input value={settings.contentFont} maxLength={200} placeholder="画面のフォントに合わせる" onChange={(event) => update({ contentFont: event.currentTarget.value })} /></label>

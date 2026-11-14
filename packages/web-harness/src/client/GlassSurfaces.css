@@ -1,7 +1,20 @@
 :root {
-	--glass-surface: color-mix(in srgb, var(--surface-raised) 78%, transparent);
-	--glass-panel: color-mix(in srgb, var(--surface-panel) 80%, transparent);
-	--glass-filter: blur(24px) saturate(1.12);
+	--glass-surface: var(--surface-raised);
+	--glass-panel: var(--surface-panel);
+	--glass-popup: var(--surface-raised);
+	--glass-filter: none;
+	--dialog-scrim: #0006;
+	--dialog-scrim-clear: #0000;
+	--dialog-scrim-filter: blur(3px);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+	:root {
+		--glass-surface: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+		--glass-panel: color-mix(in srgb, var(--surface-panel) 91%, transparent);
+		--glass-popup: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+		--glass-filter: blur(24px);
+	}
 }
 
 .composer {
@@ -19,8 +32,9 @@
 	background: var(--glass-surface);
 	backdrop-filter: var(--glass-filter);
 }
-.command-picker, .model-popover, .usage-popover-content, .settings-dialog, .mobile-sheet:has(.mobile-model-menu) {
-	background: var(--glass-surface);
+.command-picker, .model-popover, .usage-popover-content, .quick-open, .session-context-menu, .detail-context-menu,
+.settings-dialog, .mobile-sheet:has(.mobile-model-menu), .mobile-sheet.is-top.widget-top-sheet {
+	background: var(--glass-popup);
 	backdrop-filter: var(--glass-filter);
 }
 .usage-popover-content { z-index: 18; }
@@ -30,14 +44,14 @@
 .inspector-open:not(:has(.settings-dialog)) .right-panel-body { view-transition-name: none; }
 .inspector-open:not(:has(.settings-dialog)) .team-focus { view-transition-name: none; }
 /* Fade the dimmer color; animating parent opacity would isolate the modal's blur. */
-.dialog-backdrop { background: #11111b66; backdrop-filter: none; animation-name: glass-backdrop-enter; }
+.dialog-backdrop { background: var(--dialog-scrim); backdrop-filter: var(--dialog-scrim-filter); animation-name: glass-backdrop-enter; }
+.dialog-backdrop:has(> .settings-dialog) { backdrop-filter: none; }
 .dialog-backdrop[data-closing="true"] { animation-name: glass-backdrop-exit; }
-@keyframes glass-backdrop-enter { from { background-color: #11111b00; } to { background-color: #11111b66; } }
-@keyframes glass-backdrop-exit { from { background-color: #11111b66; } to { background-color: #11111b00; } }
+@keyframes glass-backdrop-enter { from { background-color: var(--dialog-scrim-clear); } to { background-color: var(--dialog-scrim); } }
+@keyframes glass-backdrop-exit { from { background-color: var(--dialog-scrim); } to { background-color: var(--dialog-scrim-clear); } }
 .settings-dialog .settings-section, .settings-dialog .settings-key-entry, .settings-dialog .oauth-login {
 	background: color-mix(in srgb, var(--surface-panel) 55%, transparent);
 }
-.settings-dialog :is(input, select, textarea) { background: color-mix(in srgb, var(--surface-raised) 65%, transparent); }
 
 .app-shell[data-home-background="true"] :is(.topbar-leading, .topbar .quiet-button) {
 	background: var(--glass-surface);
@@ -72,11 +86,7 @@
 }
 /* The containing detail view already handles entrance and exit. */
 .right-panel .team-pane { animation: none; }
-.right-panel .detail-tab[data-active="true"] {
-	background: color-mix(in srgb, var(--surface-hover) 35%, transparent);
-	backdrop-filter: var(--glass-filter);
-}
-.right-panel .files-line-number { background: transparent; backdrop-filter: var(--glass-filter); }
+.right-panel .files-line-number { background: transparent; }
 .right-panel .files-selected-line .files-line-number { background: var(--secondary-container); }
 @media (min-width: 901px) {
 	/* Continue the docked background behind the top bar instead of cutting off the image. */
@@ -86,9 +96,4 @@
 	.app-shell:not(.inspector-open) .detail-resize-slot { visibility: hidden; }
 	.detail-resize-slot .panel-resize { position: absolute; inset: 0 auto 0 -4px; width: 8px; }
 	.detail-resize-slot .panel-resize::after { top: 12px; bottom: 12px; left: 3px; width: 1px; }
-}
-
-@supports not (backdrop-filter: blur(1px)) {
-	:root { --glass-surface: var(--surface-raised); --glass-panel: var(--surface-panel); }
-	.composer::before { background: var(--surface-raised); }
 }

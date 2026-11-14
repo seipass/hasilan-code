@@ -52,8 +52,8 @@
 /* Dimensions verified against Devin 1.141.2 devin-webapp-host/index.css:
    text-13 = 13/18px, text-12 = 12/16px, h-7/h-8 = 28/32px,
    rounded-md/lg = 6/8px, gap-2/p-3/p-4 = 8/12/16px. */
-.session-import-dialog.session-import-dialog { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-panel); box-shadow: 0 16px 48px #0005; }
-.session-import-dialog::backdrop { background: #0006; backdrop-filter: blur(3px); }
+.session-import-dialog.session-import-dialog { border: 1px solid var(--border); border-radius: var(--dialog-radius); background: var(--glass-popup); backdrop-filter: var(--glass-filter); box-shadow: var(--dialog-shadow); }
+.session-import-dialog::backdrop { background: var(--dialog-scrim); }
 .session-import-dialog .session-import-heading { align-items: center; padding: 16px; gap: 12px; border-bottom: 1px solid var(--border-subtle); }
 .session-import-heading h2 { font-size: 15px; line-height: 22px; font-weight: 600; letter-spacing: -.005em; }
 .session-import-heading code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: inherit; font-size: 12px; line-height: 16px; font-weight: 400; color: var(--on-surface-muted); }
@@ -61,7 +61,7 @@
 .session-import-dialog .session-import-source { grid-template-columns: 152px minmax(0, 1fr) auto; padding: 16px 16px 8px; gap: 12px; }
 .session-import-source label { gap: 8px; font-size: 12px; line-height: 16px; font-weight: 400; color: var(--on-surface-secondary); }
 .session-import-dialog :is(input, .select-trigger) { min-height: 32px; height: 32px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-sunken); font-size: 13px; line-height: 18px; letter-spacing: -.005em; }
-.session-import-dialog :is(input, .select-trigger):focus-visible { outline: 1px solid var(--border-strong); outline-offset: -1px; box-shadow: none; }
+.session-import-dialog :is(input, .select-trigger):focus-visible { outline-offset: -1px; box-shadow: none; }
 .session-import-dialog .session-import-source > button { min-height: 32px; height: 32px; padding: 6px 12px; border-color: var(--border); border-radius: 6px; background: transparent; font-size: 12px; line-height: 16px; }
 .session-import-dialog .session-import-paths { padding: 0 16px 12px; font-size: 11px; line-height: 14px; }
 .session-import-dialog .session-import-body { border-top: 1px solid var(--border-subtle); background: transparent; }
@@ -70,7 +70,7 @@
 .session-import-dialog .session-import-candidates { padding: 0 8px 8px; scrollbar-width: thin; }
 .session-import-candidates > button { min-height: 68px; padding: 8px 12px; margin-bottom: 2px; gap: 4px; border: 0; border-radius: 6px; }
 .session-import-candidates > button:hover:not(:disabled) { background: var(--surface-hover); }
-.session-import-candidates > [aria-selected="true"] { background: var(--surface-hover); }
+.session-import-candidates > [aria-selected="true"] { background: var(--selection-fill); }
 .session-import-candidates strong { font-size: 13px; line-height: 18px; font-weight: 500; letter-spacing: -.005em; }
 .session-import-candidates :is(span, time) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 14px; }
 .session-import-dialog .session-import-preview { padding: 16px; scrollbar-width: thin; }

@@ -1,9 +1,9 @@
 .dialog-backdrop:has(> .settings-dialog) {
-	background-color: #11111b66;
+	background-color: var(--dialog-scrim);
 	animation: none;
 	transition: background-color 170ms ease;
 }
-.dialog-backdrop[data-closing="true"]:has(> .settings-dialog) { background-color: #11111b00; animation: none; }
+.dialog-backdrop[data-closing="true"]:has(> .settings-dialog) { background-color: var(--dialog-scrim-clear); animation: none; }
 .settings-dialog.settings-dialog {
 	display: flex;
 	flex-direction: column;
@@ -58,7 +58,7 @@
 }
 .settings-tabs [role="tab"][aria-selected="true"]::after { transform: scaleY(1); }
 @starting-style {
-	.dialog-backdrop:has(> .settings-dialog) { background-color: #11111b00; }
+	.dialog-backdrop:has(> .settings-dialog) { background-color: var(--dialog-scrim-clear); }
 	.settings-dialog.settings-dialog { opacity: 0; transform: translateY(10px) scale(.985); }
 }
 @media (max-width: 600px) {
