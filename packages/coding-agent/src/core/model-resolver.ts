@@ -38,6 +38,7 @@ export const defaultModelPerProvider: Partial<Record<KnownProvider, string>> = {
 	zai: "glm-5.3",
 	"zai-coding-cn": "glm-5.3",
 	mistral: "devstral-medium-latest",
+	"mistral-vibe": "mistral-vibe-cli-latest",
 	minimax: "MiniMax-M2.7",
 	"minimax-cn": "MiniMax-M2.7",
 	moonshotai: "kimi-k2.6",

@@ -440,6 +440,7 @@ ${chalk.bold("Environment Variables:")}
   ZAI_API_KEY                      - ZAI Coding Plan API key (Global)
   ZAI_CODING_CN_API_KEY            - ZAI Coding Plan API key (China)
   MISTRAL_API_KEY                  - Mistral API key
+  MISTRAL_VIBE_API_KEY             - Mistral Vibe dedicated API key
   MINIMAX_API_KEY                  - MiniMax API key
   MOONSHOT_API_KEY                 - Moonshot AI API key
   OPENCODE_API_KEY                 - OpenCode Zen/OpenCode Go API key
