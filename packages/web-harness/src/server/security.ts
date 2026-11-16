@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { isLanAddress } from "./network.ts";
+import { isLanAddress, isTailscaleAddress } from "./network.ts";
 
 export const LOOPBACK_HOST = "127.0.0.1";
 
@@ -44,7 +44,7 @@ export class LoopbackSecurity {
 			throw new Error("Authentication-free development requires NODE_ENV=development");
 		if (development && lanAddresses.length) throw new Error("Authentication-free development is loopback only");
 		if (lanAddresses.some((address) => !isLanAddress(address)))
-			throw new Error("LAN addresses must be private IPv4 addresses");
+			throw new Error("LAN addresses must be private or Tailscale IPv4 addresses");
 		this.lanAddresses = lanAddresses;
 		this.development = development;
 	}
@@ -84,6 +84,8 @@ export class LoopbackSecurity {
 		if (this.development && peer !== LOOPBACK_HOST) throw new HttpError(403, "Development access is loopback only");
 		if (peer !== LOOPBACK_HOST && (!peer || !isLanAddress(peer)))
 			throw new HttpError(403, "Only local network clients are allowed");
+		if (peer && isTailscaleAddress(peer) && !this.lanAddresses.some(isTailscaleAddress))
+			throw new HttpError(403, "Tailscale access requires a local Tailscale address");
 		return `http://${host}`;
 	}
 

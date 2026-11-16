@@ -40,7 +40,7 @@ Usage: hasilan-code [--lan] [--dev] [--no-open] [--port <0..65535>] [--cwd <dire
   --port     Loopback HTTP port (default 3080; 0 chooses an OS-assigned port)
   --cwd      Initial workspace directory (default current working directory)
   --no-open  Show launch instructions only (default; never opens a browser automatically)
-  --lan      Share on private IPv4 LAN addresses and print authenticated links and terminal QR codes
+  --lan      Share on private LAN and Tailscale IPv4 addresses; print authenticated links and QR codes
   --dev      Skip local launch authentication; requires NODE_ENV=development and cannot use --lan
   --help     Show this help
   --version  Show the Hasilan Code and bundled Pi versions

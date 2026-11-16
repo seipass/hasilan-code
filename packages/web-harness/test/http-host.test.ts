@@ -14,6 +14,7 @@ import {
 	sendJson,
 	sendWebSocket,
 } from "../src/server/http-host.ts";
+import { isLanAddress } from "../src/server/network.ts";
 import { LoopbackSecurity } from "../src/server/security.ts";
 
 interface Reply {
@@ -81,6 +82,27 @@ afterEach(async () => {
 });
 
 describe("loopback HTTP boundary", () => {
+	it("accepts Tailscale peers only when a shared local Tailscale address is present", () => {
+		for (const address of ["100.64.0.1", "100.127.255.255"]) expect(isLanAddress(address)).toBe(true);
+		for (const address of ["100.63.255.255", "100.128.0.1", "100.64.999.1"])
+			expect(isLanAddress(address)).toBe(false);
+		const security = new LoopbackSecurity(["100.101.102.103"]);
+		security.setPort(3080);
+		const req = {
+			headers: { host: "100.101.102.103:3080", origin: "http://100.101.102.103:3080" },
+			rawHeaders: ["Host", "100.101.102.103:3080", "Origin", "http://100.101.102.103:3080"],
+			socket: { remoteAddress: "100.100.100.100" },
+		} as unknown as IncomingMessage;
+		expect(security.lanLaunchUrls[0]).toMatch(/^http:\/\/100\.101\.102\.103:3080\/\?token=/);
+		expect(() => security.checkHost(req)).not.toThrow();
+		expect(() => security.requireOrigin(req)).not.toThrow();
+		expect(() => security.requireAuthentication(req)).toThrow("Authentication required");
+		const noTailscale = new LoopbackSecurity(["192.168.1.2"]);
+		noTailscale.setPort(3080);
+		req.headers.host = "192.168.1.2:3080";
+		req.rawHeaders[1] = "192.168.1.2:3080";
+		expect(() => noTailscale.checkHost(req)).toThrow("Tailscale access");
+	});
 	it("opens development UI, API and WebSockets without cookies while enforcing Host and Origin", async () => {
 		vi.stubEnv("NODE_ENV", "development");
 		const directory = await mkdtemp(join(tmpdir(), "hasilan-dev-static-"));

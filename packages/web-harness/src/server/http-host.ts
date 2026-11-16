@@ -147,7 +147,7 @@ export class HttpHost {
 		if (options.development && options.lan) throw new Error("--dev cannot be combined with --lan");
 		const lanAddresses = options.lan ? getLanAddresses() : [];
 		if (options.lan && lanAddresses.length === 0)
-			throw new Error("No private IPv4 LAN address found; connect to a LAN before using --lan");
+			throw new Error("No private or Tailscale IPv4 address found; connect to a network before using --lan");
 		this.security = new LoopbackSecurity(lanAddresses, options.development);
 		const port = options.port ?? 3080;
 		if (!Number.isInteger(port) || port < 0 || port > 65535)
