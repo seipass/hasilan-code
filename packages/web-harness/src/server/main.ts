@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -9,7 +8,6 @@ import {
 } from "@hasilan-code/pi-coding-agent";
 import { toString as qrCodeText } from "qrcode";
 import { ATTACHMENT_LIMITS } from "../shared/attachments.ts";
-import { CANVAS_LIMITS, canvasSaveSchema, isCanvasDocument, serializeCanvasDesign } from "../shared/canvas.ts";
 import {
 	credentialSchema,
 	modelSchema,
@@ -33,7 +31,6 @@ import { AgentWorktrees } from "./agent-worktrees.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
 import { browserAdjustmentSchema, suggestBrowserAdjustments } from "./browser-adjustments.ts";
-import { CanvasStore, CanvasStoreError } from "./canvas-store.ts";
 import { CLI_HELP, type CliOptions, openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
 import { EventHub } from "./events.ts";
@@ -44,7 +41,8 @@ import { gitReview } from "./git-review.ts";
 import { GithubDashboardReader } from "./github-dashboard.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { mediaView, serveMedia } from "./media.ts";
-import { loadToolProfile } from "./plugins/tool-profile.ts";
+import { canvasPlugin } from "./plugins/canvas.ts";
+import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
 import { acquireProfile } from "./profile-lock.ts";
 import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
@@ -112,7 +110,6 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		jev: settings.get().jev.model,
 		textModel: settings.get().jevComputer?.textModel,
 	}));
-	const pluginTools = loadToolProfile(agentDir, new Map([["web-search", () => webSearchPlugin(settings)]]));
 	const widgets = new WidgetData();
 	const githubDashboard = new GithubDashboardReader();
 	let events: EventHub | undefined;
@@ -120,6 +117,23 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const agentWorktrees = new AgentWorktrees(agentDir);
 	const isolatedFiles = new WorkspaceFiles();
 	let teams: TeamManager;
+	const plugins = loadServerProfile(
+		agentDir,
+		new Map<string, () => ServerPlugin>([
+			["web-search", () => webSearchPlugin(settings)],
+			[
+				"canvas",
+				() =>
+					canvasPlugin(
+						agentDir,
+						(id) => {
+							registry.getWorkspaceRoot(id);
+						},
+						files,
+					),
+			],
+		]),
+	);
 	const registry = new SessionRegistry({
 		agentWorktrees,
 		isolatedFiles,
@@ -152,7 +166,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 			standardTools.splice(
 				standardTools.length - 2,
 				0,
-				...pluginTools(
+				...plugins.toolsForSession(
 					{ sessionId: descriptor.sessionId, workspaceId: descriptor.workspaceId, cwd: descriptor.cwd },
 					standardTools,
 				),
@@ -174,9 +188,6 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	await teams.initialize();
 	await registry.addWorkspace(cwd);
 	const workspaceRouter = new WorkspaceRouter(files, modelRuntime, () => settings.get().jev.model, registry);
-	const canvases = new CanvasStore(agentDir, (id) => {
-		registry.getWorkspaceRoot(id);
-	});
 	const terminals = new TerminalManager({ getWorkspaceRoot: (id) => files.getWorkspaceRoot(id) });
 	const sessionImports = new SessionImportService();
 	events = new EventHub(
@@ -483,23 +494,6 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 						if (!root) throw new HttpError(404, "Workspace team not found");
 						return reply(await teams.describe(root.sessionId, parts[4], responsibility));
 					}
-					if (parts[3] === "canvas" && parts[4] === "compose" && parts.length === 5 && method === "POST") {
-						const document = await readJson(request, canvasSaveSchema, CANVAS_LIMITS.bytes);
-						if (!isCanvasDocument(document)) throw new HttpError(400, "設計データの ID・接続先が不正です。");
-						const snapshot = await files.create(
-							id,
-							`.hasilan-code/canvas/design-${randomBytes(8).toString("hex")}.txt`,
-							Buffer.from(`${serializeCanvasDesign(document.design)}\n`, "utf8"),
-						);
-						return reply({ path: snapshot.path }, 201);
-					}
-					if (parts[3] === "canvas" && parts.length === 4) {
-						if (method === "GET") return reply(await canvases.get(id));
-						if (method === "PUT")
-							return reply(
-								await canvases.save(id, await readJson(request, canvasSaveSchema, CANVAS_LIMITS.bytes)),
-							);
-					}
 					if (parts[3] === "files" && method === "GET") return reply(await files.list(id, path));
 					if (parts[3] === "file-search" && method === "GET") {
 						const query = url.searchParams.get("q") ?? "";
@@ -556,10 +550,9 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					await terminals.close(parts[2]);
 					return reply({ closed: true });
 				}
-				return false;
+				return await plugins.handleApi(request, response, url, parts);
 			} catch (error) {
 				if (error instanceof HarnessError) throw new HttpError(error.statusCode, error.message);
-				if (error instanceof CanvasStoreError) throw new HttpError(error.status, error.message);
 				throw error;
 			}
 		},

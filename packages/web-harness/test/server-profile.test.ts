@@ -1,0 +1,83 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { startHarness } from "../src/server/main.ts";
+import { loadServerProfile, type ServerPlugin } from "../src/server/plugins/server-profile.ts";
+import { emptyCanvasDocument } from "../src/shared/canvas.ts";
+
+let dir: string;
+beforeEach(async () => {
+	dir = await mkdtemp(join(tmpdir(), "hasilan-plugins-"));
+});
+afterEach(async () => {
+	vi.unstubAllEnvs();
+	await rm(dir, { recursive: true, force: true });
+});
+
+it("keeps the authenticated Canvas API and its data across disable and re-enable", async () => {
+	vi.stubEnv("HASILAN_CODE_AGENT_DIR", dir);
+	vi.stubEnv("PI_OFFLINE", "1");
+	const options = { cwd: dir, port: 0, noOpen: true, help: false, lan: false, development: false };
+	async function withHost(run: (api: (path: string, body?: unknown) => Promise<Response>) => Promise<void>) {
+		const harness = await startHarness(options);
+		try {
+			const { origin, launchUrl } = harness.launch;
+			const login = await fetch(launchUrl, { redirect: "manual" });
+			const cookie = login.headers.getSetCookie()[0].split(";")[0];
+			await run((path, body) =>
+				fetch(
+					origin + path,
+					body === undefined
+						? { headers: { cookie } }
+						: {
+								method: "PUT",
+								headers: { cookie, origin, "Content-Type": "application/json" },
+								body: JSON.stringify(body),
+							},
+				),
+			);
+		} finally {
+			await harness.shutdown();
+		}
+	}
+
+	let path = "";
+	await withHost(async (api) => {
+		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
+		path = `/api/workspaces/${workspaceId}/canvas`;
+		const saved = await api(path, emptyCanvasDocument());
+		expect(saved.status).toBe(200);
+		expect(await saved.json()).toMatchObject({ revision: 1 });
+	});
+	await writeFile(join(dir, "plugins.json"), '{"canvas":false}');
+	await withHost(async (api) => {
+		expect((await api(path)).status).toBe(404);
+	});
+	await writeFile(join(dir, "plugins.json"), "{}");
+	await withHost(async (api) => {
+		expect(await (await api(path)).json()).toMatchObject({ revision: 1 });
+	});
+}, 30_000);
+
+it("uses the standard profile by default and only loads the selected implementations", async () => {
+	const builtin = vi.fn((): ServerPlugin => ({ apiVersion: 1, tools: () => [] }));
+	const builtins = new Map([["search", builtin]]);
+	const report = vi.fn();
+	const session = { sessionId: "test", workspaceId: "workspace", cwd: dir };
+	expect(loadServerProfile(dir, builtins, report).toolsForSession(session)).toEqual([]);
+	expect(builtin).toHaveBeenCalledTimes(1);
+
+	await writeFile(join(dir, "plugins.json"), JSON.stringify({ search: false }));
+	expect(loadServerProfile(dir, builtins, report).toolsForSession(session)).toEqual([]);
+	expect(builtin).toHaveBeenCalledTimes(1);
+
+	await writeFile(join(dir, "plugins.json"), JSON.stringify({ search: "./local.cjs", broken: "./missing.cjs" }));
+	await writeFile(
+		join(dir, "local.cjs"),
+		"exports.apiVersion = 1; exports.tools = ({ sessionId }) => [{ name: sessionId, parameters: {}, execute() {} }];",
+	);
+	expect(loadServerProfile(dir, builtins, report).toolsForSession(session)).toMatchObject([{ name: "test" }]);
+	expect(builtin).toHaveBeenCalledTimes(1);
+	expect(report).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("Plugin broken failed to load"));
+});
