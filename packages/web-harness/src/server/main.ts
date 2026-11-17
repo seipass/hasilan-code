@@ -44,6 +44,8 @@ import { gitReview } from "./git-review.ts";
 import { GithubDashboardReader } from "./github-dashboard.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { mediaView, serveMedia } from "./media.ts";
+import { loadToolProfile } from "./plugins/tool-profile.ts";
+import { webSearchPlugin } from "./plugins/web-search.ts";
 import { acquireProfile } from "./profile-lock.ts";
 import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
 import { handleSessionImport } from "./session-import/routes.ts";
@@ -59,7 +61,6 @@ import { ComputerManager } from "./tools/computer/index.ts";
 import { JevComputer } from "./tools/computer/jev.ts";
 import { createHashlineTools } from "./tools/hashline/index.ts";
 import { LazyBrowserManager } from "./tools/lazy-browser.ts";
-import { SearchService } from "./tools/search.ts";
 import { ShellProcessManager } from "./tools/shell-process.ts";
 import { UiPreferencesStore } from "./ui-preferences.ts";
 import { WidgetData } from "./widget-data.ts";
@@ -111,7 +112,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		jev: settings.get().jev.model,
 		textModel: settings.get().jevComputer?.textModel,
 	}));
-	const search = new SearchService(settings);
+	const pluginTools = loadToolProfile(agentDir, new Map([["web-search", () => webSearchPlugin(settings)]]));
 	const widgets = new WidgetData();
 	const githubDashboard = new GithubDashboardReader();
 	let events: EventHub | undefined;
@@ -129,7 +130,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		// Pi validates each tool's declared schema before execution; erase only the registry's heterogeneous generic boundary.
 		customTools: (descriptor) => {
 			const shellSettings = createHarnessSettings(descriptor.cwd, agentDir);
-			return [
+			const standardTools = [
 				...createHashlineTools(
 					descriptor.worktree ? isolatedFiles : files,
 					descriptor.worktree ? descriptor.sessionId : descriptor.workspaceId,
@@ -145,10 +146,18 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 				browser.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				computer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				jevComputer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
-				search.createTool(),
 				teams.createTool(descriptor.sessionId),
 				teams.createGoalTool(descriptor.sessionId),
 			] as unknown as ToolDefinition[];
+			standardTools.splice(
+				standardTools.length - 2,
+				0,
+				...pluginTools(
+					{ sessionId: descriptor.sessionId, workspaceId: descriptor.workspaceId, cwd: descriptor.cwd },
+					standardTools,
+				),
+			);
+			return standardTools;
 		},
 	});
 	teams = new TeamManager(registry, {
