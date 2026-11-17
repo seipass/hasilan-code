@@ -11,7 +11,6 @@ import { userText } from "./MessageActions.tsx";
 import { ChatPane } from "./ChatPane.tsx";
 import { DetailPane, type DetailView } from "./DetailPane.tsx";
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
-import { GoalPanel } from "./GoalPanel.tsx";
 import { HomeBackdrop, useHomeBackground } from "./HomeAppearance.tsx";
 import { HomeDashboard } from "./HomeDashboard.tsx";
 import { nextClientId } from "./ids.ts";
@@ -23,6 +22,7 @@ import { preferences, usePreferenceState } from "./preferences.ts";
 import { PreferenceStatus } from "./PreferenceStatus.tsx";
 import { canvasPanel } from "./plugins/canvas.tsx";
 import { externalPanel } from "./plugins/external-panel.tsx";
+import { GoalControl } from "./plugins/goal.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import type { WorkspacePanel } from "./plugins/workspace-panels.ts";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
@@ -79,7 +79,10 @@ export function App() {
 		});
 	}, [profile]);
 	const activePanel = activePanels?.find(({ id }) => id === mode);
-	const commands = COMPOSER_COMMANDS.filter(({ command }) => command !== "/canvas" || activePanels?.some(({ id }) => id === canvasPanel.id));
+	const goalEnabled = profile?.activeIds.includes("goal") ?? false;
+	const canvasEnabled = activePanels?.some(({ id }) => id === canvasPanel.id) ?? false;
+	const commands = COMPOSER_COMMANDS.filter(({ command }) =>
+		(command !== "/canvas" || canvasEnabled) && (command !== "/goal" || goalEnabled));
 	const [draftInsertion, setDraftInsertion] = useState<{ id: string; text: string }>();
 	const [workspaceId, setWorkspaceId] = useState<string>();
 	const [sessionId, setSessionId] = useState<string | undefined>(() => preferences.getItem("pi-web-selected-session") || undefined);
@@ -133,8 +136,6 @@ export function App() {
 	const modelNeedsAuthentication = model
 		? catalog?.providers.find((entry) => entry.id === model.provider)?.configured === false
 		: !!catalog?.providers.length && catalog.providers.every((entry) => entry.configured === false);
-	const [dismissedGoalId, setDismissedGoalId] = usePreferenceState<string | null>(`pi-web-dismissed-goal:${sessionId ?? "new"}`, null);
-	const visibleGoal = !session?.parentSessionId && session?.goal && (session.goal.status !== "complete" || session.goal.id !== dismissedGoalId) ? session.goal : undefined;
 	const modelSetup = modelNeedsAuthentication ? "authentication" : !model ? "selection" : undefined;
 	const workspace = workspaces.find((entry) => entry.workspaceId === workspaceId);
 	const summaries = [...initialSessions.filter((entry) => !projections[entry.workspaceId]), ...Object.values(projections).flatMap((projection) => projection.sessions)];
@@ -415,7 +416,7 @@ export function App() {
 			if (attachments.length && parsed.kind !== "prompt") throw new Error("添付ファイルは通常のメッセージとして送信してください。");
 			if (parsed.kind === "canvas") {
 				if (!activePanels) throw new Error("プラグインの読み込みが完了してから開いてください。");
-				if (!activePanels.some(({ id }) => id === canvasPanel.id)) throw new Error("設計キャンバスが無効です。");
+				if (!canvasEnabled) throw new Error("設計キャンバスが無効です。");
 				if (!workspaceId) throw new Error("ワークスペースを選択してください。");
 				openPanel(canvasPanel.id);
 				return {};
@@ -481,6 +482,8 @@ export function App() {
 		await command(`/api/sessions/${encodeURIComponent(session.sessionId)}/prompt`, { text, mode: "prompt" });
 	}
 	async function goalAction(action: GoalAction): Promise<Goal | null> {
+		if (!profile) throw new Error("プラグインの読み込みが完了してから操作してください。");
+		if (!goalEnabled) throw new Error("Goal が無効です。");
 		const target = action.op === "create" ? await inputSession() : sessionId;
 		if (!target) {
 			if (action.op === "get") return null;
@@ -608,7 +611,7 @@ export function App() {
 				{activePanels?.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
 					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={(dirty) => setDirtyPanels((previous) => dirty === previous.includes(id) ? previous : dirty ? [...previous, id] : previous.filter((entry) => entry !== id))} />
 				</div></Presence>)}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={visibleGoal && <GoalPanel key={visibleGoal.id} goal={visibleGoal} onDismiss={() => setDismissedGoalId(visibleGoal.id)} busy={!!session?.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session?.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>

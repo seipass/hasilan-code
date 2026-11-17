@@ -45,7 +45,7 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	let path = "";
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toEqual({
-			activeIds: ["web-search", "theme-default", "canvas"],
+			activeIds: ["web-search", "theme-default", "goal", "canvas"],
 			panels: [],
 			themes: [expect.objectContaining({ id: "theme-default", customizable: true })],
 		});
@@ -55,7 +55,7 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 		expect(saved.status).toBe(200);
 		expect(await saved.json()).toMatchObject({ revision: 1 });
 	});
-	await writeFile(join(dir, "plugins.json"), '{"canvas":false}');
+	await writeFile(join(dir, "plugins.json"), '{"canvas":false,"goal":false}');
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
 			activeIds: ["web-search", "theme-default"],

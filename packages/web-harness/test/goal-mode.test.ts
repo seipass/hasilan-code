@@ -15,18 +15,18 @@ import { ModelRuntime, type ToolDefinition } from "@hasilan-code/pi-coding-agent
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../../coding-agent/src/core/auth-storage.ts";
-import { createHttpHost, HttpError, readJson, sendJson } from "../src/server/http-host.ts";
+import { createHttpHost, HttpError } from "../src/server/http-host.ts";
+import { goalPlugin } from "../src/server/plugins/goal.ts";
 import { HarnessError, SessionRegistry } from "../src/server/session-registry.ts";
 import { TeamManager } from "../src/server/team-manager.ts";
 import { WorkspaceFiles } from "../src/server/workspace-files.ts";
-import { goalActionSchema } from "../src/shared/goals.ts";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
 	for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function fixture(responses: FauxResponseStep[] = [], limit = 4) {
+async function fixture(responses: FauxResponseStep[] = [], limit = 4, goalEnabled = true) {
 	const root = await mkdtemp(join(tmpdir(), "hasilan-goal-"));
 	const workspacePath = join(root, "workspace");
 	await mkdir(workspacePath);
@@ -47,12 +47,13 @@ async function fixture(responses: FauxResponseStep[] = [], limit = 4) {
 	const progressParameters = Type.Object({ step: Type.Integer(), hold: Type.Optional(Type.Boolean()) });
 	const registry = new SessionRegistry({
 		agentDir: root,
+		goalEnabled,
 		modelRuntime,
 		workspaceFiles: new WorkspaceFiles(),
 		customTools: (descriptor) =>
 			[
 				teams.createTool(descriptor.sessionId),
-				teams.createGoalTool(descriptor.sessionId),
+				...(goalEnabled ? [teams.createGoalTool(descriptor.sessionId)] : []),
 				{
 					name: "progress",
 					label: "Deterministic progress",
@@ -114,6 +115,33 @@ async function idle(registry: SessionRegistry, sessionId: string) {
 }
 
 describe("Goal mode production SDK boundaries", () => {
+	it("leaves saved goals out of execution when the plugin is disabled", async () => {
+		const f = await fixture(
+			[
+				(context) => {
+					expect(JSON.stringify(context.messages)).not.toContain("Saved goal objective");
+					return fauxAssistantMessage("ordinary response");
+				},
+			],
+			4,
+			false,
+		);
+		const id = f.session.sessionId;
+		const now = new Date().toISOString();
+		const goal = {
+			id: "0123456789abcdef",
+			objective: "Saved goal objective",
+			status: "active",
+			createdAt: now,
+			updatedAt: now,
+		} as const;
+		f.registry.descriptor(id).goal = { ...goal };
+		await f.teams.prompt(id, { text: "ordinary request", mode: "prompt" });
+		await idle(f.registry, id);
+		expect(f.faux.state.callCount).toBe(1);
+		expect(f.registry.descriptor(id).goal).toEqual(goal);
+		await expect(f.teams.goal(id, { op: "get" })).rejects.toThrow("Goal plugin is disabled");
+	});
 	it("leaves ordinary sessions at one successful run", async () => {
 		const f = await fixture([fauxAssistantMessage("ordinary response")]);
 		await f.teams.prompt(f.session.sessionId, { text: "ordinary request", mode: "prompt" });
@@ -520,17 +548,14 @@ describe("Goal mode production SDK boundaries", () => {
 
 	it("validates authenticated HTTP goal commands and returns Goal or null", async () => {
 		const f = await fixture([progress(1, true)]);
+		const goal = goalPlugin(() => f.teams);
 		const host = createHttpHost({
 			port: 0,
 			handleApi: async (request, response, url) => {
-				if (url.pathname !== `/api/sessions/${f.session.sessionId}/goal`) return false;
 				try {
-					const goal = await f.teams.goal(
-						f.session.sessionId,
-						request.method === "GET" ? { op: "get" } : await readJson(request, goalActionSchema),
+					return (
+						(await goal.handleApi?.(request, response, url, url.pathname.split("/").filter(Boolean))) ?? false
 					);
-					sendJson(response, 200, goal);
-					return true;
 				} catch (error) {
 					if (error instanceof HarnessError) throw new HttpError(error.statusCode, error.message);
 					throw error;

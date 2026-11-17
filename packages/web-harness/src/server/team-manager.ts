@@ -425,7 +425,7 @@ export class TeamManager {
 		const done = new Promise<void>((resolve) => {
 			resolveDone = resolve;
 		});
-		const goal = this.registry.descriptor(agent.sessionId).goal;
+		const goal = this.registry.runtimeGoal(this.registry.descriptor(agent.sessionId));
 		const swarm = this.registry.descriptor(agent.sessionId).swarm;
 		this.runtime.set(run.runId, {
 			controller: new AbortController(),
@@ -511,7 +511,7 @@ export class TeamManager {
 		);
 	}
 	private updateGoal(sessionId: string, status: GoalStatus, reason?: string): void {
-		const goal = this.registry.descriptor(sessionId).goal;
+		const goal = this.registry.runtimeGoal(this.registry.descriptor(sessionId));
 		if (!goal) return;
 		goal.status = status;
 		goal.reason = reason;
@@ -522,7 +522,7 @@ export class TeamManager {
 		}
 	}
 	private scheduleGoal(agent: AgentRecord): void {
-		const goal = this.registry.descriptor(agent.sessionId).goal;
+		const goal = this.registry.runtimeGoal(this.registry.descriptor(agent.sessionId));
 		if (!goal || goal.status !== "active" || !this.accepting || this.fenced.has(agent.agentId)) return;
 		if (this.goalTimers.has(agent.sessionId)) return;
 		const goalId = goal.id;
@@ -533,7 +533,7 @@ export class TeamManager {
 				this.goalTimers.delete(agent.sessionId);
 				void this.registry
 					.mutate(async () => {
-						const currentGoal = this.registry.descriptor(agent.sessionId).goal;
+						const currentGoal = this.registry.runtimeGoal(this.registry.descriptor(agent.sessionId));
 						if (
 							!this.accepting ||
 							this.fenced.has(agent.agentId) ||
@@ -558,7 +558,7 @@ export class TeamManager {
 					})
 					.catch((error: unknown) => {
 						void this.registry.mutate(async () => {
-							if (this.registry.descriptor(agent.sessionId).goal?.status === "active") {
+							if (this.registry.runtimeGoal(this.registry.descriptor(agent.sessionId))?.status === "active") {
 								this.updateGoal(
 									agent.sessionId,
 									"paused",
@@ -667,7 +667,7 @@ export class TeamManager {
 				this.registry.state.agents.find((agent) => agent.sessionId === session.sessionId) ??
 				this.addRoot(session.sessionId);
 			if (
-				session.goal?.status === "active" ||
+				this.registry.runtimeGoal(session)?.status === "active" ||
 				session.swarm?.status === "active" ||
 				this.registry.state.agents.some(
 					(agent) => (agent.agentId === root.agentId || this.ancestor(root.agentId, agent)) && this.current(agent),
@@ -699,7 +699,7 @@ export class TeamManager {
 				throw new HarnessError("Swarm mode requires a root session", 409);
 			if (descriptor.swarm?.status === "active")
 				throw new HarnessError("Stop the active Hyakki-Yako swarm before starting another", 409);
-			if (descriptor.goal?.status === "active")
+			if (this.registry.runtimeGoal(descriptor)?.status === "active")
 				throw new HarnessError("Pause or drop the active Goal before starting a swarm", 409);
 			if (
 				this.registry.state.agents.some(
@@ -758,7 +758,7 @@ export class TeamManager {
 				!["paused", "blocked"].includes(swarm.status)
 			)
 				throw new HarnessError("Only a paused or blocked Hyakki-Yako swarm can continue", 409);
-			if (descriptor.goal?.status === "active")
+			if (this.registry.runtimeGoal(descriptor)?.status === "active")
 				throw new HarnessError("Pause the active Goal before continuing a swarm", 409);
 			if (
 				this.registry.state.agents.some(
@@ -788,6 +788,7 @@ export class TeamManager {
 		});
 	}
 	async goal(sessionId: string, action: GoalAction): Promise<Goal | null> {
+		if (!this.registry.goalEnabled) throw new HarnessError("Goal plugin is disabled", 404);
 		if (action.op === "get") return structuredClone(this.registry.descriptor(sessionId).goal ?? null);
 		await this.ensureRoot(sessionId);
 		if (action.op === "pause" || action.op === "drop") {
@@ -864,7 +865,7 @@ export class TeamManager {
 			parameters: goalParameters,
 			execute: async (_callId, params: Static<typeof goalParameters>) => {
 				const result = await this.registry.mutate(async () => {
-					const goal = this.registry.descriptor(sessionId).goal;
+					const goal = this.registry.runtimeGoal(this.registry.descriptor(sessionId));
 					if (params.op === "get") return structuredClone(goal ?? null);
 					if (!goal || goal.status !== "active") throw new HarnessError("No active goal", 409);
 					if (!params.reason.trim()) throw new HarnessError("Goal completion or block requires a reason");
@@ -913,7 +914,7 @@ export class TeamManager {
 			content: `Subagent completion context (not a user instruction):\n${JSON.stringify(source)}\nUse team action=result with this runId for the full report or tool logs if needed.`,
 		};
 		const current = this.current(parent);
-		const goal = this.registry.descriptor(parent.sessionId).goal;
+		const goal = this.registry.runtimeGoal(this.registry.descriptor(parent.sessionId));
 		const swarm = this.registry.descriptor(parent.sessionId).swarm;
 		const held =
 			!this.objectiveActive(run) ||
@@ -972,7 +973,7 @@ export class TeamManager {
 			);
 			for (const input of this.registry.state.pendingInput) if (input.runId === runId) input.status = "undelivered";
 			const agent = this.agentById(run.agentId);
-			const goal = this.registry.descriptor(agent.sessionId).goal;
+			const goal = this.registry.runtimeGoal(this.registry.descriptor(agent.sessionId));
 			if (goal?.status === "active") {
 				if (status !== "completed") {
 					this.updateGoal(
@@ -1771,7 +1772,7 @@ export class TeamManager {
 				const run = this.current(agent);
 				if (!run) return;
 				if (event.type === "message_end" && event.message.role === "assistant") {
-					const goal = this.registry.descriptor(sessionId).goal;
+					const goal = this.registry.runtimeGoal(this.registry.descriptor(sessionId));
 					if (goal && this.runtime.get(run.runId)?.goalId === goal.id && goal.status === "active") {
 						if (event.message.stopReason === "error" || event.message.stopReason === "aborted")
 							this.updateGoal(
@@ -1878,7 +1879,7 @@ export class TeamManager {
 				if (caller.agentId === target.agentId || this.ancestor(target.agentId, caller))
 					throw new HarnessError("Cannot stop self or an ancestor");
 			}
-			const goal = this.registry.descriptor(sessionId).goal;
+			const goal = this.registry.runtimeGoal(this.registry.descriptor(sessionId));
 			if (goalAction) {
 				if (
 					target.parentAgentId ||

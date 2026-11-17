@@ -22,7 +22,6 @@ import {
 	workspaceCreateSchema,
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
-import { goalActionSchema } from "../shared/goals.ts";
 import { DEFAULT_THEME_ID, standardTheme } from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
 import { workspaceSwarmStartSchema } from "../shared/swarm.ts";
@@ -43,6 +42,7 @@ import { GithubDashboardReader } from "./github-dashboard.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { mediaView, serveMedia } from "./media.ts";
 import { canvasPlugin } from "./plugins/canvas.ts";
+import { goalPlugin } from "./plugins/goal.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
 import { acquireProfile } from "./profile-lock.ts";
@@ -118,11 +118,19 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const agentWorktrees = new AgentWorktrees(agentDir);
 	const isolatedFiles = new WorkspaceFiles();
 	let teams: TeamManager;
+	let builtinGoal = false;
 	const plugins = loadServerProfile(
 		agentDir,
 		new Map<string, () => ServerPlugin>([
 			["web-search", () => webSearchPlugin(settings)],
 			[DEFAULT_THEME_ID, () => ({ apiVersion: 1, theme: standardTheme })],
+			[
+				"goal",
+				() => {
+					builtinGoal = true;
+					return goalPlugin(() => teams);
+				},
+			],
 			[
 				"canvas",
 				() =>
@@ -142,6 +150,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		agentDir,
 		modelRuntime,
 		workspaceFiles: files,
+		goalEnabled: builtinGoal,
 		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
 		// Pi validates each tool's declared schema before execution; erase only the registry's heterogeneous generic boundary.
 		customTools: (descriptor) => {
@@ -163,10 +172,9 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 				computer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				jevComputer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
 				teams.createTool(descriptor.sessionId),
-				teams.createGoalTool(descriptor.sessionId),
 			] as unknown as ToolDefinition[];
 			standardTools.splice(
-				standardTools.length - 2,
+				standardTools.length - 1,
 				0,
 				...plugins.toolsForSession(
 					{ sessionId: descriptor.sessionId, workspaceId: descriptor.workspaceId, cwd: descriptor.cwd },
@@ -380,10 +388,6 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 							total: json.length,
 							next: end < json.length ? end : undefined,
 						});
-					}
-					if (parts[3] === "goal" && parts.length === 4) {
-						if (method === "GET") return reply(await teams.goal(id, { op: "get" }));
-						if (method === "POST") return reply(await teams.goal(id, await readJson(request, goalActionSchema)));
 					}
 					if (parts[3] === "swarm" && parts[4] === "continue" && parts.length === 5 && method === "POST")
 						return reply(await teams.continueSwarm(id), 202);

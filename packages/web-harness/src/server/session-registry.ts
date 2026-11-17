@@ -151,6 +151,7 @@ export interface RegistryOptions {
 	workspaceFiles: WorkspaceDirectoryService;
 	modelRuntime?: ModelRuntime;
 	customTools?: (descriptor: SessionDescriptor) => ToolDefinition[];
+	goalEnabled?: boolean;
 	readAttachments?: (workspaceId: string, attachments: PromptAttachment[]) => Promise<ImageContent[]>;
 	/** An execution seam for deterministic boundary tests; production uses the Pi SDK. */
 	adapterFactory?: (descriptor: SessionDescriptor, manager: SessionManager) => Promise<ExecutionAdapter>;
@@ -455,6 +456,14 @@ function validateState(value: unknown): asserts value is HarnessState {
 
 /** Owns Pi conversations and projection only. TeamManager owns every run transition. */
 export class SessionRegistry {
+	get goalEnabled(): boolean {
+		return this.options.goalEnabled !== false;
+	}
+
+	runtimeGoal(descriptor: Pick<SessionDescriptor, "goal">): Goal | undefined {
+		return this.goalEnabled ? descriptor.goal : undefined;
+	}
+
 	readonly state: HarnessState = {
 		schemaVersion: 1,
 		workspaces: [],
@@ -495,10 +504,11 @@ export class SessionRegistry {
 				(descriptor) => descriptor.goal !== undefined || descriptor.swarm !== undefined,
 			);
 			for (const descriptor of this.state.sessions) {
-				if (descriptor.goal?.status === "active") {
-					descriptor.goal.status = "paused";
-					descriptor.goal.reason = "Host restarted; resume explicitly to continue";
-					descriptor.goal.updatedAt = new Date().toISOString();
+				const goal = this.runtimeGoal(descriptor);
+				if (goal?.status === "active") {
+					goal.status = "paused";
+					goal.reason = "Host restarted; resume explicitly to continue";
+					goal.updatedAt = new Date().toISOString();
 				}
 				if (descriptor.swarm?.status === "active") {
 					descriptor.swarm.status = "paused";
@@ -1014,7 +1024,7 @@ export class SessionRegistry {
 				this.state.sessions.some(
 					(session) =>
 						ids.has(session.sessionId) &&
-						(session.goal?.status === "active" ||
+						(this.runtimeGoal(session)?.status === "active" ||
 							session.swarm?.status === "active" ||
 							this.live.get(session.sessionId)?.runId),
 				)
@@ -1360,7 +1370,12 @@ export class SessionRegistry {
 						await this.mutate(() => undefined);
 						if (signal?.aborted) return prepared;
 						const context = prepared?.context ?? request.context;
-						const messages = appendRuntimeContext(live.manager, context.messages, descriptor, this.state);
+						const messages = appendRuntimeContext(
+							live.manager,
+							context.messages,
+							this.goalEnabled ? descriptor : { ...descriptor, goal: undefined },
+							this.state,
+						);
 						return messages === context.messages ? prepared : { ...prepared, context: { ...context, messages } };
 					};
 					if (reserved.length) session.setActiveToolsByName(selectedTools!);
@@ -1380,6 +1395,7 @@ export class SessionRegistry {
 						return images;
 					};
 					const configureExecution = () => {
+						const activeGoal = this.runtimeGoal(descriptor)?.status === "active";
 						const activeSwarm = descriptor.swarm?.status === "active";
 						const agent = this.state.agents.find((entry) => entry.sessionId === id);
 						const team = this.state.teams.find(
@@ -1388,7 +1404,7 @@ export class SessionRegistry {
 						const manager = team?.rootAgentId === agent?.agentId && !!team;
 						const specialist = !!team && agent?.parentAgentId === team.rootAgentId;
 						settingsManager.applyOverrides({
-							retry: { enabled: descriptor.goal?.status === "active" || activeSwarm ? false : retryEnabled },
+							retry: { enabled: activeGoal || activeSwarm ? false : retryEnabled },
 						});
 						if (activeSwarm || manager) {
 							// The active set can already be restricted here: a resumed transcript restores
@@ -1400,7 +1416,7 @@ export class SessionRegistry {
 										["read", "grep", "glob", "web_search", "edit", "bash", "shell_process"].includes(name),
 									),
 									"team",
-									...(descriptor.goal?.status === "active" ? ["goal"] : []),
+									...(activeGoal ? ["goal"] : []),
 								].sort(),
 							);
 						} else {
@@ -1408,7 +1424,7 @@ export class SessionRegistry {
 								session.setActiveToolsByName([...live.delegatedTools].sort());
 								live.delegatedTools = undefined;
 							}
-							if (descriptor.goal?.status === "active" && !session.getActiveToolNames().includes("goal"))
+							if (activeGoal && !session.getActiveToolNames().includes("goal"))
 								session.setActiveToolsByName([...session.getActiveToolNames(), "goal"].sort());
 						}
 						if (specialist && !session.getActiveToolNames().includes("team"))
@@ -1421,7 +1437,8 @@ export class SessionRegistry {
 							session.subscribe((event) => {
 								listener(event);
 								if (
-									(descriptor.goal?.status === "active" || descriptor.swarm?.status === "active") &&
+									(this.runtimeGoal(descriptor)?.status === "active" ||
+										descriptor.swarm?.status === "active") &&
 									event.type === "message_end" &&
 									event.message.role === "assistant" &&
 									["error", "aborted", "length"].includes(event.message.stopReason)
@@ -1463,14 +1480,15 @@ export class SessionRegistry {
 						},
 						resumeContext: async () => {
 							configureExecution();
-							if (descriptor.goal?.status === "active")
+							const goal = this.runtimeGoal(descriptor);
+							if (goal?.status === "active")
 								await session.sendCustomMessage(
 									{
 										customType: "harness-goal-continuation",
 										content:
 											"Continue the active goal from existing context. Handle queued user input and child results first.",
 										display: false,
-										details: { goalId: descriptor.goal.id },
+										details: { goalId: goal.id },
 									},
 									{ triggerTurn: false },
 								);
