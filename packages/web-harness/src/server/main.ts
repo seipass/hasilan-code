@@ -24,7 +24,6 @@ import {
 } from "../shared/contracts.ts";
 import { DEFAULT_THEME_ID, standardTheme } from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
-import { workspaceSwarmStartSchema } from "../shared/swarm.ts";
 import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
 import { readAccountUsage } from "./account-usage.ts";
 import { AgentWorktrees } from "./agent-worktrees.ts";
@@ -43,6 +42,7 @@ import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { mediaView, serveMedia } from "./media.ts";
 import { canvasPlugin } from "./plugins/canvas.ts";
 import { goalPlugin } from "./plugins/goal.ts";
+import { hyakkiPlugin } from "./plugins/hyakki.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
 import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts";
@@ -125,6 +125,7 @@ async function createHarness(
 	const isolatedFiles = new WorkspaceFiles();
 	let teams: TeamManager;
 	let builtinGoal = false;
+	let builtinHyakki = false;
 	const plugins = loadServerProfile(
 		agentDir,
 		new Map<string, () => ServerPlugin>([
@@ -167,6 +168,13 @@ async function createHarness(
 			],
 			[DEFAULT_THEME_ID, () => ({ apiVersion: 1, theme: standardTheme })],
 			[
+				"hyakki",
+				() => {
+					builtinHyakki = true;
+					return hyakkiPlugin(() => teams);
+				},
+			],
+			[
 				"goal",
 				() => {
 					builtinGoal = true;
@@ -194,6 +202,7 @@ async function createHarness(
 		modelRuntime,
 		workspaceFiles: files,
 		goalEnabled: builtinGoal,
+		swarmEnabled: builtinHyakki,
 		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
 		pluginOwnedTools: ["read", "edit", "write"],
 		customTools: (descriptor) =>
@@ -410,8 +419,6 @@ async function createHarness(
 							next: end < json.length ? end : undefined,
 						});
 					}
-					if (parts[3] === "swarm" && parts[4] === "continue" && parts.length === 5 && method === "POST")
-						return reply(await teams.continueSwarm(id), 202);
 					if (parts[3] === "prompt" && method === "POST") {
 						const input = await readJson(request, promptSchema, ATTACHMENT_LIMITS.requestBytes);
 						const descriptor = registry.descriptor(id);
@@ -520,11 +527,6 @@ async function createHarness(
 				if (parts[1] === "workspaces" && parts[2]) {
 					const id = parts[2];
 					const path = url.searchParams.get("path") ?? "";
-					if (parts[3] === "swarm" && parts.length === 4 && method === "POST")
-						return reply(
-							await teams.startWorkspaceSwarm(id, await readJson(request, workspaceSwarmStartSchema)),
-							202,
-						);
 					if (parts[3] === "agents" && parts[4] && parts.length === 5 && method === "PATCH") {
 						const { responsibility } = await readJson(request, responsibilitySchema);
 						const team = teams.snapshot(id).teams.find((entry) => entry.scope === "workspace");

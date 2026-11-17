@@ -153,6 +153,7 @@ export interface RegistryOptions {
 	customTools?: (descriptor: SessionDescriptor) => ToolDefinition[];
 	pluginOwnedTools?: readonly string[];
 	goalEnabled?: boolean;
+	swarmEnabled?: boolean;
 	readAttachments?: (workspaceId: string, attachments: PromptAttachment[]) => Promise<ImageContent[]>;
 	/** An execution seam for deterministic boundary tests; production uses the Pi SDK. */
 	adapterFactory?: (descriptor: SessionDescriptor, manager: SessionManager) => Promise<ExecutionAdapter>;
@@ -465,6 +466,14 @@ export class SessionRegistry {
 		return this.goalEnabled ? descriptor.goal : undefined;
 	}
 
+	get swarmEnabled(): boolean {
+		return this.options.swarmEnabled !== false;
+	}
+
+	runtimeSwarm(descriptor: Pick<SessionDescriptor, "swarm">): Swarm | undefined {
+		return this.swarmEnabled ? descriptor.swarm : undefined;
+	}
+
 	readonly state: HarnessState = {
 		schemaVersion: 1,
 		workspaces: [],
@@ -511,10 +520,11 @@ export class SessionRegistry {
 					goal.reason = "Host restarted; resume explicitly to continue";
 					goal.updatedAt = new Date().toISOString();
 				}
-				if (descriptor.swarm?.status === "active") {
-					descriptor.swarm.status = "paused";
-					descriptor.swarm.reason = "Host restarted; start Hyakki-Yako explicitly to continue";
-					descriptor.swarm.updatedAt = new Date().toISOString();
+				const swarm = this.runtimeSwarm(descriptor);
+				if (swarm?.status === "active") {
+					swarm.status = "paused";
+					swarm.reason = "Host restarted; start Hyakki-Yako explicitly to continue";
+					swarm.updatedAt = new Date().toISOString();
 				}
 			}
 		}
@@ -1026,7 +1036,7 @@ export class SessionRegistry {
 					(session) =>
 						ids.has(session.sessionId) &&
 						(this.runtimeGoal(session)?.status === "active" ||
-							session.swarm?.status === "active" ||
+							this.runtimeSwarm(session)?.status === "active" ||
 							this.live.get(session.sessionId)?.runId),
 				)
 			)
@@ -1377,12 +1387,10 @@ export class SessionRegistry {
 						await this.mutate(() => undefined);
 						if (signal?.aborted) return prepared;
 						const context = prepared?.context ?? request.context;
-						const messages = appendRuntimeContext(
-							live.manager,
-							context.messages,
-							this.goalEnabled ? descriptor : { ...descriptor, goal: undefined },
-							this.state,
-						);
+						const messages = appendRuntimeContext(live.manager, context.messages, descriptor, this.state, {
+							goal: this.goalEnabled,
+							swarm: this.swarmEnabled,
+						});
 						return messages === context.messages ? prepared : { ...prepared, context: { ...context, messages } };
 					};
 					if (reserved.length) session.setActiveToolsByName(selectedTools!);
@@ -1403,7 +1411,7 @@ export class SessionRegistry {
 					};
 					const configureExecution = () => {
 						const activeGoal = this.runtimeGoal(descriptor)?.status === "active";
-						const activeSwarm = descriptor.swarm?.status === "active";
+						const activeSwarm = this.runtimeSwarm(descriptor)?.status === "active";
 						const agent = this.state.agents.find((entry) => entry.sessionId === id);
 						const team = this.state.teams.find(
 							(entry) => entry.teamId === agent?.teamId && entry.scope === "workspace",
@@ -1445,7 +1453,7 @@ export class SessionRegistry {
 								listener(event);
 								if (
 									(this.runtimeGoal(descriptor)?.status === "active" ||
-										descriptor.swarm?.status === "active") &&
+										this.runtimeSwarm(descriptor)?.status === "active") &&
 									event.type === "message_end" &&
 									event.message.role === "assistant" &&
 									["error", "aborted", "length"].includes(event.message.stopReason)
@@ -1499,14 +1507,15 @@ export class SessionRegistry {
 									},
 									{ triggerTurn: false },
 								);
-							if (descriptor.swarm?.status === "active")
+							const swarm = this.runtimeSwarm(descriptor);
+							if (swarm?.status === "active")
 								await session.sendCustomMessage(
 									{
 										customType: "harness-swarm-continuation",
 										content:
 											"Continue managing the unfinished objective. Handle queued user input and member results first. Update planning records and integrate accepted changes directly when appropriate. Reuse existing members for substantial corrections and next assignments with team send. Explicitly complete or block with the team tool.",
 										display: false,
-										details: { swarmId: descriptor.swarm.id },
+										details: { swarmId: swarm.id },
 									},
 									{ triggerTurn: false },
 								);
@@ -1517,7 +1526,8 @@ export class SessionRegistry {
 						abort: () => session.abort(),
 						waitForIdle: async () => {
 							await session.waitForIdle();
-							if (descriptor.swarm?.status !== "active" && live.delegatedTools) configureExecution();
+							if (this.runtimeSwarm(descriptor)?.status !== "active" && live.delegatedTools)
+								configureExecution();
 						},
 						clearQueue: () => session.clearQueue(),
 						getActiveToolNames: () => session.getActiveToolNames(),

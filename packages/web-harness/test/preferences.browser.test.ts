@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { type Browser, chromium } from "playwright";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { EventHub } from "../src/server/events.ts";
 import { createHttpHost, type HttpHost, sendJson } from "../src/server/http-host.ts";
 import { UiPreferencesStore } from "../src/server/ui-preferences.ts";
@@ -13,6 +13,7 @@ import { DEFAULT_THEME_ID, standardTheme } from "../src/shared/plugin-profile.ts
 
 let browser: Browser;
 let directory: string;
+let preferenceDirectory: string;
 let host: HttpHost;
 let hub: EventHub;
 let store: UiPreferencesStore;
@@ -26,7 +27,7 @@ const dusk = {
 };
 
 async function start(activeIds = ["canvas"]) {
-	store = await UiPreferencesStore.open(directory);
+	store = await UiPreferencesStore.open(preferenceDirectory);
 	hub = new EventHub(() => ({ sessions: [], teams: { teams: [], agents: [], runs: [] } }));
 	host = createHttpHost({
 		port: 0,
@@ -86,6 +87,10 @@ beforeAll(async () => {
 	);
 	browser = await chromium.launch({ headless: true });
 }, 30000);
+
+beforeEach(async () => {
+	preferenceDirectory = await mkdtemp(join(directory, "profile-"));
+});
 
 afterAll(async () => {
 	await browser?.close();

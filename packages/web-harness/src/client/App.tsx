@@ -80,9 +80,11 @@ export function App() {
 	}, [profile]);
 	const activePanel = activePanels?.find(({ id }) => id === mode);
 	const goalEnabled = profile?.activeIds.includes("goal") ?? false;
+	const swarmEnabled = profile?.activeIds.includes("hyakki") ?? false;
 	const canvasEnabled = activePanels?.some(({ id }) => id === canvasPanel.id) ?? false;
 	const commands = COMPOSER_COMMANDS.filter(({ command }) =>
-		(command !== "/canvas" || canvasEnabled) && (command !== "/goal" || goalEnabled));
+		(command !== "/canvas" || canvasEnabled) && (command !== "/goal" || goalEnabled) &&
+		(command !== "/hyakki" || swarmEnabled));
 	const [draftInsertion, setDraftInsertion] = useState<{ id: string; text: string }>();
 	const [workspaceId, setWorkspaceId] = useState<string>();
 	const [sessionId, setSessionId] = useState<string | undefined>(() => preferences.getItem("pi-web-selected-session") || undefined);
@@ -414,6 +416,10 @@ export function App() {
 			const parsed = parseComposerCommand(text);
 			if (destination && (sessionId || mode !== "chat" || parsed.kind !== "prompt")) throw new Error("判断モデルによる選択はホームの通常メッセージで利用できます。");
 			if (attachments.length && parsed.kind !== "prompt") throw new Error("添付ファイルは通常のメッセージとして送信してください。");
+			if (parsed.kind === "hyakki" || parsed.kind === "hyakki-continue") {
+				if (!profile) throw new Error("プラグインの読み込みが完了してから操作してください。");
+				if (!swarmEnabled) throw new Error("Hyakki-Yako が無効です。");
+			}
 			if (parsed.kind === "canvas") {
 				if (!activePanels) throw new Error("プラグインの読み込みが完了してから開いてください。");
 				if (!canvasEnabled) throw new Error("設計キャンバスが無効です。");
@@ -617,7 +623,7 @@ export function App() {
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
 					<div className="right-panel-body detail-panel-body">
 						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab} onActiveFileChange={setActiveFilePath}
-							browserModel={model} team={<TeamPane snapshot={team} sessions={summaries} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
+							browserModel={model} team={<TeamPane snapshot={team} sessions={swarmEnabled ? summaries : summaries.map((summary) => summary.swarm ? { ...summary, swarm: undefined } : summary)} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>
 				</aside>

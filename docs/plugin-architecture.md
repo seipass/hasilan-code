@@ -88,6 +88,8 @@ exports.theme = {
 
 `"goal": false` にすると、Goal のコマンド、入力欄の操作、API、ツール、自動継続を無効にする。会話に保存済みの目標は保持される。
 
+`"hyakki": false` にすると、百鬼夜行の開始・再開、Canvas からの送信先、モデルのスウォーム操作、自動継続を無効にする。既存の目標、チーム、担当エージェント、会話は保持される。通常のチーム操作には `team-tools` を使う。
+
 既存のセッション用ツールは `hashline`、`shell-process`、`browser-tools`、`computer-tools`、`jev-computer`、`web-search`、`team-tools`、`goal` として同梱し、標準で有効にする。`hashline` を無効化したとき、別のプラグインが提供しない `read`、`edit`、`write` は Pi の既定ツールにも戻さない。`shell-process` は長時間実行用の `shell_process` を担当する。
 
 セッションに紐づくリソースを持つプラグインは、停止・削除時の `closeSession(sessionId)` とホスト終了時の `close()` をエクスポートできる。ホストは登録の逆順で呼び出し、各呼び出しの失敗を記録して残りの後片付けを続ける。

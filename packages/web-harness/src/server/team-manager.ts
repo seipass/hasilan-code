@@ -180,7 +180,7 @@ const taskSchema = Type.Object({
 	model: Type.Optional(Type.Object({ provider: Type.String(), id: Type.String() })),
 	tools: Type.Optional(Type.Array(Type.String())),
 });
-const teamParameters = Type.Union([
+const teamCommonParameters = [
 	Type.Object({ action: Type.Literal("spawn"), tasks: Type.Array(taskSchema, { minItems: 1, maxItems: 32 }) }),
 	Type.Object({
 		action: Type.Literal("workflow"),
@@ -218,6 +218,9 @@ const teamParameters = Type.Union([
 		timeoutMs: Type.Optional(Type.Integer({ minimum: 0, maximum: 300000 })),
 	}),
 	Type.Object({ action: Type.Literal("stop"), agentId: Type.String() }),
+] as const;
+const teamParameters = Type.Union([
+	...teamCommonParameters,
 	Type.Object(
 		{
 			action: Type.Literal("swarm"),
@@ -227,6 +230,7 @@ const teamParameters = Type.Union([
 		{ additionalProperties: false },
 	),
 ]);
+const teamParametersWithoutSwarm = Type.Union([...teamCommonParameters]);
 const goalParameters = Type.Union([
 	Type.Object({ op: Type.Literal("get") }, { additionalProperties: false }),
 	Type.Object(
@@ -287,7 +291,7 @@ export class TeamManager {
 				this.registry.state.teams.filter((team) => team.scope === "workspace").map((team) => team.workspaceId),
 			);
 			for (const session of this.registry.state.sessions
-				.filter((entry) => entry.swarm)
+				.filter((entry) => this.registry.runtimeSwarm(entry))
 				.sort((a, b) => b.swarm!.createdAt.localeCompare(a.swarm!.createdAt))) {
 				if (adopted.has(session.workspaceId)) continue;
 				const agent = this.agentForSession(session.sessionId);
@@ -354,10 +358,12 @@ export class TeamManager {
 		return run;
 	}
 	private objectiveActive(run: RunRecord): boolean {
-		if (!run.swarmId) return true;
+		if (!this.registry.swarmEnabled || !run.swarmId) return true;
 		const agent = this.agentById(run.agentId);
 		const team = this.registry.state.teams.find((entry) => entry.teamId === agent.teamId)!;
-		const objective = this.registry.descriptor(this.agentById(team.rootAgentId).sessionId).swarm;
+		const objective = this.registry.runtimeSwarm(
+			this.registry.descriptor(this.agentById(team.rootAgentId).sessionId),
+		);
 		return objective?.id === run.swarmId && objective.status === "active";
 	}
 	private current(agent: AgentRecord): RunRecord | undefined {
@@ -417,7 +423,7 @@ export class TeamManager {
 		const team = this.registry.state.teams.find((entry) => entry.teamId === agent.teamId);
 		const objective =
 			team?.scope === "workspace"
-				? this.registry.descriptor(this.agentById(team.rootAgentId).sessionId).swarm
+				? this.registry.runtimeSwarm(this.registry.descriptor(this.agentById(team.rootAgentId).sessionId))
 				: undefined;
 		if (objective?.status === "active") run.swarmId = objective.id;
 		this.registry.state.runs.push(run);
@@ -426,7 +432,7 @@ export class TeamManager {
 			resolveDone = resolve;
 		});
 		const goal = this.registry.runtimeGoal(this.registry.descriptor(agent.sessionId));
-		const swarm = this.registry.descriptor(agent.sessionId).swarm;
+		const swarm = this.registry.runtimeSwarm(this.registry.descriptor(agent.sessionId));
 		this.runtime.set(run.runId, {
 			controller: new AbortController(),
 			done,
@@ -573,7 +579,7 @@ export class TeamManager {
 		);
 	}
 	private updateSwarm(sessionId: string, status: SwarmStatus, reason?: string): void {
-		const swarm = this.registry.descriptor(sessionId).swarm;
+		const swarm = this.registry.runtimeSwarm(this.registry.descriptor(sessionId));
 		if (!swarm) return;
 		swarm.status = status;
 		swarm.reason = reason;
@@ -585,7 +591,7 @@ export class TeamManager {
 		}
 	}
 	private scheduleSwarm(agent: AgentRecord): void {
-		const swarm = this.registry.descriptor(agent.sessionId).swarm;
+		const swarm = this.registry.runtimeSwarm(this.registry.descriptor(agent.sessionId));
 		if (
 			swarm?.status !== "active" ||
 			!this.accepting ||
@@ -602,7 +608,7 @@ export class TeamManager {
 				this.swarmTimers.delete(agent.sessionId);
 				void this.registry
 					.mutate(async () => {
-						const currentSwarm = this.registry.descriptor(agent.sessionId).swarm;
+						const currentSwarm = this.registry.runtimeSwarm(this.registry.descriptor(agent.sessionId));
 						if (
 							!this.accepting ||
 							this.fenced.has(agent.agentId) ||
@@ -629,7 +635,7 @@ export class TeamManager {
 					})
 					.catch((error: unknown) => {
 						void this.registry.mutate(async () => {
-							if (this.registry.descriptor(agent.sessionId).swarm?.id !== swarmId) return;
+							if (this.registry.runtimeSwarm(this.registry.descriptor(agent.sessionId))?.id !== swarmId) return;
 							this.updateSwarm(
 								agent.sessionId,
 								"paused",
@@ -646,6 +652,7 @@ export class TeamManager {
 		workspaceId: string,
 		input: WorkspaceSwarmStart,
 	): Promise<AdmissionResult & { swarm: Swarm; sessionId: string }> {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
 		if (!input.objective.trim() || input.objective.trim().length > SWARM_OBJECTIVE_MAX_LENGTH)
 			throw new HarnessError(`Swarm objective must contain 1..${SWARM_OBJECTIVE_MAX_LENGTH} characters`);
 		const sessionId = await this.registry.mutate(async () => {
@@ -668,7 +675,7 @@ export class TeamManager {
 				this.addRoot(session.sessionId);
 			if (
 				this.registry.runtimeGoal(session)?.status === "active" ||
-				session.swarm?.status === "active" ||
+				this.registry.runtimeSwarm(session)?.status === "active" ||
 				this.registry.state.agents.some(
 					(agent) => (agent.agentId === root.agentId || this.ancestor(root.agentId, agent)) && this.current(agent),
 				)
@@ -687,6 +694,7 @@ export class TeamManager {
 		return { ...(await this.startSwarm(sessionId, { objective: input.objective })), sessionId };
 	}
 	async startSwarm(sessionId: string, input: SwarmStart): Promise<AdmissionResult & { swarm: Swarm }> {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
 		const objective = input.objective.trim();
 		if (!objective || objective.length > SWARM_OBJECTIVE_MAX_LENGTH)
 			throw new HarnessError(`Swarm objective must contain 1..${SWARM_OBJECTIVE_MAX_LENGTH} characters`);
@@ -697,7 +705,7 @@ export class TeamManager {
 			const descriptor = this.registry.descriptor(sessionId);
 			if (agent.parentAgentId || descriptor.parentSessionId)
 				throw new HarnessError("Swarm mode requires a root session", 409);
-			if (descriptor.swarm?.status === "active")
+			if (this.registry.runtimeSwarm(descriptor)?.status === "active")
 				throw new HarnessError("Stop the active Hyakki-Yako swarm before starting another", 409);
 			if (this.registry.runtimeGoal(descriptor)?.status === "active")
 				throw new HarnessError("Pause or drop the active Goal before starting a swarm", 409);
@@ -746,6 +754,7 @@ export class TeamManager {
 		});
 	}
 	async continueSwarm(sessionId: string): Promise<AdmissionResult & { swarm: Swarm }> {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
 		return this.registry.mutate(async () => {
 			const agent = this.agentForSession(sessionId);
 			this.assertOpen(agent);
@@ -801,7 +810,7 @@ export class TeamManager {
 			const descriptor = this.registry.descriptor(sessionId);
 			if (agent.parentAgentId || descriptor.parentSessionId)
 				throw new HarnessError("Goal mode requires a root session", 409);
-			if (descriptor.swarm?.status === "active")
+			if (this.registry.runtimeSwarm(descriptor)?.status === "active")
 				throw new HarnessError("Stop the active Hyakki-Yako swarm before starting a Goal", 409);
 			if (
 				this.registry.state.agents.some(
@@ -915,7 +924,7 @@ export class TeamManager {
 		};
 		const current = this.current(parent);
 		const goal = this.registry.runtimeGoal(this.registry.descriptor(parent.sessionId));
-		const swarm = this.registry.descriptor(parent.sessionId).swarm;
+		const swarm = this.registry.runtimeSwarm(this.registry.descriptor(parent.sessionId));
 		const held =
 			!this.objectiveActive(run) ||
 			(goal?.status !== "active" && (swarm ? swarm.status !== "active" : !current && !!goal));
@@ -1008,7 +1017,7 @@ export class TeamManager {
 					else this.goalFingerprints.set(goal.id, fingerprint);
 				}
 			}
-			const swarm = this.registry.descriptor(agent.sessionId).swarm;
+			const swarm = this.registry.runtimeSwarm(this.registry.descriptor(agent.sessionId));
 			if (swarm?.status === "active" && this.runtime.get(runId)?.swarmId === swarm.id) {
 				if (status !== "completed")
 					this.updateSwarm(agent.sessionId, "paused", error ?? "Run was aborted or did not complete");
@@ -1785,7 +1794,7 @@ export class TeamManager {
 						await this.registry.persist();
 						this.changed(agent);
 					}
-					const swarm = this.registry.descriptor(sessionId).swarm;
+					const swarm = this.registry.runtimeSwarm(this.registry.descriptor(sessionId));
 					if (swarm?.status === "active" && this.runtime.get(run.runId)?.swarmId === swarm.id) {
 						if (["error", "aborted", "length"].includes(event.message.stopReason)) {
 							this.updateSwarm(
@@ -1894,7 +1903,7 @@ export class TeamManager {
 					goalAction === "drop" ? "Dropped by user" : "Paused by user",
 				);
 			} else if (goal?.status === "active") this.updateGoal(sessionId, "paused", "Stopped by user");
-			const swarm = this.registry.descriptor(sessionId).swarm;
+			const swarm = this.registry.runtimeSwarm(this.registry.descriptor(sessionId));
 			if (swarm?.status === "active") this.updateSwarm(sessionId, "paused", "Stopped by user");
 			// Persist lifecycle transitions before aborting: settlement must never requeue them.
 			if (goal || swarm) await this.registry.persist();
@@ -2051,16 +2060,19 @@ export class TeamManager {
 			return { status: worktree.status, changed: result.changed };
 		});
 	}
-	createTool(sessionId: string): ToolDefinition<typeof teamParameters> {
+	createTool(sessionId: string): ToolDefinition<typeof teamParameters | typeof teamParametersWithoutSwarm> {
 		return {
 			name: "team",
 			label: "Agent team",
-			description:
-				"Manage workspace specialists and bounded helpers. Spawn/workflow reuse a manager's existing idle specialist by name across objectives. New specialists require a continuing responsibility separate from task; profiles supply their description. Send consults or assigns work to an existing member and returns results to requesters, including queued senders. Handoff transfers a specialist's current assignment to an idle peer, preserving the original requester; waits follow the new owner. Describe deliberately changes an idle specialist's responsibility as manager. Workflow passes successful prerequisite results and skips dependents of failure. Cannot wait on or stop self or ancestors. An active Hyakki-Yako manager must explicitly complete or block with evidence; complete requires successful delegated work and an idle subtree.",
+			description: `Manage workspace specialists and bounded helpers. Spawn/workflow reuse a manager's existing idle specialist by name across objectives. New specialists require a continuing responsibility separate from task; profiles supply their description. Send consults or assigns work to an existing member and returns results to requesters, including queued senders. Handoff transfers a specialist's current assignment to an idle peer, preserving the original requester; waits follow the new owner. Describe deliberately changes an idle specialist's responsibility as manager. Workflow passes successful prerequisite results and skips dependents of failure. Cannot wait on or stop self or ancestors.${
+				this.registry.swarmEnabled
+					? " An active Hyakki-Yako manager must explicitly complete or block with evidence; complete requires successful delegated work and an idle subtree."
+					: ""
+			}`,
 			promptSnippet:
 				"Manage a durable workspace roster, not task-shaped agents. New specialists need a responsibility describing continuing ownership, separate from task. Inspect list before creating anyone; send work or questions directly to existing members. Specialists choose their own execution and may spawn bounded helpers. Use handoff to transfer your current assignment to an idle specialist, including context, deliverable, and acceptance; after transfer, finish your turn without duplicating their work. Wait follows ownership transfers. Use describe as manager to deliberately change an idle specialist's responsibility. The workspace manager owns priorities and final acceptance, handles coordination and integration, and delegates substantial implementation and verification.",
 			executionMode: "sequential",
-			parameters: teamParameters,
+			parameters: this.registry.swarmEnabled ? teamParameters : teamParametersWithoutSwarm,
 			promptGuidelines: [
 				"Completion notices, wait, and workflow give short previews. Use team action result with the runId to read a report, list tool logs (view logs), or read a log by logIndex (view log). Follow nextOffset to read more only when needed.",
 				"Each newly spawned agent in a Git workspace works in its own checkout. After it settles, inspect its patch with team action work, op diff, and the agentId. Use op adopt to apply accepted changes to your checkout, discard to park rejected changes, or restore to reconsider a parked patch. Decide and perform these operations yourself. Never ask the user to click a review button for routine acceptance. Adopt prerequisite code before assigning work that must build on it. Apply failures leave the patch available for review.",
@@ -2070,8 +2082,9 @@ export class TeamManager {
 				let result: unknown;
 				switch (params.action) {
 					case "swarm":
+						if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
 						result = await this.registry.mutate(async () => {
-							const swarm = this.registry.descriptor(sessionId).swarm;
+							const swarm = this.registry.runtimeSwarm(this.registry.descriptor(sessionId));
 							const agent = this.agentForSession(sessionId);
 							const current = this.current(agent);
 							if (agent.parentAgentId || !swarm || !current)

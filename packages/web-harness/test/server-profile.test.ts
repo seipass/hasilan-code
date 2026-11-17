@@ -26,19 +26,21 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	vi.stubEnv("HASILAN_CODE_AGENT_DIR", dir);
 	vi.stubEnv("PI_OFFLINE", "1");
 	const options = { cwd: dir, port: 0, noOpen: true, help: false, lan: false, development: false };
-	async function withHost(run: (api: (path: string, body?: unknown) => Promise<Response>) => Promise<void>) {
+	async function withHost(
+		run: (api: (path: string, body?: unknown, method?: string) => Promise<Response>) => Promise<void>,
+	) {
 		const harness = await startHarness(options);
 		try {
 			const { origin, launchUrl } = harness.launch;
 			const login = await fetch(launchUrl, { redirect: "manual" });
 			const cookie = login.headers.getSetCookie()[0].split(";")[0];
-			await run((path, body) =>
+			await run((path, body, method = "PUT") =>
 				fetch(
 					origin + path,
 					body === undefined
 						? { headers: { cookie } }
 						: {
-								method: "PUT",
+								method,
 								headers: { cookie, origin, "Content-Type": "application/json" },
 								body: JSON.stringify(body),
 							},
@@ -50,6 +52,7 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	}
 
 	let path = "";
+	let swarmPath = "";
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toEqual({
 			activeIds: [
@@ -61,6 +64,7 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 				"web-search",
 				"team-tools",
 				"theme-default",
+				"hyakki",
 				"goal",
 				"canvas",
 			],
@@ -69,17 +73,23 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 		});
 		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
 		path = `/api/workspaces/${workspaceId}/canvas`;
+		swarmPath = `/api/workspaces/${workspaceId}/swarm`;
+		expect((await api(swarmPath, {}, "POST")).status).toBe(400);
 		const saved = await api(path, emptyCanvasDocument());
 		expect(saved.status).toBe(200);
 		expect(await saved.json()).toMatchObject({ revision: 1 });
 	});
-	await writeFile(join(dir, "plugins.json"), '{"canvas":false,"goal":false,"hashline":false,"shell-process":false}');
+	await writeFile(
+		join(dir, "plugins.json"),
+		'{"canvas":false,"goal":false,"hashline":false,"shell-process":false,"hyakki":false}',
+	);
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
 			activeIds: ["browser-tools", "computer-tools", "jev-computer", "web-search", "team-tools", "theme-default"],
 			panels: [],
 		});
 		expect((await api(path)).status).toBe(404);
+		expect((await api(swarmPath, {}, "POST")).status).toBe(404);
 	});
 	await writeFile(join(dir, "plugins.json"), '{"notes":"./notes.cjs"}');
 	await writeFile(

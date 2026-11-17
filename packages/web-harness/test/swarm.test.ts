@@ -24,7 +24,7 @@ afterEach(async () => {
 	for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function fixture(limit = 2) {
+async function fixture(limit = 2, swarmEnabled = true) {
 	const root = await mkdtemp(join(tmpdir(), "hasilan-swarm-"));
 	const workspacePath = join(root, "workspace");
 	await mkdir(workspacePath);
@@ -42,6 +42,7 @@ async function fixture(limit = 2) {
 	const gateParameters = Type.Object({ name: Type.String() });
 	const registry = new SessionRegistry({
 		agentDir: root,
+		swarmEnabled,
 		modelRuntime,
 		workspaceFiles: new WorkspaceFiles(),
 		customTools: (descriptor) =>
@@ -152,6 +153,38 @@ async function idle(registry: SessionRegistry, sessionId: string) {
 }
 
 describe("Hyakki-Yako real SDK orchestration", () => {
+	it("preserves a saved swarm while disabled without admitting autonomous work or adding its context", async () => {
+		const f = await fixture(2, false);
+		const id = f.session.sessionId;
+		f.faux.setResponses([fauxAssistantMessage("Initial response")]);
+		const initial = await f.teams.prompt(id, { text: "Initial request", mode: "prompt" });
+		await idle(f.registry, id);
+		const now = new Date().toISOString();
+		const swarm = {
+			id: "0123456789abcdef",
+			objective: "Saved swarm objective",
+			status: "active",
+			createdAt: now,
+			updatedAt: now,
+			rootRunId: initial.runId,
+		} as const;
+		f.registry.descriptor(id).swarm = { ...swarm };
+		let request = "";
+		f.faux.setResponses([
+			(context) => {
+				request = JSON.stringify(context.messages);
+				return fauxAssistantMessage("Ordinary response");
+			},
+		]);
+		await f.teams.prompt(id, { text: "Ordinary request", mode: "prompt" });
+		await idle(f.registry, id);
+		expect(f.faux.state.callCount).toBe(2);
+		expect(request).toContain("Ordinary request");
+		expect(request).not.toContain("Saved swarm objective");
+		expect(f.registry.descriptor(id).swarm).toEqual(swarm);
+		expect(Check(f.teams.createTool(id).parameters, { action: "swarm", op: "complete", reason: "test" })).toBe(false);
+		await expect(f.teams.continueSwarm(id)).rejects.toThrow("Hyakki-Yako plugin is disabled");
+	});
 	it("continues a stopped swarm with the same objective, identity, and team", async () => {
 		const f = await fixture(2);
 		await expect(f.teams.continueSwarm(f.session.sessionId)).rejects.toMatchObject({ statusCode: 409 });
