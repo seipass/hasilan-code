@@ -22,6 +22,7 @@ import { PanelResize } from "./PanelResize.tsx";
 import { preferences, usePreferenceState } from "./preferences.ts";
 import { PreferenceStatus } from "./PreferenceStatus.tsx";
 import { canvasPanel } from "./plugins/canvas.tsx";
+import type { WorkspacePanel } from "./plugins/workspace-panels.ts";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
 import { sessionRecency } from "./session-recency.ts";
 import { SessionImportDialog } from "./SessionImportDialog.tsx";
@@ -37,7 +38,7 @@ import { sendWorkspacePrompt } from "./workspace-send.ts";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 import "./WorkspaceModes.css";
 
-const workspacePanels = [canvasPanel] as const;
+const workspacePanels: readonly WorkspacePanel[] = [canvasPanel];
 
 function sessionFromLocation(): string | undefined {
 	if (typeof location === "undefined") return undefined;
@@ -62,7 +63,7 @@ function WorkspaceFeed({ id, onUpdate, onFiles }: { id: string; onUpdate: (id: s
 export function App() {
 	const { background, changeBackground } = useHomeBackground();
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-	const [mode, setMode] = useState<"chat" | "canvas">("chat");
+	const [mode, setMode] = useState("chat");
 	const [canvasDirty, setCanvasDirty] = useState(false);
 	const [openedPanels, setOpenedPanels] = useState<readonly string[]>([]);
 	const [activePluginIds, setActivePluginIds] = useState<readonly string[]>();
@@ -413,8 +414,7 @@ export function App() {
 				if (!activePluginIds) throw new Error("プラグインの読み込みが完了してから開いてください。");
 				if (!activePanels.some(({ id }) => id === canvasPanel.id)) throw new Error("設計キャンバスが無効です。");
 				if (!workspaceId) throw new Error("ワークスペースを選択してください。");
-				setOpenedPanels((previous) => previous.includes(canvasPanel.id) ? previous : [...previous, canvasPanel.id]);
-				setMode(canvasPanel.id); setModelOpen(false);
+				openPanel(canvasPanel.id);
 				return {};
 			}
 			if (parsed.kind === "chat") { setMode("chat"); setModelOpen(false); return {}; }
@@ -508,6 +508,12 @@ export function App() {
 		setRightTab("team");
 		setRightOpen(true);
 	}
+	function openPanel(id: string): void {
+		setOpenedPanels((previous) => previous.includes(id) ? previous : [...previous, id]);
+		setMode(id);
+		setModelOpen(false);
+	}
+
 	function insertPanelDraft(text: string): void {
 		if (commandPending.current) throw new Error("送信が完了してから設計を入力欄に追加してください。");
 		setDraftInsertion({ id: nextClientId(), text });
@@ -556,6 +562,13 @@ export function App() {
 			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={() => newConversation()}><img className="brand-symbol" src="/code-logo.svg" alt="" /></button></div>
 			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><Icon name="plus" size="control" />新しい会話</button>
 			<button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" title="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></div>
+			{activePanels.length > 0 && <nav className="sidebar-plugin-panels" aria-label="プラグイン">
+				{activePanels.map(({ id, title, icon }) => <button type="button" key={id} aria-current={mode === id ? "page" : undefined} disabled={!workspaceId} onClick={() => {
+					if (commandPending.current) return;
+					openPanel(id);
+					if (narrowViewport) setSidebarOpen(false);
+				}}><Icon name={icon} />{title}</button>)}
+			</nav>}
 			<label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>
 			<div className="history-heading"><span>会話</span><span className="history-heading-actions"><Presence show={runningCount > 0}><button className="icon-button history-stop-all" aria-label="実行中の会話をすべて停止" title="実行中の会話をすべて停止" onClick={() => { void stopAll(); }}><Icon name="stop" size="inline" /></button></Presence><button className="icon-button workspace-add-button" aria-label="ワークスペースを追加" title="フォルダーを選択してワークスペースを追加" disabled={addingWorkspace} onClick={() => { void addWorkspace(); }}>{addingWorkspace ? "…" : <Icon name="plus" size="control" />}</button></span></div>
 			<nav className="history-navigation" aria-label="ワークスペースと会話">
@@ -575,7 +588,7 @@ export function App() {
 								const bounds = button.getBoundingClientRect();
 								setSessionAction({ session: summary, opener: button, x: x ?? bounds.right - 8, y: y ?? bounds.bottom });
 							};
-							return <li key={summary.sessionId} className="history-session-row"><button className={`session-button ${summary.sessionId === sessionId ? "selected" : ""}`} aria-current={summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); openActions(event.currentTarget, event.clientX || undefined, event.clientY || undefined); }} onKeyDown={(event) => { if (event.key === "F10" && event.shiftKey) { event.preventDefault(); openActions(event.currentTarget); } }} title={title}><span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : status === "idle" ? "待機中" : RUN_LABELS[status]} /><span className="session-copy"><span className="session-title">{title}</span><time className="session-recency" dateTime={lastUsed} title={lastUsed ? new Date(lastUsed).toLocaleString("ja-JP") : undefined}>{sessionRecency(lastUsed)}</time></span></button><button type="button" className="session-menu-button" aria-label={`${title}の操作`} title="会話の操作" aria-haspopup="menu" aria-expanded={sessionAction?.session.sessionId === summary.sessionId} onClick={(event) => openActions(event.currentTarget)}><Icon name="more" size="control" /></button></li>;
+							return <li key={summary.sessionId} className="history-session-row"><button className={`session-button ${mode === "chat" && summary.sessionId === sessionId ? "selected" : ""}`} aria-current={mode === "chat" && summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); openActions(event.currentTarget, event.clientX || undefined, event.clientY || undefined); }} onKeyDown={(event) => { if (event.key === "F10" && event.shiftKey) { event.preventDefault(); openActions(event.currentTarget); } }} title={title}><span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : status === "idle" ? "待機中" : RUN_LABELS[status]} /><span className="session-copy"><span className="session-title">{title}</span><time className="session-recency" dateTime={lastUsed} title={lastUsed ? new Date(lastUsed).toLocaleString("ja-JP") : undefined}>{sessionRecency(lastUsed)}</time></span></button><button type="button" className="session-menu-button" aria-label={`${title}の操作`} title="会話の操作" aria-haspopup="menu" aria-expanded={sessionAction?.session.sessionId === summary.sessionId} onClick={(event) => openActions(event.currentTarget)}><Icon name="more" size="control" /></button></li>;
 						}}</MotionItems></ul><Presence show={conversations.length === 0}><p className="history-empty">{historyQuery ? "一致する会話がありません" : "会話はありません。"}</p></Presence>
 						{bodyMatches.filter((match) => conversations.some((entry) => entry.sessionId === match.sessionId)).slice(0, 6).map((match, index) => <button key={`${match.sessionId}-${index}`} type="button" className="history-body-match" onClick={() => selectSession(match.sessionId)} title={match.snippet}><span className="history-body-role">{match.role === "user" ? "あなた" : "AI"}</span>{match.snippet}</button>)}
 					</details>;
@@ -592,7 +605,7 @@ export function App() {
 				{activePanels.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
 					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={setCanvasDirty} />
 				</div></Presence>)}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${mode === "canvas" ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={visibleGoal && <GoalPanel key={visibleGoal.id} goal={visibleGoal} onDismiss={() => setDismissedGoalId(visibleGoal.id)} busy={!!session?.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session?.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={visibleGoal && <GoalPanel key={visibleGoal.id} goal={visibleGoal} onDismiss={() => setDismissedGoalId(visibleGoal.id)} busy={!!session?.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session?.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>

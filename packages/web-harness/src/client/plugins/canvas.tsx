@@ -27,5 +27,6 @@ function CanvasView({ workspaceId, opened, onDraft, onDirtyChange }: WorkspacePa
 export const canvasPanel = {
 	id: "canvas",
 	title: "設計キャンバス",
+	icon: "graph",
 	View: CanvasView,
 } as const satisfies WorkspacePanel;

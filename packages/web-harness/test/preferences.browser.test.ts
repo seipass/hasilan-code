@@ -70,25 +70,48 @@ afterAll(async () => {
 	if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-it("opens the built-in Canvas from the composer only when its plugin is enabled", async () => {
+it("opens the built-in Canvas from the sidebar and composer only when its plugin is enabled", async () => {
 	for (const enabled of [true, false]) {
 		const address = await start(enabled ? ["canvas"] : []);
 		const page = await browser.newPage({ reducedMotion: "reduce" });
 		try {
 			await page.goto(address.launchUrl);
 			const input = page.getByRole("combobox", { name: "メッセージ" });
+			const panelButton = page
+				.getByRole("navigation", { name: "プラグイン", exact: true })
+				.getByRole("button", { name: "設計キャンバス", exact: true });
+			const canvas = page.getByRole("region", { name: "プロジェクト設計キャンバス" });
+			if (enabled) {
+				await panelButton.waitFor();
+				expect(
+					await panelButton.evaluate((button) => button.parentElement?.previousElementSibling?.className),
+				).toBe("sidebar-conversation-actions");
+				await input.fill("保存する下書き");
+				const currentUrl = page.url();
+				await panelButton.click();
+				await canvas.waitFor();
+				expect(await panelButton.getAttribute("aria-current")).toBe("page");
+				expect(await input.inputValue()).toBe("保存する下書き");
+				expect(page.url()).toBe(currentUrl);
+				await input.fill("/chat");
+				await input.press("Enter");
+				await input.press("Enter");
+				await canvas.waitFor({ state: "hidden" });
+				expect(await panelButton.getAttribute("aria-current")).toBeNull();
+			}
 			await input.fill("/canvas");
 			const option = page.getByRole("option", { name: /\/canvas/ });
 			if (enabled) {
 				await option.waitFor();
 				await input.press("Enter");
 				await input.press("Enter");
-				await page.getByRole("region", { name: "プロジェクト設計キャンバス" }).waitFor();
+				await canvas.waitFor();
 			} else {
 				await input.press("Enter");
 				await page.getByText("設計キャンバスが無効です。", { exact: true }).waitFor();
 				expect(await option.count()).toBe(0);
-				expect(await page.getByRole("region", { name: "プロジェクト設計キャンバス" }).count()).toBe(0);
+				expect(await canvas.count()).toBe(0);
+				expect(await panelButton.count()).toBe(0);
 			}
 		} finally {
 			await page.close();
