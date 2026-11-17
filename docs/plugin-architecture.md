@@ -36,7 +36,7 @@ DeepSeek Harness を参考に、次の項目を満たす。モデルの応答品
 
 ### サーバー用プロファイル
 
-Web とデスクトップの共通ホストは、起動時にエージェントディレクトリの `plugins.json` を読み込む。未設定なら同梱の `web-search` と `canvas` を有効にする。ID の値を `false` にすると無効になり、モジュールへのパスを指定すると置き換わる。相対パスは `plugins.json` のディレクトリを基準に解決する。新しい ID で追加もできる。変更はホストを再起動すると反映される。
+Web とデスクトップの共通ホストは、起動時にエージェントディレクトリの `plugins.json` を読み込む。未設定なら同梱の `web-search`、`canvas`、`theme-default` を有効にする。ID の値を `false` にすると無効になり、モジュールへのパスを指定すると置き換わる。相対パスは `plugins.json` のディレクトリを基準に解決する。新しい ID で追加もできる。変更はホストを再起動すると反映される。
 
 ```json
 {
@@ -45,7 +45,7 @@ Web とデスクトップの共通ホストは、起動時にエージェント�
 }
 ```
 
-モジュールは `apiVersion = 1` と、`tools(session)`、`handleApi(request, response, url, parts)`、`panel` のうち少なくとも一つを名前付きでエクスポートする。`tools` は Pi のツール定義の配列を返し、セッション ID、ワークスペース ID、作業ディレクトリを参照できる。API ハンドラーはホストが認証したリクエストを受け取り、応答を書いた場合は `true`、担当外の場合は `false` を返す。読み込むモジュールはホストと同じ権限で実行される。読み込みに失敗した ID は起動ログに出る。
+モジュールは `apiVersion = 1` と、`tools(session)`、`handleApi(request, response, url, parts)`、`panel`、`theme` のうち少なくとも一つを名前付きでエクスポートする。`tools` は Pi のツール定義の配列を返し、セッション ID、ワークスペース ID、作業ディレクトリを参照できる。API ハンドラーはホストが認証したリクエストを受け取り、応答を書いた場合は `true`、担当外の場合は `false` を返す。読み込むモジュールはホストと同じ権限で実行される。読み込みに失敗した ID は起動ログに出る。
 
 ブラウザーは認証済みの `GET /api/plugin-profile` から、有効なプラグインと外部画面の一覧を取得する。画面の名前とアイコンを、サイドバーの「新しい会話」の直下に表示する。ボタンを押すとセッションを保ったまま、登録した画面がメイン領域に表示される。Canvas は従来どおり `/canvas` でも開ける。無効化するとサイドバーのボタン、コマンド候補、画面が消え、保存データは残る。
 
@@ -72,6 +72,19 @@ document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", {
 画面コードは最初に開いたときに読み込まれる。登録関数には `workspaceId`、`signal`、`insertDraft(text)`、`setDirty(boolean)` が渡る。画面は同じワークスペース内の移動で保持される。ワークスペースを離れると `signal` が中断され、登録関数が返した後片付け関数が呼ばれる。画面コードはアプリと同じオリジンで実行するため、信頼できるプラグインを使う。
 
 Chord のローダーは試用時点のパッケージから公開されていない。最初のツール移行は Node のモジュール読み込みで構成し、画面やサービスを移すときにローダー選定を再検討する。
+
+組み込みの配色は `theme-default` として同梱する。独自の配色を配布する場合は、プラグインの `theme` に `title`、`dark`、`light` を指定する。それぞれの配色は `background`、`foreground`、`accent` に6桁の16進色を、`contrast` に0〜100の整数を指定する。
+
+```js
+exports.apiVersion = 1;
+exports.theme = {
+  title: "Dusk",
+  dark: { background: "#102030", foreground: "#e9eef4", accent: "#aecaff", contrast: 55 },
+  light: { background: "#faf0e6", foreground: "#252945", accent: "#3a5199", contrast: 50 },
+};
+```
+
+たとえば `"dusk": "./plugins/dusk.cjs"` をプロファイルに追加して再起動すると、「設定 → 外観 → 配色」で選択できる。選択は設定に保存され、配色プラグインを外すと標準配色に戻る。標準のカスタム色は保存済みの設定から引き続き使える。
 
 ### 段階
 

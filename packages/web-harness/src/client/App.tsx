@@ -1,8 +1,7 @@
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
-import type { PluginProfile } from "../shared/plugin-profile.ts";
 import { aggregateUsage } from "../shared/usage.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
@@ -24,6 +23,7 @@ import { preferences, usePreferenceState } from "./preferences.ts";
 import { PreferenceStatus } from "./PreferenceStatus.tsx";
 import { canvasPanel } from "./plugins/canvas.tsx";
 import { externalPanel } from "./plugins/external-panel.tsx";
+import { usePluginProfile } from "./plugins/profile.tsx";
 import type { WorkspacePanel } from "./plugins/workspace-panels.ts";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
 import { sessionRecency } from "./session-recency.ts";
@@ -68,7 +68,16 @@ export function App() {
 	const [mode, setMode] = useState("chat");
 	const [dirtyPanels, setDirtyPanels] = useState<readonly string[]>([]);
 	const [openedPanels, setOpenedPanels] = useState<readonly string[]>([]);
-	const [activePanels, setActivePanels] = useState<readonly WorkspacePanel[]>();
+	const profile = usePluginProfile();
+	const activePanels = useMemo(() => {
+		if (!profile) return undefined;
+		const external = new Map(profile.panels.map((entry) => [entry.id, externalPanel(entry)]));
+		const builtins = new Map(workspacePanels.map((panel) => [panel.id, panel]));
+		return profile.activeIds.flatMap((id) => {
+			const panel = external.get(id) ?? builtins.get(id);
+			return panel ? [panel] : [];
+		});
+	}, [profile]);
 	const activePanel = activePanels?.find(({ id }) => id === mode);
 	const commands = COMPOSER_COMMANDS.filter(({ command }) => command !== "/canvas" || activePanels?.some(({ id }) => id === canvasPanel.id));
 	const [draftInsertion, setDraftInsertion] = useState<{ id: string; text: string }>();
@@ -193,21 +202,6 @@ export function App() {
 		if (!rightOpen && rightPanelRef.current?.contains(document.activeElement)) rightPanelToggle.current?.focus();
 	}, [rightOpen]);
 	useEffect(() => { if (workspaceId && workspaceChannel.data) updateProjection(workspaceId, workspaceChannel.data); }, [workspaceId, workspaceChannel.data, updateProjection]);
-	useEffect(() => {
-		const controller = new AbortController();
-		void api<PluginProfile>("/api/plugin-profile", { signal: controller.signal })
-			.then(({ activeIds, panels }) => {
-				if (controller.signal.aborted) return;
-				const external = new Map(panels.map((entry) => [entry.id, externalPanel(entry)]));
-				const builtins = new Map(workspacePanels.map((panel) => [panel.id, panel]));
-				setActivePanels(activeIds.flatMap((id) => {
-					const panel = external.get(id) ?? builtins.get(id);
-					return panel ? [panel] : [];
-				}));
-			})
-			.catch(() => { if (!controller.signal.aborted) setActivePanels([]); });
-		return () => controller.abort();
-	}, []);
 	useEffect(() => {
 		const controller = new AbortController();
 		Promise.all([api<Workspace[]>("/api/workspaces", { signal: controller.signal }), api<SessionSummary[]>("/api/sessions", { signal: controller.signal })]).then(([folders, sessions]) => {

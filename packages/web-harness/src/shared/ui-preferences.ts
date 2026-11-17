@@ -90,7 +90,7 @@ const keybindingsSchema = Type.Object(
 	},
 	{ additionalProperties: false },
 );
-const themeVariantSchema = Type.Object(
+export const themeVariantSchema = Type.Object(
 	{
 		background: Type.String({ pattern: "^#[0-9a-fA-F]{6}$" }),
 		foreground: Type.String({ pattern: "^#[0-9a-fA-F]{6}$" }),
@@ -110,6 +110,7 @@ export const appearanceSchema = Type.Object(
 		uiSize: Type.Integer({ minimum: 11, maximum: 20 }),
 		codeSize: Type.Integer({ minimum: 10, maximum: 24 }),
 		translucentSidebar: Type.Boolean(),
+		themeId: Type.Optional(Type.String({ pattern: "^[a-z0-9][a-z0-9._-]{0,127}$" })),
 	},
 	{ additionalProperties: false },
 );

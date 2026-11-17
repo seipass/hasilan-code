@@ -45,8 +45,9 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	let path = "";
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toEqual({
-			activeIds: ["web-search", "canvas"],
+			activeIds: ["web-search", "theme-default", "canvas"],
 			panels: [],
+			themes: [expect.objectContaining({ id: "theme-default", customizable: true })],
 		});
 		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
 		path = `/api/workspaces/${workspaceId}/canvas`;
@@ -56,7 +57,10 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	});
 	await writeFile(join(dir, "plugins.json"), '{"canvas":false}');
 	await withHost(async (api) => {
-		expect(await (await api("/api/plugin-profile")).json()).toEqual({ activeIds: ["web-search"], panels: [] });
+		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
+			activeIds: ["web-search", "theme-default"],
+			panels: [],
+		});
 		expect((await api(path)).status).toBe(404);
 	});
 	await writeFile(join(dir, "plugins.json"), '{"notes":"./notes.cjs"}');
@@ -98,4 +102,18 @@ it("uses the standard profile by default and only loads the selected implementat
 	expect(loadServerProfile(dir, builtins, report).toolsForSession(session)).toMatchObject([{ name: "test" }]);
 	expect(builtin).toHaveBeenCalledTimes(1);
 	expect(report).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("Plugin broken failed to load"));
+});
+
+it("exports installed theme palettes and excludes invalid theme plugins", async () => {
+	const dark = { background: "#000011", foreground: "#ffffff", accent: "#aabbcc", contrast: 50 };
+	const light = { ...dark, background: "#ffffff", foreground: "#000000" };
+	const theme = { title: "Dusk", dark, light };
+	await writeFile(join(dir, "plugins.json"), '{"dusk":"./dusk.cjs","invalid":"./invalid.cjs"}');
+	await writeFile(join(dir, "dusk.cjs"), `module.exports = ${JSON.stringify({ apiVersion: 1, theme })};`);
+	await writeFile(join(dir, "invalid.cjs"), 'module.exports = { apiVersion: 1, theme: { title: "Invalid" } };');
+	const report = vi.fn();
+	const { profile } = loadServerProfile(dir, new Map(), report);
+	expect(profile.themes).toEqual([{ id: "dusk", customizable: false, ...theme }]);
+	expect(profile.activeIds).toEqual(["dusk"]);
+	expect(report).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("invalid theme declaration"));
 });

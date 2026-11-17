@@ -4,7 +4,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ToolDefinition } from "@hasilan-code/pi-coding-agent";
-import type { PluginProfile } from "../../shared/plugin-profile.ts";
+import { Check } from "typebox/value";
+import { type PluginProfile, type ThemePlugin, themePluginSchema } from "../../shared/plugin-profile.ts";
 
 export interface ToolSession {
 	readonly sessionId: string;
@@ -26,6 +27,7 @@ export interface ServerPlugin {
 	readonly tools?: ToolFactory;
 	readonly handleApi?: PluginApi;
 	readonly panel?: { readonly title: string; readonly script: string };
+	readonly theme?: ThemePlugin;
 }
 
 export function loadServerProfile(
@@ -51,6 +53,7 @@ export function loadServerProfile(
 	const requirePlugin = createRequire(profilePath);
 	const active = new Map<string, ServerPlugin>();
 	const panels: PluginProfile["panels"] = [];
+	const themes: PluginProfile["themes"] = [];
 	const scripts = new Map<string, string>();
 	for (const id of new Set([...builtins.keys(), ...choices.keys()])) {
 		const choice = choices.get(id);
@@ -65,9 +68,12 @@ export function loadServerProfile(
 				plugin.apiVersion !== 1 ||
 				("tools" in plugin && typeof plugin.tools !== "function") ||
 				("handleApi" in plugin && typeof plugin.handleApi !== "function") ||
-				!("tools" in plugin || "handleApi" in plugin || "panel" in plugin)
+				!("tools" in plugin || "handleApi" in plugin || "panel" in plugin || "theme" in plugin)
 			)
-				throw new Error("expected apiVersion 1 and a tools, handleApi, or panel export");
+				throw new Error("expected apiVersion 1 and a tools, handleApi, panel, or theme export");
+			const theme = "theme" in plugin ? plugin.theme : undefined;
+			if ("theme" in plugin && (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(id) || !Check(themePluginSchema, theme)))
+				throw new Error("invalid theme declaration");
 			if ("panel" in plugin) {
 				const panel = plugin.panel;
 				if (
@@ -94,6 +100,7 @@ export function loadServerProfile(
 				panels.push({ id, title: panel.title.trim() });
 			}
 			active.set(id, plugin as ServerPlugin);
+			if (Check(themePluginSchema, theme)) themes.push({ id, customizable: !modulePath, ...theme });
 		} catch (error) {
 			report(`Plugin ${id} failed to load: ${error instanceof Error ? error.message : String(error)}`);
 		}
@@ -127,7 +134,7 @@ export function loadServerProfile(
 		return false;
 	};
 	return {
-		profile: { activeIds: [...active.keys()], panels } satisfies PluginProfile,
+		profile: { activeIds: [...active.keys()], panels, themes } satisfies PluginProfile,
 		toolsForSession,
 		handleApi,
 		async panelScript(id: string) {

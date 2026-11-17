@@ -9,12 +9,21 @@ import { EventHub } from "../src/server/events.ts";
 import { createHttpHost, type HttpHost, sendJson } from "../src/server/http-host.ts";
 import { UiPreferencesStore } from "../src/server/ui-preferences.ts";
 import { emptyCanvasDocument } from "../src/shared/canvas.ts";
+import { DEFAULT_THEME_ID, standardTheme } from "../src/shared/plugin-profile.ts";
 
 let browser: Browser;
 let directory: string;
 let host: HttpHost;
 let hub: EventHub;
 let store: UiPreferencesStore;
+
+const dusk = {
+	id: "dusk",
+	title: "Dusk",
+	customizable: false,
+	dark: { ...standardTheme.dark, background: "#102030" },
+	light: { ...standardTheme.light, background: "#faf0e6" },
+};
 
 async function start(activeIds = ["canvas"]) {
 	store = await UiPreferencesStore.open(directory);
@@ -31,6 +40,10 @@ async function start(activeIds = ["canvas"]) {
 				sendJson(response, 200, {
 					activeIds,
 					panels: activeIds.includes("notes") ? [{ id: "notes", title: "Notes" }] : [],
+					themes: [
+						{ id: DEFAULT_THEME_ID, customizable: true, ...standardTheme },
+						...(activeIds.includes("dusk") ? [dusk] : []),
+					],
 				});
 			else if (url.pathname === "/api/plugin-profile/notes/panel.js" && activeIds.includes("notes")) {
 				response.writeHead(200, { "Content-Type": "application/javascript" });
@@ -145,6 +158,35 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 			await host.close();
 			await store.close();
 		}
+	}
+}, 30000);
+
+it("selects an external palette, keeps it after reload, and restores the built-in palette", async () => {
+	const address = await start(["dusk"]);
+	const page = await browser.newPage({ reducedMotion: "reduce" });
+	try {
+		await page.goto(address.launchUrl);
+		const openAppearance = async () => {
+			await page.getByRole("button", { name: "設定", exact: true }).click();
+			await page.getByRole("tab", { name: "外観", exact: true }).click();
+		};
+		const background = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--surface"));
+		await openAppearance();
+		await page.getByRole("combobox", { name: "配色", exact: true }).click();
+		await page.getByRole("option", { name: "Dusk", exact: true }).click();
+		await expect.poll(background).toBe("#102030");
+		await page.evaluate(() => window.hasilanFlushPreferences?.());
+		await page.reload();
+		await expect.poll(background).toBe("#102030");
+		await openAppearance();
+		await page.getByRole("combobox", { name: "配色", exact: true }).click();
+		await page.getByRole("option", { name: "標準", exact: true }).click();
+		await expect.poll(background).toBe("#141414");
+	} finally {
+		await page.close();
+		hub.close();
+		await host.close();
+		await store.close();
 	}
 }, 30000);
 

@@ -23,6 +23,7 @@ import {
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
 import { goalActionSchema } from "../shared/goals.ts";
+import { DEFAULT_THEME_ID, standardTheme } from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
 import { workspaceSwarmStartSchema } from "../shared/swarm.ts";
 import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
@@ -121,6 +122,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		agentDir,
 		new Map<string, () => ServerPlugin>([
 			["web-search", () => webSearchPlugin(settings)],
+			[DEFAULT_THEME_ID, () => ({ apiVersion: 1, theme: standardTheme })],
 			[
 				"canvas",
 				() =>

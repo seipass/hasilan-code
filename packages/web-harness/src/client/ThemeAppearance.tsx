@@ -1,6 +1,8 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { Check } from "typebox/value";
+import { DEFAULT_THEME_ID, standardTheme } from "../shared/plugin-profile.ts";
 import { appearanceSchema, type Appearance } from "../shared/ui-preferences.ts";
+import { usePluginProfile } from "./plugins/profile.tsx";
 import { usePreferenceState } from "./preferences.ts";
 import { Select } from "./Select.tsx";
 import "./ThemeAppearance.css";
@@ -8,8 +10,8 @@ import "./ThemeAppearance.css";
 const KEY = "pi-web-appearance";
 const DEFAULT: Appearance = {
 	mode: "dark",
-	dark: { background: "#141414", foreground: "#e8e8e8", accent: "#e8e8e8", contrast: 50 },
-	light: { background: "#ffffff", foreground: "#202124", accent: "#2563eb", contrast: 50 },
+	dark: standardTheme.dark,
+	light: standardTheme.light,
 	codeTheme: "auto", contentFont: "", codeFont: "", uiSize: 13, codeSize: 13, translucentSidebar: false,
 };
 type Variant = "dark" | "light";
@@ -21,9 +23,18 @@ function fontFamily(value: string, fallback: string): string {
 	return value.trim() ? `${JSON.stringify(value.trim())}, ${fallback}` : fallback;
 }
 
+const initialThemes = [{ id: DEFAULT_THEME_ID, customizable: true, ...standardTheme }];
+
+function useThemeSelection(themeId: string | undefined) {
+	const themes = usePluginProfile()?.themes ?? initialThemes;
+	const selectedTheme = themes.find(({ id }) => id === themeId) ?? themes.find(({ id }) => id === DEFAULT_THEME_ID);
+	return { themes, selectedTheme };
+}
+
 /** Applies synchronized appearance preferences outside the settings dialog. */
 export function ApplicationTheme() {
 	const [settings] = usePreferenceState(KEY, DEFAULT, readAppearance);
+	const { selectedTheme } = useThemeSelection(settings.themeId);
 	const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
 	useEffect(() => {
 		const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -34,7 +45,7 @@ export function ApplicationTheme() {
 	useEffect(() => {
 		const root = document.documentElement;
 		const variant = settings.mode === "system" ? systemDark ? "dark" : "light" : settings.mode;
-		const theme = settings[variant];
+		const theme = selectedTheme?.customizable ? settings[variant] : selectedTheme?.[variant] ?? DEFAULT[variant];
 		const code = settings.codeTheme === "auto" ? variant : settings.codeTheme;
 		const mix = (color: string, percent: number, base = theme.background) => `color-mix(in srgb, ${color} ${percent}%, ${base})`;
 		const amount = 0.65 + theme.contrast / 100;
@@ -81,12 +92,13 @@ export function ApplicationTheme() {
 		root.dataset.theme = variant;
 		root.dataset.translucentSidebar = String(settings.translucentSidebar);
 		return () => { for (const name of Object.keys(colors)) root.style.removeProperty(name); root.style.removeProperty("color-scheme"); root.style.removeProperty("font-size"); delete root.dataset.theme; delete root.dataset.translucentSidebar; };
-	}, [settings, systemDark]);
+	}, [settings, systemDark, selectedTheme]);
 	return null;
 }
 
 export function ThemeAppearance() {
 	const [settings, setSettings] = usePreferenceState(KEY, DEFAULT, readAppearance);
+	const { themes, selectedTheme } = useThemeSelection(settings.themeId);
 	const [selected, setSelected] = useState<Variant>(() => settings.mode === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : settings.mode);
 	const [share, setShare] = useState("");
 	const [message, setMessage] = useState("");
@@ -96,13 +108,19 @@ export function ThemeAppearance() {
 	const variant = settings[selected];
 	return <section className="settings-section theme-appearance">
 		<h3>テーマ</h3>
+		{themes.some(({ customizable }) => !customizable) && <label>配色<Select aria-label="配色" value={selectedTheme?.id ?? ""} onChange={(value) => update({ themeId: value || undefined })}>
+			{!themes.some(({ id }) => id === DEFAULT_THEME_ID) && <option value="">標準</option>}
+			{themes.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
+		</Select></label>}
 		<div className="theme-modes" role="group" aria-label="テーマモード">{([ ["system", "システム"], ["light", "ライト"], ["dark", "ダーク"] ] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={settings.mode === value} onClick={() => { update({ mode: value }); setSelected(value === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : value); }}>{label}</button>)}</div>
+		{selectedTheme?.customizable && <>
 		<div className="theme-heading"><h4>{selected === "dark" ? "ダーク" : "ライト"}テーマ</h4><div><button type="button" onClick={() => { setMessage(""); setShowImport(!showImport); }}>読み込む</button><button type="button" onClick={() => { void navigator.clipboard.writeText(JSON.stringify({ format: "hasilan-theme-v1", variant: selected, colors: variant })).then(() => setMessage("テーマをコピーしました。"), () => setMessage("コピーできませんでした。")); }}>コピー</button></div></div>
 		<div className="theme-variants" role="group" aria-label="編集するテーマ">{(["light", "dark"] as const).map((value) => <button type="button" key={value} aria-pressed={selected === value} onClick={() => setSelected(value)}>{value === "light" ? "ライト" : "ダーク"}</button>)}</div>
 		{showImport && <div className="theme-import"><label>テーマの文字列<textarea value={share} onChange={(event) => setShare(event.currentTarget.value)} rows={3} /></label><button type="button" onClick={() => { try { const data: unknown = JSON.parse(share); if (!data || typeof data !== "object" || !("colors" in data) || !("format" in data) || data.format !== "hasilan-theme-v1") throw new Error(); const next = { ...settings, [selected]: data.colors }; if (!Check(appearanceSchema, next)) throw new Error(); setSettings(next); setMessage("テーマを読み込みました。"); setShowImport(false); } catch { setMessage("有効なテーマ文字列を入力してください。"); } }}>適用</button></div>}
 		<div className="theme-color-grid">{([ ["background", "背景"], ["foreground", "文字"], ["accent", "アクセント"] ] as const).map(([key, label]) => <label key={key}>{label}<span><input type="color" aria-label={`${label}の色`} value={variant[key]} onChange={(event) => updateVariant({ [key]: event.currentTarget.value })} /><code>{variant[key]}</code></span></label>)}</div>
 		<label className="theme-range">コントラスト <output>{variant.contrast}</output><input type="range" min="0" max="100" value={variant.contrast} style={{ "--theme-range-progress": `${variant.contrast}%` } as CSSProperties} onChange={(event) => updateVariant({ contrast: Number(event.currentTarget.value) })} /></label>
 		<button type="button" onClick={() => updateVariant(DEFAULT[selected])}>このテーマをリセット</button>
+		</>}
 		<label>コードのテーマ<Select aria-label="コードのテーマ" value={settings.codeTheme} onChange={(value) => update({ codeTheme: value as Appearance["codeTheme"] })}><option value="auto">画面に合わせる</option><option value="dark">ダーク</option><option value="light">ライト</option></Select></label>
 		<label>本文のフォント<input value={settings.contentFont} maxLength={200} placeholder="画面のフォントに合わせる" onChange={(event) => update({ contentFont: event.currentTarget.value })} /></label>
 		<label>コードのフォント<input value={settings.codeFont} maxLength={200} placeholder="JetBrains Mono" onChange={(event) => update({ codeFont: event.currentTarget.value })} /></label>
