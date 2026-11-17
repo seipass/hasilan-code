@@ -1,16 +1,26 @@
+import { type Static, Type } from "typebox";
+import { themeVariantSchema } from "./ui-preferences.ts";
+
 export interface ExternalPanelEntry {
 	id: string;
 	title: string;
+}
+
+export interface PluginStatus {
+	id: string;
+	title: string;
+	source: "built-in" | "external";
+	status: "enabled" | "disabled" | "failed" | "blocked";
+	requires: readonly string[];
+	reason?: string;
 }
 
 export interface PluginProfile {
 	activeIds: string[];
 	panels: ExternalPanelEntry[];
 	themes: (ThemePlugin & { id: string; customizable: boolean })[];
+	plugins: PluginStatus[];
 }
-
-import { type Static, Type } from "typebox";
-import { themeVariantSchema } from "./ui-preferences.ts";
 
 export const DEFAULT_THEME_ID = "theme-default";
 export const themePluginSchema = Type.Object(

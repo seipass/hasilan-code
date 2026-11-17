@@ -11,7 +11,7 @@ export function PluginProfileProvider({ children }: { children: ReactNode }) {
 		void api<PluginProfile>("/api/plugin-profile", { signal: controller.signal })
 			.then((value) => { if (!controller.signal.aborted) setProfile(value); })
 			.catch(() => {
-				if (!controller.signal.aborted) setProfile({ activeIds: [], panels: [], themes: [] });
+				if (!controller.signal.aborted) setProfile({ activeIds: [], panels: [], themes: [], plugins: [] });
 			});
 		return () => controller.abort();
 	}, []);

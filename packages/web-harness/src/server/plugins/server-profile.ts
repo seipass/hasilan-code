@@ -5,7 +5,13 @@ import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { Check } from "typebox/value";
-import { type PluginProfile, type ThemePlugin, themePluginSchema } from "../../shared/plugin-profile.ts";
+import {
+	type ExternalPanelEntry,
+	type PluginProfile,
+	type PluginStatus,
+	type ThemePlugin,
+	themePluginSchema,
+} from "../../shared/plugin-profile.ts";
 
 export interface ToolSession {
 	readonly sessionId: string;
@@ -26,6 +32,7 @@ export type PluginApi = (
 
 export interface ServerPlugin {
 	readonly apiVersion: 1;
+	readonly requires?: readonly string[];
 	readonly tools?: ToolFactory;
 	readonly handleApi?: PluginApi;
 	readonly panel?: { readonly title: string; readonly script: string };
@@ -55,12 +62,29 @@ export function loadServerProfile(
 	}
 
 	const requirePlugin = createRequire(profilePath);
-	const active = new Map<string, ServerPlugin>();
+	const candidates = new Map<
+		string,
+		{
+			plugin: ServerPlugin;
+			panel?: ExternalPanelEntry;
+			script?: string;
+			theme?: ThemePlugin;
+		}
+	>();
+	const inventory = new Map<string, PluginStatus>();
 	const panels: PluginProfile["panels"] = [];
 	const themes: PluginProfile["themes"] = [];
 	const scripts = new Map<string, string>();
 	for (const id of new Set([...builtins.keys(), ...choices.keys()])) {
 		const choice = choices.get(id);
+		const status: PluginStatus = {
+			id,
+			title: id,
+			source: typeof choice === "string" || !builtins.has(id) ? "external" : "built-in",
+			status: "disabled",
+			requires: [],
+		};
+		inventory.set(id, status);
 		if (choice === false) continue;
 		try {
 			const modulePath = choice === undefined ? undefined : requirePlugin.resolve(resolve(agentDir, choice));
@@ -77,9 +101,15 @@ export function loadServerProfile(
 				!("tools" in plugin || "handleApi" in plugin || "panel" in plugin || "theme" in plugin)
 			)
 				throw new Error("expected apiVersion 1 and a tools, handleApi, panel, or theme export");
+			const requires = "requires" in plugin ? plugin.requires : [];
+			if (!Array.isArray(requires) || requires.some((name: unknown) => typeof name !== "string" || !name.trim()))
+				throw new Error("requires must be a list of plugin IDs");
+			status.requires = [...new Set(requires)];
 			const theme = "theme" in plugin ? plugin.theme : undefined;
 			if ("theme" in plugin && (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(id) || !Check(themePluginSchema, theme)))
 				throw new Error("invalid theme declaration");
+			let entry: ExternalPanelEntry | undefined;
+			let script: string | undefined;
 			if ("panel" in plugin) {
 				const panel = plugin.panel;
 				if (
@@ -98,19 +128,51 @@ export function loadServerProfile(
 				)
 					throw new Error("invalid panel declaration");
 				const directory = dirname(realpathSync(modulePath));
-				const script = realpathSync(resolve(directory, panel.script));
+				script = realpathSync(resolve(directory, panel.script));
 				const fromModule = relative(directory, script);
 				if (!fromModule || isAbsolute(fromModule) || fromModule === ".." || fromModule.startsWith(`..${sep}`))
 					throw new Error("panel script must be inside the plugin directory");
-				scripts.set(id, script);
-				panels.push({ id, title: panel.title.trim() });
+				entry = { id, title: panel.title.trim() };
 			}
-			active.set(id, plugin as ServerPlugin);
-			if (Check(themePluginSchema, theme)) themes.push({ id, customizable: !modulePath, ...theme });
+			const palette = Check(themePluginSchema, theme) ? theme : undefined;
+			status.title = entry?.title ?? palette?.title ?? id;
+			candidates.set(id, { plugin: plugin as ServerPlugin, panel: entry, script, theme: palette });
 		} catch (error) {
-			report(`Plugin ${id} failed to load: ${error instanceof Error ? error.message : String(error)}`);
+			status.status = "failed";
+			status.reason = error instanceof Error ? error.message : String(error);
+			report(`Plugin ${id} failed to load: ${status.reason}`);
 		}
 	}
+	const active = new Map<string, ServerPlugin>();
+	const visiting = new Set<string>();
+	function activate(id: string): boolean {
+		const candidate = candidates.get(id);
+		const status = inventory.get(id);
+		if (!candidate || !status || status.status === "blocked") return false;
+		if (active.has(id)) return true;
+		visiting.add(id);
+		for (const dependency of status.requires) {
+			const cycle = visiting.has(dependency);
+			if (!cycle && activate(dependency)) continue;
+			status.status = "blocked";
+			status.reason = cycle
+				? `Dependency cycle involving ${dependency}`
+				: `Required plugin ${dependency} is unavailable`;
+			report(`Plugin ${id} could not activate: ${status.reason}`);
+			visiting.delete(id);
+			return false;
+		}
+		visiting.delete(id);
+		status.status = "enabled";
+		active.set(id, candidate.plugin);
+		if (candidate.panel && candidate.script) {
+			panels.push(candidate.panel);
+			scripts.set(id, candidate.script);
+		}
+		if (candidate.theme) themes.push({ id, customizable: status.source === "built-in", ...candidate.theme });
+		return true;
+	}
+	for (const id of candidates.keys()) activate(id);
 	function toolsForSession(session: ToolSession) {
 		const tools = new Map<string, ToolDefinition>();
 		for (const [id, plugin] of active) {
@@ -147,7 +209,13 @@ export function loadServerProfile(
 		}
 	}
 	return {
-		profile: { activeIds: [...active.keys()], panels, themes } satisfies PluginProfile,
+		profile: {
+			activeIds: [...active.keys()],
+			panels,
+			themes,
+			plugins: [...inventory.values()],
+		} satisfies PluginProfile,
+		isBuiltinActive: (id: string) => inventory.get(id)?.source === "built-in" && active.has(id),
 		toolsForSession,
 		handleApi,
 		closeSession: (sessionId: string) => dispose((plugin) => plugin.closeSession?.(sessionId)),

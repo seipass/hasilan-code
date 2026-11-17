@@ -124,8 +124,6 @@ async function createHarness(
 	const agentWorktrees = new AgentWorktrees(agentDir);
 	const isolatedFiles = new WorkspaceFiles();
 	let teams: TeamManager;
-	let builtinGoal = false;
-	let builtinHyakki = false;
 	const plugins = loadServerProfile(
 		agentDir,
 		new Map<string, () => ServerPlugin>([
@@ -167,20 +165,8 @@ async function createHarness(
 				}),
 			],
 			[DEFAULT_THEME_ID, () => ({ apiVersion: 1, theme: standardTheme })],
-			[
-				"hyakki",
-				() => {
-					builtinHyakki = true;
-					return hyakkiPlugin(() => teams);
-				},
-			],
-			[
-				"goal",
-				() => {
-					builtinGoal = true;
-					return goalPlugin(() => teams);
-				},
-			],
+			["hyakki", () => hyakkiPlugin(() => teams)],
+			["goal", () => goalPlugin(() => teams)],
 			[
 				"canvas",
 				() =>
@@ -201,8 +187,8 @@ async function createHarness(
 		agentDir,
 		modelRuntime,
 		workspaceFiles: files,
-		goalEnabled: builtinGoal,
-		swarmEnabled: builtinHyakki,
+		goalEnabled: plugins.isBuiltinActive("goal"),
+		swarmEnabled: plugins.isBuiltinActive("hyakki"),
 		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
 		pluginOwnedTools: ["read", "edit", "write"],
 		customTools: (descriptor) =>

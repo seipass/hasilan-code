@@ -6,6 +6,7 @@ import type { ServerPlugin } from "./server-profile.ts";
 export function hyakkiPlugin(getTeams: () => Pick<TeamManager, "startWorkspaceSwarm" | "continueSwarm">): ServerPlugin {
 	return {
 		apiVersion: 1,
+		requires: ["team-tools"],
 		async handleApi(request, response, _url, parts) {
 			const [, section, id, feature, action] = parts;
 			if (request.method !== "POST" || !id || feature !== "swarm") return false;

@@ -90,6 +90,8 @@ exports.theme = {
 
 `"hyakki": false` にすると、百鬼夜行の開始・再開、Canvas からの送信先、モデルのスウォーム操作、自動継続を無効にする。既存の目標、チーム、担当エージェント、会話は保持される。通常のチーム操作には `team-tools` を使う。
 
+プラグインは `requires` に必須のプラグイン ID を列挙できる。`hyakki` は `team-tools` を要求する。依存先が無効、読み込み失敗、未登録、または循環している場合は、その機能を有効にしない。認証済みの `GET /api/plugin-profile` で、有効・無効・読み込み失敗・依存不足の状態と理由を確認できる。モジュールの読み込み時点では、ツールや API を提供するための宣言だけを行う。
+
 既存のセッション用ツールは `hashline`、`shell-process`、`browser-tools`、`computer-tools`、`jev-computer`、`web-search`、`team-tools`、`goal` として同梱し、標準で有効にする。`hashline` を無効化したとき、別のプラグインが提供しない `read`、`edit`、`write` は Pi の既定ツールにも戻さない。`shell-process` は長時間実行用の `shell_process` を担当する。
 
 セッションに紐づくリソースを持つプラグインは、停止・削除時の `closeSession(sessionId)` とホスト終了時の `close()` をエクスポートできる。ホストは登録の逆順で呼び出し、各呼び出しの失敗を記録して残りの後片付けを続ける。

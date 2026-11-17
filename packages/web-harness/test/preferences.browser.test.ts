@@ -40,6 +40,7 @@ async function start(activeIds = ["canvas"]) {
 			else if (url.pathname === "/api/plugin-profile")
 				sendJson(response, 200, {
 					activeIds,
+					plugins: [],
 					panels: activeIds.includes("notes") ? [{ id: "notes", title: "Notes" }] : [],
 					themes: [
 						{ id: DEFAULT_THEME_ID, customizable: true, ...standardTheme },

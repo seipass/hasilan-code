@@ -54,7 +54,7 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	let path = "";
 	let swarmPath = "";
 	await withHost(async (api) => {
-		expect(await (await api("/api/plugin-profile")).json()).toEqual({
+		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
 			activeIds: [
 				"hashline",
 				"shell-process",
@@ -70,6 +70,9 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 			],
 			panels: [],
 			themes: [expect.objectContaining({ id: "theme-default", customizable: true })],
+			plugins: expect.arrayContaining([
+				{ id: "hyakki", title: "hyakki", status: "enabled", source: "built-in", requires: ["team-tools"] },
+			]),
 		});
 		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
 		path = `/api/workspaces/${workspaceId}/canvas`;
@@ -81,12 +84,20 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	});
 	await writeFile(
 		join(dir, "plugins.json"),
-		'{"canvas":false,"goal":false,"hashline":false,"shell-process":false,"hyakki":false}',
+		'{"canvas":false,"goal":false,"hashline":false,"shell-process":false,"team-tools":false}',
 	);
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
-			activeIds: ["browser-tools", "computer-tools", "jev-computer", "web-search", "team-tools", "theme-default"],
+			activeIds: ["browser-tools", "computer-tools", "jev-computer", "web-search", "theme-default"],
 			panels: [],
+			plugins: expect.arrayContaining([
+				expect.objectContaining({
+					id: "hyakki",
+					status: "blocked",
+					reason: "Required plugin team-tools is unavailable",
+				}),
+				expect.objectContaining({ id: "team-tools", status: "disabled" }),
+			]),
 		});
 		expect((await api(path)).status).toBe(404);
 		expect((await api(swarmPath, {}, "POST")).status).toBe(404);
@@ -170,6 +181,41 @@ it("cleans up active plugins in reverse order even when a cleanup throws", async
 	await profile.close();
 	expect(calls).toEqual(["second:s1", "first:s1", "second", "first"]);
 	expect(report).toHaveBeenCalledExactlyOnceWith("Plugin second failed to clean up: cleanup failed");
+});
+
+it("activates dependencies first and excludes missing and cyclic registrations", async () => {
+	const plugin =
+		(requires: string[]): (() => ServerPlugin) =>
+		() => ({ apiVersion: 1, requires, tools: () => [] });
+	const builtins = new Map([
+		["dependent", plugin(["base"])],
+		["base", plugin([])],
+		["missing", plugin(["uninstalled"])],
+		["loop-a", plugin(["loop-b"])],
+		["loop-b", plugin(["loop-a"])],
+		["independent", plugin([])],
+	]);
+	const report = vi.fn();
+	const runtime = loadServerProfile(dir, builtins, report);
+	expect(runtime.profile.activeIds).toEqual(["base", "dependent", "independent"]);
+	expect(runtime.isBuiltinActive("dependent")).toBe(true);
+	expect(runtime.isBuiltinActive("missing")).toBe(false);
+	expect(runtime.profile.plugins).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({
+				id: "missing",
+				status: "blocked",
+				reason: "Required plugin uninstalled is unavailable",
+			}),
+			expect.objectContaining({ id: "loop-a", status: "blocked" }),
+			expect.objectContaining({
+				id: "loop-b",
+				status: "blocked",
+				reason: expect.stringContaining("Dependency cycle"),
+			}),
+		]),
+	);
+	expect(report).toHaveBeenCalledTimes(3);
 });
 
 it("does not expose Pi file or persistent shell tools when their plugins are disabled", async () => {
