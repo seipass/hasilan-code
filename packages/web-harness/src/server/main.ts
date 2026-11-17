@@ -45,6 +45,7 @@ import { canvasPlugin } from "./plugins/canvas.ts";
 import { goalPlugin } from "./plugins/goal.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
+import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts";
 import { acquireProfile } from "./profile-lock.ts";
 import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
 import { handleSessionImport } from "./session-import/routes.ts";
@@ -58,9 +59,7 @@ import { textTransformSchema, transformText } from "./text-transform.ts";
 import { PythonDesktop } from "./tools/computer/backend.ts";
 import { ComputerManager } from "./tools/computer/index.ts";
 import { JevComputer } from "./tools/computer/jev.ts";
-import { createHashlineTools } from "./tools/hashline/index.ts";
 import { LazyBrowserManager } from "./tools/lazy-browser.ts";
-import { ShellProcessManager } from "./tools/shell-process.ts";
 import { UiPreferencesStore } from "./ui-preferences.ts";
 import { WidgetData } from "./widget-data.ts";
 import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
@@ -73,8 +72,11 @@ export interface HarnessHooks {
 /** The CLI and desktop own the same services, API and persistence format. */
 export async function startHarness(options: CliOptions, hooks: HarnessHooks = {}) {
 	const release = await acquireProfile(getHarnessAgentDir());
+	let closePlugins: (() => Promise<void>) | undefined;
 	try {
-		const harness = await createHarness(options, hooks);
+		const harness = await createHarness(options, hooks, (close) => {
+			closePlugins = close;
+		});
 		let stopping: Promise<void> | undefined;
 		return {
 			...harness,
@@ -84,12 +86,17 @@ export async function startHarness(options: CliOptions, hooks: HarnessHooks = {}
 			},
 		};
 	} catch (error) {
+		await closePlugins?.();
 		await release();
 		throw error;
 	}
 }
 
-async function createHarness(options: CliOptions, hooks: HarnessHooks) {
+async function createHarness(
+	options: CliOptions,
+	hooks: HarnessHooks,
+	onPluginsLoaded: (close: () => Promise<void>) => void,
+) {
 	const cwd = await resolveCliWorkspace(options);
 	const agentDir = getHarnessAgentDir();
 	const agentSettings = createHarnessSettings(cwd, agentDir);
@@ -105,7 +112,6 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
 	const artifacts = new ArtifactStore();
 	const browser = new LazyBrowserManager(artifacts);
-	const shellProcesses = new ShellProcessManager();
 	const computer = new ComputerManager(new PythonDesktop(agentDir), artifacts);
 	const jevComputer = new JevComputer(computer, modelRuntime, () => ({
 		jev: settings.get().jev.model,
@@ -122,7 +128,43 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 	const plugins = loadServerProfile(
 		agentDir,
 		new Map<string, () => ServerPlugin>([
+			["hashline", () => hashlinePlugin(files, isolatedFiles)],
+			["shell-process", () => shellProcessPlugin(agentDir)],
+			[
+				"browser-tools",
+				() => ({
+					apiVersion: 1,
+					tools: ({ sessionId }) => [
+						browser.createTool(sessionId, teams.agentIdForSession(sessionId)) as unknown as ToolDefinition,
+					],
+				}),
+			],
+			[
+				"computer-tools",
+				() => ({
+					apiVersion: 1,
+					tools: ({ sessionId }) => [
+						computer.createTool(sessionId, teams.agentIdForSession(sessionId)) as unknown as ToolDefinition,
+					],
+				}),
+			],
+			[
+				"jev-computer",
+				() => ({
+					apiVersion: 1,
+					tools: ({ sessionId }) => [
+						jevComputer.createTool(sessionId, teams.agentIdForSession(sessionId)) as unknown as ToolDefinition,
+					],
+				}),
+			],
 			["web-search", () => webSearchPlugin(settings)],
+			[
+				"team-tools",
+				() => ({
+					apiVersion: 1,
+					tools: ({ sessionId }) => [teams.createTool(sessionId) as unknown as ToolDefinition],
+				}),
+			],
 			[DEFAULT_THEME_ID, () => ({ apiVersion: 1, theme: standardTheme })],
 			[
 				"goal",
@@ -144,6 +186,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 			],
 		]),
 	);
+	onPluginsLoaded(plugins.close);
 	const registry = new SessionRegistry({
 		agentWorktrees,
 		isolatedFiles,
@@ -152,37 +195,15 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		workspaceFiles: files,
 		goalEnabled: builtinGoal,
 		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
-		// Pi validates each tool's declared schema before execution; erase only the registry's heterogeneous generic boundary.
-		customTools: (descriptor) => {
-			const shellSettings = createHarnessSettings(descriptor.cwd, agentDir);
-			const standardTools = [
-				...createHashlineTools(
-					descriptor.worktree ? isolatedFiles : files,
-					descriptor.worktree ? descriptor.sessionId : descriptor.workspaceId,
-				),
-				...(!descriptor.tools || descriptor.tools.includes("bash")
-					? [
-							shellProcesses.createTool(descriptor.sessionId, descriptor.cwd, {
-								shellPath: shellSettings.getShellPath(),
-								commandPrefix: shellSettings.getShellCommandPrefix(),
-							}),
-						]
-					: []),
-				browser.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
-				computer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
-				jevComputer.createTool(descriptor.sessionId, teams.agentIdForSession(descriptor.sessionId)),
-				teams.createTool(descriptor.sessionId),
-			] as unknown as ToolDefinition[];
-			standardTools.splice(
-				standardTools.length - 1,
-				0,
-				...plugins.toolsForSession(
-					{ sessionId: descriptor.sessionId, workspaceId: descriptor.workspaceId, cwd: descriptor.cwd },
-					standardTools,
-				),
-			);
-			return standardTools;
-		},
+		pluginOwnedTools: ["read", "edit", "write"],
+		customTools: (descriptor) =>
+			plugins.toolsForSession({
+				sessionId: descriptor.sessionId,
+				workspaceId: descriptor.workspaceId,
+				cwd: descriptor.cwd,
+				isolated: !!descriptor.worktree,
+				selectedTools: descriptor.tools,
+			}),
 	});
 	teams = new TeamManager(registry, {
 		agentWorktrees,
@@ -190,7 +211,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		agentDir,
 		getLimits: () => settings.get().teams,
 		onStopSession: async (id) => {
-			shellProcesses.closeSession(id);
+			await plugins.closeSession(id);
 			await Promise.all([browser.closeSession(id), computer.closeSession(id)]);
 		},
 	});
@@ -354,7 +375,7 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					}
 					if (parts.length === 3 && method === "DELETE") {
 						const deletedSessionIds = await registry.deleteSession(id);
-						for (const sessionId of deletedSessionIds) shellProcesses.closeSession(sessionId);
+						for (const sessionId of deletedSessionIds) await plugins.closeSession(sessionId);
 						await Promise.allSettled(deletedSessionIds.map((sessionId) => browser.closeSession(sessionId)));
 						await Promise.allSettled(deletedSessionIds.map((sessionId) => computer.closeSession(sessionId)));
 						for (const sessionId of deletedSessionIds) artifacts.deleteSession(sessionId);
@@ -582,9 +603,9 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 		if (shuttingDown) return;
 		shuttingDown = true;
 		folderPickerAbort.abort();
-		shellProcesses.close();
 		// Attempt every cleanup even when a device or PTY refuses to close.
 		const owners = await Promise.allSettled([authLogin.close(), teams.close()]);
+		await plugins.close();
 		const results = await Promise.allSettled([
 			registry.close(),
 			browser.close(),

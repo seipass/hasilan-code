@@ -1,9 +1,16 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fauxAssistantMessage, fauxProvider, InMemoryModelsStore } from "@hasilan-code/pi-ai";
+import { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { AuthStorage } from "../../coding-agent/src/core/auth-storage.ts";
 import { startHarness } from "../src/server/main.ts";
 import { loadServerProfile, type ServerPlugin } from "../src/server/plugins/server-profile.ts";
+import { hashlinePlugin, shellProcessPlugin } from "../src/server/plugins/workspace-tools.ts";
+import { SessionRegistry } from "../src/server/session-registry.ts";
+import { TeamManager } from "../src/server/team-manager.ts";
+import { WorkspaceFiles } from "../src/server/workspace-files.ts";
 import { emptyCanvasDocument } from "../src/shared/canvas.ts";
 
 let dir: string;
@@ -45,7 +52,18 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	let path = "";
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toEqual({
-			activeIds: ["web-search", "theme-default", "goal", "canvas"],
+			activeIds: [
+				"hashline",
+				"shell-process",
+				"browser-tools",
+				"computer-tools",
+				"jev-computer",
+				"web-search",
+				"team-tools",
+				"theme-default",
+				"goal",
+				"canvas",
+			],
 			panels: [],
 			themes: [expect.objectContaining({ id: "theme-default", customizable: true })],
 		});
@@ -55,10 +73,10 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 		expect(saved.status).toBe(200);
 		expect(await saved.json()).toMatchObject({ revision: 1 });
 	});
-	await writeFile(join(dir, "plugins.json"), '{"canvas":false,"goal":false}');
+	await writeFile(join(dir, "plugins.json"), '{"canvas":false,"goal":false,"hashline":false,"shell-process":false}');
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
-			activeIds: ["web-search", "theme-default"],
+			activeIds: ["browser-tools", "computer-tools", "jev-computer", "web-search", "team-tools", "theme-default"],
 			panels: [],
 		});
 		expect((await api(path)).status).toBe(404);
@@ -116,4 +134,76 @@ it("exports installed theme palettes and excludes invalid theme plugins", async 
 	expect(profile.themes).toEqual([{ id: "dusk", customizable: false, ...theme }]);
 	expect(profile.activeIds).toEqual(["dusk"]);
 	expect(report).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("invalid theme declaration"));
+});
+
+it("cleans up active plugins in reverse order even when a cleanup throws", async () => {
+	const calls: string[] = [];
+	const report = vi.fn();
+	const builtins = new Map<string, () => ServerPlugin>(
+		["first", "second"].map((id) => [
+			id,
+			() => ({
+				apiVersion: 1,
+				tools: () => [],
+				closeSession: (sessionId) => {
+					calls.push(`${id}:${sessionId}`);
+					if (id === "second") throw new Error("cleanup failed");
+				},
+				close: () => {
+					calls.push(id);
+				},
+			}),
+		]),
+	);
+	const profile = loadServerProfile(dir, builtins, report);
+	await profile.closeSession("s1");
+	await profile.close();
+	expect(calls).toEqual(["second:s1", "first:s1", "second", "first"]);
+	expect(report).toHaveBeenCalledExactlyOnceWith("Plugin second failed to clean up: cleanup failed");
+});
+
+it("does not expose Pi file or persistent shell tools when their plugins are disabled", async () => {
+	await writeFile(join(dir, "plugins.json"), '{"hashline":false,"shell-process":false}');
+	const files = new WorkspaceFiles();
+	const plugins = loadServerProfile(
+		dir,
+		new Map([
+			["hashline", () => hashlinePlugin(files, files)],
+			["shell-process", () => shellProcessPlugin(dir)],
+		]),
+	);
+	const faux = fauxProvider({ provider: "plugin-test" });
+	faux.setResponses([fauxAssistantMessage("Done")]);
+	const modelRuntime = await ModelRuntime.create({
+		credentials: AuthStorage.inMemory(),
+		modelsPath: null,
+		modelsStore: new InMemoryModelsStore(),
+		allowModelNetwork: false,
+		refreshOnCreate: false,
+	});
+	modelRuntime.registerNativeProvider(faux.provider);
+	const registry = new SessionRegistry({
+		agentDir: dir,
+		workspaceFiles: files,
+		modelRuntime,
+		pluginOwnedTools: ["read", "edit", "write"],
+		customTools: plugins.toolsForSession,
+	});
+	const teams = new TeamManager(registry);
+	try {
+		await registry.initialize();
+		await teams.initialize();
+		const workspace = await registry.addWorkspace(dir);
+		const { provider, id } = faux.getModel();
+		const { sessionId } = await registry.create({ workspaceId: workspace.id, model: { provider, id } });
+		await teams.prompt(sessionId, { text: "Hello", mode: "prompt" });
+		await expect.poll(() => registry.get(sessionId).currentRun).toBeUndefined();
+		expect(faux.state.callCount).toBe(1);
+		const tools = registry.activeTools(sessionId);
+		expect(tools).toContain("bash");
+		for (const name of ["read", "edit", "write", "shell_process"]) expect(tools).not.toContain(name);
+	} finally {
+		await teams.close();
+		await registry.close();
+	}
 });

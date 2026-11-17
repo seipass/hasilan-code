@@ -11,6 +11,8 @@ export interface ToolSession {
 	readonly sessionId: string;
 	readonly workspaceId: string;
 	readonly cwd: string;
+	readonly isolated?: boolean;
+	readonly selectedTools?: readonly string[];
 }
 
 export type ToolFactory = (session: ToolSession) => readonly ToolDefinition[];
@@ -28,6 +30,8 @@ export interface ServerPlugin {
 	readonly handleApi?: PluginApi;
 	readonly panel?: { readonly title: string; readonly script: string };
 	readonly theme?: ThemePlugin;
+	readonly closeSession?: (sessionId: string) => void | Promise<void>;
+	readonly close?: () => void | Promise<void>;
 }
 
 export function loadServerProfile(
@@ -68,6 +72,8 @@ export function loadServerProfile(
 				plugin.apiVersion !== 1 ||
 				("tools" in plugin && typeof plugin.tools !== "function") ||
 				("handleApi" in plugin && typeof plugin.handleApi !== "function") ||
+				("closeSession" in plugin && typeof plugin.closeSession !== "function") ||
+				("close" in plugin && typeof plugin.close !== "function") ||
 				!("tools" in plugin || "handleApi" in plugin || "panel" in plugin || "theme" in plugin)
 			)
 				throw new Error("expected apiVersion 1 and a tools, handleApi, panel, or theme export");
@@ -105,8 +111,7 @@ export function loadServerProfile(
 			report(`Plugin ${id} failed to load: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
-	function toolsForSession(session: ToolSession, occupied: readonly ToolDefinition[] = []) {
-		const reserved = new Set(occupied.map((tool) => tool.name));
+	function toolsForSession(session: ToolSession) {
 		const tools = new Map<string, ToolDefinition>();
 		for (const [id, plugin] of active) {
 			if (!plugin.tools) continue;
@@ -116,8 +121,7 @@ export function loadServerProfile(
 				for (const tool of contributed) {
 					if (!tool?.name || typeof tool.execute !== "function" || !tool.parameters)
 						throw new Error("invalid tool definition");
-					if (reserved.has(tool.name) || tools.has(tool.name) || names.has(tool.name))
-						throw new Error(`duplicate tool name: ${tool.name}`);
+					if (tools.has(tool.name) || names.has(tool.name)) throw new Error(`duplicate tool name: ${tool.name}`);
 					names.add(tool.name);
 				}
 				for (const tool of contributed) tools.set(tool.name, tool);
@@ -133,10 +137,21 @@ export function loadServerProfile(
 		}
 		return false;
 	};
+	async function dispose(action: (plugin: ServerPlugin) => void | Promise<void>) {
+		for (const [id, plugin] of [...active].reverse()) {
+			try {
+				await action(plugin);
+			} catch (error) {
+				report(`Plugin ${id} failed to clean up: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		}
+	}
 	return {
 		profile: { activeIds: [...active.keys()], panels, themes } satisfies PluginProfile,
 		toolsForSession,
 		handleApi,
+		closeSession: (sessionId: string) => dispose((plugin) => plugin.closeSession?.(sessionId)),
+		close: () => dispose((plugin) => plugin.close?.()),
 		async panelScript(id: string) {
 			const path = scripts.get(id);
 			return path ? readFile(path) : undefined;

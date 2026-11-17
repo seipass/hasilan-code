@@ -151,6 +151,7 @@ export interface RegistryOptions {
 	workspaceFiles: WorkspaceDirectoryService;
 	modelRuntime?: ModelRuntime;
 	customTools?: (descriptor: SessionDescriptor) => ToolDefinition[];
+	pluginOwnedTools?: readonly string[];
 	goalEnabled?: boolean;
 	readAttachments?: (workspaceId: string, attachments: PromptAttachment[]) => Promise<ImageContent[]>;
 	/** An execution seam for deterministic boundary tests; production uses the Pi SDK. */
@@ -1351,6 +1352,11 @@ export class SessionRegistry {
 								(name) => !selectedTools.includes(name),
 							)
 						: [];
+					const customTools = this.options.customTools?.(descriptor);
+					// Do not fall back to Pi's unrestricted implementation for a tool owned by a disabled plugin.
+					const excludeTools = this.options.pluginOwnedTools?.filter(
+						(name) => !customTools?.some((tool) => tool.name === name),
+					);
 					const { session } = await createAgentSession({
 						cwd: descriptor.cwd,
 						agentDir: this.options.agentDir,
@@ -1359,7 +1365,8 @@ export class SessionRegistry {
 						sessionManager: live.manager,
 						settingsManager,
 						resourceLoader: loader,
-						customTools: this.options.customTools?.(descriptor),
+						customTools,
+						excludeTools,
 						tools: selectedTools ? [...selectedTools, ...reserved] : undefined,
 					});
 					if (descriptor.thinkingLevel) session.setThinkingLevel(descriptor.thinkingLevel);
