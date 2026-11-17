@@ -253,7 +253,9 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .composer-chip { display: flex; align-items: center; gap: 8px; min-width: 0; border: 0; background: transparent; padding: 6px 8px; font-size: var(--text-xs); color: var(--on-surface-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-trigger { color: var(--on-surface-secondary); }
 .model-trigger > svg { flex: none; opacity: .7; }
-.model-trigger-thinking { flex: none; font-size: var(--text-xs); }
+.model-trigger-thinking { display: inline-grid; flex: none; justify-items: end; font-size: var(--text-xs); }
+.model-trigger-thinking > span { grid-area: 1 / 1; }
+.model-trigger-thinking > .model-trigger-thinking-ghost { visibility: hidden; }
 .composer-chip span { color: var(--on-surface-muted); }
 .model-menu-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 150px); gap: 16px; margin-top: 12px; height: min(42dvh, 320px); min-height: 0; overflow: hidden; }
 .model-menu-models, .model-menu-thinking { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }

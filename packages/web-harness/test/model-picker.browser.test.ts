@@ -36,10 +36,11 @@ function MenuFixture() {
  const [thinking, setThinking] = useState("medium");
  const [commits, setCommits] = useState(0);
  const [open, setOpen] = useState(false);
+ const lag = document.body.dataset.lag === "true";
  return <><button className="model-trigger" onClick={() => setOpen(!open)}>モデル設定</button>
  {open && <ModelMenu catalog={catalog} value={value} thinkingLevel={thinking} disabled={false}
   onChange={async selection => { setValue(selection); setThinking("low"); }}
-  onThinkingChange={async level => { setCommits(count => count + 1); setThinking(level); }}
+  onThinkingChange={async level => { setCommits(count => count + 1); if (lag) setTimeout(() => setThinking(level), 250); else setThinking(level); }}
   onSettings={() => {}} onClose={() => setOpen(false)} />}
  <output aria-label="Thinking writes">{commits}:{thinking}</output></>;
 }
@@ -170,6 +171,40 @@ it("switches between the effort slider and model list and saves once after dragg
 		await slider.press("Escape");
 		await dialog.waitFor({ state: "hidden" });
 		expect(await trigger.evaluate((element) => document.activeElement === element)).toBe(true);
+	} finally {
+		await page.close();
+	}
+}, 30000);
+
+it("holds the optimistic reasoning level until the reported level catches up", async () => {
+	const page = await browser.newPage({ viewport: { width: 1120, height: 740 } });
+	try {
+		await page.setContent(
+			'<style>.model-trigger { position: absolute; right: 80px; bottom: 100px; } .model-picker-results { overflow: auto; }</style><body data-menu="true" data-lag="true"><div id="root"></div></body>',
+		);
+		await page.addStyleTag({
+			content: await readFile(new URL("../src/client/ModelMenu.css", import.meta.url), "utf8"),
+		});
+		await page.addScriptTag({ content: script });
+		await page.getByRole("button", { name: "モデル設定" }).click();
+		const dialog = page.getByRole("dialog", { name: "モデル・Thinking" });
+		const slider = dialog.getByRole("slider", { name: "推論レベル" });
+		const writes = page.getByLabel("Thinking writes");
+		expect(await slider.getAttribute("aria-valuetext")).toBe("中");
+		await slider.evaluate((element) => {
+			const values: string[] = [];
+			(window as unknown as { reasoningValues: string[] }).reasoningValues = values;
+			new MutationObserver(() => values.push(element.getAttribute("aria-valuetext") ?? "")).observe(element, {
+				attributes: true,
+				attributeFilter: ["aria-valuetext"],
+			});
+		});
+		await slider.press("ArrowRight");
+		await expect.poll(() => writes.textContent()).toBe("1:high");
+		await page.waitForTimeout(50);
+		expect(await page.evaluate(() => (window as unknown as { reasoningValues: string[] }).reasoningValues)).toEqual([
+			"高",
+		]);
 	} finally {
 		await page.close();
 	}

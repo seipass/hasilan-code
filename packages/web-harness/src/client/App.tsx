@@ -113,7 +113,8 @@ export function App() {
 	const sessionChannel = useChannel<SessionDetail>("session", sessionId, undefined, () => newConversation());
 	const session = sessionChannel.data;
 	const model = session?.model ?? draftModel;
-	const selectedModel = catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id) ?? model;
+	const catalogModel = catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id);
+	const selectedModel = catalogModel ?? model;
 	const modelNeedsAuthentication = model
 		? catalog?.providers.find((entry) => entry.id === model.provider)?.configured === false
 		: !!catalog?.providers.length && catalog.providers.every((entry) => entry.configured === false);
@@ -522,8 +523,13 @@ export function App() {
 		if (session?.model) setDraftModel(session.model);
 		draftSession.current = undefined;
 	}
+	const thinking = session?.thinkingLevel ?? draftThinking;
+	const thinkingLabel = thinking ?? "自動";
+	// Every level the trigger can show reserves its width, so changing Thinking does not resize the
+	// chip and move the popover anchored to it.
+	const thinkingLabels = [...new Set([...(catalogModel?.thinkingLevels ?? []), thinkingLabel])];
 	const modelControl = <div className="model-control">
-		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} aria-label={`モデル・Thinkingを選択: ${selectedModel?.name ?? selectedModel?.id ?? "未選択"} · ${session?.thinkingLevel ?? draftThinking ?? "自動"}`} title={`${selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"} · ${session?.thinkingLevel ?? draftThinking ?? "自動"}`} onClick={() => setModelOpen((value) => !value)}><Icon name="graph" className="model-trigger-icon" /><span className="model-trigger-name">{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}</span><span className="model-trigger-thinking">{session?.thinkingLevel ?? draftThinking ?? "自動"}</span><Icon name="chevronDown" className="model-trigger-chevron" size="inline" /></button>
+		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} aria-label={`モデル・Thinkingを選択: ${selectedModel?.name ?? selectedModel?.id ?? "未選択"} · ${thinkingLabel}`} title={`${selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"} · ${thinkingLabel}`} onClick={() => setModelOpen((value) => !value)}><Icon name="graph" className="model-trigger-icon" /><span className="model-trigger-name">{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}</span><span className="model-trigger-thinking">{thinkingLabels.map((label) => <span key={label} className={label === thinkingLabel ? undefined : "model-trigger-thinking-ghost"}>{label}</span>)}</span><Icon name="chevronDown" className="model-trigger-chevron" size="inline" /></button>
 	</div>;
 	const rightMaximum = Math.max(480, viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 260 : 0) - 320);
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);

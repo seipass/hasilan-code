@@ -40,6 +40,11 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 	const menu = useRef<HTMLDivElement>(null);
 	const currentLevel = preview ?? thinkingLevel ?? (selectedModel && levels.length === 1 ? levels[0] : undefined);
 	const effortIndex = Math.max(0, levels.findIndex((level) => level === currentLevel));
+	// The projection update can arrive after the PATCH response; keep the optimistic level until the
+	// session reports it so the slider does not snap back to the previous level in between.
+	useEffect(() => {
+		if (preview !== undefined && thinkingLevel === preview) setPreview(undefined);
+	}, [preview, thinkingLevel]);
 	useLayoutEffect(() => {
 		if (mobile) return;
 		const anchor = document.querySelector<HTMLButtonElement>(".model-trigger");
@@ -105,8 +110,8 @@ export function ModelMenu({ catalog, value, thinkingLevel, onChange, onThinkingC
 		setPreview(level);
 		setBusy(true); setError(undefined);
 		try { await onThinkingChange(level); }
-		catch (reason) { setError(errorMessage(reason)); }
-		finally { setBusy(false); setPreview(undefined); }
+		catch (reason) { setError(errorMessage(reason)); setPreview(undefined); }
+		finally { setBusy(false); }
 	}
 
 	const content = <>
