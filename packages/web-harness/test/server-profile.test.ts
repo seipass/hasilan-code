@@ -22,7 +22,7 @@ afterEach(async () => {
 	await rm(dir, { recursive: true, force: true });
 });
 
-it("keeps the authenticated Canvas API and its data across disable and re-enable", async () => {
+it("applies plugin management changes on restart and preserves existing Canvas data", async () => {
 	vi.stubEnv("HASILAN_CODE_AGENT_DIR", dir);
 	vi.stubEnv("PI_OFFLINE", "1");
 	const options = { cwd: dir, port: 0, noOpen: true, help: false, lan: false, development: false };
@@ -53,6 +53,12 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 
 	let path = "";
 	let swarmPath = "";
+	const management = "/api/plugin-management";
+	await writeFile(
+		join(dir, "notes.cjs"),
+		'exports.apiVersion = 1; exports.panel = { title: "Notes", script: "notes.js" };',
+	);
+	await writeFile(join(dir, "notes.js"), "/* Notes panel */");
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
 			activeIds: [
@@ -66,6 +72,7 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 				"theme-default",
 				"hyakki",
 				"goal",
+				"plugin-manager",
 				"canvas",
 			],
 			panels: [],
@@ -81,14 +88,27 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 		const saved = await api(path, emptyCanvasDocument());
 		expect(saved.status).toBe(200);
 		expect(await saved.json()).toMatchObject({ revision: 1 });
+		expect(await (await api(management, { op: "add", id: "notes", module: "./notes.cjs" }, "PATCH")).json()).toEqual(
+			expect.arrayContaining([expect.objectContaining({ id: "notes", enabled: true, pending: true })]),
+		);
+		const disabled = await api(management, { op: "enable", id: "notes", enabled: false }, "PATCH");
+		expect(await disabled.json()).toEqual(
+			expect.arrayContaining([expect.objectContaining({ id: "notes", enabled: false, module: "./notes.cjs" })]),
+		);
+		for (const id of ["canvas", "goal", "hashline", "shell-process", "team-tools"])
+			expect((await api(management, { op: "enable", id, enabled: false }, "PATCH")).status).toBe(200);
+		expect((await api(path)).status).toBe(200);
 	});
-	await writeFile(
-		join(dir, "plugins.json"),
-		'{"canvas":false,"goal":false,"hashline":false,"shell-process":false,"team-tools":false}',
-	);
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
-			activeIds: ["browser-tools", "computer-tools", "jev-computer", "web-search", "theme-default"],
+			activeIds: [
+				"browser-tools",
+				"computer-tools",
+				"jev-computer",
+				"web-search",
+				"theme-default",
+				"plugin-manager",
+			],
 			panels: [],
 			plugins: expect.arrayContaining([
 				expect.objectContaining({
@@ -97,17 +117,14 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 					reason: "Required plugin team-tools is unavailable",
 				}),
 				expect.objectContaining({ id: "team-tools", status: "disabled" }),
+				expect.objectContaining({ id: "notes", status: "disabled" }),
 			]),
 		});
 		expect((await api(path)).status).toBe(404);
 		expect((await api(swarmPath, {}, "POST")).status).toBe(404);
+		for (const id of ["canvas", "notes"])
+			expect((await api(management, { op: "enable", id, enabled: true }, "PATCH")).status).toBe(200);
 	});
-	await writeFile(join(dir, "plugins.json"), '{"notes":"./notes.cjs"}');
-	await writeFile(
-		join(dir, "notes.cjs"),
-		'exports.apiVersion = 1; exports.panel = { title: "Notes", script: "notes.js" };',
-	);
-	await writeFile(join(dir, "notes.js"), "/* Notes panel */");
 	await withHost(async (api) => {
 		expect(await (await api(path)).json()).toMatchObject({ revision: 1 });
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
@@ -118,6 +135,8 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 		expect(script.headers.get("content-type")).toContain("application/javascript");
 		expect(await script.text()).toBe("/* Notes panel */");
 		expect((await api("/api/plugin-profile/canvas/panel.js")).status).toBe(404);
+		expect((await api(management, { op: "remove", id: "notes" }, "PATCH")).status).toBe(200);
+		expect((await api("/api/plugin-profile/notes/panel.js")).status).toBe(200);
 	});
 }, 30_000);
 

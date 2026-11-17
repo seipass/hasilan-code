@@ -12,5 +12,6 @@ export interface WorkspacePanel {
 	id: string;
 	title: string;
 	icon: IconName;
+	requiresWorkspace?: boolean;
 	View: ComponentType<WorkspacePanelProps>;
 }

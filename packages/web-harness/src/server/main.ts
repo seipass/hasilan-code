@@ -22,7 +22,7 @@ import {
 	workspaceCreateSchema,
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
-import { DEFAULT_THEME_ID, standardTheme } from "../shared/plugin-profile.ts";
+import { DEFAULT_THEME_ID, PLUGIN_MANAGER_ID, standardTheme } from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
 import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
 import { readAccountUsage } from "./account-usage.ts";
@@ -43,6 +43,7 @@ import { mediaView, serveMedia } from "./media.ts";
 import { canvasPlugin } from "./plugins/canvas.ts";
 import { goalPlugin } from "./plugins/goal.ts";
 import { hyakkiPlugin } from "./plugins/hyakki.ts";
+import { pluginManager } from "./plugins/manager.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
 import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts";
@@ -124,7 +125,7 @@ async function createHarness(
 	const agentWorktrees = new AgentWorktrees(agentDir);
 	const isolatedFiles = new WorkspaceFiles();
 	let teams: TeamManager;
-	const plugins = loadServerProfile(
+	const plugins: ReturnType<typeof loadServerProfile> = loadServerProfile(
 		agentDir,
 		new Map<string, () => ServerPlugin>([
 			["hashline", () => hashlinePlugin(files, isolatedFiles)],
@@ -167,6 +168,7 @@ async function createHarness(
 			[DEFAULT_THEME_ID, () => ({ apiVersion: 1, theme: standardTheme })],
 			["hyakki", () => hyakkiPlugin(() => teams)],
 			["goal", () => goalPlugin(() => teams)],
+			[PLUGIN_MANAGER_ID, () => pluginManager(agentDir, () => plugins)],
 			[
 				"canvas",
 				() =>

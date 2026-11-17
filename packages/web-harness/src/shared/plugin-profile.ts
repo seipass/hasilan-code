@@ -22,6 +22,35 @@ export interface PluginProfile {
 	plugins: PluginStatus[];
 }
 
+const pluginIdSchema = Type.String({ pattern: "^[a-z0-9][a-z0-9._-]{0,127}$" });
+const pluginPathSchema = Type.String({ minLength: 1, maxLength: 4096, pattern: "\\S" });
+const pluginConfigSchema = Type.Object(
+	{ enabled: Type.Boolean(), module: Type.Optional(pluginPathSchema) },
+	{ additionalProperties: false },
+);
+export type PluginChoice = Static<typeof pluginConfigSchema>;
+export const pluginChoiceSchema = Type.Union([Type.Literal(false), pluginPathSchema, pluginConfigSchema]);
+export const pluginManagementActionSchema = Type.Union([
+	Type.Object(
+		{ op: Type.Literal("enable"), id: pluginIdSchema, enabled: Type.Boolean() },
+		{ additionalProperties: false },
+	),
+	Type.Object(
+		{ op: Type.Literal("add"), id: pluginIdSchema, module: pluginPathSchema },
+		{ additionalProperties: false },
+	),
+	Type.Object({ op: Type.Literal("remove"), id: pluginIdSchema }, { additionalProperties: false }),
+]);
+
+export interface PluginManagementEntry extends PluginStatus {
+	enabled: boolean;
+	canEnable: boolean;
+	module?: string;
+	pending: boolean;
+}
+
+export const PLUGIN_MANAGER_ID = "plugin-manager";
+
 export const DEFAULT_THEME_ID = "theme-default";
 export const themePluginSchema = Type.Object(
 	{

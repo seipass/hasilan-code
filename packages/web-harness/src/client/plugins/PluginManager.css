@@ -1,0 +1,10 @@
+.plugin-manager { flex: 1; overflow: auto; min-height: 0; padding: 16px; }
+.plugin-manager-list, .plugin-manager-form { display: grid; gap: 8px; max-width: 780px; margin: 0 auto 20px; }
+.plugin-manager-list { list-style: none; padding: 0; }
+.plugin-manager-list li { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; }
+.plugin-manager-list li > div:first-child { display: grid; min-width: 0; gap: 4px; overflow-wrap: anywhere; }
+.plugin-manager-list span, .plugin-manager-list code, .plugin-manager-form p { color: var(--on-surface-secondary); font-size: var(--text-sm); }
+.plugin-manager-list p, .plugin-manager-form p { margin: 0; }
+.plugin-manager-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.plugin-manager-form label { display: grid; gap: 4px; }
+.plugin-manager-form button { justify-self: start; }

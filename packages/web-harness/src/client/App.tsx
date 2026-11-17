@@ -23,6 +23,7 @@ import { PreferenceStatus } from "./PreferenceStatus.tsx";
 import { canvasPanel } from "./plugins/canvas.tsx";
 import { externalPanel } from "./plugins/external-panel.tsx";
 import { GoalControl } from "./plugins/goal.tsx";
+import { pluginManagerPanel } from "./plugins/manager.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import type { WorkspacePanel } from "./plugins/workspace-panels.ts";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
@@ -40,7 +41,7 @@ import { sendWorkspacePrompt } from "./workspace-send.ts";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 import "./WorkspaceModes.css";
 
-const workspacePanels: readonly WorkspacePanel[] = [canvasPanel];
+const workspacePanels: readonly WorkspacePanel[] = [canvasPanel, pluginManagerPanel];
 
 function sessionFromLocation(): string | undefined {
 	if (typeof location === "undefined") return undefined;
@@ -575,7 +576,7 @@ export function App() {
 			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><Icon name="plus" size="control" />新しい会話</button>
 			<button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" title="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></div>
 			{activePanels && activePanels.length > 0 && <nav className="sidebar-plugin-panels" aria-label="プラグイン">
-				{activePanels.map(({ id, title, icon }) => <button type="button" key={id} aria-current={mode === id ? "page" : undefined} disabled={!workspaceId} onClick={() => {
+				{activePanels.map(({ id, title, icon, requiresWorkspace = true }) => <button type="button" key={id} aria-current={mode === id ? "page" : undefined} disabled={requiresWorkspace && !workspaceId} onClick={() => {
 					if (commandPending.current) return;
 					openPanel(id);
 					if (narrowViewport) setSidebarOpen(false);

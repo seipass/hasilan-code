@@ -7,9 +7,10 @@ import { type Browser, chromium } from "playwright";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { EventHub } from "../src/server/events.ts";
 import { createHttpHost, type HttpHost, sendJson } from "../src/server/http-host.ts";
+import { pluginManager } from "../src/server/plugins/manager.ts";
 import { UiPreferencesStore } from "../src/server/ui-preferences.ts";
 import { emptyCanvasDocument } from "../src/shared/canvas.ts";
-import { DEFAULT_THEME_ID, standardTheme } from "../src/shared/plugin-profile.ts";
+import { DEFAULT_THEME_ID, PLUGIN_MANAGER_ID, standardTheme } from "../src/shared/plugin-profile.ts";
 
 let browser: Browser;
 let directory: string;
@@ -28,6 +29,16 @@ const dusk = {
 
 async function start(activeIds = ["canvas"]) {
 	store = await UiPreferencesStore.open(preferenceDirectory);
+	const manager = pluginManager(preferenceDirectory, () => ({
+		choices: new Map(),
+		builtinIds: ["canvas"],
+		profile: {
+			activeIds,
+			panels: [],
+			themes: [],
+			plugins: [{ id: "canvas", title: "Canvas", source: "built-in", status: "enabled", requires: [] }],
+		},
+	}));
 	hub = new EventHub(() => ({ sessions: [], teams: { teams: [], agents: [], runs: [] } }));
 	host = createHttpHost({
 		port: 0,
@@ -35,6 +46,8 @@ async function start(activeIds = ["canvas"]) {
 		handleWebSocket: (socket) => hub.attach(socket),
 		handleApi: async (request, response, url) => {
 			if (await store.handle(request, response, url)) return true;
+			if (activeIds.includes(PLUGIN_MANAGER_ID) && (await manager.handleApi?.(request, response, url, [])))
+				return true;
 			if (url.pathname === "/api/workspaces")
 				sendJson(response, 200, [{ workspaceId: "workspace", path: directory }]);
 			else if (url.pathname === "/api/plugin-profile")
@@ -164,6 +177,27 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 			await host.close();
 			await store.close();
 		}
+	}
+}, 30000);
+
+it("saves plugin changes from the sidebar and keeps the running state visible until restart", async () => {
+	const address = await start(["canvas", PLUGIN_MANAGER_ID]);
+	const page = await browser.newPage({ reducedMotion: "reduce" });
+	try {
+		await page.goto(address.launchUrl);
+		await page.getByRole("button", { name: "プラグイン", exact: true }).click();
+		const manager = page.getByRole("region", { name: "プラグイン管理" });
+		await manager.getByRole("button", { name: "Canvasを無効化" }).click();
+		await manager.getByText("再起動すると保存した変更が反映されます。").waitFor();
+		await manager.getByText("組み込み · 有効 · 次回起動時は無効").waitFor();
+		expect(await page.getByRole("button", { name: "設計キャンバス", exact: true }).isVisible()).toBe(true);
+		await manager.getByRole("button", { name: "Canvasを有効化" }).click();
+		await manager.getByText("再起動すると保存した変更が反映されます。").waitFor({ state: "hidden" });
+	} finally {
+		await page.close();
+		hub.close();
+		await host.close();
+		await store.close();
 	}
 }, 30000);
 

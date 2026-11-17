@@ -1,4 +1,4 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
@@ -7,11 +7,13 @@ import type { ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { Check } from "typebox/value";
 import {
 	type ExternalPanelEntry,
+	type PluginChoice,
 	type PluginProfile,
 	type PluginStatus,
 	type ThemePlugin,
 	themePluginSchema,
 } from "../../shared/plugin-profile.ts";
+import { readPluginChoices } from "./profile-config.ts";
 
 export interface ToolSession {
 	readonly sessionId: string;
@@ -47,18 +49,11 @@ export function loadServerProfile(
 	report = (message: string) => console.error(message),
 ) {
 	const profilePath = join(agentDir, "plugins.json");
-	const choices = new Map<string, false | string>();
+	let choices = new Map<string, PluginChoice>();
 	try {
-		const profile: unknown = JSON.parse(readFileSync(profilePath, "utf8"));
-		if (!profile || typeof profile !== "object" || Array.isArray(profile))
-			throw new Error("expected a map of plugin IDs to module paths or false");
-		for (const [id, value] of Object.entries(profile) as [string, unknown][]) {
-			if (value === false || (typeof value === "string" && value.trim())) choices.set(id, value);
-			else report(`Plugin ${id}: expected a module path or false in plugins.json`);
-		}
+		choices = readPluginChoices(profilePath, report);
 	} catch (error) {
-		if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
-			report(`Cannot read plugins.json: ${error instanceof Error ? error.message : String(error)}`);
+		report(`Cannot read plugins.json: ${error instanceof Error ? error.message : String(error)}`);
 	}
 
 	const requirePlugin = createRequire(profilePath);
@@ -80,14 +75,14 @@ export function loadServerProfile(
 		const status: PluginStatus = {
 			id,
 			title: id,
-			source: typeof choice === "string" || !builtins.has(id) ? "external" : "built-in",
+			source: choice?.module || !builtins.has(id) ? "external" : "built-in",
 			status: "disabled",
 			requires: [],
 		};
 		inventory.set(id, status);
-		if (choice === false) continue;
+		if (choice?.enabled === false) continue;
 		try {
-			const modulePath = choice === undefined ? undefined : requirePlugin.resolve(resolve(agentDir, choice));
+			const modulePath = choice?.module ? requirePlugin.resolve(resolve(agentDir, choice.module)) : undefined;
 			const plugin: unknown = modulePath ? requirePlugin(modulePath) : builtins.get(id)?.();
 			if (
 				!plugin ||
@@ -215,6 +210,8 @@ export function loadServerProfile(
 			themes,
 			plugins: [...inventory.values()],
 		} satisfies PluginProfile,
+		choices,
+		builtinIds: [...builtins.keys()],
 		isBuiltinActive: (id: string) => inventory.get(id)?.source === "built-in" && active.has(id),
 		toolsForSession,
 		handleApi,
