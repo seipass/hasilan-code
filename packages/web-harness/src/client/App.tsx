@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
+import type { PluginProfile } from "../shared/plugin-profile.ts";
 import { aggregateUsage } from "../shared/usage.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
@@ -22,6 +23,7 @@ import { PanelResize } from "./PanelResize.tsx";
 import { preferences, usePreferenceState } from "./preferences.ts";
 import { PreferenceStatus } from "./PreferenceStatus.tsx";
 import { canvasPanel } from "./plugins/canvas.tsx";
+import { externalPanel } from "./plugins/external-panel.tsx";
 import type { WorkspacePanel } from "./plugins/workspace-panels.ts";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
 import { sessionRecency } from "./session-recency.ts";
@@ -64,12 +66,11 @@ export function App() {
 	const { background, changeBackground } = useHomeBackground();
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [mode, setMode] = useState("chat");
-	const [canvasDirty, setCanvasDirty] = useState(false);
+	const [dirtyPanels, setDirtyPanels] = useState<readonly string[]>([]);
 	const [openedPanels, setOpenedPanels] = useState<readonly string[]>([]);
-	const [activePluginIds, setActivePluginIds] = useState<readonly string[]>();
-	const activePanels = workspacePanels.filter(({ id }) => activePluginIds?.includes(id));
-	const activePanel = activePanels.find(({ id }) => id === mode);
-	const commands = COMPOSER_COMMANDS.filter(({ command }) => command !== "/canvas" || activePanels.some(({ id }) => id === canvasPanel.id));
+	const [activePanels, setActivePanels] = useState<readonly WorkspacePanel[]>();
+	const activePanel = activePanels?.find(({ id }) => id === mode);
+	const commands = COMPOSER_COMMANDS.filter(({ command }) => command !== "/canvas" || activePanels?.some(({ id }) => id === canvasPanel.id));
 	const [draftInsertion, setDraftInsertion] = useState<{ id: string; text: string }>();
 	const [workspaceId, setWorkspaceId] = useState<string>();
 	const [sessionId, setSessionId] = useState<string | undefined>(() => preferences.getItem("pi-web-selected-session") || undefined);
@@ -194,9 +195,17 @@ export function App() {
 	useEffect(() => { if (workspaceId && workspaceChannel.data) updateProjection(workspaceId, workspaceChannel.data); }, [workspaceId, workspaceChannel.data, updateProjection]);
 	useEffect(() => {
 		const controller = new AbortController();
-		void api<{ activeIds: string[] }>("/api/plugin-profile", { signal: controller.signal })
-			.then(({ activeIds }) => { if (!controller.signal.aborted) setActivePluginIds(activeIds); })
-			.catch(() => { if (!controller.signal.aborted) setActivePluginIds([]); });
+		void api<PluginProfile>("/api/plugin-profile", { signal: controller.signal })
+			.then(({ activeIds, panels }) => {
+				if (controller.signal.aborted) return;
+				const external = new Map(panels.map((entry) => [entry.id, externalPanel(entry)]));
+				const builtins = new Map(workspacePanels.map((panel) => [panel.id, panel]));
+				setActivePanels(activeIds.flatMap((id) => {
+					const panel = external.get(id) ?? builtins.get(id);
+					return panel ? [panel] : [];
+				}));
+			})
+			.catch(() => { if (!controller.signal.aborted) setActivePanels([]); });
 		return () => controller.abort();
 	}, []);
 	useEffect(() => {
@@ -320,9 +329,9 @@ export function App() {
 		if (commandPending.current) return;
 		const targetWorkspaceId = knownWorkspaceId ?? summaries.find((entry) => entry.sessionId === id)?.workspaceId;
 		const changingWorkspace = targetWorkspaceId && targetWorkspaceId !== workspaceId;
-		if (changingWorkspace && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
+		if (changingWorkspace && dirtyPanels.length > 0 && !window.confirm("プラグイン画面の未保存の変更を破棄して移動しますか？")) return;
 		setDraftInsertion(undefined);
-		if (changingWorkspace) { setCanvasDirty(false); setOpenedPanels([]); }
+		if (changingWorkspace) { setDirtyPanels([]); setOpenedPanels([]); }
 		draftSession.current = undefined;
 		if (targetWorkspaceId) setWorkspaceId(targetWorkspaceId);
 		if (targetWorkspaceId) setExpandedWorkspaces((previous) => ({ ...previous, [targetWorkspaceId]: true }));
@@ -333,16 +342,16 @@ export function App() {
 	}
 	function selectWorkspace(id: string) {
 		if (commandPending.current) return;
-		if (id !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
+		if (id !== workspaceId && dirtyPanels.length > 0 && !window.confirm("プラグイン画面の未保存の変更を破棄して移動しますか？")) return;
 		setDraftInsertion(undefined);
 		setExpandedWorkspaces((previous) => ({ ...previous, [id]: true }));
 		if (id === workspaceId) return;
-		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setOpenedPanels([]); setMode("chat");
+		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setFileTarget(undefined); setModelOpen(false); setError(undefined); setDirtyPanels([]); setOpenedPanels([]); setMode("chat");
 	}
 	function newConversation(targetWorkspaceId = workspaceId) {
 		if (commandPending.current) return;
-		if (targetWorkspaceId !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
-		if (targetWorkspaceId !== workspaceId) { setCanvasDirty(false); setOpenedPanels([]); }
+		if (targetWorkspaceId !== workspaceId && dirtyPanels.length > 0 && !window.confirm("プラグイン画面の未保存の変更を破棄して移動しますか？")) return;
+		if (targetWorkspaceId !== workspaceId) { setDirtyPanels([]); setOpenedPanels([]); }
 		setWorkspaceId(targetWorkspaceId);
 		setExpandedWorkspaces((previous) => Object.fromEntries(workspaces.map((entry) => [entry.workspaceId, previous[entry.workspaceId] ?? entry.workspaceId === workspaceId])));
 		setHistoryQuery(""); setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined);
@@ -411,7 +420,7 @@ export function App() {
 			if (destination && (sessionId || mode !== "chat" || parsed.kind !== "prompt")) throw new Error("判断モデルによる選択はホームの通常メッセージで利用できます。");
 			if (attachments.length && parsed.kind !== "prompt") throw new Error("添付ファイルは通常のメッセージとして送信してください。");
 			if (parsed.kind === "canvas") {
-				if (!activePluginIds) throw new Error("プラグインの読み込みが完了してから開いてください。");
+				if (!activePanels) throw new Error("プラグインの読み込みが完了してから開いてください。");
 				if (!activePanels.some(({ id }) => id === canvasPanel.id)) throw new Error("設計キャンバスが無効です。");
 				if (!workspaceId) throw new Error("ワークスペースを選択してください。");
 				openPanel(canvasPanel.id);
@@ -429,11 +438,11 @@ export function App() {
 							if (modelNeedsAuthentication) { setSettingsOpen(true); throw new Error("プロバイダーの認証を設定してください。"); }
 							if (!model) { setModelOpen(true); throw new Error("送信するモデルを選択してください。"); }
 						}
-						if (folder.workspaceId !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) throw new Error("送信をキャンセルしました。");
+						if (folder.workspaceId !== workspaceId && dirtyPanels.length > 0 && !window.confirm("プラグイン画面の未保存の変更を破棄して移動しますか？")) throw new Error("送信をキャンセルしました。");
 					},
 				});
 				if (routed.kind === "candidates") return { destinationCandidates: routed.candidates };
-				if (routed.workspace.workspaceId !== workspaceId) { setCanvasDirty(false); setOpenedPanels([]); }
+				if (routed.workspace.workspaceId !== workspaceId) { setDirtyPanels([]); setOpenedPanels([]); }
 				draftSession.current = undefined;
 				setWorkspaceId(routed.workspace.workspaceId); setSessionId(routed.sessionId);
 				setExpandedWorkspaces((previous) => ({ ...previous, [routed.workspace.workspaceId]: true }));
@@ -562,7 +571,7 @@ export function App() {
 			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={() => newConversation()}><img className="brand-symbol" src="/code-logo.svg" alt="" /></button></div>
 			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><Icon name="plus" size="control" />新しい会話</button>
 			<button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" title="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></div>
-			{activePanels.length > 0 && <nav className="sidebar-plugin-panels" aria-label="プラグイン">
+			{activePanels && activePanels.length > 0 && <nav className="sidebar-plugin-panels" aria-label="プラグイン">
 				{activePanels.map(({ id, title, icon }) => <button type="button" key={id} aria-current={mode === id ? "page" : undefined} disabled={!workspaceId} onClick={() => {
 					if (commandPending.current) return;
 					openPanel(id);
@@ -602,8 +611,8 @@ export function App() {
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
 			<FilePane workspaceId={workspaceId ?? ""} activePath={activeFilePath} refreshToken={filesVersion} visible={!!workspaceId} treeVisible={!!workspaceId && fileTreeOpen} onTreeClose={() => setFileTreeOpen(false)} onOpen={openFile}>
 			<div className="main-layout"><main className="chat-column" inert={(rightOpen || sidebarOpen) && viewport.width <= 900}><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
-				{activePanels.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
-					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={setCanvasDirty} />
+				{activePanels?.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
+					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={(dirty) => setDirtyPanels((previous) => dirty === previous.includes(id) ? previous : dirty ? [...previous, id] : previous.filter((entry) => entry !== id))} />
 				</div></Presence>)}
 				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={visibleGoal && <GoalPanel key={visibleGoal.id} goal={visibleGoal} onDismiss={() => setDismissedGoalId(visibleGoal.id)} busy={!!session?.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session?.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
@@ -637,7 +646,7 @@ export function App() {
 			setInitialSessions((previous) => [...previous.filter((entry) => entry.sessionId !== imported.sessionId), imported]);
 			setExpandedWorkspaces((previous) => ({ ...previous, [folder.workspaceId]: true }));
 			draftSession.current = undefined; setDraftInsertion(undefined); setWorkspaceId(folder.workspaceId); setSessionId(imported.sessionId); setMode("chat"); setHistoryQuery(""); setFileTarget(undefined); setError(undefined); setModelOpen(false); setImportOpen(false);
-			if (folder.workspaceId !== workspaceId) { setCanvasDirty(false); setOpenedPanels([]); }
+			if (folder.workspaceId !== workspaceId) { setDirtyPanels([]); setOpenedPanels([]); }
 			if (window.innerWidth < 900) setSidebarOpen(false);
 		}} />}</div></Presence>
 	</div>;

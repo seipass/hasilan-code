@@ -44,7 +44,10 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 
 	let path = "";
 	await withHost(async (api) => {
-		expect(await (await api("/api/plugin-profile")).json()).toEqual({ activeIds: ["web-search", "canvas"] });
+		expect(await (await api("/api/plugin-profile")).json()).toEqual({
+			activeIds: ["web-search", "canvas"],
+			panels: [],
+		});
 		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
 		path = `/api/workspaces/${workspaceId}/canvas`;
 		const saved = await api(path, emptyCanvasDocument());
@@ -53,12 +56,25 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	});
 	await writeFile(join(dir, "plugins.json"), '{"canvas":false}');
 	await withHost(async (api) => {
-		expect(await (await api("/api/plugin-profile")).json()).toEqual({ activeIds: ["web-search"] });
+		expect(await (await api("/api/plugin-profile")).json()).toEqual({ activeIds: ["web-search"], panels: [] });
 		expect((await api(path)).status).toBe(404);
 	});
-	await writeFile(join(dir, "plugins.json"), "{}");
+	await writeFile(join(dir, "plugins.json"), '{"notes":"./notes.cjs"}');
+	await writeFile(
+		join(dir, "notes.cjs"),
+		'exports.apiVersion = 1; exports.panel = { title: "Notes", script: "notes.js" };',
+	);
+	await writeFile(join(dir, "notes.js"), "/* Notes panel */");
 	await withHost(async (api) => {
 		expect(await (await api(path)).json()).toMatchObject({ revision: 1 });
+		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
+			panels: [{ id: "notes", title: "Notes" }],
+		});
+		const script = await api("/api/plugin-profile/notes/panel.js");
+		expect(script.status).toBe(200);
+		expect(script.headers.get("content-type")).toContain("application/javascript");
+		expect(await script.text()).toBe("/* Notes panel */");
+		expect((await api("/api/plugin-profile/canvas/panel.js")).status).toBe(404);
 	});
 }, 30_000);
 

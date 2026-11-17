@@ -27,8 +27,20 @@ async function start(activeIds = ["canvas"]) {
 			if (await store.handle(request, response, url)) return true;
 			if (url.pathname === "/api/workspaces")
 				sendJson(response, 200, [{ workspaceId: "workspace", path: directory }]);
-			else if (url.pathname === "/api/plugin-profile") sendJson(response, 200, { activeIds });
-			else if (url.pathname === "/api/workspaces/workspace/canvas" && activeIds.includes("canvas"))
+			else if (url.pathname === "/api/plugin-profile")
+				sendJson(response, 200, {
+					activeIds,
+					panels: activeIds.includes("notes") ? [{ id: "notes", title: "Notes" }] : [],
+				});
+			else if (url.pathname === "/api/plugin-profile/notes/panel.js" && activeIds.includes("notes")) {
+				response.writeHead(200, { "Content-Type": "application/javascript" });
+				response.end(`document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", { detail(root, ctx) {
+					const button = document.createElement("button");
+					button.textContent = "Insert " + ctx.workspaceId;
+					button.onclick = () => ctx.insertDraft("from Notes");
+					root.append(button);
+				} }));`);
+			} else if (url.pathname === "/api/workspaces/workspace/canvas" && activeIds.includes("canvas"))
 				sendJson(response, 200, emptyCanvasDocument());
 			else if (url.pathname === "/api/models")
 				sendJson(response, 200, {
@@ -70,12 +82,20 @@ afterAll(async () => {
 	if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-it("opens the built-in Canvas from the sidebar and composer only when its plugin is enabled", async () => {
+it("opens built-in and external panels from the sidebar and preserves composer navigation", async () => {
 	for (const enabled of [true, false]) {
-		const address = await start(enabled ? ["canvas"] : []);
+		const address = await start(enabled ? ["canvas", "notes"] : []);
 		const page = await browser.newPage({ reducedMotion: "reduce" });
+		page.setDefaultTimeout(5_000);
 		try {
-			await page.goto(address.launchUrl);
+			const scriptRequests: string[] = [];
+			page.on("request", (request) => {
+				if (request.url().endsWith("/notes/panel.js")) scriptRequests.push(request.url());
+			});
+			await Promise.all([
+				page.waitForResponse((response) => response.url().endsWith("/api/plugin-profile") && response.ok()),
+				page.goto(address.launchUrl),
+			]);
 			const input = page.getByRole("combobox", { name: "メッセージ" });
 			const panelButton = page
 				.getByRole("navigation", { name: "プラグイン", exact: true })
@@ -98,6 +118,12 @@ it("opens the built-in Canvas from the sidebar and composer only when its plugin
 				await input.press("Enter");
 				await canvas.waitFor({ state: "hidden" });
 				expect(await panelButton.getAttribute("aria-current")).toBeNull();
+				const notesButton = page.getByRole("button", { name: "Notes", exact: true });
+				expect(scriptRequests).toEqual([]);
+				await notesButton.click();
+				await page.getByRole("region", { name: "Notes" }).getByRole("button", { name: "Insert workspace" }).click();
+				await expect.poll(() => input.inputValue()).toBe("from Notes");
+				expect(scriptRequests).toHaveLength(1);
 			}
 			await input.fill("/canvas");
 			const option = page.getByRole("option", { name: /\/canvas/ });

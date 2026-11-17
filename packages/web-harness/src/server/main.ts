@@ -255,8 +255,17 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					return true;
 				};
 				if (await uiPreferences.handle(request, response, url)) return true;
-				if (url.pathname === "/api/plugin-profile" && method === "GET")
-					return reply({ activeIds: plugins.activeIds });
+				if (url.pathname === "/api/plugin-profile" && method === "GET") return reply(plugins.profile);
+				if (parts[1] === "plugin-profile" && parts.length === 4 && parts[3] === "panel.js" && method === "GET") {
+					const script = await plugins.panelScript(parts[2]);
+					if (!script) throw new HttpError(404, "Plugin panel not found");
+					response.writeHead(200, {
+						"Content-Type": "application/javascript; charset=utf-8",
+						"Cache-Control": "no-store",
+					});
+					response.end(script);
+					return true;
+				}
 				if (url.pathname === "/api/home/github" && method === "GET") return reply(await githubDashboard.read());
 				if (url.pathname === "/api/work" && method === "GET") return reply(teams.workOverview());
 				if (parts[1] === "work" && parts.length === 4 && parts[3] === "diff" && method === "GET")

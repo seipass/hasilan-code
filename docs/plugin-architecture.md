@@ -45,9 +45,31 @@ Web とデスクトップの共通ホストは、起動時にエージェント�
 }
 ```
 
-モジュールは `apiVersion = 1` と、`tools(session)`、`handleApi(request, response, url, parts)` の少なくとも一方を名前付きでエクスポートする。`tools` は Pi のツール定義の配列を返し、セッション ID、ワークスペース ID、作業ディレクトリを参照できる。API ハンドラーはホストが認証したリクエストを受け取り、応答を書いた場合は `true`、担当外の場合は `false` を返す。読み込むモジュールはホストと同じ権限で実行される。読み込みに失敗した ID は起動ログに出る。
+モジュールは `apiVersion = 1` と、`tools(session)`、`handleApi(request, response, url, parts)`、`panel` のうち少なくとも一つを名前付きでエクスポートする。`tools` は Pi のツール定義の配列を返し、セッション ID、ワークスペース ID、作業ディレクトリを参照できる。API ハンドラーはホストが認証したリクエストを受け取り、応答を書いた場合は `true`、担当外の場合は `false` を返す。読み込むモジュールはホストと同じ権限で実行される。読み込みに失敗した ID は起動ログに出る。
 
-ブラウザーは認証済みの `GET /api/plugin-profile` から有効な ID を取得し、同じ ID で登録された組み込み画面を有効にする。画面の登録に含まれる名前とアイコンを、サイドバーの「新しい会話」の直下に表示する。ボタンを押すとセッションを保ったまま、登録した画面がメイン領域に表示される。Canvas は従来どおり `/canvas` でも開ける。無効化するとサイドバーのボタン、コマンド候補、画面が消え、保存データは残る。外部モジュールの画面登録は今後の移行対象。
+ブラウザーは認証済みの `GET /api/plugin-profile` から、有効なプラグインと外部画面の一覧を取得する。画面の名前とアイコンを、サイドバーの「新しい会話」の直下に表示する。ボタンを押すとセッションを保ったまま、登録した画面がメイン領域に表示される。Canvas は従来どおり `/canvas` でも開ける。無効化するとサイドバーのボタン、コマンド候補、画面が消え、保存データは残る。
+
+外部画面を配布するには、プラグインのモジュールと、同じディレクトリ内のブラウザー用 JavaScript を用意する。たとえば `plugins.json` で `"notes": "./plugins/notes/plugin.cjs"` を指定し、次の内容を置く。
+
+```js
+// plugins/notes/plugin.cjs
+exports.apiVersion = 1;
+exports.panel = { title: "Notes", script: "panel.js" };
+```
+
+```js
+// plugins/notes/panel.js
+document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", {
+  detail(root, { insertDraft, signal }) {
+    const button = document.createElement("button");
+    button.textContent = "下書きに追加";
+    button.addEventListener("click", () => insertDraft("メモ"), { signal });
+    root.append(button);
+  },
+}));
+```
+
+画面コードは最初に開いたときに読み込まれる。登録関数には `workspaceId`、`signal`、`insertDraft(text)`、`setDirty(boolean)` が渡る。画面は同じワークスペース内の移動で保持される。ワークスペースを離れると `signal` が中断され、登録関数が返した後片付け関数が呼ばれる。画面コードはアプリと同じオリジンで実行するため、信頼できるプラグインを使う。
 
 Chord のローダーは試用時点のパッケージから公開されていない。最初のツール移行は Node のモジュール読み込みで構成し、画面やサービスを移すときにローダー選定を再検討する。
 

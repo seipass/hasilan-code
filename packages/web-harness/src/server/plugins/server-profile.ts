@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ToolDefinition } from "@hasilan-code/pi-coding-agent";
+import type { PluginProfile } from "../../shared/plugin-profile.ts";
 
 export interface ToolSession {
 	readonly sessionId: string;
@@ -23,6 +25,7 @@ export interface ServerPlugin {
 	readonly apiVersion: 1;
 	readonly tools?: ToolFactory;
 	readonly handleApi?: PluginApi;
+	readonly panel?: { readonly title: string; readonly script: string };
 }
 
 export function loadServerProfile(
@@ -47,11 +50,14 @@ export function loadServerProfile(
 
 	const requirePlugin = createRequire(profilePath);
 	const active = new Map<string, ServerPlugin>();
+	const panels: PluginProfile["panels"] = [];
+	const scripts = new Map<string, string>();
 	for (const id of new Set([...builtins.keys(), ...choices.keys()])) {
 		const choice = choices.get(id);
 		if (choice === false) continue;
 		try {
-			const plugin: unknown = choice === undefined ? builtins.get(id)?.() : requirePlugin(resolve(agentDir, choice));
+			const modulePath = choice === undefined ? undefined : requirePlugin.resolve(resolve(agentDir, choice));
+			const plugin: unknown = modulePath ? requirePlugin(modulePath) : builtins.get(id)?.();
 			if (
 				!plugin ||
 				typeof plugin !== "object" ||
@@ -59,9 +65,34 @@ export function loadServerProfile(
 				plugin.apiVersion !== 1 ||
 				("tools" in plugin && typeof plugin.tools !== "function") ||
 				("handleApi" in plugin && typeof plugin.handleApi !== "function") ||
-				!("tools" in plugin || "handleApi" in plugin)
+				!("tools" in plugin || "handleApi" in plugin || "panel" in plugin)
 			)
-				throw new Error("expected apiVersion 1 and a tools or handleApi function");
+				throw new Error("expected apiVersion 1 and a tools, handleApi, or panel export");
+			if ("panel" in plugin) {
+				const panel = plugin.panel;
+				if (
+					!modulePath ||
+					id === "chat" ||
+					!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(id) ||
+					!panel ||
+					typeof panel !== "object" ||
+					!("title" in panel) ||
+					typeof panel.title !== "string" ||
+					!panel.title.trim() ||
+					panel.title.length > 100 ||
+					!("script" in panel) ||
+					typeof panel.script !== "string" ||
+					!/\.(?:m?js)$/.test(panel.script)
+				)
+					throw new Error("invalid panel declaration");
+				const directory = dirname(realpathSync(modulePath));
+				const script = realpathSync(resolve(directory, panel.script));
+				const fromModule = relative(directory, script);
+				if (!fromModule || isAbsolute(fromModule) || fromModule === ".." || fromModule.startsWith(`..${sep}`))
+					throw new Error("panel script must be inside the plugin directory");
+				scripts.set(id, script);
+				panels.push({ id, title: panel.title.trim() });
+			}
 			active.set(id, plugin as ServerPlugin);
 		} catch (error) {
 			report(`Plugin ${id} failed to load: ${error instanceof Error ? error.message : String(error)}`);
@@ -95,5 +126,13 @@ export function loadServerProfile(
 		}
 		return false;
 	};
-	return { activeIds: [...active.keys()], toolsForSession, handleApi };
+	return {
+		profile: { activeIds: [...active.keys()], panels } satisfies PluginProfile,
+		toolsForSession,
+		handleApi,
+		async panelScript(id: string) {
+			const path = scripts.get(id);
+			return path ? readFile(path) : undefined;
+		},
+	};
 }
