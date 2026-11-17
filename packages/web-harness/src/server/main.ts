@@ -255,6 +255,8 @@ async function createHarness(options: CliOptions, hooks: HarnessHooks) {
 					return true;
 				};
 				if (await uiPreferences.handle(request, response, url)) return true;
+				if (url.pathname === "/api/plugin-profile" && method === "GET")
+					return reply({ activeIds: plugins.activeIds });
 				if (url.pathname === "/api/home/github" && method === "GET") return reply(await githubDashboard.read());
 				if (url.pathname === "/api/work" && method === "GET") return reply(teams.workOverview());
 				if (parts[1] === "work" && parts.length === 4 && parts[3] === "diff" && method === "GET")

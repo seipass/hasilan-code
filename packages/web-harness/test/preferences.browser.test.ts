@@ -8,6 +8,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { EventHub } from "../src/server/events.ts";
 import { createHttpHost, type HttpHost, sendJson } from "../src/server/http-host.ts";
 import { UiPreferencesStore } from "../src/server/ui-preferences.ts";
+import { emptyCanvasDocument } from "../src/shared/canvas.ts";
 
 let browser: Browser;
 let directory: string;
@@ -15,7 +16,7 @@ let host: HttpHost;
 let hub: EventHub;
 let store: UiPreferencesStore;
 
-async function start() {
+async function start(activeIds = ["canvas"]) {
 	store = await UiPreferencesStore.open(directory);
 	hub = new EventHub(() => ({ sessions: [], teams: { teams: [], agents: [], runs: [] } }));
 	host = createHttpHost({
@@ -26,6 +27,9 @@ async function start() {
 			if (await store.handle(request, response, url)) return true;
 			if (url.pathname === "/api/workspaces")
 				sendJson(response, 200, [{ workspaceId: "workspace", path: directory }]);
+			else if (url.pathname === "/api/plugin-profile") sendJson(response, 200, { activeIds });
+			else if (url.pathname === "/api/workspaces/workspace/canvas" && activeIds.includes("canvas"))
+				sendJson(response, 200, emptyCanvasDocument());
 			else if (url.pathname === "/api/models")
 				sendJson(response, 200, {
 					models: [{ provider: "fixture", id: "fixture", name: "Fixture model", contextWindow: 10000 }],
@@ -65,6 +69,35 @@ afterAll(async () => {
 	await store?.close();
 	if (directory) await rm(directory, { recursive: true, force: true });
 });
+
+it("opens the built-in Canvas from the composer only when its plugin is enabled", async () => {
+	for (const enabled of [true, false]) {
+		const address = await start(enabled ? ["canvas"] : []);
+		const page = await browser.newPage({ reducedMotion: "reduce" });
+		try {
+			await page.goto(address.launchUrl);
+			const input = page.getByRole("combobox", { name: "メッセージ" });
+			await input.fill("/canvas");
+			const option = page.getByRole("option", { name: /\/canvas/ });
+			if (enabled) {
+				await option.waitFor();
+				await input.press("Enter");
+				await input.press("Enter");
+				await page.getByRole("region", { name: "プロジェクト設計キャンバス" }).waitFor();
+			} else {
+				await input.press("Enter");
+				await page.getByText("設計キャンバスが無効です。", { exact: true }).waitFor();
+				expect(await option.count()).toBe(0);
+				expect(await page.getByRole("region", { name: "プロジェクト設計キャンバス" }).count()).toBe(0);
+			}
+		} finally {
+			await page.close();
+			hub.close();
+			await host.close();
+			await store.close();
+		}
+	}
+}, 30000);
 
 it("boots the real UI after migration and restores text, attachments, background and model on another port", async () => {
 	const first = await start();

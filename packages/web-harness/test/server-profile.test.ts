@@ -44,6 +44,7 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 
 	let path = "";
 	await withHost(async (api) => {
+		expect(await (await api("/api/plugin-profile")).json()).toEqual({ activeIds: ["web-search", "canvas"] });
 		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
 		path = `/api/workspaces/${workspaceId}/canvas`;
 		const saved = await api(path, emptyCanvasDocument());
@@ -52,6 +53,7 @@ it("keeps the authenticated Canvas API and its data across disable and re-enable
 	});
 	await writeFile(join(dir, "plugins.json"), '{"canvas":false}');
 	await withHost(async (api) => {
+		expect(await (await api("/api/plugin-profile")).json()).toEqual({ activeIds: ["web-search"] });
 		expect((await api(path)).status).toBe(404);
 	});
 	await writeFile(join(dir, "plugins.json"), "{}");

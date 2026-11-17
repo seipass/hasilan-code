@@ -28,7 +28,7 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, homeDashboard, surface, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
+export function ChatPane({ session, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, homeDashboard, surface, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
 	team?: TeamSnapshot;
 	loading?: boolean;
@@ -41,6 +41,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	goalControl: ReactNode;
 	homeDashboard?: ReactNode;
 	surface?: boolean;
+	commands?: readonly (typeof COMPOSER_COMMANDS)[number][];
 	draftInsertion?: { id: string; text: string };
 	onDraftInserted: () => void;
 	onSend: (text: string, mode: "prompt" | "steer" | "followUp", attachments: AttachmentUpload[], destination?: ComposerDestination) => Promise<ComposerSendResult>;
@@ -80,7 +81,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const insertedDraft = useRef<string | undefined>(undefined);
 	const slashInput = text.trimStart().startsWith("/");
 	const commandPrefix = text.trimStart().split(/\s/, 1)[0];
-	const suggestions = COMPOSER_COMMANDS.filter((entry) => entry.command.startsWith(commandPrefix));
+	const suggestions = commands.filter((entry) => entry.command.startsWith(commandPrefix));
 	const pickerOpen = slashInput && !/\s/.test(text.trimStart()) && !pickerDismissed;
 	const activeCommand = Math.min(commandIndex, Math.max(0, suggestions.length - 1));
 	const canRouteWorkspace = !session && !loading && !surface;

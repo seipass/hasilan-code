@@ -95,5 +95,5 @@ export function loadServerProfile(
 		}
 		return false;
 	};
-	return { toolsForSession, handleApi };
+	return { activeIds: [...active.keys()], toolsForSession, handleApi };
 }

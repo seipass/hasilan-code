@@ -1,4 +1,3 @@
-import { Select } from "./Select.tsx";
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
@@ -10,7 +9,6 @@ import { useAttention } from "./attention.ts";
 import { Icon } from "./Icon.tsx";
 import { userText } from "./MessageActions.tsx";
 import { ChatPane } from "./ChatPane.tsx";
-import { CanvasPane } from "./CanvasPane.tsx";
 import { DetailPane, type DetailView } from "./DetailPane.tsx";
 import { FilePane, type FileTarget } from "./files/FilePane.tsx";
 import { GoalPanel } from "./GoalPanel.tsx";
@@ -23,12 +21,13 @@ import { MotionSwap } from "./MotionSwap.tsx";
 import { PanelResize } from "./PanelResize.tsx";
 import { preferences, usePreferenceState } from "./preferences.ts";
 import { PreferenceStatus } from "./PreferenceStatus.tsx";
+import { canvasPanel } from "./plugins/canvas.tsx";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
 import { sessionRecency } from "./session-recency.ts";
 import { SessionImportDialog } from "./SessionImportDialog.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
-import { parseComposerCommand } from "./slash-command.ts";
+import { COMPOSER_COMMANDS, parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
 import { WidgetSpace } from "./widgets/WidgetSpace.tsx";
@@ -37,6 +36,8 @@ import { workspaceLabel } from "./workspace-label.ts";
 import { sendWorkspacePrompt } from "./workspace-send.ts";
 import type { Model, ModelCatalog, PendingInputAction, SessionDetail, SessionSummary, Workspace, WorkspaceProjection } from "./types.ts";
 import "./WorkspaceModes.css";
+
+const workspacePanels = [canvasPanel] as const;
 
 function sessionFromLocation(): string | undefined {
 	if (typeof location === "undefined") return undefined;
@@ -62,9 +63,12 @@ export function App() {
 	const { background, changeBackground } = useHomeBackground();
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [mode, setMode] = useState<"chat" | "canvas">("chat");
-	const [canvasTarget, setCanvasTarget] = useState<"chat" | "swarm">("chat");
 	const [canvasDirty, setCanvasDirty] = useState(false);
-	const [canvasOpened, setCanvasOpened] = useState(false);
+	const [openedPanels, setOpenedPanels] = useState<readonly string[]>([]);
+	const [activePluginIds, setActivePluginIds] = useState<readonly string[]>();
+	const activePanels = workspacePanels.filter(({ id }) => activePluginIds?.includes(id));
+	const activePanel = activePanels.find(({ id }) => id === mode);
+	const commands = COMPOSER_COMMANDS.filter(({ command }) => command !== "/canvas" || activePanels.some(({ id }) => id === canvasPanel.id));
 	const [draftInsertion, setDraftInsertion] = useState<{ id: string; text: string }>();
 	const [workspaceId, setWorkspaceId] = useState<string>();
 	const [sessionId, setSessionId] = useState<string | undefined>(() => preferences.getItem("pi-web-selected-session") || undefined);
@@ -189,6 +193,13 @@ export function App() {
 	useEffect(() => { if (workspaceId && workspaceChannel.data) updateProjection(workspaceId, workspaceChannel.data); }, [workspaceId, workspaceChannel.data, updateProjection]);
 	useEffect(() => {
 		const controller = new AbortController();
+		void api<{ activeIds: string[] }>("/api/plugin-profile", { signal: controller.signal })
+			.then(({ activeIds }) => { if (!controller.signal.aborted) setActivePluginIds(activeIds); })
+			.catch(() => { if (!controller.signal.aborted) setActivePluginIds([]); });
+		return () => controller.abort();
+	}, []);
+	useEffect(() => {
+		const controller = new AbortController();
 		Promise.all([api<Workspace[]>("/api/workspaces", { signal: controller.signal }), api<SessionSummary[]>("/api/sessions", { signal: controller.signal })]).then(([folders, sessions]) => {
 			setWorkspaces(folders); setInitialSessions(sessions);
 			const previousSession = preferences.getItem("pi-web-selected-session"); const previousWorkspace = preferences.getItem("pi-web-workspace");
@@ -310,7 +321,7 @@ export function App() {
 		const changingWorkspace = targetWorkspaceId && targetWorkspaceId !== workspaceId;
 		if (changingWorkspace && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
 		setDraftInsertion(undefined);
-		if (changingWorkspace) { setCanvasDirty(false); setCanvasOpened(false); }
+		if (changingWorkspace) { setCanvasDirty(false); setOpenedPanels([]); }
 		draftSession.current = undefined;
 		if (targetWorkspaceId) setWorkspaceId(targetWorkspaceId);
 		if (targetWorkspaceId) setExpandedWorkspaces((previous) => ({ ...previous, [targetWorkspaceId]: true }));
@@ -325,12 +336,12 @@ export function App() {
 		setDraftInsertion(undefined);
 		setExpandedWorkspaces((previous) => ({ ...previous, [id]: true }));
 		if (id === workspaceId) return;
-		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setCanvasOpened(false); setMode("chat");
+		setWorkspaceId(id); setSessionId(undefined); draftSession.current = undefined; setFileTarget(undefined); setModelOpen(false); setError(undefined); setCanvasDirty(false); setOpenedPanels([]); setMode("chat");
 	}
 	function newConversation(targetWorkspaceId = workspaceId) {
 		if (commandPending.current) return;
 		if (targetWorkspaceId !== workspaceId && canvasDirty && !window.confirm("Canvasの未保存の変更を破棄して移動しますか？")) return;
-		if (targetWorkspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
+		if (targetWorkspaceId !== workspaceId) { setCanvasDirty(false); setOpenedPanels([]); }
 		setWorkspaceId(targetWorkspaceId);
 		setExpandedWorkspaces((previous) => Object.fromEntries(workspaces.map((entry) => [entry.workspaceId, previous[entry.workspaceId] ?? entry.workspaceId === workspaceId])));
 		setHistoryQuery(""); setMode("chat"); setSessionId(undefined); draftSession.current = undefined; setDraftInsertion(undefined); setDraftModel(model); setDraftThinking(session?.thinkingLevel ?? draftThinking); setRightOpen(false); setFileTarget(undefined); setError(undefined);
@@ -399,8 +410,11 @@ export function App() {
 			if (destination && (sessionId || mode !== "chat" || parsed.kind !== "prompt")) throw new Error("判断モデルによる選択はホームの通常メッセージで利用できます。");
 			if (attachments.length && parsed.kind !== "prompt") throw new Error("添付ファイルは通常のメッセージとして送信してください。");
 			if (parsed.kind === "canvas") {
+				if (!activePluginIds) throw new Error("プラグインの読み込みが完了してから開いてください。");
+				if (!activePanels.some(({ id }) => id === canvasPanel.id)) throw new Error("設計キャンバスが無効です。");
 				if (!workspaceId) throw new Error("ワークスペースを選択してください。");
-				setCanvasOpened(true); setMode("canvas"); setModelOpen(false);
+				setOpenedPanels((previous) => previous.includes(canvasPanel.id) ? previous : [...previous, canvasPanel.id]);
+				setMode(canvasPanel.id); setModelOpen(false);
 				return {};
 			}
 			if (parsed.kind === "chat") { setMode("chat"); setModelOpen(false); return {}; }
@@ -419,7 +433,7 @@ export function App() {
 					},
 				});
 				if (routed.kind === "candidates") return { destinationCandidates: routed.candidates };
-				if (routed.workspace.workspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
+				if (routed.workspace.workspaceId !== workspaceId) { setCanvasDirty(false); setOpenedPanels([]); }
 				draftSession.current = undefined;
 				setWorkspaceId(routed.workspace.workspaceId); setSessionId(routed.sessionId);
 				setExpandedWorkspaces((previous) => ({ ...previous, [routed.workspace.workspaceId]: true }));
@@ -494,10 +508,9 @@ export function App() {
 		setRightTab("team");
 		setRightOpen(true);
 	}
-	function composeCanvasDesign(path: string): void {
+	function insertPanelDraft(text: string): void {
 		if (commandPending.current) throw new Error("送信が完了してから設計を入力欄に追加してください。");
-		const text = `設計ファイル ${JSON.stringify(path)} を読み、内容に沿って進めてください。`;
-		setDraftInsertion({ id: nextClientId(), text: canvasTarget === "swarm" ? `/hyakki ${text}` : text });
+		setDraftInsertion({ id: nextClientId(), text });
 		setMode("chat");
 	}
 
@@ -570,16 +583,16 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}><Icon name="settings" size="control" />設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{mode === "canvas" ? "設計キャンバス" : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions has-widgets"><WidgetSpace visible usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button><button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions has-widgets"><WidgetSpace visible usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button><button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
 			<div className="home-backdrop-anchor"><HomeBackdrop background={homeBackgroundVisible ? background : undefined} /></div>
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
 			<FilePane workspaceId={workspaceId ?? ""} activePath={activeFilePath} refreshToken={filesVersion} visible={!!workspaceId} treeVisible={!!workspaceId && fileTreeOpen} onTreeClose={() => setFileTreeOpen(false)} onOpen={openFile}>
 			<div className="main-layout"><main className="chat-column" inert={(rightOpen || sidebarOpen) && viewport.width <= 900}><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
-				{canvasOpened && <Presence show={mode === "canvas"} keepMounted><div className="mode-page" inert={mode !== "canvas"}>
-					{workspaceId && <CanvasPane key={workspaceId} workspaceId={workspaceId} destinationControl={<label className="canvas-destination"><span className="sr-only">入力欄に追加する設計の送信先</span><Select aria-label="入力欄に追加する設計の送信先" value={canvasTarget} onChange={(value) => setCanvasTarget(value === "swarm" ? "swarm" : "chat")}><option value="chat">会話</option><option value="swarm">Hyakki-Yako</option></Select></label>} onComposeDesign={composeCanvasDesign} onDirtyChange={setCanvasDirty} />}
-				</div></Presence>}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${mode === "canvas" ? " is-surface" : ""}`}><ChatPane loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={visibleGoal && <GoalPanel key={visibleGoal.id} goal={visibleGoal} onDismiss={() => setDismissedGoalId(visibleGoal.id)} busy={!!session?.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session?.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
+				{activePanels.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
+					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={setCanvasDirty} />
+				</div></Presence>)}
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} className={`chat-page-transition${mode === "canvas" ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={visibleGoal && <GoalPanel key={visibleGoal.id} goal={visibleGoal} onDismiss={() => setDismissedGoalId(visibleGoal.id)} busy={!!session?.currentRun} connected={sessionChannel.connection === "connected"} unavailable={session?.availability === "missing"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
@@ -611,7 +624,7 @@ export function App() {
 			setInitialSessions((previous) => [...previous.filter((entry) => entry.sessionId !== imported.sessionId), imported]);
 			setExpandedWorkspaces((previous) => ({ ...previous, [folder.workspaceId]: true }));
 			draftSession.current = undefined; setDraftInsertion(undefined); setWorkspaceId(folder.workspaceId); setSessionId(imported.sessionId); setMode("chat"); setHistoryQuery(""); setFileTarget(undefined); setError(undefined); setModelOpen(false); setImportOpen(false);
-			if (folder.workspaceId !== workspaceId) { setCanvasDirty(false); setCanvasOpened(false); }
+			if (folder.workspaceId !== workspaceId) { setCanvasDirty(false); setOpenedPanels([]); }
 			if (window.innerWidth < 900) setSidebarOpen(false);
 		}} />}</div></Presence>
 	</div>;
