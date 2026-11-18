@@ -18,6 +18,9 @@ import {
 	DEFAULT_THEME_ID,
 	PLUGIN_MANAGER_ID,
 	type PluginProfile,
+	SESSION_ARCHIVE_ID,
+	SESSION_IMPORT_ID,
+	SESSION_SEARCH_ID,
 	standardTheme,
 	WIDGET_FEEDS_ID,
 } from "../src/shared/plugin-profile.ts";
@@ -47,6 +50,7 @@ async function start(activeIds = ["canvas"]) {
 		profile: {
 			activeIds,
 			application,
+			persistentSessions: true,
 			panels: [],
 			themes: [],
 			plugins: [{ id: "canvas", title: "Canvas", source: "built-in", status: "enabled", requires: [] }],
@@ -67,6 +71,7 @@ async function start(activeIds = ["canvas"]) {
 				sendJson(response, 200, {
 					activeIds,
 					application,
+					persistentSessions: true,
 					plugins: [],
 					panels: activeIds.includes("notes") ? [{ id: "notes", title: "Notes" }] : [],
 					themes: [
@@ -167,6 +172,10 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		"workspace-ui",
 		"runtime-context",
 		"session-storage",
+		"session-search",
+		"session-import",
+		"session-archive",
+		"storage-usage",
 		"github-dashboard",
 		"widget-feeds",
 		"account-usage",
@@ -267,7 +276,9 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 
 it("opens built-in and external panels from the sidebar and preserves composer navigation", async () => {
 	for (const enabled of [true, false]) {
-		const address = await start(enabled ? ["canvas", "notes", WIDGET_FEEDS_ID] : []);
+		const address = await start(
+			enabled ? ["canvas", "notes", WIDGET_FEEDS_ID, SESSION_SEARCH_ID, SESSION_IMPORT_ID, SESSION_ARCHIVE_ID] : [],
+		);
 		const page = await browser.newPage({ reducedMotion: "reduce" });
 		page.setDefaultTimeout(5_000);
 		try {
@@ -286,8 +297,12 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				.getByRole("button", { name: "設計キャンバス", exact: true });
 			const canvas = page.getByRole("region", { name: "プロジェクト設計キャンバス" });
 			const earthquake = page.getByRole("button", { name: "地震情報を開く" });
+			const search = page.getByRole("textbox", { name: "会話を検索" });
+			const importSession = page.getByRole("button", { name: "セッションを引き継ぐ" });
 			if (enabled) {
 				await earthquake.waitFor();
+				await search.waitFor();
+				await importSession.waitFor();
 				await panelButton.waitFor();
 				expect(
 					await panelButton.evaluate((button) => button.parentElement?.previousElementSibling?.className),
@@ -325,7 +340,13 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				expect(await canvas.count()).toBe(0);
 				expect(await panelButton.count()).toBe(0);
 				expect(await earthquake.count()).toBe(0);
+				expect(await search.count()).toBe(0);
+				expect(await importSession.count()).toBe(0);
 			}
+			await page.getByRole("button", { name: "設定", exact: true }).click();
+			const settings = page.getByRole("dialog", { name: "設定" });
+			await settings.waitFor();
+			expect(await settings.getByRole("tab", { name: "アーカイブ" }).count()).toBe(enabled ? 1 : 0);
 		} finally {
 			await page.close();
 			hub.close();

@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
+import { SESSION_IMPORT_ID, SESSION_SEARCH_ID } from "../shared/plugin-profile.ts";
 import { aggregateUsage } from "../shared/usage.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
@@ -70,6 +71,8 @@ export function App() {
 	const [dirtyPanels, setDirtyPanels] = useState<readonly string[]>([]);
 	const [openedPanels, setOpenedPanels] = useState<readonly string[]>([]);
 	const profile = usePluginProfile();
+	const searchEnabled = profile?.activeIds.includes(SESSION_SEARCH_ID) ?? false;
+	const importEnabled = !!profile?.persistentSessions && profile.activeIds.includes(SESSION_IMPORT_ID);
 	const activePanels = useMemo(() => {
 		if (!profile) return undefined;
 		const external = new Map(profile.panels.filter((entry) => entry.scope !== "application").map((entry) => [entry.id, externalPanel(entry)]));
@@ -151,7 +154,7 @@ export function App() {
 	// Sidebar search matches titles and workspace paths without scanning message bodies on each keystroke.
 	useEffect(() => {
 		const query = historyQuery.trim();
-		if (query.length < 2) { setBodyMatches([]); return; }
+		if (!searchEnabled || query.length < 2) { setBodyMatches([]); return; }
 		const controller = new AbortController();
 		const timer = window.setTimeout(() => {
 			void api<{ sessionId: string; snippet: string; role: string }[]>(`/api/sessions/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
@@ -159,7 +162,7 @@ export function App() {
 				.catch(() => { if (!controller.signal.aborted) setBodyMatches([]); });
 		}, 250);
 		return () => { window.clearTimeout(timer); controller.abort(); };
-	}, [historyQuery]);
+	}, [historyQuery, searchEnabled]);
 	const bodyMatchIds = new Set(bodyMatches.map((match) => match.sessionId));
 	const orderedRoots = [...roots].sort((a, b) => {
 		if (a.workspaceId !== b.workspaceId) return a.workspaceId.localeCompare(b.workspaceId);
@@ -257,7 +260,7 @@ export function App() {
 	}, [initialSessions, projections]);
 	useEffect(() => {
 		const keydown = (event: KeyboardEvent) => {
-			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); }
+			if (searchEnabled && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); }
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") { event.preventDefault(); setRightTab("tabs"); setRightOpen(true); window.dispatchEvent(new Event("hasilan:quick-open")); }
 			if (event.key !== "Escape") return;
 			if (modelOpen) setModelOpen(false);
@@ -266,7 +269,7 @@ export function App() {
 			else if (sidebarOpen && window.innerWidth < 900) setSidebarOpen(false);
 		};
 		window.addEventListener("keydown", keydown); return () => window.removeEventListener("keydown", keydown);
-	}, [modelOpen, rightOpen, sidebarOpen]);
+	}, [modelOpen, rightOpen, sidebarOpen, searchEnabled]);
 	// Android's back button must close one overlay instead of leaving the app. While any
 	// overlay is open we hold one extra history entry with the same URL; popping it closes
 	// the top overlay (settings, a dialog, the model sheet, then the panel and the drawer).
@@ -574,7 +577,7 @@ export function App() {
 		<aside ref={sidebarRef} id="conversation-history" className="sidebar" aria-label="会話の履歴" aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
 			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={() => newConversation()}><img className="brand-symbol" src="/code-logo.svg" alt="" /></button></div>
 			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><Icon name="plus" size="control" />新しい会話</button>
-			<button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" title="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></div>
+			{importEnabled && <button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" title="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button>}</div>
 			{activePanels && activePanels.length > 0 && <nav className="sidebar-plugin-panels" aria-label="プラグイン">
 				{activePanels.map(({ id, title, icon, requiresWorkspace = true }) => <button type="button" key={id} aria-current={mode === id ? "page" : undefined} disabled={requiresWorkspace && !workspaceId} onClick={() => {
 					if (commandPending.current) return;
@@ -582,7 +585,7 @@ export function App() {
 					if (narrowViewport) setSidebarOpen(false);
 				}}><Icon name={icon} />{title}</button>)}
 			</nav>}
-			<label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>
+			{searchEnabled && <label className="history-search"><span className="sr-only">会話を検索</span><input ref={searchInput} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="会話を検索" /><kbd>⌘ / Ctrl K</kbd></label>}
 			<div className="history-heading"><span>会話</span><span className="history-heading-actions"><Presence show={runningCount > 0}><button className="icon-button history-stop-all" aria-label="実行中の会話をすべて停止" title="実行中の会話をすべて停止" onClick={() => { void stopAll(); }}><Icon name="stop" size="inline" /></button></Presence><button className="icon-button workspace-add-button" aria-label="ワークスペースを追加" title="フォルダーを選択してワークスペースを追加" disabled={addingWorkspace} onClick={() => { void addWorkspace(); }}>{addingWorkspace ? "…" : <Icon name="plus" size="control" />}</button></span></div>
 			<nav className="history-navigation" aria-label="ワークスペースと会話">
 				<MotionItems items={workspaces.filter((entry) => !historyQuery.trim() || entry.path.toLowerCase().includes(historyQuery.toLowerCase()) || history.some((item) => item.workspaceId === entry.workspaceId))} itemKey={(entry) => entry.workspaceId}>{(entry) => {
@@ -645,13 +648,13 @@ export function App() {
 			setSessionOrder((previous) => ({ ...previous, [actionSession.workspaceId]: nextOrder }));
 			closeSessionAction();
 		}} />}</div></Presence>
-		<Presence show={importOpen && !!workspace}><div className="motion-contents">{workspace && <SessionImportDialog key={workspace.workspaceId} workspace={workspace} model={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onFile={openFile} onClose={() => setImportOpen(false)} onImported={(imported, folder) => {
+		{importEnabled && <Presence show={importOpen && !!workspace}><div className="motion-contents">{workspace && <SessionImportDialog key={workspace.workspaceId} workspace={workspace} model={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onFile={openFile} onClose={() => setImportOpen(false)} onImported={(imported, folder) => {
 			setWorkspaces((previous) => previous.some((entry) => entry.workspaceId === folder.workspaceId) ? previous : [...previous, folder]);
 			setInitialSessions((previous) => [...previous.filter((entry) => entry.sessionId !== imported.sessionId), imported]);
 			setExpandedWorkspaces((previous) => ({ ...previous, [folder.workspaceId]: true }));
 			draftSession.current = undefined; setDraftInsertion(undefined); setWorkspaceId(folder.workspaceId); setSessionId(imported.sessionId); setMode("chat"); setHistoryQuery(""); setFileTarget(undefined); setError(undefined); setModelOpen(false); setImportOpen(false);
 			if (folder.workspaceId !== workspaceId) { setDirtyPanels([]); setOpenedPanels([]); }
 			if (window.innerWidth < 900) setSidebarOpen(false);
-		}} />}</div></Presence>
+		}} />}</div></Presence>}
 	</div>;
 }

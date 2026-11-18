@@ -80,6 +80,10 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"workspace-ui",
 				"runtime-context",
 				"session-storage",
+				"session-search",
+				"session-import",
+				"session-archive",
+				"storage-usage",
 				"github-dashboard",
 				"widget-feeds",
 				"account-usage",
@@ -87,6 +91,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 			],
 			panels: [],
 			application: { kind: "built-in" },
+			persistentSessions: true,
 			themes: [expect.objectContaining({ id: "theme-default", customizable: true })],
 			plugins: expect.arrayContaining([
 				{ id: "hyakki", title: "hyakki", status: "enabled", source: "built-in", requires: ["team-tools"] },
@@ -97,6 +102,10 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 			expect.objectContaining({ id: "openrouter" }),
 		);
 		expect((await api("/api/widgets/places?q=a")).status).toBe(400);
+		expect(await (await api("/api/sessions/search?q=missing")).json()).toEqual([]);
+		expect(await (await api("/api/session-archive")).json()).toEqual([]);
+		expect((await api("/api/session-imports/sources")).status).toBe(200);
+		expect((await api("/api/storage")).status).toBe(200);
 		path = `/api/workspaces/${workspaceId}/canvas`;
 		swarmPath = `/api/workspaces/${workspaceId}/swarm`;
 		expect((await api(swarmPath, {}, "POST")).status).toBe(400);
@@ -127,6 +136,10 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"workspace-ui",
 				"runtime-context",
 				"session-storage",
+				"session-search",
+				"session-import",
+				"session-archive",
+				"storage-usage",
 				"github-dashboard",
 				"widget-feeds",
 				"account-usage",
@@ -181,6 +194,7 @@ exports.providers = [{
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
 			activeIds: ["custom-app"],
+			persistentSessions: false,
 			application: { kind: "external", panel: { id: "custom-app", title: "Custom app", scope: "application" } },
 		});
 		expect((await api("/api/plugin-profile/custom-app/panel.js")).status).toBe(200);
@@ -190,7 +204,15 @@ exports.providers = [{
 			models: [{ id: model.id, provider: "local-provider" }],
 		});
 		expect((await api(management)).status).toBe(404);
-		for (const route of ["/api/home/github", "/api/account-usage", "/api/widgets/places?q=a"]) {
+		for (const route of [
+			"/api/home/github",
+			"/api/account-usage",
+			"/api/widgets/places?q=a",
+			"/api/sessions/search?q=missing",
+			"/api/session-imports/sources",
+			"/api/session-archive",
+			"/api/storage",
+		]) {
 			expect((await api(route)).status).toBe(404);
 		}
 	});

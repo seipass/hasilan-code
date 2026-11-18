@@ -1,6 +1,7 @@
 import { Select } from "./Select.tsx";
 import { AgentModelSettings } from "./AgentModelSettings.tsx";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { SESSION_ARCHIVE_ID, STORAGE_USAGE_ID } from "../shared/plugin-profile.ts";
 import { SessionArchivePanel } from "./SessionArchivePanel.tsx";
 import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
 import { api, command, errorMessage } from "./api.ts";
@@ -13,6 +14,7 @@ import { StoragePanel } from "./StoragePanel.tsx";
 import type { HomeBackground } from "./home-background.ts";
 import { Presence } from "./Motion.tsx";
 import { MotionSwap } from "./MotionSwap.tsx";
+import { usePluginProfile } from "./plugins/profile.tsx";
 import "./SettingsMotion.css";
 import { OAuthLogin } from "./OAuthLogin.tsx";
 import { Icon } from "./Icon.tsx";
@@ -29,6 +31,7 @@ const TABS = [
 	{ id: "environment", label: "環境", icon: "settings" },
 	{ id: "beta", label: "ベータ", icon: "plus" },
 ] as const;
+const TABS_WITHOUT_ARCHIVE = TABS.filter((entry) => entry.id !== "archive");
 type SettingsTab = (typeof TABS)[number]["id"];
 const SEARCH_KEY_PROVIDERS = [
 	{ id: "brave", label: "Brave" },
@@ -58,6 +61,10 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 	homeBackground?: HomeBackground;
 	onHomeBackgroundChange: (next: HomeBackground | undefined) => void;
 }) {
+	const profile = usePluginProfile();
+	const archiveEnabled = !!profile?.persistentSessions && profile.activeIds.includes(SESSION_ARCHIVE_ID);
+	const storageUsageEnabled = profile?.activeIds.includes(STORAGE_USAGE_ID) ?? false;
+	const tabs = archiveEnabled ? TABS : TABS_WITHOUT_ARCHIVE;
 	const [settings, setSettings] = useState<Settings>();
 	const [savedSettings, setSavedSettings] = useState<Settings>();
 	const [catalog, setCatalog] = useState<ModelCatalog>();
@@ -170,9 +177,9 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 
 	// On a phone the tab list scrolls; keep the selected category visible when it changes.
 	useEffect(() => {
-		const index = TABS.findIndex((entry) => entry.id === tab);
+		const index = tabs.findIndex((entry) => entry.id === tab);
 		tabRefs.current[index]?.scrollIntoView({ block: "nearest", inline: "nearest" });
-	}, [tab]);
+	}, [tab, tabs]);
 
 	return <div className="dialog-backdrop" data-closing={closing} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
 		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onTransitionEnd={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity") finishClose(); }} onTransitionCancel={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) finishClose(); }} onKeyDown={(event) => {
@@ -187,16 +194,16 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			<header className="panel-heading"><h2 id={titleId}>設定</h2><button type="button" disabled={busy || closing} onClick={requestClose} aria-label="設定を閉じる">閉じる</button></header>
 			<div className="settings-layout">
 			<div className="settings-tabs" role="tablist" aria-label="設定のカテゴリ" aria-orientation="vertical" onKeyDown={(event) => {
-				const index = TABS.findIndex((entry) => entry.id === tab);
+				const index = tabs.findIndex((entry) => entry.id === tab);
 				let next: number;
-				if (event.key === "ArrowDown") next = (index + 1) % TABS.length;
-				else if (event.key === "ArrowUp") next = (index + TABS.length - 1) % TABS.length;
+				if (event.key === "ArrowDown") next = (index + 1) % tabs.length;
+				else if (event.key === "ArrowUp") next = (index + tabs.length - 1) % tabs.length;
 				else if (event.key === "Home") next = 0;
-				else if (event.key === "End") next = TABS.length - 1;
+				else if (event.key === "End") next = tabs.length - 1;
 				else return;
-				event.preventDefault(); setTab(TABS[next].id); tabRefs.current[next]?.focus();
+				event.preventDefault(); setTab(tabs[next].id); tabRefs.current[next]?.focus();
 			}}>
-				{TABS.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => { if (tab !== entry.id) setTab(entry.id); }}><Icon name={entry.icon} size="control" /><span>{entry.label}</span></button>)}
+				{tabs.map((entry, index) => <button key={entry.id} type="button" ref={(element) => { tabRefs.current[index] = element; }} role="tab" id={`${tabsId}-${entry.id}-tab`} aria-controls={`${tabsId}-${entry.id}-panel`} aria-selected={tab === entry.id} tabIndex={tab === entry.id ? 0 : -1} onClick={() => { if (tab !== entry.id) setTab(entry.id); }}><Icon name={entry.icon} size="control" /><span>{entry.label}</span></button>)}
 			</div>
 			<div className="settings-main">
 			<Presence show={!!error} collapse><div className="error" role="alert"><p>{error}</p>{!settings && <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>再読み込み</button>}</div></Presence>
@@ -206,9 +213,9 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			<Presence show={tab === "beta"}><section className="settings-content" role="tabpanel" id={`${tabsId}-beta-panel`} aria-labelledby={`${tabsId}-beta-tab`}>
 				<BetaSettings />
 			</section></Presence>
-			<Presence show={tab === "archive"}><section className="settings-content" role="tabpanel" id={`${tabsId}-archive-panel`} aria-labelledby={`${tabsId}-archive-tab`}>
+			{archiveEnabled && <Presence show={tab === "archive"}><section className="settings-content" role="tabpanel" id={`${tabsId}-archive-panel`} aria-labelledby={`${tabsId}-archive-tab`}>
 				<SessionArchivePanel onRestored={onSessionRestored} />
-			</section></Presence>
+			</section></Presence>}
 			<Presence show={tab === "appearance"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
 				<HomeAppearance background={homeBackground} onChange={onHomeBackgroundChange} />
 				<WidgetAppearance />
@@ -261,7 +268,7 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 				</section></Presence>
 				<Presence show={tab === "usage"}><section className="settings-content" role="tabpanel" id={`${tabsId}-usage-panel`} aria-labelledby={`${tabsId}-usage-tab`}>
 					<AccountUsagePanel />
-					<StoragePanel />
+					{storageUsageEnabled && <StoragePanel />}
 				</section></Presence>
 				<Presence show={tab === "search"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-search-panel`} aria-labelledby={`${tabsId}-search-tab`}>
 					<h3>Web 検索</h3>

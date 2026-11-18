@@ -467,6 +467,10 @@ export class SessionRegistry {
 		return this.options.goalEnabled !== false;
 	}
 
+	get sessionStorage(): SessionStorage | undefined {
+		return this.storage;
+	}
+
 	runtimeGoal(descriptor: Pick<SessionDescriptor, "goal">): Goal | undefined {
 		return this.goalEnabled ? descriptor.goal : undefined;
 	}

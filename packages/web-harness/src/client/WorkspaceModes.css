@@ -2,6 +2,7 @@
 .mode-page[hidden] { display: none; }
 .mode-page[data-motion-exit="true"] { position: absolute; inset: 0; }
 .sidebar-plugin-panels { display: grid; gap: 2px; margin-block-start: 4px; }
+.sidebar-conversation-actions > .new-conversation:only-child { grid-column: 1 / -1; }
 .sidebar-plugin-panels > button { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 10px; border: 0; border-radius: 6px; background: transparent; font-size: var(--text-sm); text-align: start; }
 .sidebar-plugin-panels > button:hover:not(:disabled), .sidebar-plugin-panels > button[aria-current="page"] { background: var(--surface-hover); }
 @media (max-width: 900px) { .sidebar-plugin-panels > button { min-height: 44px; } }

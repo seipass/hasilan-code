@@ -27,6 +27,10 @@ import {
 	DEFAULT_THEME_ID,
 	GITHUB_DASHBOARD_ID,
 	PLUGIN_MANAGER_ID,
+	SESSION_ARCHIVE_ID,
+	SESSION_IMPORT_ID,
+	SESSION_SEARCH_ID,
+	STORAGE_USAGE_ID,
 	standardTheme,
 	WIDGET_FEEDS_ID,
 	WORKSPACE_UI_ID,
@@ -54,16 +58,19 @@ import { pluginManager } from "./plugins/manager.ts";
 import { runtimeContextPlugin } from "./plugins/runtime-context.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
 import { pluginSession } from "./plugins/session.ts";
+import {
+	sessionArchivePlugin,
+	sessionImportPlugin,
+	sessionSearchPlugin,
+	storageUsagePlugin,
+} from "./plugins/session-history.ts";
 import { fileSessionStorage } from "./plugins/session-storage.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
 import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts";
 import { acquireProfile } from "./profile-lock.ts";
 import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
-import { handleSessionImport } from "./session-import/routes.ts";
-import { SessionImportService } from "./session-import/service.ts";
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
 import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./settings.ts";
-import { readStorageUsage } from "./storage-usage.ts";
 import { TeamManager } from "./team-manager.ts";
 import { TerminalManager } from "./terminal-manager.ts";
 import { textTransformSchema, transformText } from "./text-transform.ts";
@@ -170,6 +177,17 @@ async function createHarness(
 			[WORKSPACE_UI_ID, () => ({ apiVersion: 1, bundledApplication: true })],
 			["runtime-context", () => runtimeContextPlugin((): SessionRegistry => registry)],
 			["session-storage", () => ({ apiVersion: 1, sessionStorage: fileSessionStorage(agentDir) })],
+			[SESSION_SEARCH_ID, () => sessionSearchPlugin((): SessionRegistry => registry)],
+			[
+				SESSION_IMPORT_ID,
+				() =>
+					sessionImportPlugin(
+						(): SessionRegistry => registry,
+						(id) => teams.ensureRoot(id),
+					),
+			],
+			[SESSION_ARCHIVE_ID, () => sessionArchivePlugin((): SessionRegistry => registry)],
+			[STORAGE_USAGE_ID, () => storageUsagePlugin(agentDir, (): SessionRegistry => registry)],
 			[GITHUB_DASHBOARD_ID, githubDashboardPlugin],
 			[WIDGET_FEEDS_ID, widgetFeedsPlugin],
 			[ACCOUNT_USAGE_ID, () => accountUsagePlugin(() => modelRuntime)],
@@ -206,15 +224,13 @@ async function createHarness(
 		jev: settings.get().jev.model,
 		textModel: settings.get().jevComputer?.textModel,
 	}));
-	const persistence = plugins.takePersistence();
-	const storage = persistence?.storage;
 	const registry = new SessionRegistry({
 		agentWorktrees,
 		isolatedFiles,
 		agentDir,
 		modelRuntime,
 		workspaceFiles: files,
-		persistence,
+		persistence: plugins.takePersistence(),
 		goalEnabled: plugins.isBuiltinActive("goal"),
 		swarmEnabled: plugins.isBuiltinActive("hyakki"),
 		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
@@ -237,7 +253,6 @@ async function createHarness(
 	await registry.addWorkspace(cwd);
 	const workspaceRouter = new WorkspaceRouter(files, modelRuntime, () => settings.get().jev.model, registry);
 	const terminals = new TerminalManager({ getWorkspaceRoot: (id) => files.getWorkspaceRoot(id) });
-	const sessionImports = new SessionImportService();
 	events = new EventHub(
 		(channel, id) =>
 			channel === "session"
@@ -293,10 +308,6 @@ async function createHarness(
 			try {
 				if (shuttingDown) throw new HttpError(503, "Host shutting down");
 				const method = request.method;
-				if (
-					await handleSessionImport(request, response, url, sessionImports, registry, (id) => teams.ensureRoot(id))
-				)
-					return true;
 				const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
 				const reply = (data: unknown, status = 200) => {
 					sendJson(response, status, data);
@@ -317,20 +328,6 @@ async function createHarness(
 				if (url.pathname === "/api/work" && method === "GET") return reply(teams.workOverview());
 				if (parts[1] === "work" && parts.length === 4 && parts[3] === "diff" && method === "GET")
 					return reply(await teams.agentWork(parts[2], "diff"));
-				if (url.pathname === "/api/sessions/search" && method === "GET") {
-					const query = url.searchParams.get("q") ?? "";
-					if (query.length > 200) throw new HttpError(400, "Search text is too long");
-					return reply(registry.searchText(query));
-				}
-				if (url.pathname === "/api/session-archive" && method === "GET")
-					return reply(await registry.listSessionArchive());
-				if (parts[1] === "session-archive" && parts.length === 3 && (method === "POST" || method === "DELETE")) {
-					await registry.changeArchivedSession(parts[2], method === "POST" ? "restore" : "delete");
-					return reply({ ok: true });
-				}
-				if (url.pathname === "/api/storage" && method === "GET") {
-					return reply(await readStorageUsage(agentDir, new Set(registry.sessionPaths()), storage));
-				}
 				if (url.pathname === "/api/workspaces") {
 					if (method === "GET")
 						return reply(registry.listWorkspaces().map((item) => ({ ...item, workspaceId: item.id })));
@@ -367,7 +364,7 @@ async function createHarness(
 						return reply(registry.page(session.sessionId), 201);
 					}
 				}
-				if (parts[1] === "sessions" && parts[2]) {
+				if (parts[1] === "sessions" && parts[2] && url.pathname !== "/api/sessions/search") {
 					const id = parts[2];
 					if (parts.length === 3 && method === "GET") return reply(registry.page(id));
 					if (parts.length === 3 && method === "PATCH") {

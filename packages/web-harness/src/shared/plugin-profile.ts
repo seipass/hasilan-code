@@ -21,6 +21,7 @@ export interface PluginProfile {
 	panels: ExternalPanelEntry[];
 	themes: (ThemePlugin & { id: string; customizable: boolean })[];
 	plugins: PluginStatus[];
+	persistentSessions: boolean;
 	application: { kind: "built-in" } | { kind: "external"; panel: ExternalPanelEntry } | null;
 }
 
@@ -56,6 +57,10 @@ export const WORKSPACE_UI_ID = "workspace-ui";
 export const GITHUB_DASHBOARD_ID = "github-dashboard";
 export const WIDGET_FEEDS_ID = "widget-feeds";
 export const ACCOUNT_USAGE_ID = "account-usage";
+export const SESSION_SEARCH_ID = "session-search";
+export const SESSION_IMPORT_ID = "session-import";
+export const SESSION_ARCHIVE_ID = "session-archive";
+export const STORAGE_USAGE_ID = "storage-usage";
 
 export const DEFAULT_THEME_ID = "theme-default";
 export const themePluginSchema = Type.Object(

@@ -314,6 +314,7 @@ export async function loadServerProfile(
 			panels,
 			themes,
 			plugins: [...inventory.values()],
+			persistentSessions: persistence.selected !== null,
 			application,
 		} satisfies PluginProfile,
 		choices,
