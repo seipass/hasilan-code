@@ -44,7 +44,9 @@ import { canvasPlugin } from "./plugins/canvas.ts";
 import { goalPlugin } from "./plugins/goal.ts";
 import { hyakkiPlugin } from "./plugins/hyakki.ts";
 import { pluginManager } from "./plugins/manager.ts";
+import { runtimeContextPlugin } from "./plugins/runtime-context.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
+import { pluginSession } from "./plugins/session.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
 import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts";
 import { acquireProfile } from "./profile-lock.ts";
@@ -174,6 +176,7 @@ async function createHarness(
 			["goal", () => goalPlugin(() => teams)],
 			[PLUGIN_MANAGER_ID, () => pluginManager(agentDir, () => plugins)],
 			[WORKSPACE_UI_ID, () => ({ apiVersion: 1, bundledApplication: true })],
+			["runtime-context", () => runtimeContextPlugin((): SessionRegistry => registry)],
 			[
 				"canvas",
 				() =>
@@ -198,14 +201,8 @@ async function createHarness(
 		swarmEnabled: plugins.isBuiltinActive("hyakki"),
 		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
 		pluginOwnedTools: ["read", "edit", "write"],
-		customTools: (descriptor) =>
-			plugins.toolsForSession({
-				sessionId: descriptor.sessionId,
-				workspaceId: descriptor.workspaceId,
-				cwd: descriptor.cwd,
-				isolated: !!descriptor.worktree,
-				selectedTools: descriptor.tools,
-			}),
+		customTools: (descriptor) => plugins.toolsForSession(pluginSession(descriptor)),
+		runtimeContext: plugins.contextForSession,
 	});
 	teams = new TeamManager(registry, {
 		agentWorktrees,

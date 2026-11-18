@@ -47,6 +47,8 @@ import type { ModelUsage } from "../shared/usage.ts";
 import type { AgentWorktree, AgentWorktrees } from "./agent-worktrees.ts";
 import { createHarnessSettings } from "./config.ts";
 import { modelGuidance } from "./model-guidance.ts";
+import { standardRuntimeSections } from "./plugins/runtime-context.ts";
+import { pluginSession, type RuntimeContextFactory } from "./plugins/session.ts";
 import { projectAttachmentContent } from "./prompt-attachments.ts";
 import { appendRuntimeContext } from "./runtime-context.ts";
 import { listArchivedSessions, readArchivedSession, transcriptPathKey } from "./session-archive.ts";
@@ -151,6 +153,7 @@ export interface RegistryOptions {
 	workspaceFiles: WorkspaceDirectoryService;
 	modelRuntime?: ModelRuntime;
 	customTools?: (descriptor: SessionDescriptor) => ToolDefinition[];
+	runtimeContext?: RuntimeContextFactory;
 	pluginOwnedTools?: readonly string[];
 	goalEnabled?: boolean;
 	swarmEnabled?: boolean;
@@ -1387,10 +1390,13 @@ export class SessionRegistry {
 						await this.mutate(() => undefined);
 						if (signal?.aborted) return prepared;
 						const context = prepared?.context ?? request.context;
-						const messages = appendRuntimeContext(live.manager, context.messages, descriptor, this.state, {
-							goal: this.goalEnabled,
-							swarm: this.swarmEnabled,
-						});
+						const sections =
+							this.options.runtimeContext?.(pluginSession(descriptor)) ??
+							standardRuntimeSections(descriptor, this.state, {
+								goal: this.goalEnabled,
+								swarm: this.swarmEnabled,
+							});
+						const messages = appendRuntimeContext(live.manager, context.messages, sections);
 						return messages === context.messages ? prepared : { ...prepared, context: { ...context, messages } };
 					};
 					if (reserved.length) session.setActiveToolsByName(selectedTools!);

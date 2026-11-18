@@ -77,6 +77,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"goal",
 				"plugin-manager",
 				"workspace-ui",
+				"runtime-context",
 				"canvas",
 			],
 			panels: [],
@@ -114,6 +115,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"theme-default",
 				"plugin-manager",
 				"workspace-ui",
+				"runtime-context",
 			],
 			panels: [],
 			plugins: expect.arrayContaining([
@@ -258,6 +260,32 @@ it("activates dependencies first and excludes missing and cyclic registrations",
 		]),
 	);
 	expect(report).toHaveBeenCalledTimes(3);
+});
+
+it("isolates invalid runtime context and keeps unrelated contributions in registration order", () => {
+	const report = vi.fn();
+	const profile = loadServerProfile(
+		dir,
+		new Map<string, () => ServerPlugin>([
+			["first", () => ({ apiVersion: 1, context: ({ sessionId }) => [sessionId] })],
+			[
+				"broken",
+				() => ({
+					apiVersion: 1,
+					context: () => {
+						throw new Error("cannot read context");
+					},
+				}),
+			],
+			["last", () => ({ apiVersion: 1, context: ({ workspaceId }) => ["  ", workspaceId] })],
+		]),
+		report,
+	);
+	expect(profile.contextForSession({ sessionId: "session", workspaceId: "workspace", cwd: dir })).toEqual([
+		"session",
+		"workspace",
+	]);
+	expect(report).toHaveBeenCalledExactlyOnceWith("Plugin broken could not provide context: cannot read context");
 });
 
 it("does not expose Pi file or persistent shell tools when their plugins are disabled", async () => {

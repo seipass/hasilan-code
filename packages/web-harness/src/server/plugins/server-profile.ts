@@ -15,16 +15,7 @@ import {
 	WORKSPACE_UI_ID,
 } from "../../shared/plugin-profile.ts";
 import { readPluginChoices } from "./profile-config.ts";
-
-export interface ToolSession {
-	readonly sessionId: string;
-	readonly workspaceId: string;
-	readonly cwd: string;
-	readonly isolated?: boolean;
-	readonly selectedTools?: readonly string[];
-}
-
-export type ToolFactory = (session: ToolSession) => readonly ToolDefinition[];
+import type { RuntimeContextFactory, ToolFactory, ToolSession } from "./session.ts";
 
 export type PluginApi = (
 	request: IncomingMessage,
@@ -37,6 +28,7 @@ export interface ServerPlugin {
 	readonly apiVersion: 1;
 	readonly requires?: readonly string[];
 	readonly tools?: ToolFactory;
+	readonly context?: RuntimeContextFactory;
 	readonly handleApi?: PluginApi;
 	readonly panel?: { readonly title: string; readonly script: string; readonly scope?: "application" };
 	readonly bundledApplication?: true;
@@ -92,19 +84,21 @@ export function loadServerProfile(
 				!("apiVersion" in plugin) ||
 				plugin.apiVersion !== 1 ||
 				("tools" in plugin && typeof plugin.tools !== "function") ||
+				("context" in plugin && typeof plugin.context !== "function") ||
 				("handleApi" in plugin && typeof plugin.handleApi !== "function") ||
 				("closeSession" in plugin && typeof plugin.closeSession !== "function") ||
 				("close" in plugin && typeof plugin.close !== "function") ||
 				("bundledApplication" in plugin && (modulePath || plugin.bundledApplication !== true)) ||
 				!(
 					"tools" in plugin ||
+					"context" in plugin ||
 					"handleApi" in plugin ||
 					"panel" in plugin ||
 					"theme" in plugin ||
 					"bundledApplication" in plugin
 				)
 			)
-				throw new Error("expected apiVersion 1 and a tools, handleApi, panel, or theme export");
+				throw new Error("expected apiVersion 1 and a tools, context, handleApi, panel, or theme export");
 			const requires = "requires" in plugin ? plugin.requires : [];
 			if (!Array.isArray(requires) || requires.some((name: unknown) => typeof name !== "string" || !name.trim()))
 				throw new Error("requires must be a list of plugin IDs");
@@ -208,6 +202,21 @@ export function loadServerProfile(
 		}
 		return [...tools.values()];
 	}
+	const contextPlugins = [...active].filter(([, plugin]) => plugin.context);
+	const contextForSession: RuntimeContextFactory = (session) => {
+		const sections: string[] = [];
+		for (const [id, plugin] of contextPlugins) {
+			try {
+				const result = plugin.context?.(session);
+				if (!Array.isArray(result) || result.some((section: unknown) => typeof section !== "string"))
+					throw new Error("context must return a list of strings");
+				for (const section of result) if (section.trim()) sections.push(section);
+			} catch (error) {
+				report(`Plugin ${id} could not provide context: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		}
+		return sections;
+	};
 	const handleApi: PluginApi = async (request, response, url, parts) => {
 		for (const plugin of active.values()) {
 			if (plugin.handleApi && (await plugin.handleApi(request, response, url, parts))) return true;
@@ -235,6 +244,7 @@ export function loadServerProfile(
 		builtinIds: [...builtins.keys()],
 		isBuiltinActive: (id: string) => inventory.get(id)?.source === "built-in" && active.has(id),
 		toolsForSession,
+		contextForSession,
 		handleApi,
 		closeSession: (sessionId: string) => dispose((plugin) => plugin.closeSession?.(sessionId)),
 		close: () => dispose((plugin) => plugin.close?.()),

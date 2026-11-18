@@ -5,7 +5,8 @@ import { fauxAssistantMessage, type Usage } from "@hasilan-code/pi-ai";
 import { SessionManager } from "@hasilan-code/pi-coding-agent";
 import { afterEach, expect, it } from "vitest";
 import { buildSystemPrompt } from "../../coding-agent/src/core/system-prompt.ts";
-import { appendRuntimeContext } from "../src/server/runtime-context.ts";
+import { standardRuntimeSections } from "../src/server/plugins/runtime-context.ts";
+import { appendRuntimeContext as appendSections } from "../src/server/runtime-context.ts";
 import type { SessionDescriptor } from "../src/server/session-registry.ts";
 import { SessionUsage } from "../src/server/session-usage.ts";
 import { aggregateUsage, cacheReadPercent } from "../src/shared/usage.ts";
@@ -22,6 +23,14 @@ const descriptor: SessionDescriptor = {
 	availability: "ready",
 	goal: { id: "g1", objective: "Verify files", status: "active", createdAt: "start", updatedAt: "start" },
 };
+
+function appendRuntimeContext(
+	manager: SessionManager,
+	messages: ReturnType<SessionManager["buildSessionContext"]>["messages"],
+	session: SessionDescriptor,
+) {
+	return appendSections(manager, messages, standardRuntimeSections(session));
+}
 
 it("shares the entire common prompt prefix between different agent roles", () => {
 	const common = {

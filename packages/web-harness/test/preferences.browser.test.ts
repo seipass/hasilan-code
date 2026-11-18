@@ -128,12 +128,13 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		fauxAssistantMessage(fauxToolCall("plugin_echo", {}), { stopReason: "toolUse" }),
 		(context) =>
 			fauxAssistantMessage(
-				context.messages.some(
-					(message) =>
-						message.role === "toolResult" &&
-						message.toolName === "plugin_echo" &&
-						message.content.some((item) => item.type === "text" && item.text === "from external tool"),
-				)
+				JSON.stringify(context.messages).includes("External plugin context.") &&
+					context.messages.some(
+						(message) =>
+							message.role === "toolResult" &&
+							message.toolName === "plugin_echo" &&
+							message.content.some((item) => item.type === "text" && item.text === "from external tool"),
+					)
 					? "Verified external tool"
 					: "External tool did not run",
 			),
@@ -160,6 +161,7 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		"goal",
 		"plugin-manager",
 		"workspace-ui",
+		"runtime-context",
 		"canvas",
 	];
 	await writeFile(
@@ -173,6 +175,7 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		join(preferenceDirectory, "plugin.cjs"),
 		`
 		exports.apiVersion = 1;
+		exports.context = () => ["External plugin context."];
 		exports.panel = { title: "Custom app", script: "panel.js", scope: "application" };
 		exports.tools = () => [{
 			name: "plugin_echo", label: "External echo", description: "Return a test marker.",
