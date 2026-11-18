@@ -12,6 +12,7 @@ import {
 	type PluginStatus,
 	type ThemePlugin,
 	themePluginSchema,
+	WORKSPACE_UI_ID,
 } from "../../shared/plugin-profile.ts";
 import { readPluginChoices } from "./profile-config.ts";
 
@@ -37,7 +38,8 @@ export interface ServerPlugin {
 	readonly requires?: readonly string[];
 	readonly tools?: ToolFactory;
 	readonly handleApi?: PluginApi;
-	readonly panel?: { readonly title: string; readonly script: string };
+	readonly panel?: { readonly title: string; readonly script: string; readonly scope?: "application" };
+	readonly bundledApplication?: true;
 	readonly theme?: ThemePlugin;
 	readonly closeSession?: (sessionId: string) => void | Promise<void>;
 	readonly close?: () => void | Promise<void>;
@@ -93,7 +95,14 @@ export function loadServerProfile(
 				("handleApi" in plugin && typeof plugin.handleApi !== "function") ||
 				("closeSession" in plugin && typeof plugin.closeSession !== "function") ||
 				("close" in plugin && typeof plugin.close !== "function") ||
-				!("tools" in plugin || "handleApi" in plugin || "panel" in plugin || "theme" in plugin)
+				("bundledApplication" in plugin && (modulePath || plugin.bundledApplication !== true)) ||
+				!(
+					"tools" in plugin ||
+					"handleApi" in plugin ||
+					"panel" in plugin ||
+					"theme" in plugin ||
+					"bundledApplication" in plugin
+				)
 			)
 				throw new Error("expected apiVersion 1 and a tools, handleApi, panel, or theme export");
 			const requires = "requires" in plugin ? plugin.requires : [];
@@ -119,7 +128,8 @@ export function loadServerProfile(
 					panel.title.length > 100 ||
 					!("script" in panel) ||
 					typeof panel.script !== "string" ||
-					!/\.(?:m?js)$/.test(panel.script)
+					!/\.(?:m?js)$/.test(panel.script) ||
+					("scope" in panel && panel.scope !== "application")
 				)
 					throw new Error("invalid panel declaration");
 				const directory = dirname(realpathSync(modulePath));
@@ -127,7 +137,7 @@ export function loadServerProfile(
 				const fromModule = relative(directory, script);
 				if (!fromModule || isAbsolute(fromModule) || fromModule === ".." || fromModule.startsWith(`..${sep}`))
 					throw new Error("panel script must be inside the plugin directory");
-				entry = { id, title: panel.title.trim() };
+				entry = { id, title: panel.title.trim(), ...("scope" in panel ? { scope: "application" as const } : {}) };
 			}
 			const palette = Check(themePluginSchema, theme) ? theme : undefined;
 			status.title = entry?.title ?? palette?.title ?? id;
@@ -168,6 +178,16 @@ export function loadServerProfile(
 		return true;
 	}
 	for (const id of candidates.keys()) activate(id);
+	const applicationPanels = panels.filter((panel) => panel.scope === "application");
+	const bundledApplication = active.get(WORKSPACE_UI_ID)?.bundledApplication === true;
+	const applicationPanel =
+		applicationPanels.find((panel) => panel.id === WORKSPACE_UI_ID) ??
+		(bundledApplication ? undefined : applicationPanels[0]);
+	const application: PluginProfile["application"] = applicationPanel
+		? { kind: "external", panel: applicationPanel }
+		: bundledApplication
+			? { kind: "built-in" }
+			: null;
 	function toolsForSession(session: ToolSession) {
 		const tools = new Map<string, ToolDefinition>();
 		for (const [id, plugin] of active) {
@@ -209,6 +229,7 @@ export function loadServerProfile(
 			panels,
 			themes,
 			plugins: [...inventory.values()],
+			application,
 		} satisfies PluginProfile,
 		choices,
 		builtinIds: [...builtins.keys()],

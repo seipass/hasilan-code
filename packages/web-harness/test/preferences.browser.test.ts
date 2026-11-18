@@ -10,7 +10,12 @@ import { createHttpHost, type HttpHost, sendJson } from "../src/server/http-host
 import { pluginManager } from "../src/server/plugins/manager.ts";
 import { UiPreferencesStore } from "../src/server/ui-preferences.ts";
 import { emptyCanvasDocument } from "../src/shared/canvas.ts";
-import { DEFAULT_THEME_ID, PLUGIN_MANAGER_ID, standardTheme } from "../src/shared/plugin-profile.ts";
+import {
+	DEFAULT_THEME_ID,
+	PLUGIN_MANAGER_ID,
+	type PluginProfile,
+	standardTheme,
+} from "../src/shared/plugin-profile.ts";
 
 let browser: Browser;
 let directory: string;
@@ -27,13 +32,14 @@ const dusk = {
 	light: { ...standardTheme.light, background: "#faf0e6" },
 };
 
-async function start(activeIds = ["canvas"]) {
+async function start(activeIds = ["canvas"], application: PluginProfile["application"] = { kind: "built-in" }) {
 	store = await UiPreferencesStore.open(preferenceDirectory);
 	const manager = pluginManager(preferenceDirectory, () => ({
 		choices: new Map(),
 		builtinIds: ["canvas"],
 		profile: {
 			activeIds,
+			application,
 			panels: [],
 			themes: [],
 			plugins: [{ id: "canvas", title: "Canvas", source: "built-in", status: "enabled", requires: [] }],
@@ -53,6 +59,7 @@ async function start(activeIds = ["canvas"]) {
 			else if (url.pathname === "/api/plugin-profile")
 				sendJson(response, 200, {
 					activeIds,
+					application,
 					plugins: [],
 					panels: activeIds.includes("notes") ? [{ id: "notes", title: "Notes" }] : [],
 					themes: [
@@ -60,7 +67,15 @@ async function start(activeIds = ["canvas"]) {
 						...(activeIds.includes("dusk") ? [dusk] : []),
 					],
 				});
-			else if (url.pathname === "/api/plugin-profile/notes/panel.js" && activeIds.includes("notes")) {
+			else if (url.pathname === "/api/plugin-profile/custom-app/panel.js" && application?.kind === "external") {
+				response.writeHead(200, { "Content-Type": "application/javascript" });
+				response.end(`document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", {
+					detail(root, { signal }) {
+						void fetch("/api/workspaces", { signal }).then((response) => response.json())
+							.then(([workspace]) => { root.textContent = workspace.workspaceId; });
+					}
+				}));`);
+			} else if (url.pathname === "/api/plugin-profile/notes/panel.js" && activeIds.includes("notes")) {
 				response.writeHead(200, { "Content-Type": "application/javascript" });
 				response.end(`document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", { detail(root, ctx) {
 					const button = document.createElement("button");
@@ -113,6 +128,25 @@ afterAll(async () => {
 	await store?.close();
 	if (directory) await rm(directory, { recursive: true, force: true });
 });
+
+it("mounts a custom application without opening the bundled workspace UI", async () => {
+	const address = await start(["custom-app"], {
+		kind: "external",
+		panel: { id: "custom-app", title: "Custom app", scope: "application" },
+	});
+	const page = await browser.newPage();
+	try {
+		await page.goto(address.launchUrl);
+		const application = page.getByRole("region", { name: "Custom app" });
+		await expect.poll(() => application.textContent()).toBe("workspace");
+		expect(await page.getByRole("combobox", { name: "メッセージ" }).count()).toBe(0);
+	} finally {
+		await page.close();
+		hub.close();
+		await host.close();
+		await store.close();
+	}
+}, 30000);
 
 it("opens built-in and external panels from the sidebar and preserves composer navigation", async () => {
 	for (const enabled of [true, false]) {

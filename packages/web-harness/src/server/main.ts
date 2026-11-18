@@ -22,7 +22,7 @@ import {
 	workspaceCreateSchema,
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
-import { DEFAULT_THEME_ID, PLUGIN_MANAGER_ID, standardTheme } from "../shared/plugin-profile.ts";
+import { DEFAULT_THEME_ID, PLUGIN_MANAGER_ID, standardTheme, WORKSPACE_UI_ID } from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
 import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
 import { readAccountUsage } from "./account-usage.ts";
@@ -169,6 +169,7 @@ async function createHarness(
 			["hyakki", () => hyakkiPlugin(() => teams)],
 			["goal", () => goalPlugin(() => teams)],
 			[PLUGIN_MANAGER_ID, () => pluginManager(agentDir, () => plugins)],
+			[WORKSPACE_UI_ID, () => ({ apiVersion: 1, bundledApplication: true })],
 			[
 				"canvas",
 				() =>

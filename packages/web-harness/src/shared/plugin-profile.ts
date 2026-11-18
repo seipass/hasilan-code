@@ -4,6 +4,7 @@ import { themeVariantSchema } from "./ui-preferences.ts";
 export interface ExternalPanelEntry {
 	id: string;
 	title: string;
+	scope?: "application";
 }
 
 export interface PluginStatus {
@@ -20,6 +21,7 @@ export interface PluginProfile {
 	panels: ExternalPanelEntry[];
 	themes: (ThemePlugin & { id: string; customizable: boolean })[];
 	plugins: PluginStatus[];
+	application: { kind: "built-in" } | { kind: "external"; panel: ExternalPanelEntry } | null;
 }
 
 const pluginIdSchema = Type.String({ pattern: "^[a-z0-9][a-z0-9._-]{0,127}$" });
@@ -50,6 +52,7 @@ export interface PluginManagementEntry extends PluginStatus {
 }
 
 export const PLUGIN_MANAGER_ID = "plugin-manager";
+export const WORKSPACE_UI_ID = "workspace-ui";
 
 export const DEFAULT_THEME_ID = "theme-default";
 export const themePluginSchema = Type.Object(

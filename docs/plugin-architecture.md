@@ -71,6 +71,12 @@ document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", {
 
 画面コードは最初に開いたときに読み込まれる。登録関数には `workspaceId`、`signal`、`insertDraft(text)`、`setDirty(boolean)` が渡る。画面は同じワークスペース内の移動で保持される。ワークスペースを離れると `signal` が中断され、登録関数が返した後片付け関数が呼ばれる。画面コードはアプリと同じオリジンで実行するため、信頼できるプラグインを使う。
 
+### アプリの画面全体を差し替える
+
+通常は、組み込みの `workspace-ui` がアプリの画面を表示する。自作プラグインで画面全体を差し替えるには、`panel` に `scope: "application"` を加え、`plugins.json` の `workspace-ui` にそのモジュールのパスを指定する。別の ID で登録する場合は、`workspace-ui` を `false` にする。画面全体を提供するプラグインが複数ある場合は、最初に有効になったものを使う。`workspace-ui` として登録した画面は優先される。
+
+画面全体の登録関数には `scope` と `signal` が渡る。ワークスペースの一覧は `GET /api/workspaces` で取得できる。
+
 Chord のローダーは試用時点のパッケージから公開されていない。最初のツール移行は Node のモジュール読み込みで構成し、画面やサービスを移すときにローダー選定を再検討する。
 
 組み込みの配色は `theme-default` として同梱する。独自の配色を配布する場合は、プラグインの `theme` に `title`、`dark`、`light` を指定する。それぞれの配色は `background`、`foreground`、`accent` に6桁の16進色を、`contrast` に0〜100の整数を指定する。

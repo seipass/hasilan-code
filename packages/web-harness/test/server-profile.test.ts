@@ -53,6 +53,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 
 	let path = "";
 	let swarmPath = "";
+	let builtinIds: string[] = [];
 	const management = "/api/plugin-management";
 	await writeFile(
 		join(dir, "notes.cjs"),
@@ -60,7 +61,9 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 	);
 	await writeFile(join(dir, "notes.js"), "/* Notes panel */");
 	await withHost(async (api) => {
-		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
+		const profile = await (await api("/api/plugin-profile")).json();
+		builtinIds = profile.activeIds;
+		expect(profile).toMatchObject({
 			activeIds: [
 				"hashline",
 				"shell-process",
@@ -73,9 +76,11 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"hyakki",
 				"goal",
 				"plugin-manager",
+				"workspace-ui",
 				"canvas",
 			],
 			panels: [],
+			application: { kind: "built-in" },
 			themes: [expect.objectContaining({ id: "theme-default", customizable: true })],
 			plugins: expect.arrayContaining([
 				{ id: "hyakki", title: "hyakki", status: "enabled", source: "built-in", requires: ["team-tools"] },
@@ -108,6 +113,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"web-search",
 				"theme-default",
 				"plugin-manager",
+				"workspace-ui",
 			],
 			panels: [],
 			plugins: expect.arrayContaining([
@@ -137,6 +143,23 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 		expect((await api("/api/plugin-profile/canvas/panel.js")).status).toBe(404);
 		expect((await api(management, { op: "remove", id: "notes" }, "PATCH")).status).toBe(200);
 		expect((await api("/api/plugin-profile/notes/panel.js")).status).toBe(200);
+	});
+	await writeFile(
+		join(dir, "plugins.json"),
+		JSON.stringify({ ...Object.fromEntries(builtinIds.map((id) => [id, false])), "custom-app": "./custom.cjs" }),
+	);
+	await writeFile(
+		join(dir, "custom.cjs"),
+		'exports.apiVersion = 1; exports.panel = { title: "Custom app", script: "notes.js", scope: "application" };',
+	);
+	await withHost(async (api) => {
+		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
+			activeIds: ["custom-app"],
+			application: { kind: "external", panel: { id: "custom-app", title: "Custom app", scope: "application" } },
+		});
+		expect((await api("/api/plugin-profile/custom-app/panel.js")).status).toBe(200);
+		expect((await api("/api/workspaces")).status).toBe(200);
+		expect((await api(management)).status).toBe(404);
 	});
 }, 30_000);
 

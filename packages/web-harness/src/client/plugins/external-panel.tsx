@@ -3,14 +3,17 @@ import type { ExternalPanelEntry } from "../../shared/plugin-profile.ts";
 import { errorMessage } from "../api.ts";
 import type { WorkspacePanel, WorkspacePanelProps } from "./workspace-panels.ts";
 
-type Mount = (root: HTMLElement, context: {
+type MountContext = { signal: AbortSignal } & ({
+	scope: "application";
+} | {
+	scope: "workspace";
 	workspaceId: string;
-	signal: AbortSignal;
 	insertDraft: (text: string) => void;
 	setDirty: (dirty: boolean) => void;
-}) => void | (() => void);
+});
+type Mount = (root: HTMLElement, context: MountContext) => void | (() => void);
 
-export function externalPanel({ id, title }: ExternalPanelEntry): WorkspacePanel {
+export function externalPanel({ id, title, scope }: ExternalPanelEntry): WorkspacePanel {
 	let loading: Promise<Mount> | undefined;
 	function load() {
 		loading ??= new Promise<Mount>((resolve, reject) => {
@@ -42,20 +45,25 @@ export function externalPanel({ id, title }: ExternalPanelEntry): WorkspacePanel
 		const callbacks = useRef({ onDraft, onDirtyChange });
 		callbacks.current = { onDraft, onDirtyChange };
 		const [error, setError] = useState<string>();
+		const [retry, setRetry] = useState(0);
+		const ready = opened && (scope === "application" || !!workspaceId);
 		useEffect(() => {
 			const node = root.current;
-			if (!opened || !workspaceId || !node) return;
+			if (!opened || !node) return;
 			setError(undefined);
 			const controller = new AbortController();
+			const signal = controller.signal;
+			const context: MountContext | undefined = scope === "application"
+				? { scope, signal }
+				: workspaceId ? {
+					scope: "workspace", workspaceId, signal,
+					insertDraft: (text) => { if (!signal.aborted) callbacks.current.onDraft(text); },
+					setDirty: (dirty) => { if (!signal.aborted) callbacks.current.onDirtyChange(dirty); },
+				} : undefined;
+			if (!context) return;
 			let dispose: ReturnType<Mount>;
 			void load().then((mount) => {
-				if (controller.signal.aborted) return;
-				dispose = mount(node, {
-					workspaceId,
-					signal: controller.signal,
-					insertDraft: (text) => { if (!controller.signal.aborted) callbacks.current.onDraft(text); },
-					setDirty: (dirty) => { if (!controller.signal.aborted) callbacks.current.onDirtyChange(dirty); },
-				});
+				if (!signal.aborted) dispose = mount(node, context);
 			}).catch((reason: unknown) => {
 				if (!controller.signal.aborted) {
 					node.replaceChildren();
@@ -72,10 +80,10 @@ export function externalPanel({ id, title }: ExternalPanelEntry): WorkspacePanel
 					callbacks.current.onDirtyChange(false);
 				}
 			};
-		}, [opened, workspaceId]);
-		if (!opened || !workspaceId) return null;
-		return <section className="external-plugin-panel" aria-label={title}>
-			{error && <p className="error" role="alert">{error}</p>}
+		}, [opened, workspaceId, retry]);
+		if (!ready) return null;
+		return <section className={scope === "application" ? "external-plugin-panel external-application" : "external-plugin-panel"} aria-label={title}>
+			{error && <div role="alert"><p className="error">{error}</p><button type="button" onClick={() => setRetry((value) => value + 1)}>再試行</button></div>}
 			<div ref={root} />
 		</section>;
 	}

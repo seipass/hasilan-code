@@ -72,7 +72,7 @@ export function App() {
 	const profile = usePluginProfile();
 	const activePanels = useMemo(() => {
 		if (!profile) return undefined;
-		const external = new Map(profile.panels.map((entry) => [entry.id, externalPanel(entry)]));
+		const external = new Map(profile.panels.filter((entry) => entry.scope !== "application").map((entry) => [entry.id, externalPanel(entry)]));
 		const builtins = new Map(workspacePanels.map((panel) => [panel.id, panel]));
 		return profile.activeIds.flatMap((id) => {
 			const panel = external.get(id) ?? builtins.get(id);
