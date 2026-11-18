@@ -11,7 +11,7 @@ import { HttpError, readJson, sendJson } from "../http-host.ts";
 import { readPluginChoices } from "./profile-config.ts";
 import type { loadServerProfile, ServerPlugin } from "./server-profile.ts";
 
-type Runtime = Pick<ReturnType<typeof loadServerProfile>, "profile" | "choices" | "builtinIds">;
+type Runtime = Pick<Awaited<ReturnType<typeof loadServerProfile>>, "profile" | "choices" | "builtinIds">;
 
 export function pluginManager(agentDir: string, getRuntime: () => Runtime): ServerPlugin {
 	const path = join(agentDir, "plugins.json");

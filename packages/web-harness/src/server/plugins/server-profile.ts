@@ -15,8 +15,10 @@ import {
 	themePluginSchema,
 	WORKSPACE_UI_ID,
 } from "../../shared/plugin-profile.ts";
+import { validateState } from "../session-registry.ts";
 import { readPluginChoices } from "./profile-config.ts";
 import type { RuntimeContextFactory, ToolFactory, ToolSession } from "./session.ts";
+import type { SessionPersistence, SessionStorage } from "./session-storage.ts";
 
 export type PluginApi = (
 	request: IncomingMessage,
@@ -31,6 +33,7 @@ export interface ServerPlugin {
 	readonly tools?: ToolFactory;
 	readonly context?: RuntimeContextFactory;
 	readonly providers?: readonly Provider[];
+	readonly sessionStorage?: SessionStorage;
 	readonly handleApi?: PluginApi;
 	readonly panel?: { readonly title: string; readonly script: string; readonly scope?: "application" };
 	readonly bundledApplication?: true;
@@ -57,7 +60,7 @@ function isProvider(value: unknown): value is Provider {
 	);
 }
 
-export function loadServerProfile(
+export async function loadServerProfile(
 	agentDir: string,
 	builtins: ReadonlyMap<string, () => ServerPlugin>,
 	report = (message: string) => console.error(message),
@@ -114,6 +117,7 @@ export function loadServerProfile(
 					"tools" in plugin ||
 					"context" in plugin ||
 					"providers" in plugin ||
+					"sessionStorage" in plugin ||
 					"handleApi" in plugin ||
 					"panel" in plugin ||
 					"theme" in plugin ||
@@ -124,6 +128,19 @@ export function loadServerProfile(
 				throw new Error("expected apiVersion 1 and a supported plugin contribution");
 			if ("providers" in plugin && (!Array.isArray(plugin.providers) || !plugin.providers.every(isProvider)))
 				throw new Error("providers must be a list of Pi providers");
+			if ("sessionStorage" in plugin) {
+				const storage = plugin.sessionStorage as Partial<SessionStorage> | undefined;
+				if (
+					!storage ||
+					typeof storage.sessionsDirectory !== "string" ||
+					!isAbsolute(storage.sessionsDirectory) ||
+					typeof storage.importAssetsDirectory !== "string" ||
+					!isAbsolute(storage.importAssetsDirectory) ||
+					typeof storage.readState !== "function" ||
+					typeof storage.writeState !== "function"
+				)
+					throw new Error("sessionStorage must declare absolute directories and provide readState and writeState");
+			}
 			const requires = "requires" in plugin ? plugin.requires : [];
 			if (!Array.isArray(requires) || requires.some((name: unknown) => typeof name !== "string" || !name.trim()))
 				throw new Error("requires must be a list of plugin IDs");
@@ -169,8 +186,9 @@ export function loadServerProfile(
 	}
 	const active = new Map<string, ServerPlugin>();
 	const providers = new Map<string, Provider>();
+	const persistence: { selected: SessionPersistence | null } = { selected: null };
 	const visiting = new Set<string>();
-	function activate(id: string): boolean {
+	async function activate(id: string): Promise<boolean> {
 		const candidate = candidates.get(id);
 		const status = inventory.get(id);
 		if (!candidate || !status || status.status === "blocked" || status.status === "failed") return false;
@@ -178,7 +196,7 @@ export function loadServerProfile(
 		visiting.add(id);
 		for (const dependency of status.requires) {
 			const cycle = visiting.has(dependency);
-			if (!cycle && activate(dependency)) continue;
+			if (!cycle && (await activate(dependency))) continue;
 			status.status = "blocked";
 			status.reason = cycle
 				? `Dependency cycle involving ${dependency}`
@@ -198,6 +216,27 @@ export function loadServerProfile(
 			}
 			contributedProviders.set(provider.id, provider);
 		}
+		const storage = candidate.plugin.sessionStorage;
+		if (storage) {
+			try {
+				if (persistence.selected) throw new Error("A session storage plugin is already active");
+				const state = await storage.readState();
+				if (state !== undefined) validateState(state);
+				persistence.selected = { storage, restoredState: state };
+			} catch (error) {
+				status.status = "failed";
+				status.reason = error instanceof Error ? error.message : String(error);
+				report(`Plugin ${id} could not activate: ${status.reason}`);
+				try {
+					await candidate.plugin.close?.();
+				} catch (cleanupError) {
+					report(
+						`Plugin ${id} failed to clean up: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+					);
+				}
+				return false;
+			}
+		}
 		for (const [providerId, provider] of contributedProviders) providers.set(providerId, provider);
 		status.status = "enabled";
 		active.set(id, candidate.plugin);
@@ -208,7 +247,7 @@ export function loadServerProfile(
 		if (candidate.theme) themes.push({ id, customizable: status.source === "built-in", ...candidate.theme });
 		return true;
 	}
-	for (const id of candidates.keys()) activate(id);
+	for (const id of candidates.keys()) await activate(id);
 	const applicationPanels = panels.filter((panel) => panel.scope === "application");
 	const bundledApplication = active.get(WORKSPACE_UI_ID)?.bundledApplication === true;
 	const applicationPanel =
@@ -281,6 +320,11 @@ export function loadServerProfile(
 		builtinIds: [...builtins.keys()],
 		includeBuiltinProviders: [...active.values()].some((plugin) => plugin.bundledModelProviders === true),
 		providers: [...providers.values()],
+		takePersistence() {
+			const selected = persistence.selected;
+			persistence.selected = null;
+			return selected;
+		},
 		isBuiltinActive: (id: string) => inventory.get(id)?.source === "built-in" && active.has(id),
 		toolsForSession,
 		contextForSession,

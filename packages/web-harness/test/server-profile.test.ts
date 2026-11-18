@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, InMemoryModelsStore } from "@hasilan-code/pi-ai";
@@ -79,6 +79,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"plugin-manager",
 				"workspace-ui",
 				"runtime-context",
+				"session-storage",
 				"github-dashboard",
 				"widget-feeds",
 				"account-usage",
@@ -125,6 +126,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"plugin-manager",
 				"workspace-ui",
 				"runtime-context",
+				"session-storage",
 				"github-dashboard",
 				"widget-feeds",
 				"account-usage",
@@ -158,10 +160,10 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 		expect((await api(management, { op: "remove", id: "notes" }, "PATCH")).status).toBe(200);
 		expect((await api("/api/plugin-profile/notes/panel.js")).status).toBe(200);
 	});
-	await writeFile(
-		join(dir, "plugins.json"),
-		JSON.stringify({ ...Object.fromEntries(builtinIds.map((id) => [id, false])), "custom-app": "./custom.cjs" }),
-	);
+	const statePath = join(dir, "web-harness", "state.json");
+	const originalState = await readFile(statePath, "utf8");
+	const disabled = Object.fromEntries(builtinIds.map((id) => [id, false]));
+	await writeFile(join(dir, "plugins.json"), JSON.stringify({ ...disabled, "custom-app": "./custom.cjs" }));
 	const model = fauxProvider({ provider: "local-provider" }).getModel();
 	await writeFile(
 		join(dir, "custom.cjs"),
@@ -192,6 +194,47 @@ exports.providers = [{
 			expect((await api(route)).status).toBe(404);
 		}
 	});
+	expect(await readFile(statePath, "utf8")).toBe(originalState);
+	await writeFile(join(dir, "plugins.json"), JSON.stringify({ ...disabled, "local-storage": "./local-storage.cjs" }));
+	const localStatePath = join(dir, "local-state.json");
+	await writeFile(
+		join(dir, "local-storage.cjs"),
+		`const fs = require("node:fs/promises");
+const path = ${JSON.stringify(localStatePath)};
+exports.apiVersion = 1;
+exports.sessionStorage = {
+	sessionsDirectory: ${JSON.stringify(join(dir, "local-sessions"))},
+	importAssetsDirectory: ${JSON.stringify(join(dir, "local-assets"))},
+	async readState() {
+		try { return JSON.parse(await fs.readFile(path, "utf8")); }
+		catch (error) { if (error.code !== "ENOENT") throw error; }
+	},
+	writeState(snapshot) { return fs.writeFile(path, snapshot); },
+};`,
+	);
+	let savedSession: string;
+	await withHost(async (api) => {
+		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
+		const response = await api("/api/sessions", { workspaceId }, "POST");
+		expect(response.status).toBe(201);
+		const { sessionId, path: transcript } = await response.json();
+		expect(transcript).toContain(join(dir, "local-sessions"));
+		savedSession = sessionId;
+	});
+	await withHost(async (api) => {
+		const response = await api(`/api/sessions/${savedSession}`);
+		expect(response.status).toBe(200);
+	});
+	await writeFile(localStatePath, '{"schemaVersion":999}');
+	await withHost(async (api) => {
+		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
+			activeIds: [],
+			plugins: expect.arrayContaining([expect.objectContaining({ id: "local-storage", status: "failed" })]),
+		});
+		expect((await api("/api/workspaces")).status).toBe(200);
+	});
+	expect(await readFile(localStatePath, "utf8")).toBe('{"schemaVersion":999}');
+	expect(await readFile(statePath, "utf8")).toBe(originalState);
 }, 30_000);
 
 it("uses the standard profile by default and only loads the selected implementations", async () => {
@@ -199,11 +242,11 @@ it("uses the standard profile by default and only loads the selected implementat
 	const builtins = new Map([["search", builtin]]);
 	const report = vi.fn();
 	const session = { sessionId: "test", workspaceId: "workspace", cwd: dir };
-	expect(loadServerProfile(dir, builtins, report).toolsForSession(session)).toEqual([]);
+	expect((await loadServerProfile(dir, builtins, report)).toolsForSession(session)).toEqual([]);
 	expect(builtin).toHaveBeenCalledTimes(1);
 
 	await writeFile(join(dir, "plugins.json"), JSON.stringify({ search: false }));
-	expect(loadServerProfile(dir, builtins, report).toolsForSession(session)).toEqual([]);
+	expect((await loadServerProfile(dir, builtins, report)).toolsForSession(session)).toEqual([]);
 	expect(builtin).toHaveBeenCalledTimes(1);
 
 	await writeFile(join(dir, "plugins.json"), JSON.stringify({ search: "./local.cjs", broken: "./missing.cjs" }));
@@ -211,7 +254,7 @@ it("uses the standard profile by default and only loads the selected implementat
 		join(dir, "local.cjs"),
 		"exports.apiVersion = 1; exports.tools = ({ sessionId }) => [{ name: sessionId, parameters: {}, execute() {} }];",
 	);
-	expect(loadServerProfile(dir, builtins, report).toolsForSession(session)).toMatchObject([{ name: "test" }]);
+	expect((await loadServerProfile(dir, builtins, report)).toolsForSession(session)).toMatchObject([{ name: "test" }]);
 	expect(builtin).toHaveBeenCalledTimes(1);
 	expect(report).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("Plugin broken failed to load"));
 });
@@ -224,7 +267,7 @@ it("exports installed theme palettes and excludes invalid theme plugins", async 
 	await writeFile(join(dir, "dusk.cjs"), `module.exports = ${JSON.stringify({ apiVersion: 1, theme })};`);
 	await writeFile(join(dir, "invalid.cjs"), 'module.exports = { apiVersion: 1, theme: { title: "Invalid" } };');
 	const report = vi.fn();
-	const { profile } = loadServerProfile(dir, new Map(), report);
+	const { profile } = await loadServerProfile(dir, new Map(), report);
 	expect(profile.themes).toEqual([{ id: "dusk", customizable: false, ...theme }]);
 	expect(profile.activeIds).toEqual(["dusk"]);
 	expect(report).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("invalid theme declaration"));
@@ -249,7 +292,7 @@ it("cleans up active plugins in reverse order even when a cleanup throws", async
 			}),
 		]),
 	);
-	const profile = loadServerProfile(dir, builtins, report);
+	const profile = await loadServerProfile(dir, builtins, report);
 	await profile.closeSession("s1");
 	await profile.close();
 	expect(calls).toEqual(["second:s1", "first:s1", "second", "first"]);
@@ -269,7 +312,7 @@ it("activates dependencies first and excludes missing and cyclic registrations",
 		["independent", plugin([])],
 	]);
 	const report = vi.fn();
-	const runtime = loadServerProfile(dir, builtins, report);
+	const runtime = await loadServerProfile(dir, builtins, report);
 	expect(runtime.profile.activeIds).toEqual(["base", "dependent", "independent"]);
 	expect(runtime.isBuiltinActive("dependent")).toBe(true);
 	expect(runtime.isBuiltinActive("missing")).toBe(false);
@@ -291,9 +334,9 @@ it("activates dependencies first and excludes missing and cyclic registrations",
 	expect(report).toHaveBeenCalledTimes(3);
 });
 
-it("isolates invalid runtime context and keeps unrelated contributions in registration order", () => {
+it("isolates invalid runtime context and keeps unrelated contributions in registration order", async () => {
 	const report = vi.fn();
-	const profile = loadServerProfile(
+	const profile = await loadServerProfile(
 		dir,
 		new Map<string, () => ServerPlugin>([
 			["first", () => ({ apiVersion: 1, context: ({ sessionId }) => [sessionId] })],
@@ -320,7 +363,7 @@ it("isolates invalid runtime context and keeps unrelated contributions in regist
 it("does not expose Pi file or persistent shell tools when their plugins are disabled", async () => {
 	await writeFile(join(dir, "plugins.json"), '{"hashline":false,"shell-process":false}');
 	const files = new WorkspaceFiles();
-	const plugins = loadServerProfile(
+	const plugins = await loadServerProfile(
 		dir,
 		new Map([
 			["hashline", () => hashlinePlugin(files, files)],

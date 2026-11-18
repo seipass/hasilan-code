@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
-import { mkdir, open, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { open, rm, unlink } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import type { AgentMessage, ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { clampThinkingLevel, getSupportedThinkingLevels, type ImageContent } from "@hasilan-code/pi-ai";
@@ -49,6 +49,7 @@ import { createHarnessSettings } from "./config.ts";
 import { modelGuidance } from "./model-guidance.ts";
 import { standardRuntimeSections } from "./plugins/runtime-context.ts";
 import { pluginSession, type RuntimeContextFactory } from "./plugins/session.ts";
+import { fileSessionStorage, type SessionPersistence, type SessionStorage } from "./plugins/session-storage.ts";
 import { projectAttachmentContent } from "./prompt-attachments.ts";
 import { appendRuntimeContext } from "./runtime-context.ts";
 import { listArchivedSessions, readArchivedSession, transcriptPathKey } from "./session-archive.ts";
@@ -151,6 +152,7 @@ export interface RegistryOptions {
 	isolatedFiles?: WorkspaceDirectoryService;
 	agentDir: string;
 	workspaceFiles: WorkspaceDirectoryService;
+	persistence?: SessionPersistence | null;
 	modelRuntime?: ModelRuntime;
 	customTools?: (descriptor: SessionDescriptor) => ToolDefinition[];
 	runtimeContext?: RuntimeContextFactory;
@@ -232,7 +234,7 @@ function messageText(message: AgentMessage): string {
 		.map((part) => part.text)
 		.join("\n");
 }
-function validateState(value: unknown): asserts value is HarnessState {
+export function validateState(value: unknown): asserts value is HarnessState {
 	if (!value || typeof value !== "object") throw new Error("Invalid web-harness state");
 	const state = value as Partial<HarnessState>;
 	if (
@@ -487,7 +489,9 @@ export class SessionRegistry {
 		pendingInput: [],
 	};
 	private readonly options: RegistryOptions;
-	private readonly statePath: string;
+	private readonly storage?: SessionStorage;
+	private readonly restoreFromDisk: boolean;
+	private restoredState?: HarnessState;
 	private readonly live = new Map<string, LiveSession>();
 	private readonly usageSummaries = new Map<string, ModelUsage[]>();
 	private readonly historyReaders = new Map<string, number>();
@@ -498,21 +502,25 @@ export class SessionRegistry {
 	private mutationQueue: Promise<unknown> = Promise.resolve();
 	private accepting = true;
 	private hydrationTimer?: ReturnType<typeof setTimeout>;
-	constructor(options: RegistryOptions) {
+	constructor({ persistence, ...options }: RegistryOptions) {
 		this.options = options;
-		this.statePath = join(options.agentDir, "web-harness", "state.json");
+		this.restoreFromDisk = persistence === undefined;
+		this.storage = this.restoreFromDisk ? fileSessionStorage(options.agentDir) : persistence?.storage;
+		this.restoredState = persistence?.restoredState;
 	}
 	async initialize(): Promise<void> {
-		let parsed: unknown;
-		let savedModes = false;
-		try {
-			parsed = JSON.parse(await readFile(this.statePath, "utf8"));
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		let restored = this.restoredState;
+		this.restoredState = undefined;
+		if (this.restoreFromDisk) {
+			const parsed = await this.storage?.readState();
+			if (parsed !== undefined) {
+				validateState(parsed);
+				restored = parsed;
+			}
 		}
-		if (parsed !== undefined) {
-			validateState(parsed);
-			Object.assign(this.state, parsed);
+		let savedModes = false;
+		if (restored) {
+			Object.assign(this.state, restored);
 			savedModes = this.state.sessions.some(
 				(descriptor) => descriptor.goal !== undefined || descriptor.swarm !== undefined,
 			);
@@ -603,6 +611,7 @@ export class SessionRegistry {
 	/** Restore billing in the background; unopened transcripts must not stay resident. */
 	startHistoryHydration(): void {
 		const ids = this.state.sessions.map((session) => session.sessionId);
+		if (!ids.length) return;
 		let index = 0;
 		const next = () => {
 			this.hydrationTimer = undefined;
@@ -632,10 +641,13 @@ export class SessionRegistry {
 	}
 	private newManager(descriptor: SessionDescriptor): SessionManager {
 		const parent = descriptor.parentSessionId ? this.descriptor(descriptor.parentSessionId) : undefined;
-		return SessionManager.create(descriptor.cwd, join(this.options.agentDir, "web-harness", "sessions"), {
+		const options = {
 			id: descriptor.sessionId,
 			parentSession: parent?.path,
-		});
+		};
+		return this.storage
+			? SessionManager.create(descriptor.cwd, this.storage.sessionsDirectory, options)
+			: SessionManager.inMemory(descriptor.cwd, options);
 	}
 	private addLive(descriptor: SessionDescriptor, manager: SessionManager): void {
 		const imported = projectImport(manager, descriptor.sessionId);
@@ -777,6 +789,7 @@ export class SessionRegistry {
 		thinkingLevel?: ThinkingLevel,
 	): Promise<SessionDescriptor> {
 		return this.mutate(async () => {
+			if (!this.storage) throw new HarnessError("Session storage is disabled", 409);
 			if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
 			const cwd = this.getWorkspaceRoot(workspaceId);
 			if (!(await sameWorkspace(source.cwd, cwd)))
@@ -819,7 +832,7 @@ export class SessionRegistry {
 				cwd: source.cwd,
 				warnings: source.warnings,
 			});
-			const assets = join(this.options.agentDir, "web-harness", "import-assets", descriptor.sessionId);
+			const assets = join(this.storage.importAssetsDirectory, descriptor.sessionId);
 			const path = this.newManager(descriptor).getSessionFile();
 			if (!path) throw new Error("Could not prepare imported session file");
 			descriptor.path = path;
@@ -870,8 +883,8 @@ export class SessionRegistry {
 	importAsset(sessionId: string, assetId: string): ImportAsset & { path: string } {
 		const live = this.ensureLive(sessionId);
 		const asset = /^[a-f0-9]{64}$/.test(assetId) && live?.importAssets.get(assetId);
-		if (!asset) throw new HarnessError("添付ファイルが見つかりません。", 404);
-		return { ...asset, path: join(this.options.agentDir, "web-harness", "import-assets", sessionId, assetId) };
+		if (!asset || !this.storage) throw new HarnessError("添付ファイルが見つかりません。", 404);
+		return { ...asset, path: join(this.storage.importAssetsDirectory, sessionId, assetId) };
 	}
 	/** TeamManager calls this only while holding the shared mutation gate. */
 	async createWithinMutation(options: {
@@ -948,11 +961,9 @@ export class SessionRegistry {
 			this.changed(id);
 		});
 	}
-	private archiveDirectory(): string {
-		return join(this.options.agentDir, "web-harness", "sessions");
-	}
 	async listSessionArchive(): Promise<ArchivedSession[]> {
-		const entries = await listArchivedSessions(this.archiveDirectory(), this.sessionPaths());
+		if (!this.storage) return [];
+		const entries = await listArchivedSessions(this.storage.sessionsDirectory, this.sessionPaths());
 		return entries.map((entry) => ({
 			...entry,
 			title: this.state.archiveMetadata?.[entry.file]?.title ?? entry.title,
@@ -961,9 +972,10 @@ export class SessionRegistry {
 	async changeArchivedSession(file: string, action: "restore" | "delete"): Promise<void> {
 		await this.mutate(async () => {
 			if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
-			const entry = await readArchivedSession(this.archiveDirectory(), file);
+			if (!this.storage) throw new HarnessError("Session storage is disabled", 404);
+			const entry = await readArchivedSession(this.storage.sessionsDirectory, file);
 			if (!entry) throw new HarnessError("アーカイブが見つかりません。", 404);
-			const path = join(this.archiveDirectory(), entry.file);
+			const path = join(this.storage.sessionsDirectory, entry.file);
 			const key = transcriptPathKey(path);
 			if (this.sessionPaths().some((active) => transcriptPathKey(active) === key))
 				throw new HarnessError("使用中の会話です。", 409);
@@ -1284,19 +1296,10 @@ export class SessionRegistry {
 
 	persist(): Promise<void> {
 		this.state.workspaces = this.options.workspaceFiles.getWorkspaces();
+		const storage = this.storage;
+		if (!storage) return Promise.resolve();
 		const bytes = JSON.stringify(this.state, null, 2);
-		const save = this.saveQueue.then(async () => {
-			await mkdir(join(this.options.agentDir, "web-harness"), { recursive: true, mode: 0o700 });
-			const temporary = `${this.statePath}.${randomUUID()}.tmp`;
-			try {
-				await writeFile(temporary, bytes, { mode: 0o600 });
-				await rename(temporary, this.statePath);
-			} finally {
-				await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
-					if (error.code !== "ENOENT") throw error;
-				});
-			}
-		});
+		const save = this.saveQueue.then(() => storage.writeState(bytes));
 		this.saveQueue = save.catch(() => undefined);
 		return save;
 	}

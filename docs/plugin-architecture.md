@@ -110,6 +110,10 @@ exports.theme = {
 
 GitHub の活動と Pull request は `github-dashboard`、天気・地域検索・地震・ニュースの取得は `widget-feeds`、接続中のアカウントの使用量は `account-usage` が提供する。無効にすると、該当する API と画面内の表示が無効になる。既存の画面を使いながら接続先だけ替えるには、同じ ID で登録し、既存の API に応答する `handleApi` を実装する。
 
+会話の保存は `session-storage` が担当する。標準構成では従来どおり `web-harness/state.json`、`web-harness/sessions`、`web-harness/import-assets` を使う。保存プラグインを外すと、会話は起動中だけ保持される。
+
+保存先を差し替えるプラグインは `sessionStorage` をエクスポートする。`sessionsDirectory` と `importAssetsDirectory` には絶対パスを指定する。`writeState(snapshot)` は会話の一覧や実行状態を含む JSON 文字列を保存し、`readState()` は読み込んだ JSON をパースして返す。初回は `undefined` を返す。会話の本文は Pi の JSONL 形式で保存される。状態の読み込みに失敗したプラグインは管理画面に理由が表示され、ホストはその保存先に書き込まずに起動する。
+
 サイドバーの「プラグイン」で、現在の状態と次回起動時の設定を確認できる。設定の変更、ローカルモジュールの登録・置き換え、登録解除は次回起動時に反映される。登録解除してもモジュールやデータは削除しない。外部プラグインを無効化するときは、再有効化に必要なモジュールパスを `{ "enabled": false, "module": "./plugins/example.cjs" }` として保持する。
 
 ### 段階

@@ -54,6 +54,7 @@ import { pluginManager } from "./plugins/manager.ts";
 import { runtimeContextPlugin } from "./plugins/runtime-context.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
 import { pluginSession } from "./plugins/session.ts";
+import { fileSessionStorage } from "./plugins/session-storage.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
 import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts";
 import { acquireProfile } from "./profile-lock.ts";
@@ -121,7 +122,7 @@ async function createHarness(
 	const agentWorktrees = new AgentWorktrees(agentDir);
 	const isolatedFiles = new WorkspaceFiles();
 	let teams: TeamManager;
-	const plugins: ReturnType<typeof loadServerProfile> = loadServerProfile(
+	const plugins: Awaited<ReturnType<typeof loadServerProfile>> = await loadServerProfile(
 		agentDir,
 		new Map<string, () => ServerPlugin>([
 			["hashline", () => hashlinePlugin(files, isolatedFiles)],
@@ -168,6 +169,7 @@ async function createHarness(
 			[PLUGIN_MANAGER_ID, () => pluginManager(agentDir, () => plugins)],
 			[WORKSPACE_UI_ID, () => ({ apiVersion: 1, bundledApplication: true })],
 			["runtime-context", () => runtimeContextPlugin((): SessionRegistry => registry)],
+			["session-storage", () => ({ apiVersion: 1, sessionStorage: fileSessionStorage(agentDir) })],
 			[GITHUB_DASHBOARD_ID, githubDashboardPlugin],
 			[WIDGET_FEEDS_ID, widgetFeedsPlugin],
 			[ACCOUNT_USAGE_ID, () => accountUsagePlugin(() => modelRuntime)],
@@ -204,12 +206,15 @@ async function createHarness(
 		jev: settings.get().jev.model,
 		textModel: settings.get().jevComputer?.textModel,
 	}));
+	const persistence = plugins.takePersistence();
+	const storage = persistence?.storage;
 	const registry = new SessionRegistry({
 		agentWorktrees,
 		isolatedFiles,
 		agentDir,
 		modelRuntime,
 		workspaceFiles: files,
+		persistence,
 		goalEnabled: plugins.isBuiltinActive("goal"),
 		swarmEnabled: plugins.isBuiltinActive("hyakki"),
 		readAttachments: (workspaceId, attachments) => readAttachmentImages(files, workspaceId, attachments),
@@ -324,7 +329,7 @@ async function createHarness(
 					return reply({ ok: true });
 				}
 				if (url.pathname === "/api/storage" && method === "GET") {
-					return reply(await readStorageUsage(agentDir, new Set(registry.sessionPaths())));
+					return reply(await readStorageUsage(agentDir, new Set(registry.sessionPaths()), storage));
 				}
 				if (url.pathname === "/api/workspaces") {
 					if (method === "GET")
@@ -595,9 +600,9 @@ async function createHarness(
 		folderPickerAbort.abort();
 		// Attempt every cleanup even when a device or PTY refuses to close.
 		const owners = await Promise.allSettled([authLogin.close(), teams.close()]);
+		const [registryResult] = await Promise.allSettled([registry.close()]);
 		await plugins.close();
 		const results = await Promise.allSettled([
-			registry.close(),
 			browser.close(),
 			computer.close(),
 			terminals.shutdown(),
@@ -606,7 +611,7 @@ async function createHarness(
 		hub.close();
 		artifacts.close();
 		await host.close();
-		const failed = [...owners, ...results].find((result) => result.status === "rejected");
+		const failed = [...owners, registryResult, ...results].find((result) => result.status === "rejected");
 		if (failed?.status === "rejected") throw failed.reason;
 	};
 	return {

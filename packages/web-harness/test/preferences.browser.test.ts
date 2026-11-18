@@ -166,6 +166,7 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		"plugin-manager",
 		"workspace-ui",
 		"runtime-context",
+		"session-storage",
 		"github-dashboard",
 		"widget-feeds",
 		"account-usage",
@@ -256,6 +257,9 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 			await page.close();
 			await harness.shutdown();
 		}
+		await expect(readFile(join(preferenceDirectory, "web-harness", "state.json"))).rejects.toMatchObject({
+			code: "ENOENT",
+		});
 	} finally {
 		vi.unstubAllEnvs();
 	}

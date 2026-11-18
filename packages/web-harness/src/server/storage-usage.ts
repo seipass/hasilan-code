@@ -1,6 +1,7 @@
 import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import type { SessionStorage } from "./plugins/session-storage.ts";
 
 export interface StorageUsage {
 	/** Bytes used by Pi session transcripts. */
@@ -42,27 +43,33 @@ async function directoryUsage(path: string): Promise<{ bytes: number; files: num
 }
 
 /** Reports where the agent profile spends disk and how many session files are unreferenced. */
-export async function readStorageUsage(agentDir: string, referencedPaths: Set<string>): Promise<StorageUsage> {
-	const root = join(agentDir, "web-harness");
-	const sessions = await directoryUsage(join(root, "sessions"));
-	const preferences = await directoryUsage(join(root, "ui-preferences"));
-	const imports = await directoryUsage(join(root, "import-assets"));
+export async function readStorageUsage(
+	agentDir: string,
+	referencedPaths: Set<string>,
+	storage?: Pick<SessionStorage, "sessionsDirectory" | "importAssetsDirectory">,
+): Promise<StorageUsage> {
+	const directory = storage?.sessionsDirectory;
+	const sessions = directory ? await directoryUsage(directory) : { bytes: 0, files: 0 };
+	const preferences = await directoryUsage(join(agentDir, "web-harness", "ui-preferences"));
+	const imports = storage ? (await directoryUsage(storage.importAssetsDirectory)).bytes : 0;
 	let orphans = 0;
 	let orphanBytes = 0;
-	for (const name of await readdir(join(root, "sessions")).catch(() => [] as string[])) {
-		if (!name.endsWith(".jsonl")) continue;
-		const full = join(root, "sessions", name);
-		if (referencedPaths.has(full)) continue;
-		const info = await stat(full).catch(() => undefined);
-		if (!info) continue;
-		orphans++;
-		orphanBytes += info.size;
+	if (directory) {
+		for (const name of await readdir(directory).catch(() => [] as string[])) {
+			if (!name.endsWith(".jsonl")) continue;
+			const full = join(directory, name);
+			if (referencedPaths.has(full)) continue;
+			const info = await stat(full).catch(() => undefined);
+			if (!info) continue;
+			orphans++;
+			orphanBytes += info.size;
+		}
 	}
 	return {
 		sessions: sessions.bytes,
 		sessionFiles: sessions.files,
 		preferences: preferences.bytes,
-		imports: imports.bytes,
+		imports,
 		orphans,
 		orphanBytes,
 	};
