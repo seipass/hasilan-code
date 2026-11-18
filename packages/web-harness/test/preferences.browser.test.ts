@@ -2,11 +2,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fauxAssistantMessage, fauxProvider, fauxToolCall, InMemoryModelsStore } from "@hasilan-code/pi-ai";
+import { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { build } from "esbuild";
 import { type Browser, chromium } from "playwright";
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { AuthStorage } from "../../coding-agent/src/core/auth-storage.ts";
 import { EventHub } from "../src/server/events.ts";
 import { createHttpHost, type HttpHost, sendJson } from "../src/server/http-host.ts";
+import { startHarness } from "../src/server/main.ts";
 import { pluginManager } from "../src/server/plugins/manager.ts";
 import { UiPreferencesStore } from "../src/server/ui-preferences.ts";
 import { emptyCanvasDocument } from "../src/shared/canvas.ts";
@@ -32,7 +36,8 @@ const dusk = {
 	light: { ...standardTheme.light, background: "#faf0e6" },
 };
 
-async function start(activeIds = ["canvas"], application: PluginProfile["application"] = { kind: "built-in" }) {
+async function start(activeIds = ["canvas"]) {
+	const application: PluginProfile["application"] = { kind: "built-in" };
 	store = await UiPreferencesStore.open(preferenceDirectory);
 	const manager = pluginManager(preferenceDirectory, () => ({
 		choices: new Map(),
@@ -67,15 +72,7 @@ async function start(activeIds = ["canvas"], application: PluginProfile["applica
 						...(activeIds.includes("dusk") ? [dusk] : []),
 					],
 				});
-			else if (url.pathname === "/api/plugin-profile/custom-app/panel.js" && application?.kind === "external") {
-				response.writeHead(200, { "Content-Type": "application/javascript" });
-				response.end(`document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", {
-					detail(root, { signal }) {
-						void fetch("/api/workspaces", { signal }).then((response) => response.json())
-							.then(([workspace]) => { root.textContent = workspace.workspaceId; });
-					}
-				}));`);
-			} else if (url.pathname === "/api/plugin-profile/notes/panel.js" && activeIds.includes("notes")) {
+			else if (url.pathname === "/api/plugin-profile/notes/panel.js" && activeIds.includes("notes")) {
 				response.writeHead(200, { "Content-Type": "application/javascript" });
 				response.end(`document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", { detail(root, ctx) {
 					const button = document.createElement("button");
@@ -129,22 +126,127 @@ afterAll(async () => {
 	if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-it("mounts a custom application without opening the bundled workspace UI", async () => {
-	const address = await start(["custom-app"], {
-		kind: "external",
-		panel: { id: "custom-app", title: "Custom app", scope: "application" },
+it("runs Pi with a custom application and tool while every built-in plugin is disabled", async () => {
+	const faux = fauxProvider({ provider: "external-plugin-test", tokenSize: { min: 1, max: 1 } });
+	faux.setResponses([
+		fauxAssistantMessage(fauxToolCall("plugin_echo", {}), { stopReason: "toolUse" }),
+		(context) =>
+			fauxAssistantMessage(
+				context.messages.some(
+					(message) =>
+						message.role === "toolResult" &&
+						message.toolName === "plugin_echo" &&
+						message.content.some((item) => item.type === "text" && item.text === "from external tool"),
+				)
+					? "Verified external tool"
+					: "External tool did not run",
+			),
+	]);
+	const modelRuntime = await ModelRuntime.create({
+		credentials: AuthStorage.inMemory(),
+		modelsPath: null,
+		modelsStore: new InMemoryModelsStore(),
+		allowModelNetwork: false,
+		refreshOnCreate: false,
 	});
+	modelRuntime.registerNativeProvider(faux.provider);
+	const { provider, id } = faux.getModel();
+	const disabled = [
+		"hashline",
+		"shell-process",
+		"browser-tools",
+		"computer-tools",
+		"jev-computer",
+		"web-search",
+		"team-tools",
+		"theme-default",
+		"hyakki",
+		"goal",
+		"plugin-manager",
+		"workspace-ui",
+		"canvas",
+	];
+	await writeFile(
+		join(preferenceDirectory, "plugins.json"),
+		JSON.stringify({
+			...Object.fromEntries(disabled.map((name) => [name, false])),
+			"custom-app": "./plugin.cjs",
+		}),
+	);
+	await writeFile(
+		join(preferenceDirectory, "plugin.cjs"),
+		`
+		exports.apiVersion = 1;
+		exports.panel = { title: "Custom app", script: "panel.js", scope: "application" };
+		exports.tools = () => [{
+			name: "plugin_echo", label: "External echo", description: "Return a test marker.",
+			parameters: { type: "object", properties: {}, additionalProperties: false },
+			execute: async () => ({ content: [{ type: "text", text: "from external tool" }], details: null }),
+		}];
+	`,
+	);
+	await writeFile(
+		join(preferenceDirectory, "panel.js"),
+		`
+		document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", {
+			detail(root, { signal }) {
+				const button = document.createElement("button");
+				button.textContent = "Run Pi";
+				const result = document.createElement("output");
+				const request = async (path, body) => {
+					const response = await fetch(path, body === undefined ? { signal } : {
+						method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal,
+					});
+					if (!response.ok) throw new Error(await response.text());
+					return response.json();
+				};
+				button.addEventListener("click", async () => {
+					button.disabled = true;
+					try {
+						const [workspace] = await request("/api/workspaces");
+						const { sessionId } = await request("/api/sessions", {
+							workspaceId: workspace.workspaceId, model: ${JSON.stringify({ provider, id })},
+						});
+						const path = "/api/sessions/" + encodeURIComponent(sessionId);
+						await request(path + "/prompt", { text: "Run the external tool", mode: "prompt" });
+						while (!signal.aborted) {
+							const session = await request(path);
+							if (!session.currentRun && session.latestRun) {
+								result.textContent = session.latestRun.result ?? session.latestRun.error;
+								break;
+							}
+							await new Promise((resolve) => setTimeout(resolve, 40));
+						}
+					} catch (error) {
+						if (!signal.aborted) result.textContent = String(error);
+					}
+				}, { signal });
+				root.append(button, result);
+			}
+		}));`,
+	);
 	const page = await browser.newPage();
+	vi.stubEnv("HASILAN_CODE_AGENT_DIR", preferenceDirectory);
 	try {
-		await page.goto(address.launchUrl);
-		const application = page.getByRole("region", { name: "Custom app" });
-		await expect.poll(() => application.textContent()).toBe("workspace");
-		expect(await page.getByRole("combobox", { name: "メッセージ" }).count()).toBe(0);
+		const harness = await startHarness(
+			{ cwd: directory, port: 0, noOpen: true, help: false, lan: false, development: false },
+			{ modelRuntime, staticDir: directory },
+		);
+		try {
+			await page.goto(harness.launch.launchUrl);
+			const profile = await page.evaluate(async () => (await fetch("/api/plugin-profile")).json());
+			expect(profile.activeIds).toEqual(["custom-app"]);
+			const application = page.getByRole("region", { name: "Custom app" });
+			await application.getByRole("button", { name: "Run Pi" }).click();
+			await expect.poll(() => application.getByRole("status").textContent()).toBe("Verified external tool");
+			expect(await page.getByRole("combobox", { name: "メッセージ" }).count()).toBe(0);
+			expect(faux.state.callCount).toBe(2);
+		} finally {
+			await page.close();
+			await harness.shutdown();
+		}
 	} finally {
-		await page.close();
-		hub.close();
-		await host.close();
-		await store.close();
+		vi.unstubAllEnvs();
 	}
 }, 30000);
 
@@ -162,6 +264,7 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				page.waitForResponse((response) => response.url().endsWith("/api/plugin-profile") && response.ok()),
 				page.goto(address.launchUrl),
 			]);
+			await page.locator('.workspace-accordion[data-selected="true"]').waitFor({ state: "attached" });
 			const input = page.getByRole("combobox", { name: "メッセージ" });
 			const panelButton = page
 				.getByRole("navigation", { name: "プラグイン", exact: true })
@@ -199,7 +302,7 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				await input.press("Enter");
 				await canvas.waitFor();
 			} else {
-				await input.press("Enter");
+				await page.getByRole("button", { name: "送信", exact: true }).click();
 				await page.getByText("設計キャンバスが無効です。", { exact: true }).waitFor();
 				expect(await option.count()).toBe(0);
 				expect(await canvas.count()).toBe(0);

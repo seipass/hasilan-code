@@ -68,6 +68,8 @@ import { WorkspaceRouter } from "./workspace-router.ts";
 
 export interface HarnessHooks {
 	pickFolder?: (cwd: string, signal: AbortSignal) => Promise<string | undefined>;
+	modelRuntime?: ModelRuntime;
+	staticDir?: string;
 }
 
 /** The CLI and desktop own the same services, API and persistence format. */
@@ -103,11 +105,13 @@ async function createHarness(
 	const agentSettings = createHarnessSettings(cwd, agentDir);
 	applyHttpProxySettings(agentSettings.getGlobalSettings().httpProxy);
 	configureHttpDispatcher(agentSettings.getHttpIdleTimeoutMs());
-	const modelRuntime = await ModelRuntime.create({
-		authPath: join(agentDir, "auth.json"),
-		modelsPath: join(agentDir, "models.json"),
-		modelsStorePath: join(agentDir, "models-store.json"),
-	});
+	const modelRuntime =
+		hooks.modelRuntime ??
+		(await ModelRuntime.create({
+			authPath: join(agentDir, "auth.json"),
+			modelsPath: join(agentDir, "models.json"),
+			modelsStorePath: join(agentDir, "models-store.json"),
+		}));
 	const settings = await SettingsService.open(agentDir, modelRuntime);
 	const uiPreferences = await UiPreferencesStore.open(agentDir);
 	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
@@ -259,7 +263,7 @@ async function createHarness(
 		port: options.port,
 		lan: options.lan,
 		development: options.development,
-		staticDir: fileURLToPath(new URL("../client/", import.meta.url)),
+		staticDir: hooks.staticDir ?? fileURLToPath(new URL("../client/", import.meta.url)),
 		artifacts,
 		acceptWebSocket: (url) =>
 			url.pathname === "/api/events" || /^\/api\/terminals\/[^/]+\/events$/.test(url.pathname),
