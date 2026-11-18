@@ -1,11 +1,11 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall, InMemoryModelsStore } from "@hasilan-code/pi-ai";
 import { ModelRuntime } from "@hasilan-code/pi-coding-agent";
-import { build } from "esbuild";
 import { type Browser, chromium } from "playwright";
+import { build, type Manifest } from "vite";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { AuthStorage } from "../../coding-agent/src/core/auth-storage.ts";
 import { EventHub } from "../src/server/events.ts";
@@ -27,6 +27,7 @@ let preferenceDirectory: string;
 let host: HttpHost;
 let hub: EventHub;
 let store: UiPreferencesStore;
+let workspaceBundle: string;
 
 const dusk = {
 	id: "dusk",
@@ -97,20 +98,15 @@ async function start(activeIds = ["canvas"]) {
 
 beforeAll(async () => {
 	directory = await mkdtemp(join(tmpdir(), "hasilan-preferences-browser-"));
-	const bundle = await build({
-		entryPoints: [fileURLToPath(new URL("../src/client/main.tsx", import.meta.url))],
-		bundle: true,
-		write: false,
-		jsx: "automatic",
-		loader: { ".css": "empty" },
-		format: "iife",
-		define: { "process.env.NODE_ENV": '"production"' },
+	await build({
+		configFile: fileURLToPath(new URL("../vite.config.ts", import.meta.url)),
+		logLevel: "error",
+		build: { outDir: directory, sourcemap: false, manifest: true },
 	});
-	await writeFile(join(directory, "app.js"), bundle.outputFiles[0].text);
-	await writeFile(
-		join(directory, "index.html"),
-		'<!doctype html><div id="root"></div><script src="/app.js"></script>',
-	);
+	const manifest = JSON.parse(await readFile(join(directory, ".vite", "manifest.json"), "utf8")) as Manifest;
+	const workspace = manifest["src/client/App.tsx"];
+	expect(workspace?.isDynamicEntry).toBe(true);
+	workspaceBundle = workspace.file;
 	browser = await chromium.launch({ headless: true });
 }, 30000);
 
@@ -226,6 +222,10 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		}));`,
 	);
 	const page = await browser.newPage();
+	const workspaceRequests: string[] = [];
+	page.on("request", (request) => {
+		if (new URL(request.url()).pathname === `/${workspaceBundle}`) workspaceRequests.push(request.url());
+	});
 	vi.stubEnv("HASILAN_CODE_AGENT_DIR", preferenceDirectory);
 	try {
 		const harness = await startHarness(
@@ -240,6 +240,7 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 			await application.getByRole("button", { name: "Run Pi" }).click();
 			await expect.poll(() => application.getByRole("status").textContent()).toBe("Verified external tool");
 			expect(await page.getByRole("combobox", { name: "メッセージ" }).count()).toBe(0);
+			expect(workspaceRequests).toHaveLength(0);
 			expect(faux.state.callCount).toBe(2);
 		} finally {
 			await page.close();

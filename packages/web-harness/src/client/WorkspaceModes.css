@@ -1,8 +1,6 @@
 .mode-page { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .mode-page[hidden] { display: none; }
 .mode-page[data-motion-exit="true"] { position: absolute; inset: 0; }
-.external-plugin-panel { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
-.external-application { height: 100dvh; }
 .sidebar-plugin-panels { display: grid; gap: 2px; margin-block-start: 4px; }
 .sidebar-plugin-panels > button { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 10px; border: 0; border-radius: 6px; background: transparent; font-size: var(--text-sm); text-align: start; }
 .sidebar-plugin-panels > button:hover:not(:disabled), .sidebar-plugin-panels > button[aria-current="page"] { background: var(--surface-hover); }

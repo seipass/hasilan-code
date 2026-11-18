@@ -75,6 +75,8 @@ document.currentScript.dispatchEvent(new CustomEvent("hasilan:panel", {
 
 通常は、組み込みの `workspace-ui` がアプリの画面を表示する。自作プラグインで画面全体を差し替えるには、`panel` に `scope: "application"` を加え、`plugins.json` の `workspace-ui` にそのモジュールのパスを指定する。別の ID で登録する場合は、`workspace-ui` を `false` にする。画面全体を提供するプラグインが複数ある場合は、最初に有効になったものを使う。`workspace-ui` として登録した画面は優先される。
 
+ブラウザーは、設定で選ばれた画面のコードを読み込む。自作画面で起動した場合は、標準画面の JavaScript ファイルを取得しない。
+
 画面全体の登録関数には `scope` と `signal` が渡る。ワークスペースの一覧は `GET /api/workspaces` で取得できる。
 
 Chord のローダーは試用時点のパッケージから公開されていない。最初のツール移行は Node のモジュール読み込みで構成し、画面やサービスを移すときにローダー選定を再検討する。

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ExternalPanelEntry } from "../../shared/plugin-profile.ts";
 import { errorMessage } from "../api.ts";
 import type { WorkspacePanel, WorkspacePanelProps } from "./workspace-panels.ts";
+import "./ExternalPanel.css";
 
 type MountContext = { signal: AbortSignal } & ({
 	scope: "application";
