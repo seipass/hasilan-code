@@ -72,6 +72,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"jev-computer",
 				"web-search",
 				"team-tools",
+				"model-providers",
 				"theme-default",
 				"hyakki",
 				"goal",
@@ -88,6 +89,9 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 			]),
 		});
 		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
+		expect((await (await api("/api/models")).json()).providers).toContainEqual(
+			expect.objectContaining({ id: "openrouter" }),
+		);
 		path = `/api/workspaces/${workspaceId}/canvas`;
 		swarmPath = `/api/workspaces/${workspaceId}/swarm`;
 		expect((await api(swarmPath, {}, "POST")).status).toBe(400);
@@ -112,6 +116,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"computer-tools",
 				"jev-computer",
 				"web-search",
+				"model-providers",
 				"theme-default",
 				"plugin-manager",
 				"workspace-ui",
@@ -150,9 +155,19 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 		join(dir, "plugins.json"),
 		JSON.stringify({ ...Object.fromEntries(builtinIds.map((id) => [id, false])), "custom-app": "./custom.cjs" }),
 	);
+	const model = fauxProvider({ provider: "local-provider" }).getModel();
 	await writeFile(
 		join(dir, "custom.cjs"),
-		'exports.apiVersion = 1; exports.panel = { title: "Custom app", script: "notes.js", scope: "application" };',
+		`exports.apiVersion = 1;
+exports.panel = { title: "Custom app", script: "notes.js", scope: "application" };
+exports.providers = [{
+	id: "local-provider",
+	name: "Local provider",
+	auth: { apiKey: { name: "Local", async resolve() { return { auth: {} }; } } },
+	getModels() { return [${JSON.stringify(model)}]; },
+	stream() { throw new Error("Unexpected stream"); },
+	streamSimple() { throw new Error("Unexpected stream"); },
+}];`,
 	);
 	await withHost(async (api) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
@@ -161,6 +176,10 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 		});
 		expect((await api("/api/plugin-profile/custom-app/panel.js")).status).toBe(200);
 		expect((await api("/api/workspaces")).status).toBe(200);
+		expect(await (await api("/api/models")).json()).toMatchObject({
+			providers: [{ id: "local-provider", name: "Local provider", configured: true }],
+			models: [{ id: model.id, provider: "local-provider" }],
+		});
 		expect((await api(management)).status).toBe(404);
 	});
 }, 30_000);

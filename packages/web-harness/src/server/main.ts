@@ -107,23 +107,9 @@ async function createHarness(
 	const agentSettings = createHarnessSettings(cwd, agentDir);
 	applyHttpProxySettings(agentSettings.getGlobalSettings().httpProxy);
 	configureHttpDispatcher(agentSettings.getHttpIdleTimeoutMs());
-	const modelRuntime =
-		hooks.modelRuntime ??
-		(await ModelRuntime.create({
-			authPath: join(agentDir, "auth.json"),
-			modelsPath: join(agentDir, "models.json"),
-			modelsStorePath: join(agentDir, "models-store.json"),
-		}));
-	const settings = await SettingsService.open(agentDir, modelRuntime);
-	const uiPreferences = await UiPreferencesStore.open(agentDir);
-	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
 	const artifacts = new ArtifactStore();
 	const browser = new LazyBrowserManager(artifacts);
 	const computer = new ComputerManager(new PythonDesktop(agentDir), artifacts);
-	const jevComputer = new JevComputer(computer, modelRuntime, () => ({
-		jev: settings.get().jev.model,
-		textModel: settings.get().jevComputer?.textModel,
-	}));
 	const widgets = new WidgetData();
 	const githubDashboard = new GithubDashboardReader();
 	let events: EventHub | undefined;
@@ -163,7 +149,7 @@ async function createHarness(
 					],
 				}),
 			],
-			["web-search", () => webSearchPlugin(settings)],
+			["web-search", () => webSearchPlugin(() => settings)],
 			[
 				"team-tools",
 				() => ({
@@ -171,6 +157,7 @@ async function createHarness(
 					tools: ({ sessionId }) => [teams.createTool(sessionId) as unknown as ToolDefinition],
 				}),
 			],
+			["model-providers", () => ({ apiVersion: 1, bundledModelProviders: true })],
 			[DEFAULT_THEME_ID, () => ({ apiVersion: 1, theme: standardTheme })],
 			["hyakki", () => hyakkiPlugin(() => teams)],
 			["goal", () => goalPlugin(() => teams)],
@@ -191,6 +178,25 @@ async function createHarness(
 		]),
 	);
 	onPluginsLoaded(plugins.close);
+	const modelRuntime =
+		hooks.modelRuntime ??
+		(await ModelRuntime.create({
+			authPath: join(agentDir, "auth.json"),
+			modelsPath: join(agentDir, "models.json"),
+			modelsStorePath: join(agentDir, "models-store.json"),
+			includeBuiltinProviders: plugins.includeBuiltinProviders,
+			providers: plugins.providers,
+		}));
+	if (hooks.modelRuntime) {
+		for (const provider of plugins.providers) modelRuntime.registerNativeProvider(provider);
+	}
+	const settings = await SettingsService.open(agentDir, modelRuntime);
+	const uiPreferences = await UiPreferencesStore.open(agentDir);
+	const authLogin = new AuthLoginManager(modelRuntime, { getDeviceId: () => agentSettings.getOrCreateDeviceId() });
+	const jevComputer = new JevComputer(computer, modelRuntime, () => ({
+		jev: settings.get().jev.model,
+		textModel: settings.get().jevComputer?.textModel,
+	}));
 	const registry = new SessionRegistry({
 		agentWorktrees,
 		isolatedFiles,

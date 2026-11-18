@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import type { Provider } from "@hasilan-code/pi-ai";
 import type { ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { Check } from "typebox/value";
 import {
@@ -29,12 +30,31 @@ export interface ServerPlugin {
 	readonly requires?: readonly string[];
 	readonly tools?: ToolFactory;
 	readonly context?: RuntimeContextFactory;
+	readonly providers?: readonly Provider[];
 	readonly handleApi?: PluginApi;
 	readonly panel?: { readonly title: string; readonly script: string; readonly scope?: "application" };
 	readonly bundledApplication?: true;
+	readonly bundledModelProviders?: true;
 	readonly theme?: ThemePlugin;
 	readonly closeSession?: (sessionId: string) => void | Promise<void>;
 	readonly close?: () => void | Promise<void>;
+}
+
+function isProvider(value: unknown): value is Provider {
+	if (!value || typeof value !== "object") return false;
+	const provider = value as Partial<Provider>;
+	return (
+		typeof provider.id === "string" &&
+		!!provider.id.trim() &&
+		typeof provider.name === "string" &&
+		!!provider.name.trim() &&
+		!!provider.auth &&
+		typeof provider.auth === "object" &&
+		!!(provider.auth.apiKey || provider.auth.oauth) &&
+		typeof provider.getModels === "function" &&
+		typeof provider.stream === "function" &&
+		typeof provider.streamSimple === "function"
+	);
 }
 
 export function loadServerProfile(
@@ -89,16 +109,21 @@ export function loadServerProfile(
 				("closeSession" in plugin && typeof plugin.closeSession !== "function") ||
 				("close" in plugin && typeof plugin.close !== "function") ||
 				("bundledApplication" in plugin && (modulePath || plugin.bundledApplication !== true)) ||
+				("bundledModelProviders" in plugin && (modulePath || plugin.bundledModelProviders !== true)) ||
 				!(
 					"tools" in plugin ||
 					"context" in plugin ||
+					"providers" in plugin ||
 					"handleApi" in plugin ||
 					"panel" in plugin ||
 					"theme" in plugin ||
-					"bundledApplication" in plugin
+					"bundledApplication" in plugin ||
+					"bundledModelProviders" in plugin
 				)
 			)
-				throw new Error("expected apiVersion 1 and a tools, context, handleApi, panel, or theme export");
+				throw new Error("expected apiVersion 1 and a supported plugin contribution");
+			if ("providers" in plugin && (!Array.isArray(plugin.providers) || !plugin.providers.every(isProvider)))
+				throw new Error("providers must be a list of Pi providers");
 			const requires = "requires" in plugin ? plugin.requires : [];
 			if (!Array.isArray(requires) || requires.some((name: unknown) => typeof name !== "string" || !name.trim()))
 				throw new Error("requires must be a list of plugin IDs");
@@ -143,11 +168,12 @@ export function loadServerProfile(
 		}
 	}
 	const active = new Map<string, ServerPlugin>();
+	const providers = new Map<string, Provider>();
 	const visiting = new Set<string>();
 	function activate(id: string): boolean {
 		const candidate = candidates.get(id);
 		const status = inventory.get(id);
-		if (!candidate || !status || status.status === "blocked") return false;
+		if (!candidate || !status || status.status === "blocked" || status.status === "failed") return false;
 		if (active.has(id)) return true;
 		visiting.add(id);
 		for (const dependency of status.requires) {
@@ -162,6 +188,17 @@ export function loadServerProfile(
 			return false;
 		}
 		visiting.delete(id);
+		const contributedProviders = new Map<string, Provider>();
+		for (const provider of candidate.plugin.providers ?? []) {
+			if (providers.has(provider.id) || contributedProviders.has(provider.id)) {
+				status.status = "failed";
+				status.reason = `Duplicate model provider: ${provider.id}`;
+				report(`Plugin ${id} could not activate: ${status.reason}`);
+				return false;
+			}
+			contributedProviders.set(provider.id, provider);
+		}
+		for (const [providerId, provider] of contributedProviders) providers.set(providerId, provider);
 		status.status = "enabled";
 		active.set(id, candidate.plugin);
 		if (candidate.panel && candidate.script) {
@@ -242,6 +279,8 @@ export function loadServerProfile(
 		} satisfies PluginProfile,
 		choices,
 		builtinIds: [...builtins.keys()],
+		includeBuiltinProviders: [...active.values()].some((plugin) => plugin.bundledModelProviders === true),
+		providers: [...providers.values()],
 		isBuiltinActive: (id: string) => inventory.get(id)?.source === "built-in" && active.has(id),
 		toolsForSession,
 		contextForSession,

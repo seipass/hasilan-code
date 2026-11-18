@@ -109,6 +109,10 @@ interface ModelRuntimeSnapshot {
 }
 
 export interface CreateModelRuntimeOptions {
+	/** Include Pi's provider catalog unless the caller supplies its own composition. */
+	includeBuiltinProviders?: boolean;
+	/** Additional native providers to register before restoring model and credential state. */
+	providers?: readonly Provider[];
 	/** Credential storage. Defaults to the file at authPath. */
 	credentials?: CredentialStore;
 	authPath?: string;
@@ -211,6 +215,7 @@ export class ModelRuntime implements Models {
 		modelsPath: string | undefined,
 		modelsStore: ModelsStore,
 		providers: readonly Provider[],
+		additionalProviders: readonly Provider[],
 		modelNetworkEnabled: boolean,
 	) {
 		this.credentials = credentials;
@@ -219,6 +224,11 @@ export class ModelRuntime implements Models {
 		this.modelNetworkEnabled = modelNetworkEnabled;
 		this.defaultBuiltins = new Map(providers.map((provider) => [provider.id, provider]));
 		for (const [providerId, provider] of this.defaultBuiltins) this.builtins.set(providerId, provider);
+		for (const provider of additionalProviders) {
+			if (!provider.id.trim()) throw new Error("Provider id must not be empty.");
+			if (this.nativeExtensionProviders.has(provider.id)) throw new Error(`Duplicate provider: ${provider.id}`);
+			this.nativeExtensionProviders.set(provider.id, provider);
+		}
 		this.models = createModels({ credentials, modelsStore });
 		this.rebuildProviders();
 	}
@@ -233,27 +243,27 @@ export class ModelRuntime implements Models {
 			(modelsPath
 				? new FileModelsStore(options.modelsStorePath ?? join(dirname(modelsPath), "models-store.json"))
 				: new InMemoryCodingAgentModelsStore());
-		const builtinModelDataGeneratedAt = builtinProviderCatalog.getBuiltinModelDataGeneratedAt();
-		const providers = builtinProviderCatalog.builtinProviders().map((provider) => {
-			if (provider.id === "radius") return provider;
-			// OpenRouter narrows the catalog to the models, limits and prices of the user's key.
-			if (provider.id === "openrouter") {
-				return withPersonalizedCatalog(
-					provider,
-					personalizeOpenRouterCatalog,
-					options.catalogBaseUrl,
-					builtinModelDataGeneratedAt,
-				);
+		const providers: Provider[] = [];
+		if (options.includeBuiltinProviders !== false) {
+			const generatedAt = builtinProviderCatalog.getBuiltinModelDataGeneratedAt();
+			for (const provider of builtinProviderCatalog.builtinProviders()) {
+				if (provider.id === "radius") providers.push(provider);
+				// OpenRouter narrows the catalog to the models, limits and prices of the user's key.
+				else if (provider.id === "openrouter")
+					providers.push(
+						withPersonalizedCatalog(provider, personalizeOpenRouterCatalog, options.catalogBaseUrl, generatedAt),
+					);
+				else providers.push(withRemoteCatalog(provider, options.catalogBaseUrl, generatedAt));
 			}
-			return withRemoteCatalog(provider, options.catalogBaseUrl, builtinModelDataGeneratedAt);
-		});
-		providers.push(devinProvider());
+			providers.push(devinProvider());
+		}
 		const runtime = new ModelRuntime(
 			credentials,
 			config,
 			modelsPath,
 			modelsStore,
 			providers,
+			options.providers ?? [],
 			process.env.PI_OFFLINE === undefined,
 		);
 		runtime.configureRadiusProviders();

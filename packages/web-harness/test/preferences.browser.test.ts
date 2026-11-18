@@ -156,6 +156,7 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		"jev-computer",
 		"web-search",
 		"team-tools",
+		"model-providers",
 		"theme-default",
 		"hyakki",
 		"goal",
