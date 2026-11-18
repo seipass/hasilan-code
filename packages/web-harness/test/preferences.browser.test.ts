@@ -19,6 +19,7 @@ import {
 	PLUGIN_MANAGER_ID,
 	type PluginProfile,
 	standardTheme,
+	WIDGET_FEEDS_ID,
 } from "../src/shared/plugin-profile.ts";
 
 let browser: Browser;
@@ -88,6 +89,8 @@ async function start(activeIds = ["canvas"]) {
 					models: [{ provider: "fixture", id: "fixture", name: "Fixture model", contextWindow: 10000 }],
 					providers: [{ id: "fixture", name: "Fixture", configured: true }],
 				});
+			else if (url.pathname === "/api/widgets/earthquakes" && activeIds.includes(WIDGET_FEEDS_ID))
+				sendJson(response, 200, { notices: [], fetchedAt: Date.now() });
 			else if (url.pathname === "/api/sessions" || url.pathname === "/api/terminals") sendJson(response, 200, []);
 			else return false;
 			return true;
@@ -163,6 +166,9 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		"plugin-manager",
 		"workspace-ui",
 		"runtime-context",
+		"github-dashboard",
+		"widget-feeds",
+		"account-usage",
 		"canvas",
 	];
 	await writeFile(
@@ -257,7 +263,7 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 
 it("opens built-in and external panels from the sidebar and preserves composer navigation", async () => {
 	for (const enabled of [true, false]) {
-		const address = await start(enabled ? ["canvas", "notes"] : []);
+		const address = await start(enabled ? ["canvas", "notes", WIDGET_FEEDS_ID] : []);
 		const page = await browser.newPage({ reducedMotion: "reduce" });
 		page.setDefaultTimeout(5_000);
 		try {
@@ -275,7 +281,9 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				.getByRole("navigation", { name: "プラグイン", exact: true })
 				.getByRole("button", { name: "設計キャンバス", exact: true });
 			const canvas = page.getByRole("region", { name: "プロジェクト設計キャンバス" });
+			const earthquake = page.getByRole("button", { name: "地震情報を開く" });
 			if (enabled) {
+				await earthquake.waitFor();
 				await panelButton.waitFor();
 				expect(
 					await panelButton.evaluate((button) => button.parentElement?.previousElementSibling?.className),
@@ -312,6 +320,7 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				expect(await option.count()).toBe(0);
 				expect(await canvas.count()).toBe(0);
 				expect(await panelButton.count()).toBe(0);
+				expect(await earthquake.count()).toBe(0);
 			}
 		} finally {
 			await page.close();

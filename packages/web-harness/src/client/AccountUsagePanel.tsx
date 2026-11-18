@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { AccountUsageMetric } from "@hasilan-code/pi-ai";
 import type { ProviderAccountUsageView } from "../shared/account-usage.ts";
+import { ACCOUNT_USAGE_ID } from "../shared/plugin-profile.ts";
+import { usePluginProfile } from "./plugins/profile.tsx";
 import { api, errorMessage } from "./api.ts";
 import { MotionItems, Presence } from "./Motion.tsx";
 import "./AccountUsagePanel.css";
@@ -30,6 +32,10 @@ function Metric({ metric }: { metric: AccountUsageMetric }) {
 }
 
 export function AccountUsagePanel() {
+	return usePluginProfile()?.activeIds.includes(ACCOUNT_USAGE_ID) ? <EnabledAccountUsagePanel /> : null;
+}
+
+function EnabledAccountUsagePanel() {
 	const [entries, setEntries] = useState<ProviderAccountUsageView[]>();
 	const [error, setError] = useState<string>();
 	const [loading, setLoading] = useState(true);

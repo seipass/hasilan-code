@@ -1,4 +1,5 @@
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { WIDGET_FEEDS_ID } from "../../shared/plugin-profile.ts";
 import type { ModelUsage } from "../../shared/usage.ts";
 import type { QuakeSnapshot, WeatherSnapshot } from "../../shared/widgets.ts";
 import { AccountUsagePanel } from "../AccountUsagePanel.tsx";
@@ -7,6 +8,7 @@ import { MotionItems } from "../Motion.tsx";
 import { UsagePanel } from "../UsagePanel.tsx";
 import { Select } from "../Select.tsx";
 import { usePreferenceState } from "../preferences.ts";
+import { usePluginProfile } from "../plugins/profile.tsx";
 import { defaultWidgetPreferences, parseWidgetPreferences, weatherLabel, WIDGET_KEY, TOPBAR_WIDGETS, type TopbarWidget, WIDGET_LABELS, type WidgetPreferences } from "./state.ts";
 import { useWidgetData } from "./use-widget-data.ts";
 import { QuakeDetails, WeatherDetails } from "./WidgetDetails.tsx";
@@ -14,6 +16,7 @@ import { WidgetIcon } from "./WidgetIcon.tsx";
 import "./WidgetSpace.css";
 
 export function WidgetSpace({ visible, usage, usageTitle, contextPercent }: { visible: boolean; usage: ModelUsage[]; usageTitle: string; contextPercent?: number | null }) {
+	const feedsEnabled = usePluginProfile()?.activeIds.includes(WIDGET_FEEDS_ID) ?? false;
 	const [preferences, setPreferences] = usePreferenceState(WIDGET_KEY, defaultWidgetPreferences, parseWidgetPreferences);
 	const [active, setActive] = useState<TopbarWidget | null>(null);
 	const [closing, setClosing] = useState(false);
@@ -21,8 +24,9 @@ export function WidgetSpace({ visible, usage, usageTitle, contextPercent }: { vi
 	const root = useRef<HTMLDivElement>(null);
 	const anchor = useRef<HTMLElement>(null);
 	const weatherPath = preferences.place ? `/api/widgets/weather?latitude=${preferences.place.latitude}&longitude=${preferences.place.longitude}` : undefined;
-	const weather = useWidgetData<WeatherSnapshot>(weatherPath, visible, 600_000);
-	const earthquake = useWidgetData<QuakeSnapshot>("/api/widgets/earthquakes", visible, 30_000);
+	const weather = useWidgetData<WeatherSnapshot>(weatherPath, visible && feedsEnabled, 600_000);
+	const earthquake = useWidgetData<QuakeSnapshot>("/api/widgets/earthquakes", visible && feedsEnabled, 30_000);
+	const order = topbarOrder(preferences, feedsEnabled);
 	useEffect(() => { if (!visible) setActive(null); }, [visible]);
 	const positionSheet = useCallback(() => {
 		const parent = root.current?.parentElement;
@@ -60,7 +64,7 @@ export function WidgetSpace({ visible, usage, usageTitle, contextPercent }: { vi
 	const change = (next: WidgetPreferences) => setPreferences(next);
 	return <div className="widget-space" ref={root} hidden={!visible}>
 		<div className="widget-strip" role="toolbar" aria-label="ウィジェット">
-			<MotionItems items={topbarOrder(preferences)} itemKey={(kind) => kind}>{(kind) => <button type="button" className={`widget-chip is-${kind}`} key={kind} data-size={preferences.display?.[kind] ?? "icon"} aria-label={`${WIDGET_LABELS[kind]}を開く`} aria-haspopup="dialog" aria-expanded={active === kind && !closing} title={summaries[kind]} onClick={(event) => openWidget(kind, event.currentTarget)}><WidgetIcon kind={kind} />{preferences.display?.[kind] === "mini" && <span><span className="widget-chip-label">{chipLabels[kind]}</span><strong>{summaries[kind]}</strong></span>}</button>}</MotionItems>
+			<MotionItems items={order} itemKey={(kind) => kind}>{(kind) => <button type="button" className={`widget-chip is-${kind}`} key={kind} data-size={preferences.display?.[kind] ?? "icon"} aria-label={`${WIDGET_LABELS[kind]}を開く`} aria-haspopup="dialog" aria-expanded={active === kind && !closing} title={summaries[kind]} onClick={(event) => openWidget(kind, event.currentTarget)}><WidgetIcon kind={kind} />{preferences.display?.[kind] === "mini" && <span><span className="widget-chip-label">{chipLabels[kind]}</span><strong>{summaries[kind]}</strong></span>}</button>}</MotionItems>
 		</div>
 		<MobileSheet open={visible && active !== null && !closing} side="top" className={`widget-top-sheet widget-sheet-${active ?? "idle"}`} style={sheetStyle} motionAnchor={anchor} title={active ? WIDGET_LABELS[active] : "ウィジェット"} headingActions={active === "earthquake" ? <button type="button" disabled={earthquake.busy} onClick={earthquake.refresh}>{earthquake.busy ? "更新中…" : "更新"}</button> : null} onClosing={() => setClosing(true)} onClose={() => { setActive(null); setClosing(false); }}>
 			<div className="widget-sheet-body">
@@ -73,21 +77,25 @@ export function WidgetSpace({ visible, usage, usageTitle, contextPercent }: { vi
 	</div>;
 }
 
-function topbarOrder(preferences: WidgetPreferences): TopbarWidget[] {
+function topbarOrder(preferences: WidgetPreferences, feedsEnabled = true): TopbarWidget[] {
 	return [...new Set([...preferences.order, ...TOPBAR_WIDGETS])].filter(
-		(kind): kind is TopbarWidget => TOPBAR_WIDGETS.some((widget) => widget === kind),
+		(kind): kind is TopbarWidget =>
+			feedsEnabled ? TOPBAR_WIDGETS.some((widget) => widget === kind) : kind === "usage" || kind === "notes",
 	);
 }
 
 export function WidgetAppearance() {
+	const feedsEnabled = usePluginProfile()?.activeIds.includes(WIDGET_FEEDS_ID) ?? false;
 	const [preferences, setPreferences] = usePreferenceState(WIDGET_KEY, defaultWidgetPreferences, parseWidgetPreferences);
-	const order = topbarOrder(preferences);
+	const order = topbarOrder(preferences, feedsEnabled);
 	function move(index: number, direction: -1 | 1) {
 		setPreferences((previous) => {
 			const next = topbarOrder(previous);
-			const target = index + direction;
-			if (target < 0 || target >= next.length) return previous;
-			[next[index], next[target]] = [next[target], next[index]];
+			const active = topbarOrder(previous, feedsEnabled);
+			const from = next.indexOf(active[index]);
+			const target = next.indexOf(active[index + direction]);
+			if (from < 0 || target < 0) return previous;
+			[next[from], next[target]] = [next[target], next[from]];
 			return { ...previous, order: next };
 		});
 	}

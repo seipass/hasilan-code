@@ -22,10 +22,17 @@ import {
 	workspaceCreateSchema,
 	workspacePickerSchema,
 } from "../shared/contracts.ts";
-import { DEFAULT_THEME_ID, PLUGIN_MANAGER_ID, standardTheme, WORKSPACE_UI_ID } from "../shared/plugin-profile.ts";
+import {
+	ACCOUNT_USAGE_ID,
+	DEFAULT_THEME_ID,
+	GITHUB_DASHBOARD_ID,
+	PLUGIN_MANAGER_ID,
+	standardTheme,
+	WIDGET_FEEDS_ID,
+	WORKSPACE_UI_ID,
+} from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
 import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
-import { readAccountUsage } from "./account-usage.ts";
 import { AgentWorktrees } from "./agent-worktrees.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
@@ -37,12 +44,12 @@ import { fileEditSchema, readEditableFile, saveEditableFile } from "./file-edito
 import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
 import { gitReview } from "./git-review.ts";
-import { GithubDashboardReader } from "./github-dashboard.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { mediaView, serveMedia } from "./media.ts";
 import { canvasPlugin } from "./plugins/canvas.ts";
 import { goalPlugin } from "./plugins/goal.ts";
 import { hyakkiPlugin } from "./plugins/hyakki.ts";
+import { accountUsagePlugin, githubDashboardPlugin, widgetFeedsPlugin } from "./plugins/integrations.ts";
 import { pluginManager } from "./plugins/manager.ts";
 import { runtimeContextPlugin } from "./plugins/runtime-context.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
@@ -64,7 +71,6 @@ import { ComputerManager } from "./tools/computer/index.ts";
 import { JevComputer } from "./tools/computer/jev.ts";
 import { LazyBrowserManager } from "./tools/lazy-browser.ts";
 import { UiPreferencesStore } from "./ui-preferences.ts";
-import { WidgetData } from "./widget-data.ts";
 import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
 import { WorkspaceRouter } from "./workspace-router.ts";
 
@@ -110,8 +116,6 @@ async function createHarness(
 	const artifacts = new ArtifactStore();
 	const browser = new LazyBrowserManager(artifacts);
 	const computer = new ComputerManager(new PythonDesktop(agentDir), artifacts);
-	const widgets = new WidgetData();
-	const githubDashboard = new GithubDashboardReader();
 	let events: EventHub | undefined;
 	const files = new WorkspaceFiles({ onChanged: (event) => events?.publish("workspace", event.workspaceId, event) });
 	const agentWorktrees = new AgentWorktrees(agentDir);
@@ -164,6 +168,9 @@ async function createHarness(
 			[PLUGIN_MANAGER_ID, () => pluginManager(agentDir, () => plugins)],
 			[WORKSPACE_UI_ID, () => ({ apiVersion: 1, bundledApplication: true })],
 			["runtime-context", () => runtimeContextPlugin((): SessionRegistry => registry)],
+			[GITHUB_DASHBOARD_ID, githubDashboardPlugin],
+			[WIDGET_FEEDS_ID, widgetFeedsPlugin],
+			[ACCOUNT_USAGE_ID, () => accountUsagePlugin(() => modelRuntime)],
 			[
 				"canvas",
 				() =>
@@ -302,14 +309,9 @@ async function createHarness(
 					response.end(script);
 					return true;
 				}
-				if (url.pathname === "/api/home/github" && method === "GET") return reply(await githubDashboard.read());
 				if (url.pathname === "/api/work" && method === "GET") return reply(teams.workOverview());
 				if (parts[1] === "work" && parts.length === 4 && parts[3] === "diff" && method === "GET")
 					return reply(await teams.agentWork(parts[2], "diff"));
-				if (url.pathname.startsWith("/api/widgets/")) {
-					if (method !== "GET") throw new HttpError(405, "Method is not allowed");
-					return reply(await widgets.query(url));
-				}
 				if (url.pathname === "/api/sessions/search" && method === "GET") {
 					const query = url.searchParams.get("q") ?? "";
 					if (query.length > 200) throw new HttpError(400, "Search text is too long");
@@ -323,16 +325,6 @@ async function createHarness(
 				}
 				if (url.pathname === "/api/storage" && method === "GET") {
 					return reply(await readStorageUsage(agentDir, new Set(registry.sessionPaths())));
-				}
-				if (url.pathname === "/api/account-usage" && method === "GET") {
-					const controller = new AbortController();
-					const abort = () => controller.abort();
-					response.once("close", abort);
-					try {
-						return reply(await readAccountUsage(modelRuntime, controller.signal));
-					} finally {
-						response.off("close", abort);
-					}
 				}
 				if (url.pathname === "/api/workspaces") {
 					if (method === "GET")

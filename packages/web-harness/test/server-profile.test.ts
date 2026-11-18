@@ -79,6 +79,9 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"plugin-manager",
 				"workspace-ui",
 				"runtime-context",
+				"github-dashboard",
+				"widget-feeds",
+				"account-usage",
 				"canvas",
 			],
 			panels: [],
@@ -92,6 +95,7 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 		expect((await (await api("/api/models")).json()).providers).toContainEqual(
 			expect.objectContaining({ id: "openrouter" }),
 		);
+		expect((await api("/api/widgets/places?q=a")).status).toBe(400);
 		path = `/api/workspaces/${workspaceId}/canvas`;
 		swarmPath = `/api/workspaces/${workspaceId}/swarm`;
 		expect((await api(swarmPath, {}, "POST")).status).toBe(400);
@@ -121,6 +125,9 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"plugin-manager",
 				"workspace-ui",
 				"runtime-context",
+				"github-dashboard",
+				"widget-feeds",
+				"account-usage",
 			],
 			panels: [],
 			plugins: expect.arrayContaining([
@@ -181,6 +188,9 @@ exports.providers = [{
 			models: [{ id: model.id, provider: "local-provider" }],
 		});
 		expect((await api(management)).status).toBe(404);
+		for (const route of ["/api/home/github", "/api/account-usage", "/api/widgets/places?q=a"]) {
+			expect((await api(route)).status).toBe(404);
+		}
 	});
 }, 30_000);
 

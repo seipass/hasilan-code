@@ -53,6 +53,9 @@ export interface PluginManagementEntry extends PluginStatus {
 
 export const PLUGIN_MANAGER_ID = "plugin-manager";
 export const WORKSPACE_UI_ID = "workspace-ui";
+export const GITHUB_DASHBOARD_ID = "github-dashboard";
+export const WIDGET_FEEDS_ID = "widget-feeds";
+export const ACCOUNT_USAGE_ID = "account-usage";
 
 export const DEFAULT_THEME_ID = "theme-default";
 export const themePluginSchema = Type.Object(
