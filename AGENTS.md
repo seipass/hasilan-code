@@ -123,3 +123,5 @@ For release preparation, publishing, verification, or recovery, load and follow 
 ## User Override
 
 If the user's instructions conflict with any rule in this document, ask for explicit confirmation before overriding. Only then execute their instructions.
+
+作業が終わるたびにコミットしてください
