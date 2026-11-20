@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 import { Check } from "typebox/value";
 import { DEFAULT_THEME_ID, standardTheme } from "../shared/plugin-profile.ts";
 import { appearanceSchema, type Appearance } from "../shared/ui-preferences.ts";
+import { formatFontStack } from "./FontAppearance.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import { usePreferenceState } from "./preferences.ts";
 import { Select } from "./Select.tsx";
@@ -18,9 +19,6 @@ type Variant = "dark" | "light";
 function readAppearance(raw: string | null): Appearance {
 	try { const value: unknown = JSON.parse(raw ?? "null"); return Check(appearanceSchema, value) ? value as Appearance : DEFAULT; }
 	catch { return DEFAULT; }
-}
-function fontFamily(value: string, fallback: string): string {
-	return value.trim() ? `${JSON.stringify(value.trim())}, ${fallback}` : fallback;
 }
 
 const initialThemes = [{ id: DEFAULT_THEME_ID, customizable: true, ...standardTheme }];
@@ -72,8 +70,8 @@ export function ApplicationTheme() {
 			"--border-subtle": mix(theme.foreground, 6 * amount), "--border": mix(theme.foreground, 12 * amount),
 			"--border-strong": mix(theme.foreground, 22 * amount), "--scroll-thumb": mix(theme.foreground, 20),
 			"--scroll-thumb-hover": mix(theme.foreground, 32),
-			"--font-content": fontFamily(settings.contentFont, "inherit"),
-			"--font-code": fontFamily(settings.codeFont, '"JetBrains Mono", "UDEV Gothic", monospace'),
+			"--font-content": formatFontStack(settings.contentFont, "inherit"),
+			"--font-code": formatFontStack(settings.codeFont, '"JetBrains Mono", "UDEV Gothic", monospace'),
 			"--text-code": `${settings.codeSize}px`, "--text-reading": `${settings.uiSize + 1}px`,
 			"--text-control": `${settings.uiSize}px`, "--text-2xs": `${settings.uiSize - 2}px`,
 			"--text-xs": `${settings.uiSize - 1}px`, "--text-sm": `${settings.uiSize}px`,
@@ -122,9 +120,6 @@ export function ThemeAppearance() {
 		<button type="button" onClick={() => updateVariant(DEFAULT[selected])}>このテーマをリセット</button>
 		</>}
 		<label>コードのテーマ<Select aria-label="コードのテーマ" value={settings.codeTheme} onChange={(value) => update({ codeTheme: value as Appearance["codeTheme"] })}><option value="auto">画面に合わせる</option><option value="dark">ダーク</option><option value="light">ライト</option></Select></label>
-		<label>本文のフォント<input value={settings.contentFont} maxLength={200} placeholder="画面のフォントに合わせる" onChange={(event) => update({ contentFont: event.currentTarget.value })} /></label>
-		<label>コードのフォント<input value={settings.codeFont} maxLength={200} placeholder="JetBrains Mono" onChange={(event) => update({ codeFont: event.currentTarget.value })} /></label>
-		<div className="theme-size-grid"><label>画面の文字サイズ<input type="number" min="11" max="20" value={settings.uiSize} onChange={(event) => { const value = event.currentTarget.valueAsNumber; if (Number.isInteger(value) && value >= 11 && value <= 20) update({ uiSize: value }); }} /></label><label>コードの文字サイズ<input type="number" min="10" max="24" value={settings.codeSize} onChange={(event) => { const value = event.currentTarget.valueAsNumber; if (Number.isInteger(value) && value >= 10 && value <= 24) update({ codeSize: value }); }} /></label></div>
 		<label className="settings-toggle"><input type="checkbox" checked={settings.translucentSidebar} onChange={(event) => update({ translucentSidebar: event.currentTarget.checked })} /><span>サイドバーを半透明にする</span></label>
 		<p className="fine-print">変更はすぐに反映・保存され、Web版とデスクトップ版で共有されます。テーマ文字列はHasilan Code間で共有できます。</p>
 		{message && <p role="status">{message}</p>}

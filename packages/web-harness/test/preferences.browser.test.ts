@@ -454,8 +454,7 @@ it("boots the real UI after migration and restores text, attachments, background
 		.toContain("Meiryo");
 	await page.getByRole("button", { name: "設定", exact: true }).click();
 	await page.getByRole("tab", { name: "外観", exact: true }).click();
-	await page.getByRole("combobox", { name: "画面のフォント" }).click();
-	await page.getByRole("option", { name: "Arial", exact: true }).click();
+	await page.getByRole("combobox", { name: "画面のフォント" }).fill("Arial");
 	await expect
 		.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).fontFamily))
 		.toContain("Arial");

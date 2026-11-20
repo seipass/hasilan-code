@@ -1,0 +1,20 @@
+.font-appearance { display: grid; gap: 14px; }
+.font-appearance h3, .font-appearance p { margin: 0; }
+.font-appearance-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.font-appearance-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.font-field { display: grid; gap: 6px; }
+.font-field > label { display: grid; gap: 6px; }
+.font-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.font-presets button { min-height: 24px; padding: 2px 8px; font-size: var(--text-xs); border: 1px solid var(--border-subtle); background: transparent; color: var(--on-surface-secondary); }
+.font-presets button:hover { background: var(--surface-hover); color: var(--on-surface); }
+.font-presets button[aria-pressed="true"] { background: var(--selection-fill); border-color: var(--border-strong); color: var(--on-surface); }
+.font-size-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.font-size-control { display: grid; gap: 6px; }
+.font-size-row { display: flex; align-items: center; gap: 8px; }
+.font-size-row input[type="range"] { flex: 1; min-width: 0; }
+.font-size-row input[type="number"] { width: 68px; flex: none; }
+.font-preview { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-panel); }
+.font-preview-ui { font-size: var(--text-control); }
+.font-preview-content { font-family: var(--font-content, inherit); font-size: var(--text-reading); line-height: 1.5; }
+.font-preview-code { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--code-surface, var(--surface-sunken)); color: var(--code-text, var(--on-surface)); font-family: var(--font-code); font-size: var(--text-code); overflow-x: auto; }
+@media (max-width: 560px) { .font-size-grid { grid-template-columns: 1fr; } }
