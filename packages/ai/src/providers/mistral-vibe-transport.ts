@@ -6,12 +6,14 @@ export function normalizeMistralDelta(delta: Record<string, unknown>): void {
 	const unpack = (value: unknown): string => {
 		if (typeof value === "string") return value;
 		if (!Array.isArray(value)) throw new Error("Unsupported Mistral content block");
-		return value.map((block) => {
-			if (!block || typeof block !== "object" || block.type !== "text" || typeof block.text !== "string") {
-				throw new Error("Unsupported Mistral content block");
-			}
-			return block.text;
-		}).join("");
+		return value
+			.map((block) => {
+				if (!block || typeof block !== "object" || block.type !== "text" || typeof block.text !== "string") {
+					throw new Error("Unsupported Mistral content block");
+				}
+				return block.text;
+			})
+			.join("");
 	};
 	for (const block of delta.content) {
 		if (!block || typeof block !== "object") throw new Error("Unsupported Mistral streamed content block");
@@ -49,20 +51,22 @@ export function normalizeMistralStream(response: Response): Response {
 	};
 	const body = response.body
 		.pipeThrough(new TextDecoderStream())
-		.pipeThrough(new TransformStream<string, string>({
-			transform(chunk, controller) {
-				pending += chunk;
-				let index = pending.indexOf("\n");
-				while (index !== -1) {
-					controller.enqueue(`${normalizeLine(pending.slice(0, index).replace(/\r$/, ""))}\n`);
-					pending = pending.slice(index + 1);
-					index = pending.indexOf("\n");
-				}
-			},
-			flush(controller) {
-				if (pending) controller.enqueue(normalizeLine(pending));
-			},
-		}))
+		.pipeThrough(
+			new TransformStream<string, string>({
+				transform(chunk, controller) {
+					pending += chunk;
+					let index = pending.indexOf("\n");
+					while (index !== -1) {
+						controller.enqueue(`${normalizeLine(pending.slice(0, index).replace(/\r$/, ""))}\n`);
+						pending = pending.slice(index + 1);
+						index = pending.indexOf("\n");
+					}
+				},
+				flush(controller) {
+					if (pending) controller.enqueue(normalizeLine(pending));
+				},
+			}),
+		)
 		.pipeThrough(new TextEncoderStream());
 	const headers = new Headers(response.headers);
 	headers.delete("content-length");

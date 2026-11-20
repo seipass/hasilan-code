@@ -35,7 +35,9 @@ describe("Mistral Vibe provider", () => {
 		const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
 			const key = new Headers(init?.headers).get("authorization");
 			return Response.json({
-				data: [{ id: key === "Bearer key-one" ? "model-one" : "model-two", capabilities: { completion_chat: true } }],
+				data: [
+					{ id: key === "Bearer key-one" ? "model-one" : "model-two", capabilities: { completion_chat: true } },
+				],
 			});
 		});
 		const credentials = new InMemoryCredentialStore();
@@ -54,17 +56,28 @@ describe("Mistral Vibe provider", () => {
 	});
 
 	it("converts typed streaming content and preserves UTF-8 boundaries", async () => {
-		const event = { choices: [{ delta: { content: [
-			{ type: "thinking", thinking: [{ type: "text", text: "思考" }] },
-			{ type: "text", text: "回答" },
-		] } }] };
+		const event = {
+			choices: [
+				{
+					delta: {
+						content: [
+							{ type: "thinking", thinking: [{ type: "text", text: "思考" }] },
+							{ type: "text", text: "回答" },
+						],
+					},
+				},
+			],
+		};
 		const bytes = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\ndata: [DONE]\n\n`);
-		const response = new Response(new ReadableStream({
-			start(controller) {
-				for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
-				controller.close();
-			},
-		}), { headers: { "content-type": "text/event-stream" } });
+		const response = new Response(
+			new ReadableStream({
+				start(controller) {
+					for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
+					controller.close();
+				},
+			}),
+			{ headers: { "content-type": "text/event-stream" } },
+		);
 		const output = await normalizeMistralStream(response).text();
 		expect(output).toContain('"content":"回答"');
 		expect(output).toContain('"reasoning_content":"思考"');
@@ -78,7 +91,7 @@ describe("Mistral Vibe provider", () => {
 			const url = input instanceof Request ? input.url : String(input);
 			const authorization = new Headers(init?.headers).get("authorization");
 			const method = init?.method ?? "GET";
-			const body = typeof init?.body === "string" ? JSON.parse(init.body) as { model?: string } : {};
+			const body = typeof init?.body === "string" ? (JSON.parse(init.body) as { model?: string }) : {};
 			calls.push({ url, authorization, method, model: body.model });
 			if (url.endsWith("/models")) {
 				return Response.json({
@@ -87,21 +100,32 @@ describe("Mistral Vibe provider", () => {
 			}
 			if (url.endsWith("/chat/completions")) {
 				const events = [
-					{ id: "vibe-response", model: "test-vibe-model", choices: [{ index: 0, delta: { content: [
-						{ type: "text", text: "Vibe works" },
-					] }, finish_reason: null }] },
-					{ id: "vibe-response", model: "test-vibe-model", choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-						usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 } },
+					{
+						id: "vibe-response",
+						model: "test-vibe-model",
+						choices: [
+							{ index: 0, delta: { content: [{ type: "text", text: "Vibe works" }] }, finish_reason: null },
+						],
+					},
+					{
+						id: "vibe-response",
+						model: "test-vibe-model",
+						choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+						usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 },
+					},
 				];
-				return new Response(`${events.map((event) => `data: ${JSON.stringify(event)}`).join("\n\n")}\n\ndata: [DONE]\n\n`, {
-					headers: { "content-type": "text/event-stream" },
-				});
+				return new Response(
+					`${events.map((event) => `data: ${JSON.stringify(event)}`).join("\n\n")}\n\ndata: [DONE]\n\n`,
+					{
+						headers: { "content-type": "text/event-stream" },
+					},
+				);
 			}
 			throw new Error(`Unexpected endpoint: ${url}`);
 		};
 		const models = createModels({
 			authContext: {
-				env: async (name) => name === "MISTRAL_VIBE_API_KEY" ? key : undefined,
+				env: async (name) => (name === "MISTRAL_VIBE_API_KEY" ? key : undefined),
 				fileExists: async () => false,
 			},
 		});
@@ -116,24 +140,28 @@ describe("Mistral Vibe provider", () => {
 		});
 		expect(message.stopReason).toBe("stop");
 		expect(message.content).toEqual([{ type: "text", text: "Vibe works" }]);
-		expect(calls.some((call) =>
-			call.url === "https://api.mistral.ai/v1/chat/completions" &&
-			call.authorization === `Bearer ${key}` &&
-			call.model === "test-vibe-model",
-		)).toBe(true);
+		expect(
+			calls.some(
+				(call) =>
+					call.url === "https://api.mistral.ai/v1/chat/completions" &&
+					call.authorization === `Bearer ${key}` &&
+					call.model === "test-vibe-model",
+			),
+		).toBe(true);
 	});
 
 	it("hides the previous catalog after an AuthContext key rotation", async () => {
 		let key = "one";
 		const models = createModels({
 			authContext: {
-				env: async (name) => name === "MISTRAL_VIBE_API_KEY" ? key : undefined,
+				env: async (name) => (name === "MISTRAL_VIBE_API_KEY" ? key : undefined),
 				fileExists: async () => false,
 			},
 		});
-		const fetcher: typeof fetch = async () => Response.json({
-			data: [{ id: `model-${key}`, capabilities: { completion_chat: true } }],
-		});
+		const fetcher: typeof fetch = async () =>
+			Response.json({
+				data: [{ id: `model-${key}`, capabilities: { completion_chat: true } }],
+			});
 		models.setProvider(mistralVibeProvider(fetcher));
 		expect((await models.refresh({ providers: ["mistral-vibe"] })).errors.size).toBe(0);
 		expect((await models.getAvailable("mistral-vibe")).some((model) => model.id === "model-one")).toBe(true);
@@ -143,19 +171,20 @@ describe("Mistral Vibe provider", () => {
 		expect((await models.getAvailable("mistral-vibe")).some((model) => model.id === "model-two")).toBe(true);
 	});
 
-
 	it("retains a same-key AuthContext catalog and persisted cache when discovery fails", async () => {
 		const key = "stable-context-key";
 		let discoveryFails = false;
-		const fetcher = vi.fn(async () => discoveryFails
-			? new Response("Service unavailable", { status: 503 })
-			: Response.json({
-				data: [{ id: "known-model", capabilities: { completion_chat: true } }],
-			}));
+		const fetcher = vi.fn(async () =>
+			discoveryFails
+				? new Response("Service unavailable", { status: 503 })
+				: Response.json({
+						data: [{ id: "known-model", capabilities: { completion_chat: true } }],
+					}),
+		);
 		const store = new InMemoryModelsStore();
 		const models = createModels({
 			authContext: {
-				env: async (name) => name === "MISTRAL_VIBE_API_KEY" ? key : undefined,
+				env: async (name) => (name === "MISTRAL_VIBE_API_KEY" ? key : undefined),
 				fileExists: async () => false,
 			},
 			modelsStore: store,
@@ -194,7 +223,7 @@ describe("Mistral Vibe provider", () => {
 		const store = new InMemoryModelsStore();
 		const models = createModels({
 			authContext: {
-				env: async (name) => name === "MISTRAL_VIBE_API_KEY" ? currentKey : undefined,
+				env: async (name) => (name === "MISTRAL_VIBE_API_KEY" ? currentKey : undefined),
 				fileExists: async () => false,
 			},
 			modelsStore: store,
@@ -211,5 +240,4 @@ describe("Mistral Vibe provider", () => {
 		expect((await models.getAvailable("mistral-vibe")).some((model) => model.id === "first-model")).toBe(false);
 		expect(await store.read("mistral-vibe")).toBeUndefined();
 	});
-
 });

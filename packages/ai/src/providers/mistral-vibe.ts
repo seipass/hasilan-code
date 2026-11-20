@@ -23,9 +23,7 @@ function credentialKey(credential?: Credential): string | undefined {
 /** Mistral does not return pricing metadata. Zero here is a placeholder, not free inference. */
 export function mistralVibeModel(id: string, row: Record<string, unknown> = {}): Model<"openai-completions"> {
 	const capabilities =
-		row.capabilities && typeof row.capabilities === "object"
-			? (row.capabilities as Record<string, unknown>)
-			: {};
+		row.capabilities && typeof row.capabilities === "object" ? (row.capabilities as Record<string, unknown>) : {};
 	const reported = row.max_context_length;
 	const contextWindow =
 		typeof reported === "number" && Number.isSafeInteger(reported) && reported > 0 ? reported : 128_000;
@@ -65,7 +63,8 @@ export function parseMistralVibeCatalog(payload: unknown): Model<"openai-complet
 			!capabilities ||
 			typeof capabilities !== "object" ||
 			(capabilities as Record<string, unknown>).completion_chat !== true
-		) continue;
+		)
+			continue;
 		result.set(row.id, mistralVibeModel(row.id, row));
 	}
 	return [...result.values()];
@@ -87,14 +86,15 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 	const api = openAICompletionsApi();
 	const apiKeyAuth = envApiKeyAuth("Mistral Vibe API key", ["MISTRAL_VIBE_API_KEY"]);
 
-	const requestOptions = (model: Model<"openai-completions">, options: SimpleStreamOptions = {}): SimpleStreamOptions => {
+	const requestOptions = (
+		model: Model<"openai-completions">,
+		options: SimpleStreamOptions = {},
+	): SimpleStreamOptions => {
 		const key = options.apiKey?.trim();
 		if (!key) throw new Error("Missing Mistral Vibe API key");
 		if (model.baseUrl.replace(/\/$/, "") !== BASE_URL) throw new Error("Mistral Vibe endpoint override blocked");
-		if (
-			model.id !== FALLBACK_MODEL &&
-			(activeKey !== key || !catalog.some((candidate) => candidate.id === model.id))
-		) throw new Error("Model not found in the current Mistral Vibe key's catalog");
+		if (model.id !== FALLBACK_MODEL && (activeKey !== key || !catalog.some((candidate) => candidate.id === model.id)))
+			throw new Error("Model not found in the current Mistral Vibe key's catalog");
 		const transport = options.fetch ?? fetcher;
 		return {
 			...options,
@@ -144,7 +144,8 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 		models: [],
 		api: {
 			...api,
-			stream: (model, context, options) => api.stream(model, context, requestOptions(model as Model<"openai-completions">, options)),
+			stream: (model, context, options) =>
+				api.stream(model, context, requestOptions(model as Model<"openai-completions">, options)),
 			streamSimple: (model, context, options) =>
 				api.streamSimple(model, context, requestOptions(model as Model<"openai-completions">, options)),
 		},
@@ -156,9 +157,7 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 		filterModels: (models, credential) => {
 			// checkAuth resolves the effective key before getAvailable invokes this filter.
 			const key = lastResolvedKey ?? credentialKey(credential);
-			return key && activeKey === key
-				? models
-				: models.filter((model) => model.id === FALLBACK_MODEL);
+			return key && activeKey === key ? models : models.filter((model) => model.id === FALLBACK_MODEL);
 		},
 		async refreshModels(context) {
 			const key = credentialKey(context.credential);
@@ -173,8 +172,10 @@ export function mistralVibeProvider(fetcher: typeof fetch = fetch): Provider<"op
 					nextScope && context.stored?.etag === nextScope
 						? context.stored.models.filter(
 								(model): model is Model<"openai-completions"> =>
-									model.provider === ID && model.api === "openai-completions" &&
-									isModelType(model, "chat") && model.baseUrl === BASE_URL,
+									model.provider === ID &&
+									model.api === "openai-completions" &&
+									isModelType(model, "chat") &&
+									model.baseUrl === BASE_URL,
 							)
 						: [];
 				const result = await context.publish({
