@@ -32,7 +32,6 @@ import {
 	STORAGE_USAGE_ID,
 	standardTheme,
 	TERMINAL_ID,
-	WIDGET_FEEDS_ID,
 	WORKSPACE_FILES_ID,
 	WORKSPACE_UI_ID,
 } from "../shared/plugin-profile.ts";
@@ -52,7 +51,7 @@ import { serveWorkspaceImage } from "./image-content.ts";
 import { canvasPlugin } from "./plugins/canvas.ts";
 import { goalPlugin } from "./plugins/goal.ts";
 import { hyakkiPlugin } from "./plugins/hyakki.ts";
-import { accountUsagePlugin, githubDashboardPlugin, widgetFeedsPlugin } from "./plugins/integrations.ts";
+import { accountUsagePlugin, githubDashboardPlugin } from "./plugins/integrations.ts";
 import { pluginManager } from "./plugins/manager.ts";
 import { runtimeContextPlugin } from "./plugins/runtime-context.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
@@ -191,7 +190,6 @@ async function createHarness(
 			[WORKSPACE_FILES_ID, () => workspaceFilesPlugin(files)],
 			[TERMINAL_ID, () => terminalPlugin((id) => files.getWorkspaceRoot(id))],
 			[GITHUB_DASHBOARD_ID, githubDashboardPlugin],
-			[WIDGET_FEEDS_ID, widgetFeedsPlugin],
 			[ACCOUNT_USAGE_ID, () => accountUsagePlugin(() => modelRuntime)],
 			[
 				"canvas",

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, expect, it } from "vitest";
-import { controlMusic, registerMusic, useMusic } from "../src/client/widgets/music.ts";
+import { controlMusic, registerMusic, useMusic } from "../src/client/files/music.ts";
 
 class AudioFixture extends EventTarget {
 	paused = true;

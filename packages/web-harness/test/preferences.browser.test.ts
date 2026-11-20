@@ -23,7 +23,6 @@ import {
 	SESSION_SEARCH_ID,
 	standardTheme,
 	TERMINAL_ID,
-	WIDGET_FEEDS_ID,
 	WORKSPACE_FILES_ID,
 } from "../src/shared/plugin-profile.ts";
 
@@ -96,8 +95,6 @@ async function start(activeIds = ["canvas"]) {
 					models: [{ provider: "fixture", id: "fixture", name: "Fixture model", contextWindow: 10000 }],
 					providers: [{ id: "fixture", name: "Fixture", configured: true }],
 				});
-			else if (url.pathname === "/api/widgets/earthquakes" && activeIds.includes(WIDGET_FEEDS_ID))
-				sendJson(response, 200, { notices: [], fetchedAt: Date.now() });
 			else if (url.pathname === "/api/sessions" || url.pathname === "/api/terminals") sendJson(response, 200, []);
 			else return false;
 			return true;
@@ -181,7 +178,6 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		"workspace-files",
 		"terminal",
 		"github-dashboard",
-		"widget-feeds",
 		"account-usage",
 		"canvas",
 	];
@@ -285,7 +281,6 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				? [
 						"canvas",
 						"notes",
-						WIDGET_FEEDS_ID,
 						SESSION_SEARCH_ID,
 						SESSION_IMPORT_ID,
 						SESSION_ARCHIVE_ID,
@@ -311,12 +306,10 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				.getByRole("navigation", { name: "プラグイン", exact: true })
 				.getByRole("button", { name: "設計キャンバス", exact: true });
 			const canvas = page.getByRole("region", { name: "プロジェクト設計キャンバス" });
-			const earthquake = page.getByRole("button", { name: "地震情報を開く" });
 			const search = page.getByRole("textbox", { name: "会話を検索" });
 			const importSession = page.getByRole("button", { name: "セッションを引き継ぐ" });
 			const fileTree = page.getByRole("button", { name: "ファイルツリー", exact: true });
 			if (enabled) {
-				await earthquake.waitFor();
 				await search.waitFor();
 				await importSession.waitFor();
 				await fileTree.waitFor();
@@ -356,7 +349,6 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				expect(await option.count()).toBe(0);
 				expect(await canvas.count()).toBe(0);
 				expect(await panelButton.count()).toBe(0);
-				expect(await earthquake.count()).toBe(0);
 				expect(await search.count()).toBe(0);
 				expect(await importSession.count()).toBe(0);
 				expect(await fileTree.count()).toBe(0);

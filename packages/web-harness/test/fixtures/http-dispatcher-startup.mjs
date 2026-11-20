@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import * as undici from "undici";
 import { startHarness } from "../../src/server/main.ts";
-import { WidgetData } from "../../src/server/widget-data.ts";
 
 const root = await mkdtemp(join(tmpdir(), "hasilan-http-startup-"));
 process.env.HASILAN_CODE_AGENT_DIR = join(root, "agent");
@@ -31,8 +30,7 @@ try {
 	await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const address = server.address();
 	assert(address && typeof address !== "string");
-	const widgets = new WidgetData();
-	await assert.rejects(widgets.read(new URL(`http://127.0.0.1:${address.port}/`), 0, (value) => value));
+	await assert.rejects(fetch(new URL(`http://127.0.0.1:${address.port}/`)).then((response) => response.text()));
 	await setTimeout(100);
 } finally {
 	await harness?.shutdown();

@@ -93,12 +93,6 @@
 	.mobile-sheet:not(.is-top)::backdrop {
 		transition: opacity 200ms ease, display 200ms allow-discrete, overlay 200ms allow-discrete !important;
 	}
-	.mobile-sheet.is-top.widget-top-sheet {
-		transition: display 280ms allow-discrete, overlay 280ms allow-discrete !important;
-	}
-	.mobile-sheet.is-top.widget-top-sheet::backdrop {
-		transition: opacity 160ms ease, display 280ms allow-discrete, overlay 280ms allow-discrete !important;
-	}
 	@supports (interpolate-size: allow-keywords) {
 		.conversation .context-entry::details-content {
 			transition: height 240ms cubic-bezier(.4, 0, .2, 1), opacity 160ms ease, content-visibility 240ms allow-discrete !important;

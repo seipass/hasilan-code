@@ -5,15 +5,13 @@ pre { border-radius: 10px; }
 fieldset { border-radius: 12px; }
 
 :is(.workspace-accordion > summary, .files-tree-entry, .usage-popover-trigger) { border-radius: 9px; }
-:is(.new-conversation, .session-import-trigger, .composer-attachment, .session-context-menu, .widget-chip,
+:is(.new-conversation, .session-import-trigger, .composer-attachment, .session-context-menu,
 	.settings-provider-section, .settings-key-entry, .oauth-login, .canvas-properties > div, .team-graph-node) { border-radius: 12px; }
 :is(.tool-card, .context-entry, .composer-notice, .command-picker-option, .settings-next-action, .settings-notice,
 	.model-picker-empty, .usage-panel-body, .canvas-message) { border-radius: 10px; }
 :is(.command-picker, .usage-popover-content, .goal-panel, .team-overview, .team-focus, .team-empty,
-	.computer-activity, .home-background-preview, .account-usage-loading, .files-audio-artwork, .canvas-node,
-	.widget-quake-row, .widget-quake-tsunami) { border-radius: 14px; }
-:is(.composer-popover, .session-action-dialog, .widget-quake-latest, .team-graph-node.is-root,
-	.widget-news-list a) { border-radius: 16px; }
+	.computer-activity, .home-background-preview, .account-usage-loading, .files-audio-artwork, .canvas-node) { border-radius: 14px; }
+:is(.composer-popover, .session-action-dialog, .team-graph-node.is-root) { border-radius: 16px; }
 .session-import-dialog { border-radius: 16px; }
 .role-user .message-content { border-radius: 17px; }
 :is(.composer, .settings-dialog) { border-radius: 20px; }
@@ -25,7 +23,6 @@ fieldset { border-radius: 12px; }
 .canvas-viewport { border-radius: 0 0 12px 12px; }
 .mobile-sheet { border-radius: 20px 20px 0 0; }
 .mobile-sheet.is-right { border-radius: 18px 0 0 18px; }
-.mobile-sheet.is-top.widget-top-sheet { border-radius: 0 0 18px 18px; }
 
 @media (max-width: 600px) {
 	.session-import-dialog { border-radius: 0; }

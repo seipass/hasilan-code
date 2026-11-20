@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
 import { SESSION_IMPORT_ID, SESSION_SEARCH_ID, TERMINAL_ID, WORKSPACE_FILES_ID } from "../shared/plugin-profile.ts";
-import { aggregateUsage } from "../shared/usage.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
 import { useAttention } from "./attention.ts";
@@ -35,7 +34,6 @@ import { useChannel } from "./subscriptions.ts";
 import { COMPOSER_COMMANDS, parseComposerCommand } from "./slash-command.ts";
 import { RUN_LABELS, TeamPane } from "./TeamPane.tsx";
 import { ToolInspector } from "./ToolInspector.tsx";
-import { WidgetSpace } from "./widgets/WidgetSpace.tsx";
 import { WorkOverview } from "./WorkOverview.tsx";
 import { workspaceLabel } from "./workspace-label.ts";
 import { sendWorkspacePrompt } from "./workspace-send.ts";
@@ -150,7 +148,6 @@ export function App() {
 	const team = workspaceChannel.data?.teams;
 	const selectedAgent = team?.agents.find((agent) => agent.sessionId === sessionId);
 	const workspaceTeam = team?.teams.find((entry) => entry.scope === "workspace");
-	const widgetUsage = sessionId ? session?.usage ?? [] : aggregateUsage(summaries.filter((entry) => entry.workspaceId === workspaceId).map((entry) => entry.usage ?? []));
 	const runningCount = summaries.filter((entry) => entry.workspaceId === workspaceId && !!entry.currentRun).length;
 	const roots = summaries.filter((entry) => !entry.parentSessionId);
 	// Sidebar search matches titles and workspace paths without scanning message bodies on each keystroke.
@@ -614,7 +611,7 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}><Icon name="settings" size="control" />設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions has-widgets"><WidgetSpace visible usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button>{filesEnabled && <button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button>}<button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions"><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button>{filesEnabled && <button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button>}<button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
 			<div className="home-backdrop-anchor"><HomeBackdrop background={homeBackgroundVisible ? background : undefined} /></div>
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>

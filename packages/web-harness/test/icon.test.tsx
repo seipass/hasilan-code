@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import { ICON_SIZES, Icon } from "../src/client/Icon.tsx";
-import { WidgetIcon } from "../src/client/widgets/WidgetIcon.tsx";
 
 // Controls that show only an icon need a stable, font-independent shape and no extra accessible text.
 it("renders stroke icons as hidden decoration", () => {
@@ -25,14 +24,5 @@ it("uses one of the shared sizes", () => {
 		const markup = renderToStaticMarkup(<Icon name="plus" size={size} />);
 		expect(markup).toContain(`width="${ICON_SIZES[size]}"`);
 		expect(markup).toContain(`height="${ICON_SIZES[size]}"`);
-	}
-});
-
-// Regression: WidgetIcon is a raw <svg>, so removing its CSS size made it render at viewBox scale (up to 150px).
-it("gives the widget icons explicit dimensions", () => {
-	for (const kind of ["weather", "news", "music", "notes", "edit"] as const) {
-		const markup = renderToStaticMarkup(<WidgetIcon kind={kind} />);
-		expect(markup).toContain('width="18"');
-		expect(markup).toContain('height="18"');
 	}
 });

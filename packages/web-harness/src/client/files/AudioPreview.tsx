@@ -1,7 +1,7 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { AudioMetadata } from "../../shared/media.ts";
 import { mediaReady, Presence } from "../Motion.tsx";
-import { readMusicPreferences, registerMusic } from "../widgets/music.ts";
+import { readMusicPreferences, registerMusic } from "./music.ts";
 
 function timeLabel(seconds: number) {
 	const value = Math.max(0, Math.floor(seconds));

@@ -108,7 +108,7 @@ exports.theme = {
 
 モデル接続を追加するには、Pi の `Provider` を配列にして `providers` としてエクスポートする。組み込みの `model-providers` は標準の接続先をまとめて提供する。別のプラグインで同じプロバイダー ID を登録すると、その実装が標準の接続先に代わる。複数のプラグインから同じ ID を登録した場合は、先に有効になったプラグインを使う。`"model-providers": false` で標準の接続先を外せる。保存済みの認証情報と `models.json` は引き続き Pi が扱う。
 
-GitHub の活動と Pull request は `github-dashboard`、天気・地域検索・地震・ニュースの取得は `widget-feeds`、接続中のアカウントの使用量は `account-usage` が提供する。無効にすると、該当する API と画面内の表示が無効になる。既存の画面を使いながら接続先だけ替えるには、同じ ID で登録し、既存の API に応答する `handleApi` を実装する。
+GitHub の活動と Pull request は `github-dashboard`、接続中のアカウントの使用量は `account-usage` が提供する。無効にすると、該当する API と画面内の表示が無効になる。既存の画面を使いながら接続先だけ替えるには、同じ ID で登録し、既存の API に応答する `handleApi` を実装する。
 
 会話の保存は `session-storage` が担当する。標準構成では従来どおり `web-harness/state.json`、`web-harness/sessions`、`web-harness/import-assets` を使う。保存プラグインを外すと、会話は起動中だけ保持される。
 

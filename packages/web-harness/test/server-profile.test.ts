@@ -94,7 +94,6 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"workspace-files",
 				"terminal",
 				"github-dashboard",
-				"widget-feeds",
 				"account-usage",
 				"canvas",
 			],
@@ -110,7 +109,6 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 		expect((await (await api("/api/models")).json()).providers).toContainEqual(
 			expect.objectContaining({ id: "openrouter" }),
 		);
-		expect((await api("/api/widgets/places?q=a")).status).toBe(400);
 		expect(await (await api("/api/sessions/search?q=missing")).json()).toEqual([]);
 		expect(await (await api("/api/session-archive")).json()).toEqual([]);
 		expect((await api("/api/session-imports/sources")).status).toBe(200);
@@ -154,7 +152,6 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"workspace-files",
 				"terminal",
 				"github-dashboard",
-				"widget-feeds",
 				"account-usage",
 			],
 			panels: [],
@@ -258,7 +255,6 @@ exports.providers = [{
 		for (const route of [
 			"/api/home/github",
 			"/api/account-usage",
-			"/api/widgets/places?q=a",
 			"/api/sessions/search?q=missing",
 			"/api/session-imports/sources",
 			"/api/session-archive",

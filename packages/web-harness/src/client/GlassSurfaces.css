@@ -33,7 +33,7 @@
 	backdrop-filter: var(--glass-filter);
 }
 .command-picker, .model-popover, .usage-popover-content, .quick-open, .session-context-menu, .detail-context-menu,
-.settings-dialog, .mobile-sheet:has(.mobile-model-menu), .mobile-sheet.is-top.widget-top-sheet {
+.settings-dialog, .mobile-sheet:has(.mobile-model-menu) {
 	background: var(--glass-popup);
 	backdrop-filter: var(--glass-filter);
 }

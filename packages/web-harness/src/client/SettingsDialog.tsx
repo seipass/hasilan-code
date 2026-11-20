@@ -6,7 +6,6 @@ import { SessionArchivePanel } from "./SessionArchivePanel.tsx";
 import { AccountUsagePanel } from "./AccountUsagePanel.tsx";
 import { api, command, errorMessage } from "./api.ts";
 import { HomeAppearance } from "./HomeAppearance.tsx";
-import { WidgetAppearance } from "./widgets/WidgetSpace.tsx";
 import { KeybindingSettings } from "./KeybindingSettings.tsx";
 import { usePreferenceState } from "./preferences.ts";
 import { NotificationPreference } from "./NotificationPreference.tsx";
@@ -218,7 +217,6 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			</section></Presence>}
 			<Presence show={tab === "appearance"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
 				<HomeAppearance background={homeBackground} onChange={onHomeBackgroundChange} />
-				<WidgetAppearance />
 				<NotificationPreference />
 				<KeybindingSettings />
 			</section></Presence>

@@ -81,13 +81,13 @@
 .settings-content, .settings-content label, .settings-tabs button { font-size: var(--text-control); line-height: 18px; letter-spacing: -.005em; }
 .settings-content > h3 { font-size: 24px; line-height: 32px; }
 .settings-content h4 { font-size: 15px; line-height: 22px; }
-.model-picker-option strong, .widget-chip strong { font-weight: 400; }
+.model-picker-option strong { font-weight: 400; }
 .model-picker-option[aria-selected="true"] strong, .session-button.selected .session-title { font-weight: 600; }
-.history-heading, .model-group-heading, .widget-chip-label, .tool-meta, .fine-print, .revision { font-size: var(--text-xs); line-height: 16px; }
+.history-heading, .model-group-heading, .tool-meta, .fine-print, .revision { font-size: var(--text-xs); line-height: 16px; }
 .workspace-accordion > summary, .session-button, .new-conversation, .sidebar-bottom button,
 .page-title, .quiet-button, .detail-tab > [role="tab"], .files-tree-entry,
 .model-picker-option, .model-picker-option strong, .command-picker-title,
-.settings-content :is(input, select, textarea, button), .widget-chip strong { font-size: var(--text-control); line-height: 18px; letter-spacing: -.005em; }
+.settings-content :is(input, select, textarea, button) { font-size: var(--text-control); line-height: 18px; letter-spacing: -.005em; }
 .model-picker-option > span, .command-picker-description, .tool-result-note { font-size: var(--text-xs); line-height: 16px; }
 .tool-body { font-size: var(--text-control); line-height: 18px; }
 .team-run-task, .team-graph-node-name { font-size: var(--text-control); line-height: 18px; }
@@ -153,7 +153,7 @@
 .page-title { color: var(--on-surface-secondary); }
 .quiet-button { min-height: 28px; padding: 5px 8px; border-radius: 6px; }
 .topbar .detail-toggle { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; }
-:is(.sidebar-toggle, .topbar .detail-toggle, .topbar .widget-chip, .topbar .widget-edit, .detail-toolbar .detail-panel-icon) > svg {
+:is(.sidebar-toggle, .topbar .detail-toggle, .detail-toolbar .detail-panel-icon) > svg {
 	width: var(--chrome-icon-size);
 	height: var(--chrome-icon-size);
 	stroke-width: var(--chrome-icon-stroke);
@@ -323,9 +323,6 @@ html body .back-to-bottom { display: grid; place-items: center; width: 32px; hei
 .team-overview, .team-focus, .team-graph-controls { border-color: var(--border); border-radius: 10px; }
 .team-graph-node { box-shadow: none; }
 .team-view-switch button[aria-pressed="true"] { background: var(--surface-hover); border-color: transparent; }
-.widget-chip { border-radius: 7px; }
-.widget-chip > svg { color: var(--on-surface-muted); }
-.widget-chip[aria-expanded="true"] { background: var(--selection-fill); border-color: transparent; }
 
 @media (pointer: coarse) {
 	.sidebar-conversation-actions { grid-template-columns: minmax(0, 1fr) 44px; }
