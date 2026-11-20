@@ -22,9 +22,9 @@ export function saveDetailTabs(layout: DetailTabs): string {
 	return JSON.stringify(saved);
 }
 
-export function restoreDetailTabs(raw: string | null, terminals: TerminalSummary[]): DetailTabs {
+export function restoreDetailTabs(raw: string | null, terminals: TerminalSummary[], filesEnabled = true): DetailTabs {
 	const initial: DetailTabs = {
-		tabs: [{ id: "initial-files", kind: "file", pane: 0 }],
+		tabs: [{ id: "initial-files", kind: filesEnabled ? "file" : "new", pane: 0 }],
 		selected: ["initial-files", undefined],
 		focused: 0,
 		mode: "single",
@@ -39,6 +39,7 @@ export function restoreDetailTabs(raw: string | null, terminals: TerminalSummary
 	const restoredTerminalIds = new Set<string>();
 	if (Check(savedDetailTabsSchema, parsed) && new Set(parsed.tabs.map((tab) => tab.id)).size === parsed.tabs.length) {
 		const tabs: DetailTab[] = parsed.tabs.flatMap((tab): DetailTab[] => {
+			if (tab.kind === "file" && !filesEnabled) return [];
 			if (tab.kind !== "terminal") return [tab];
 			if (restoredTerminalIds.has(tab.terminalId)) return [];
 			restoredTerminalIds.add(tab.terminalId);

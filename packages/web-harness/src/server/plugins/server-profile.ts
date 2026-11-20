@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Provider } from "@hasilan-code/pi-ai";
 import type { ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { Check } from "typebox/value";
+import type { WebSocket } from "ws";
 import {
 	type ExternalPanelEntry,
 	type PluginChoice,
@@ -27,6 +28,8 @@ export type PluginApi = (
 	parts: readonly string[],
 ) => boolean | Promise<boolean>;
 
+export type PluginWebSocketHandler = (socket: WebSocket, request: IncomingMessage) => void;
+
 export interface ServerPlugin {
 	readonly apiVersion: 1;
 	readonly requires?: readonly string[];
@@ -35,6 +38,8 @@ export interface ServerPlugin {
 	readonly providers?: readonly Provider[];
 	readonly sessionStorage?: SessionStorage;
 	readonly handleApi?: PluginApi;
+	readonly webSocket?: (url: URL) => PluginWebSocketHandler | undefined;
+	readonly runningTerminals?: () => number;
 	readonly panel?: { readonly title: string; readonly script: string; readonly scope?: "application" };
 	readonly bundledApplication?: true;
 	readonly bundledModelProviders?: true;
@@ -109,6 +114,8 @@ export async function loadServerProfile(
 				("tools" in plugin && typeof plugin.tools !== "function") ||
 				("context" in plugin && typeof plugin.context !== "function") ||
 				("handleApi" in plugin && typeof plugin.handleApi !== "function") ||
+				("webSocket" in plugin && typeof plugin.webSocket !== "function") ||
+				("runningTerminals" in plugin && typeof plugin.runningTerminals !== "function") ||
 				("closeSession" in plugin && typeof plugin.closeSession !== "function") ||
 				("close" in plugin && typeof plugin.close !== "function") ||
 				("bundledApplication" in plugin && (modulePath || plugin.bundledApplication !== true)) ||
@@ -119,6 +126,7 @@ export async function loadServerProfile(
 					"providers" in plugin ||
 					"sessionStorage" in plugin ||
 					"handleApi" in plugin ||
+					"webSocket" in plugin ||
 					"panel" in plugin ||
 					"theme" in plugin ||
 					"bundledApplication" in plugin ||
@@ -330,6 +338,35 @@ export async function loadServerProfile(
 		toolsForSession,
 		contextForSession,
 		handleApi,
+		webSocketHandler(url: URL) {
+			for (const [id, plugin] of active) {
+				try {
+					const handler = plugin.webSocket?.(url);
+					if (handler === undefined) continue;
+					if (typeof handler !== "function") throw new Error("invalid WebSocket handler");
+					return handler;
+				} catch (error) {
+					report(
+						`Plugin ${id} could not route WebSocket: ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+			}
+		},
+		runningTerminals() {
+			let total = 0;
+			for (const [id, plugin] of active) {
+				try {
+					const count = plugin.runningTerminals?.() ?? 0;
+					if (!Number.isSafeInteger(count) || count < 0) throw new Error("invalid terminal count");
+					total += count;
+				} catch (error) {
+					report(
+						`Plugin ${id} could not report terminal activity: ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+			}
+			return total;
+		},
 		closeSession: (sessionId: string) => dispose((plugin) => plugin.closeSession?.(sessionId)),
 		close: () => dispose((plugin) => plugin.close?.()),
 		async panelScript(id: string) {

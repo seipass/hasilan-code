@@ -91,7 +91,7 @@ hasilan-code
 
 #### Linux での事前準備
 
-Linux 向けの端末制御ネイティブモジュール（`node-pty`）はパッケージに同梱されていないため、初回起動前にローカルビルドが必要です。C++ コンパイラ、make、Python を用意した上で、`hasilan-code setup --build-pty` を実行してください。
+Linux でターミナルを使うには、端末制御用の `node-pty` をローカルでビルドします。C++ コンパイラ、make、Python を用意した上で、`hasilan-code setup --build-pty` を実行してください。
 
 Debian / Ubuntu での準備例:
 

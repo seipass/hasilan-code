@@ -17,7 +17,6 @@ import {
 	sessionCreateSchema,
 	sessionRenameSchema,
 	teamMessageSchema,
-	terminalCreateSchema,
 	thinkingSchema,
 	workspaceCreateSchema,
 	workspacePickerSchema,
@@ -32,7 +31,9 @@ import {
 	SESSION_SEARCH_ID,
 	STORAGE_USAGE_ID,
 	standardTheme,
+	TERMINAL_ID,
 	WIDGET_FEEDS_ID,
+	WORKSPACE_FILES_ID,
 	WORKSPACE_UI_ID,
 } from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
@@ -44,12 +45,10 @@ import { browserAdjustmentSchema, suggestBrowserAdjustments } from "./browser-ad
 import { CLI_HELP, type CliOptions, openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
 import { EventHub } from "./events.ts";
-import { fileEditSchema, readEditableFile, saveEditableFile } from "./file-editor.ts";
-import { fileView } from "./file-view.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
 import { gitReview } from "./git-review.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
-import { mediaView, serveMedia } from "./media.ts";
+import { serveWorkspaceImage } from "./image-content.ts";
 import { canvasPlugin } from "./plugins/canvas.ts";
 import { goalPlugin } from "./plugins/goal.ts";
 import { hyakkiPlugin } from "./plugins/hyakki.ts";
@@ -65,21 +64,22 @@ import {
 	storageUsagePlugin,
 } from "./plugins/session-history.ts";
 import { fileSessionStorage } from "./plugins/session-storage.ts";
+import { terminalPlugin } from "./plugins/terminal.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
+import { workspaceFilesPlugin } from "./plugins/workspace-files.ts";
 import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts";
 import { acquireProfile } from "./profile-lock.ts";
 import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
 import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./settings.ts";
 import { TeamManager } from "./team-manager.ts";
-import { TerminalManager } from "./terminal-manager.ts";
 import { textTransformSchema, transformText } from "./text-transform.ts";
 import { PythonDesktop } from "./tools/computer/backend.ts";
 import { ComputerManager } from "./tools/computer/index.ts";
 import { JevComputer } from "./tools/computer/jev.ts";
 import { LazyBrowserManager } from "./tools/lazy-browser.ts";
 import { UiPreferencesStore } from "./ui-preferences.ts";
-import { imageMime, WorkspaceFiles } from "./workspace-files.ts";
+import { WorkspaceFiles } from "./workspace-files.ts";
 import { WorkspaceRouter } from "./workspace-router.ts";
 
 export interface HarnessHooks {
@@ -188,6 +188,8 @@ async function createHarness(
 			],
 			[SESSION_ARCHIVE_ID, () => sessionArchivePlugin((): SessionRegistry => registry)],
 			[STORAGE_USAGE_ID, () => storageUsagePlugin(agentDir, (): SessionRegistry => registry)],
+			[WORKSPACE_FILES_ID, () => workspaceFilesPlugin(files)],
+			[TERMINAL_ID, () => terminalPlugin((id) => files.getWorkspaceRoot(id))],
 			[GITHUB_DASHBOARD_ID, githubDashboardPlugin],
 			[WIDGET_FEEDS_ID, widgetFeedsPlugin],
 			[ACCOUNT_USAGE_ID, () => accountUsagePlugin(() => modelRuntime)],
@@ -252,7 +254,6 @@ async function createHarness(
 	await teams.initialize();
 	await registry.addWorkspace(cwd);
 	const workspaceRouter = new WorkspaceRouter(files, modelRuntime, () => settings.get().jev.model, registry);
-	const terminals = new TerminalManager({ getWorkspaceRoot: (id) => files.getWorkspaceRoot(id) });
 	events = new EventHub(
 		(channel, id) =>
 			channel === "session"
@@ -295,13 +296,13 @@ async function createHarness(
 		development: options.development,
 		staticDir: hooks.staticDir ?? fileURLToPath(new URL("../client/", import.meta.url)),
 		artifacts,
-		acceptWebSocket: (url) =>
-			url.pathname === "/api/events" || /^\/api\/terminals\/[^/]+\/events$/.test(url.pathname),
-		handleWebSocket: (socket, _request, url) => {
+		acceptWebSocket: (url) => !shuttingDown && (url.pathname === "/api/events" || !!plugins.webSocketHandler(url)),
+		handleWebSocket: (socket, request, url) => {
 			if (url.pathname === "/api/events") hub.attach(socket);
 			else {
-				const id = decodeURIComponent(url.pathname.split("/")[3]);
-				void terminals.attach(id, socket).catch(() => socket.close(1008, "Terminal unavailable"));
+				const handle = plugins.webSocketHandler(url);
+				if (handle) handle(socket, request);
+				else socket.close(1008, "WebSocket endpoint unavailable");
 			}
 		},
 		handleApi: async (request, response, url) => {
@@ -516,7 +517,6 @@ async function createHarness(
 				}
 				if (parts[1] === "workspaces" && parts[2]) {
 					const id = parts[2];
-					const path = url.searchParams.get("path") ?? "";
 					if (parts[3] === "agents" && parts[4] && parts.length === 5 && method === "PATCH") {
 						const { responsibility } = await readJson(request, responsibilitySchema);
 						const team = teams.snapshot(id).teams.find((entry) => entry.scope === "workspace");
@@ -524,61 +524,20 @@ async function createHarness(
 						if (!root) throw new HttpError(404, "Workspace team not found");
 						return reply(await teams.describe(root.sessionId, parts[4], responsibility));
 					}
-					if (parts[3] === "files" && method === "GET") return reply(await files.list(id, path));
-					if (parts[3] === "file-search" && method === "GET") {
-						const query = url.searchParams.get("q") ?? "";
-						if (query.length > 200) throw new HttpError(400, "Search text is too long");
-						return reply(
-							await files.search(id, query, Math.min(500, Number(url.searchParams.get("limit") ?? 200) || 200)),
-						);
-					}
-					if (parts[3] === "file-edit" && parts.length === 4) {
-						if (method === "GET") return reply(await readEditableFile(files, id, path));
-						if (method === "PUT") {
-							const { revision, text } = await readJson(request, fileEditSchema, 12 * 1024 * 1024);
-							return reply(await saveEditableFile(files, id, path, revision, text));
+					if (parts[3] === "file-content" && (method === "GET" || method === "HEAD")) {
+						const path = url.searchParams.get("path") ?? "";
+						const revision = url.searchParams.get("revision");
+						// Existing chat projections use this URL for uploaded images.
+						const attachment = /^\.hasilan-code\/attachments\/([0-9a-f]{64})-[^/\\]+$/.exec(path);
+						if (
+							!plugins.profile.activeIds.includes(WORKSPACE_FILES_ID) &&
+							attachment &&
+							attachment[1] === revision
+						) {
+							await serveWorkspaceImage(files, id, path, revision, request, response);
+							return true;
 						}
 					}
-					if (parts[3] === "file" && method === "GET")
-						return reply(
-							(await mediaView(files, id, path)) ??
-								fileView(
-									await files.read(id, path),
-									Number(url.searchParams.get("offset") ?? 1),
-									Number(url.searchParams.get("limit") ?? 200),
-								),
-						);
-					if (parts[3] === "file-content" && (method === "GET" || method === "HEAD")) {
-						if (await serveMedia(files, id, path, url.searchParams.get("revision"), request, response))
-							return true;
-						const snapshot = await files.read(id, path);
-						if (snapshot.revision !== url.searchParams.get("revision"))
-							throw new HttpError(409, "File revision changed; refresh the viewer");
-						const mime = imageMime(snapshot.bytes);
-						if (!mime || mime === "image/bmp" || snapshot.bytes.length > 10 * 1024 * 1024)
-							throw new HttpError(415, "File is not a supported image");
-						response.writeHead(200, {
-							"Content-Type": mime,
-							"Content-Length": snapshot.bytes.length,
-							"X-Content-Type-Options": "nosniff",
-							"Cache-Control": "private, no-store",
-						});
-						response.end(method === "HEAD" ? undefined : snapshot.bytes);
-						return true;
-					}
-				}
-				if (url.pathname === "/api/terminals") {
-					if (method === "GET") {
-						const id = url.searchParams.get("workspaceId");
-						if (!id) throw new HttpError(400, "workspaceId is required");
-						return reply(terminals.list(id));
-					}
-					if (method === "POST")
-						return reply(await terminals.create(await readJson(request, terminalCreateSchema)), 201);
-				}
-				if (parts[1] === "terminals" && parts[2] && method === "DELETE") {
-					await terminals.close(parts[2]);
-					return reply({ closed: true });
 				}
 				return await plugins.handleApi(request, response, url, parts);
 			} catch (error) {
@@ -599,12 +558,7 @@ async function createHarness(
 		const owners = await Promise.allSettled([authLogin.close(), teams.close()]);
 		const [registryResult] = await Promise.allSettled([registry.close()]);
 		await plugins.close();
-		const results = await Promise.allSettled([
-			browser.close(),
-			computer.close(),
-			terminals.shutdown(),
-			uiPreferences.close(),
-		]);
+		const results = await Promise.allSettled([browser.close(), computer.close(), uiPreferences.close()]);
 		hub.close();
 		artifacts.close();
 		await host.close();
@@ -617,13 +571,7 @@ async function createHarness(
 		activity: () => ({
 			runs: registry.list().filter((session) => session.currentRun).length,
 			queued: registry.list().reduce((count, session) => count + session.pendingInput.length, 0),
-			terminals: registry
-				.listWorkspaces()
-				.reduce(
-					(count, workspace) =>
-						count + terminals.list(workspace.id).filter((terminal) => terminal.status === "running").length,
-					0,
-				),
+			terminals: plugins.runningTerminals(),
 		}),
 	};
 }

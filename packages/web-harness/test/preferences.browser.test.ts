@@ -22,7 +22,9 @@ import {
 	SESSION_IMPORT_ID,
 	SESSION_SEARCH_ID,
 	standardTheme,
+	TERMINAL_ID,
 	WIDGET_FEEDS_ID,
+	WORKSPACE_FILES_ID,
 } from "../src/shared/plugin-profile.ts";
 
 let browser: Browser;
@@ -176,6 +178,8 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 		"session-import",
 		"session-archive",
 		"storage-usage",
+		"workspace-files",
+		"terminal",
 		"github-dashboard",
 		"widget-feeds",
 		"account-usage",
@@ -277,7 +281,18 @@ it("runs Pi with a custom application and tool while every built-in plugin is di
 it("opens built-in and external panels from the sidebar and preserves composer navigation", async () => {
 	for (const enabled of [true, false]) {
 		const address = await start(
-			enabled ? ["canvas", "notes", WIDGET_FEEDS_ID, SESSION_SEARCH_ID, SESSION_IMPORT_ID, SESSION_ARCHIVE_ID] : [],
+			enabled
+				? [
+						"canvas",
+						"notes",
+						WIDGET_FEEDS_ID,
+						SESSION_SEARCH_ID,
+						SESSION_IMPORT_ID,
+						SESSION_ARCHIVE_ID,
+						WORKSPACE_FILES_ID,
+						TERMINAL_ID,
+					]
+				: [],
 		);
 		const page = await browser.newPage({ reducedMotion: "reduce" });
 		page.setDefaultTimeout(5_000);
@@ -299,10 +314,12 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 			const earthquake = page.getByRole("button", { name: "地震情報を開く" });
 			const search = page.getByRole("textbox", { name: "会話を検索" });
 			const importSession = page.getByRole("button", { name: "セッションを引き継ぐ" });
+			const fileTree = page.getByRole("button", { name: "ファイルツリー", exact: true });
 			if (enabled) {
 				await earthquake.waitFor();
 				await search.waitFor();
 				await importSession.waitFor();
+				await fileTree.waitFor();
 				await panelButton.waitFor();
 				expect(
 					await panelButton.evaluate((button) => button.parentElement?.previousElementSibling?.className),
@@ -342,6 +359,7 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				expect(await earthquake.count()).toBe(0);
 				expect(await search.count()).toBe(0);
 				expect(await importSession.count()).toBe(0);
+				expect(await fileTree.count()).toBe(0);
 			}
 			await page.getByRole("button", { name: "設定", exact: true }).click();
 			const settings = page.getByRole("dialog", { name: "設定" });

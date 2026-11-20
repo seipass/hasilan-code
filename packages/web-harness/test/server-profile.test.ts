@@ -1,16 +1,17 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, InMemoryModelsStore } from "@hasilan-code/pi-ai";
 import { ModelRuntime } from "@hasilan-code/pi-coding-agent";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { WebSocket } from "ws";
 import { AuthStorage } from "../../coding-agent/src/core/auth-storage.ts";
 import { startHarness } from "../src/server/main.ts";
 import { loadServerProfile, type ServerPlugin } from "../src/server/plugins/server-profile.ts";
 import { hashlinePlugin, shellProcessPlugin } from "../src/server/plugins/workspace-tools.ts";
 import { SessionRegistry } from "../src/server/session-registry.ts";
 import { TeamManager } from "../src/server/team-manager.ts";
-import { WorkspaceFiles } from "../src/server/workspace-files.ts";
+import { fileRevision, WorkspaceFiles } from "../src/server/workspace-files.ts";
 import { emptyCanvasDocument } from "../src/shared/canvas.ts";
 
 let dir: string;
@@ -27,24 +28,30 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 	vi.stubEnv("PI_OFFLINE", "1");
 	const options = { cwd: dir, port: 0, noOpen: true, help: false, lan: false, development: false };
 	async function withHost(
-		run: (api: (path: string, body?: unknown, method?: string) => Promise<Response>) => Promise<void>,
+		run: (
+			api: (path: string, body?: unknown, method?: string) => Promise<Response>,
+			connect: (path: string) => WebSocket,
+		) => Promise<void>,
 	) {
 		const harness = await startHarness(options);
 		try {
 			const { origin, launchUrl } = harness.launch;
 			const login = await fetch(launchUrl, { redirect: "manual" });
 			const cookie = login.headers.getSetCookie()[0].split(";")[0];
-			await run((path, body, method = "PUT") =>
-				fetch(
-					origin + path,
-					body === undefined
-						? { headers: { cookie } }
-						: {
-								method,
-								headers: { cookie, origin, "Content-Type": "application/json" },
-								body: JSON.stringify(body),
-							},
-				),
+			await run(
+				(path, body, method = "PUT") =>
+					fetch(
+						origin + path,
+						body === undefined
+							? { headers: { cookie } }
+							: {
+									method,
+									headers: { cookie, origin, "Content-Type": "application/json" },
+									body: JSON.stringify(body),
+								},
+					),
+				(path) =>
+					new WebSocket(origin.replace("http:", "ws:") + path, { headers: { Cookie: cookie, Origin: origin } }),
 			);
 		} finally {
 			await harness.shutdown();
@@ -84,6 +91,8 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"session-import",
 				"session-archive",
 				"storage-usage",
+				"workspace-files",
+				"terminal",
 				"github-dashboard",
 				"widget-feeds",
 				"account-usage",
@@ -106,6 +115,8 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 		expect(await (await api("/api/session-archive")).json()).toEqual([]);
 		expect((await api("/api/session-imports/sources")).status).toBe(200);
 		expect((await api("/api/storage")).status).toBe(200);
+		expect((await api(`/api/workspaces/${workspaceId}/file?path=notes.js`)).status).toBe(200);
+		expect(await (await api(`/api/terminals?workspaceId=${workspaceId}`)).json()).toEqual([]);
 		path = `/api/workspaces/${workspaceId}/canvas`;
 		swarmPath = `/api/workspaces/${workspaceId}/swarm`;
 		expect((await api(swarmPath, {}, "POST")).status).toBe(400);
@@ -140,6 +151,8 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"session-import",
 				"session-archive",
 				"storage-usage",
+				"workspace-files",
+				"terminal",
 				"github-dashboard",
 				"widget-feeds",
 				"account-usage",
@@ -182,6 +195,10 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 		join(dir, "custom.cjs"),
 		`exports.apiVersion = 1;
 exports.panel = { title: "Custom app", script: "notes.js", scope: "application" };
+exports.webSocket = (url) => url.pathname === "/api/probe/events" ? (socket) => {
+	socket.send("custom websocket");
+	socket.close();
+} : undefined;
 exports.providers = [{
 	id: "local-provider",
 	name: "Local provider",
@@ -191,14 +208,48 @@ exports.providers = [{
 	streamSimple() { throw new Error("Unexpected stream"); },
 }];`,
 	);
-	await withHost(async (api) => {
+	await withHost(async (api, connect) => {
 		expect(await (await api("/api/plugin-profile")).json()).toMatchObject({
 			activeIds: ["custom-app"],
 			persistentSessions: false,
 			application: { kind: "external", panel: { id: "custom-app", title: "Custom app", scope: "application" } },
 		});
 		expect((await api("/api/plugin-profile/custom-app/panel.js")).status).toBe(200);
-		expect((await api("/api/workspaces")).status).toBe(200);
+		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
+		expect((await api(`/api/workspaces/${workspaceId}/files`)).status).toBe(404);
+		expect((await api(`/api/terminals?workspaceId=${workspaceId}`)).status).toBe(404);
+		const status = await new Promise<number | undefined>((resolve, reject) => {
+			const socket = connect("/api/terminals/missing/events");
+			socket.once("unexpected-response", (_request, response) => {
+				response.resume();
+				resolve(response.statusCode);
+			});
+			socket.once("open", () => {
+				socket.close();
+				reject(new Error("Terminal socket unexpectedly accepted"));
+			});
+			socket.once("error", reject);
+		});
+		expect(status).toBe(404);
+		const message = await new Promise<string>((resolve, reject) => {
+			const socket = connect("/api/probe/events");
+			socket.once("message", (data) => resolve(data.toString()));
+			socket.once("error", reject);
+		});
+		expect(message).toBe("custom websocket");
+		const png = Buffer.from(
+			"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=",
+			"base64",
+		);
+		const revision = fileRevision(png);
+		const attachment = `.hasilan-code/attachments/${revision}-test.png`;
+		await mkdir(join(dir, ".hasilan-code", "attachments"), { recursive: true });
+		await writeFile(join(dir, attachment), png);
+		const response = await api(
+			`/api/workspaces/${workspaceId}/file-content?path=${encodeURIComponent(attachment)}&revision=${revision}`,
+		);
+		expect(response.headers.get("content-type")).toBe("image/png");
+		expect(Buffer.from(await response.arrayBuffer())).toEqual(png);
 		expect(await (await api("/api/models")).json()).toMatchObject({
 			providers: [{ id: "local-provider", name: "Local provider", configured: true }],
 			models: [{ id: model.id, provider: "local-provider" }],

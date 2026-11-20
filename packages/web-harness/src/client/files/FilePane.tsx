@@ -12,6 +12,7 @@ import "./FilePane.css";
 interface FileEntry { name: string; path: string; kind: "file" | "directory" | "symlink"; size: number }
 export interface FileTarget { path: string; line?: number; requestId: string }
 interface FilePaneProps {
+	enabled?: boolean;
 	workspaceId: string; activePath?: string; refreshToken: number; visible: boolean; treeVisible: boolean;
 	children: ReactNode;
 	onTreeClose: () => void;
@@ -55,7 +56,14 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen,
 	</ul>;
 }
 
-export function FilePane({ workspaceId, activePath, refreshToken, visible, treeVisible, children, onTreeClose, onOpen }: FilePaneProps) {
+export function FilePane(props: FilePaneProps) {
+	if (props.enabled === false) return <section className="files-pane" aria-label="作業ビューア">
+		<div className="files-layout"><div className="files-preview">{props.children}</div></div>
+	</section>;
+	return <EnabledFilePane {...props} />;
+}
+
+function EnabledFilePane({ workspaceId, activePath, refreshToken, visible, treeVisible, children, onTreeClose, onOpen }: FilePaneProps) {
 	const mobile = useMobileLayout();
 	const [filter, setFilter] = useState("");
 	const [refreshing, setRefreshing] = useState(false);

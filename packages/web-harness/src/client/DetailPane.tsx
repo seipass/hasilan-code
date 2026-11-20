@@ -24,7 +24,7 @@ import "./DetailPane.css";
 export type DetailView = "tabs" | "team" | "tools";
 
 
-export function DetailPane({ workspaceId, target, browserTarget, browserModel, refreshToken, visible, view, onViewChange, onActiveFileChange, team, tools }: {
+export function DetailPane({ workspaceId, target, browserTarget, browserModel, refreshToken, visible, view, onViewChange, onActiveFileChange, team, tools, filesEnabled = true, terminalEnabled = true }: {
 	workspaceId: string;
 	target?: FileTarget;
 	browserTarget?: { id: string; url: string };
@@ -36,8 +36,11 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 	onActiveFileChange?: (path: string | undefined) => void;
 	team: ReactNode;
 	tools: ReactNode;
+	filesEnabled?: boolean;
+	terminalEnabled?: boolean;
 }) {
-	const [layout, dispatch] = useReducer(detailTabsReducer, { ...emptyDetailTabs, tabs: [{ id: "initial-files", kind: "file", pane: 0 }], selected: ["initial-files", undefined] });
+	const [layout, dispatch] = useReducer(detailTabsReducer, { ...emptyDetailTabs, tabs: [{ id: "initial-files", kind: filesEnabled ? "file" : "new", pane: 0 }], selected: ["initial-files", undefined] });
+	const layoutKey = `pi-web-tabs:${workspaceId}${filesEnabled ? "" : "-no-files"}${terminalEnabled ? "" : "-no-terminal"}`;
 	const [error, setError] = useState<string>();
 	const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number }>();
 	const [transformRequest, setTransformRequest] = useState<{ id: string; path: string; operation: "translate" | "summarize"; requestId: string }>();
@@ -45,7 +48,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 	const [listAttempt, setListAttempt] = useState(0);
 	const [restored, setRestored] = useState(false);
 	const didRestore = useRef(false);
-	const savedLayout = usePreferenceString(`pi-web-tabs:${workspaceId}`);
+	const savedLayout = usePreferenceString(layoutKey);
 	const [creating, setCreating] = useState<string[]>([]);
 	const [closing, setClosing] = useState<string[]>([]);
 	const [viewStates, setViewStates] = useState(() => new Map<string, TerminalViewState>());
@@ -98,11 +101,14 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 	}, [contextMenu]);
 	useEffect(() => {
 		const controller = new AbortController();
-		void api<TerminalSummary[]>(`/api/terminals?workspaceId=${encodeURIComponent(workspaceId)}`, { signal: controller.signal }).then((items) => {
+		const entries = terminalEnabled
+			? api<TerminalSummary[]>(`/api/terminals?workspaceId=${encodeURIComponent(workspaceId)}`, { signal: controller.signal })
+			: Promise.resolve<TerminalSummary[]>([]);
+		void entries.then((items) => {
 			if (controller.signal.aborted) return;
 			const available = items.filter((item) => !dismissed.current.has(item.terminalId));
 			if (!didRestore.current) {
-				const saved = restoreDetailTabs(preferences.getItem(`pi-web-tabs:${workspaceId}`), available);
+				const saved = restoreDetailTabs(preferences.getItem(layoutKey), available, filesEnabled);
 				terminalNumber.current = Math.max(0, ...saved.tabs.map((tab) => tab.kind === "terminal" ? tab.number : 0));
 				dispatch({ type: "restoreLayout", layout: saved });
 				setRestored(true);
@@ -112,29 +118,32 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 		}).catch((reason: unknown) => { if (!controller.signal.aborted) {
 			setError(errorMessage(reason)); setListFailed(true);
 			if (!didRestore.current) {
-				dispatch({ type: "restoreLayout", layout: restoreDetailTabs(preferences.getItem(`pi-web-tabs:${workspaceId}`), []) });
+				dispatch({ type: "restoreLayout", layout: restoreDetailTabs(preferences.getItem(layoutKey), [], filesEnabled) });
 				didRestore.current = true; setRestored(true);
 			}
 		} });
 		return () => controller.abort();
-	}, [workspaceId, listAttempt]);
-	useEffect(() => { if (restored && !listFailed) preferences.setItem(`pi-web-tabs:${workspaceId}`, saveDetailTabs(layout)); }, [workspaceId, layout, restored, listFailed]);
+	}, [workspaceId, listAttempt, layoutKey, filesEnabled, terminalEnabled]);
+	useEffect(() => { if (restored && !listFailed) preferences.setItem(layoutKey, saveDetailTabs(layout)); }, [layoutKey, layout, restored, listFailed]);
 	useEffect(() => {
 		if (!restored || savedLayout === null || savedLayout === saveDetailTabs(layoutRef.current)) return;
 		const controller = new AbortController();
-		void api<TerminalSummary[]>(`/api/terminals?workspaceId=${encodeURIComponent(workspaceId)}`, { signal: controller.signal }).then((items) => {
+		const entries = terminalEnabled
+			? api<TerminalSummary[]>(`/api/terminals?workspaceId=${encodeURIComponent(workspaceId)}`, { signal: controller.signal })
+			: Promise.resolve<TerminalSummary[]>([]);
+		void entries.then((items) => {
 			if (controller.signal.aborted) return;
-			const restored = restoreDetailTabs(savedLayout, items);
+			const restored = restoreDetailTabs(savedLayout, items, filesEnabled);
 			terminalNumber.current = Math.max(terminalNumber.current, ...restored.tabs.map((tab) => tab.kind === "terminal" ? tab.number : 0));
 			dispatch({ type: "restoreLayout", layout: restored });
 		}).catch((reason: unknown) => { if (!controller.signal.aborted) setError(errorMessage(reason)); });
 		return () => controller.abort();
-	}, [workspaceId, savedLayout, restored]);
+	}, [workspaceId, savedLayout, restored, filesEnabled, terminalEnabled]);
 	useEffect(() => {
-		if (!restored || !target || target.requestId === handledRequest.current) return;
+		if (!filesEnabled || !restored || !target || target.requestId === handledRequest.current) return;
 		handledRequest.current = target.requestId;
 		dispatch({ type: "openFile", ...target, id: nextClientId() });
-	}, [target, restored]);
+	}, [target, restored, filesEnabled]);
 	useEffect(() => {
 		if (!restored || !browserTarget || browserTarget.id === handledBrowserRequest.current) return;
 		handledBrowserRequest.current = browserTarget.id;
@@ -166,6 +175,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 		dispatch({ type: "add", tab: { id: nextClientId(), pane, kind: "new" } });
 	}
 	function chooseFile(tab: DetailTab | undefined, pane: PaneIndex) {
+		if (!filesEnabled) return;
 		onViewChange("tabs");
 		const next: DetailTab = { id: tab?.id ?? nextClientId(), pane, kind: "file" };
 		dispatch(tab ? { type: "replace", tab: next } : { type: "add", tab: next });
@@ -180,6 +190,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 		dispatch({ type: "openFile", path, line, requestId: nextClientId(), id: nextClientId() });
 	}
 	async function createTerminal(tab: DetailTab | undefined, pane: PaneIndex) {
+		if (!terminalEnabled) return;
 		onViewChange("tabs");
 		const tabId = tab?.id ?? nextClientId();
 		const requestId = tab?.id ?? `empty-pane-${pane}`;
@@ -229,7 +240,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 		return tab.kind === "terminal" ? `端末 ${tab.number}` : tab.kind === "file" ? tab.file?.path.split(/[\\/]/).at(-1) || "ファイルを選択" : tab.kind === "browser" ? "ブラウザ" : "新しいタブ";
 	}
 	function choices(tab: DetailTab | undefined, pane: PaneIndex) {
-		return <div className="detail-new-tab"><h2 className="sr-only">新しいタブ</h2><div className="detail-new-choices"><button type="button" onClick={() => onViewChange("team")}><Icon name="graph" /><span>進捗</span></button><button type="button" disabled={!!tab && creating.includes(tab.id)} onClick={() => chooseFile(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6l2 3h8v13H4z" /></svg><span>ファイル</span></button><button type="button" disabled={creating.includes(tab?.id ?? "")} onClick={() => { void createTerminal(tab, pane); }}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></svg><span>{tab && creating.includes(tab.id) ? "作成中…" : "ターミナル"}</span></button>{document.documentElement.dataset.desktopPlatform && <button type="button" onClick={() => chooseBrowser(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18" /></svg><span>ブラウザ</span></button>}</div></div>;
+		return <div className="detail-new-tab"><h2 className="sr-only">新しいタブ</h2><div className="detail-new-choices"><button type="button" onClick={() => onViewChange("team")}><Icon name="graph" /><span>進捗</span></button>{filesEnabled && <button type="button" disabled={!!tab && creating.includes(tab.id)} onClick={() => chooseFile(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6l2 3h8v13H4z" /></svg><span>ファイル</span></button>}{terminalEnabled && <button type="button" disabled={creating.includes(tab?.id ?? "")} onClick={() => { void createTerminal(tab, pane); }}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></svg><span>{tab && creating.includes(tab.id) ? "作成中…" : "ターミナル"}</span></button>}{document.documentElement.dataset.desktopPlatform && <button type="button" onClick={() => chooseBrowser(tab, pane)}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18M12 3c-5 5-5 13 0 18" /></svg><span>ブラウザ</span></button>}</div></div>;
 	}
 	const selectedFiles = layout.tabs.filter((tab) => tab.kind === "file" && layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single"));
 	const activeFile = selectedFiles.find((tab) => tab.pane === layout.focused) ?? selectedFiles[0];
@@ -257,7 +268,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 					}}><span className="detail-tab-kind" aria-hidden="true">{tab.kind === "terminal" ? ">_" : tab.kind === "file" ? "▤" : "+"}</span><span className="detail-tab-title" data-read-only={readOnly || undefined}>{title(tab)}</span>{tab.kind === "file" && tab.file && isDraftDirty(draftKey(workspaceId, tab.file.path)) && <span className="detail-tab-dirty" aria-label="未保存の変更">●</span>}</button>
 					<button type="button" className="detail-tab-close" draggable={false} aria-label={`${title(tab)}を閉じる`} disabled={closing.includes(tab.id) || creating.includes(tab.id)} onClick={() => { void closeTab(tab); }}><Icon name="close" size="inline" /></button>
 				</div>; }}</MotionItems>
-			</div></div>{(tabOverflow.left || tabOverflow.right) && <div className="detail-tab-overflow"><button type="button" aria-label="左のタブへ" disabled={!tabOverflow.left} onClick={() => strip.current?.scrollBy({ left: -200 })}><Icon name="chevronLeft" size="inline" /></button><button type="button" aria-label="右のタブへ" disabled={!tabOverflow.right} onClick={() => strip.current?.scrollBy({ left: 200 })}><Icon name="chevronRight" size="inline" /></button><Select aria-label="タブ一覧" value={layout.selected[layout.focused] ?? ""} onChange={(value) => { const tab = layout.tabs.find((entry) => entry.id === value); if (tab) select(tab, true); }}>{layout.tabs.map((tab) => <option key={tab.id} value={tab.id}>{title(tab)}</option>)}</Select></div>}<div className="detail-tab-add"><button type="button" className="detail-tab-new" aria-label="新しいタブを開く" title="クリックで新しいタブ・下へスライドで端末・右へスライドでファイル" data-gesture={tabGesture} onPointerDown={(event) => {
+			</div></div>{(tabOverflow.left || tabOverflow.right) && <div className="detail-tab-overflow"><button type="button" aria-label="左のタブへ" disabled={!tabOverflow.left} onClick={() => strip.current?.scrollBy({ left: -200 })}><Icon name="chevronLeft" size="inline" /></button><button type="button" aria-label="右のタブへ" disabled={!tabOverflow.right} onClick={() => strip.current?.scrollBy({ left: 200 })}><Icon name="chevronRight" size="inline" /></button><Select aria-label="タブ一覧" value={layout.selected[layout.focused] ?? ""} onChange={(value) => { const tab = layout.tabs.find((entry) => entry.id === value); if (tab) select(tab, true); }}>{layout.tabs.map((tab) => <option key={tab.id} value={tab.id}>{title(tab)}</option>)}</Select></div>}<div className="detail-tab-add"><button type="button" className="detail-tab-new" aria-label="新しいタブを開く" title={["クリックで新しいタブ", terminalEnabled ? "下へスライドで端末" : "", filesEnabled ? "右へスライドでファイル" : ""].filter(Boolean).join("・")} data-gesture={tabGesture} onPointerDown={(event) => {
 				if (event.button !== 0) return;
 				setShowTabHints(false);
 				const bounds = event.currentTarget.getBoundingClientRect();
@@ -271,7 +282,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 				const x = event.clientX - press.x; const y = event.clientY - press.y;
 				if (Math.hypot(x, y) >= 3) setShowTabHints(true);
 				press.moved ||= Math.hypot(x, y) >= 18;
-				setTabGesture(Math.max(x, y) < 18 ? undefined : x > Math.abs(y) ? "file" : y > Math.abs(x) ? "terminal" : undefined);
+				setTabGesture(Math.max(x, y) < 18 ? undefined : filesEnabled && x > Math.abs(y) ? "file" : terminalEnabled && y > Math.abs(x) ? "terminal" : undefined);
 			}} onPointerUp={(event) => {
 				const press = tabPress.current;
 				if (!press || press.pointerId !== event.pointerId) return;
@@ -280,7 +291,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 				tabPress.current = undefined; setTabGesture(undefined); setShowTabHints(false);
 				if (x >= 18 && x > Math.abs(y)) chooseFile(undefined, layout.focused);
 				else if (y >= 18 && y > Math.abs(x)) void createTerminal(undefined, layout.focused);
-			}} onPointerCancel={() => { tabPress.current = undefined; suppressTabClick.current = true; setTabGesture(undefined); setShowTabHints(false); }} onLostPointerCapture={() => { tabPress.current = undefined; setTabGesture(undefined); setShowTabHints(false); }} onClick={(event) => { if (suppressTabClick.current && event.detail !== 0) { suppressTabClick.current = false; return; } addTab(); }}><Icon name="plus" size="control" /></button>{showTabHints && createPortal(<TabGestureHints {...tabHintAnchor} active={tabGesture} />, document.body)}</div>
+			}} onPointerCancel={() => { tabPress.current = undefined; suppressTabClick.current = true; setTabGesture(undefined); setShowTabHints(false); }} onLostPointerCapture={() => { tabPress.current = undefined; setTabGesture(undefined); setShowTabHints(false); }} onClick={(event) => { if (suppressTabClick.current && event.detail !== 0) { suppressTabClick.current = false; return; } addTab(); }}><Icon name="plus" size="control" /></button>{showTabHints && filesEnabled && terminalEnabled && createPortal(<TabGestureHints {...tabHintAnchor} active={tabGesture} />, document.body)}</div>
 			<SplitActions label="作業タブ" mode={layout.mode} onChange={(mode) => { onViewChange("tabs"); dispatch({ type: "split", mode }); }} />
 			<div className="detail-panel-actions" role="group" aria-label="詳細パネル">
 				<button type="button" className="detail-panel-icon" aria-label="チーム" title="チーム" aria-pressed={view === "team"} aria-controls={`${id}-team`} onClick={() => onViewChange(view === "team" ? "tabs" : "team")}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 4v2" /></svg></button>

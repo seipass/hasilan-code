@@ -2,7 +2,7 @@ import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
-import { SESSION_IMPORT_ID, SESSION_SEARCH_ID } from "../shared/plugin-profile.ts";
+import { SESSION_IMPORT_ID, SESSION_SEARCH_ID, TERMINAL_ID, WORKSPACE_FILES_ID } from "../shared/plugin-profile.ts";
 import { aggregateUsage } from "../shared/usage.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
@@ -71,6 +71,8 @@ export function App() {
 	const [dirtyPanels, setDirtyPanels] = useState<readonly string[]>([]);
 	const [openedPanels, setOpenedPanels] = useState<readonly string[]>([]);
 	const profile = usePluginProfile();
+	const filesEnabled = profile?.activeIds.includes(WORKSPACE_FILES_ID) ?? false;
+	const terminalEnabled = profile?.activeIds.includes(TERMINAL_ID) ?? false;
 	const searchEnabled = profile?.activeIds.includes(SESSION_SEARCH_ID) ?? false;
 	const importEnabled = !!profile?.persistentSessions && profile.activeIds.includes(SESSION_IMPORT_ID);
 	const activePanels = useMemo(() => {
@@ -261,7 +263,7 @@ export function App() {
 	useEffect(() => {
 		const keydown = (event: KeyboardEvent) => {
 			if (searchEnabled && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSidebarOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); }
-			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") { event.preventDefault(); setRightTab("tabs"); setRightOpen(true); window.dispatchEvent(new Event("hasilan:quick-open")); }
+			if (filesEnabled && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "p") { event.preventDefault(); setRightTab("tabs"); setRightOpen(true); window.dispatchEvent(new Event("hasilan:quick-open")); }
 			if (event.key !== "Escape") return;
 			if (modelOpen) setModelOpen(false);
 			// Overlays cover the page below 900px, so Escape is the only pointer-free way out.
@@ -269,7 +271,7 @@ export function App() {
 			else if (sidebarOpen && window.innerWidth < 900) setSidebarOpen(false);
 		};
 		window.addEventListener("keydown", keydown); return () => window.removeEventListener("keydown", keydown);
-	}, [modelOpen, rightOpen, sidebarOpen, searchEnabled]);
+	}, [modelOpen, rightOpen, sidebarOpen, searchEnabled, filesEnabled]);
 	// Android's back button must close one overlay instead of leaving the app. While any
 	// overlay is open we hold one extra history entry with the same URL; popping it closes
 	// the top overlay (settings, a dialog, the model sheet, then the panel and the drawer).
@@ -385,7 +387,7 @@ export function App() {
 		setProjections((previous) => Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, { ...value, sessions: value.sessions.filter((entry) => !deleted.has(entry.sessionId)) }])));
 		if (sessionId && deleted.has(sessionId)) newConversation();
 	}
-	function openFile(path: string, line?: number) { setFileTarget({ path, line, requestId: nextClientId() }); setRightTab("tabs"); setRightOpen(true); }
+	function openFile(path: string, line?: number) { if (!filesEnabled) return; setFileTarget({ path, line, requestId: nextClientId() }); setRightTab("tabs"); setRightOpen(true); }
 	async function addWorkspace() {
 		if (addingWorkspace) return;
 		setAddingWorkspace(true); setError(undefined);
@@ -612,11 +614,11 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}><Icon name="settings" size="control" />設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions has-widgets"><WidgetSpace visible usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button><button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions has-widgets"><WidgetSpace visible usage={widgetUsage} usageTitle={sessionId ? "この会話" : "このワークスペース"} contextPercent={session?.contextUsage?.percent} /><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button>{filesEnabled && <button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button>}<button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
 			<div className="home-backdrop-anchor"><HomeBackdrop background={homeBackgroundVisible ? background : undefined} /></div>
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
-			<FilePane workspaceId={workspaceId ?? ""} activePath={activeFilePath} refreshToken={filesVersion} visible={!!workspaceId} treeVisible={!!workspaceId && fileTreeOpen} onTreeClose={() => setFileTreeOpen(false)} onOpen={openFile}>
+			<FilePane enabled={filesEnabled} workspaceId={workspaceId ?? ""} activePath={activeFilePath} refreshToken={filesVersion} visible={!!workspaceId} treeVisible={!!workspaceId && fileTreeOpen} onTreeClose={() => setFileTreeOpen(false)} onOpen={openFile}>
 			<div className="main-layout"><main className="chat-column" inert={(rightOpen || sidebarOpen) && viewport.width <= 900}><Presence show={!!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
 				{activePanels?.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
 					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={(dirty) => setDirtyPanels((previous) => dirty === previous.includes(id) ? previous : dirty ? [...previous, id] : previous.filter((entry) => entry !== id))} />
@@ -626,7 +628,7 @@ export function App() {
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
 					<div className="right-panel-body detail-panel-body">
-						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab} onActiveFileChange={setActiveFilePath}
+						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} filesEnabled={filesEnabled} terminalEnabled={terminalEnabled} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab} onActiveFileChange={setActiveFilePath}
 							browserModel={model} team={<TeamPane snapshot={team} sessions={swarmEnabled ? summaries : summaries.map((summary) => summary.swarm ? { ...summary, swarm: undefined } : summary)} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>

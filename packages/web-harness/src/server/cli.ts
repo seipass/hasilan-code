@@ -10,7 +10,7 @@ function terminalSupportRemedy(platform: NodeJS.Platform): string {
 }
 
 /**
- * Reports a terminal addon that cannot load before the server starts, so the user reads the remedy
+ * Reports a terminal addon that cannot load, so the user reads the remedy
  * instead of a node-pty stack trace. `load` performs the real native import.
  */
 export function terminalSupportFailure(load: () => unknown, platform: NodeJS.Platform): Error | undefined {

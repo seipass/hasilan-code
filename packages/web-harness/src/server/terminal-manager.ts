@@ -3,7 +3,7 @@ import { release } from "node:os";
 import { join } from "node:path";
 import serialize, { type SerializeAddon } from "@xterm/addon-serialize";
 import headless, { type ITerminalAddon, type Terminal } from "@xterm/headless";
-import { type IDisposable, type IPty, spawn } from "node-pty";
+import type { IDisposable, IPty, spawn } from "node-pty";
 import type {
 	TerminalClientMessage,
 	TerminalServerMessage,
@@ -30,8 +30,7 @@ export interface TerminalSocket {
 
 export interface TerminalManagerOptions {
 	getWorkspaceRoot: (workspaceId: string) => string | Promise<string>;
-	/** Test seam for process events; production always uses node-pty. */
-	spawn?: typeof spawn;
+	spawn: typeof spawn;
 }
 
 interface Attachment {
@@ -141,7 +140,7 @@ export class TerminalManager {
 		screen.loadAddon(serializer as unknown as ITerminalAddon);
 		let pty: IPty;
 		try {
-			pty = (this.options.spawn ?? spawn)(shell, windows ? ["-NoLogo"] : [], {
+			pty = this.options.spawn(shell, windows ? ["-NoLogo"] : [], {
 				cwd,
 				cols: request.cols,
 				rows: request.rows,
@@ -238,6 +237,12 @@ export class TerminalManager {
 			}),
 		);
 		return { ...entry.summary };
+	}
+
+	runningCount(): number {
+		let count = 0;
+		for (const terminal of this.terminals.values()) if (terminal.summary.status === "running") count++;
+		return count;
 	}
 
 	list(workspaceId: string): TerminalSummary[] {

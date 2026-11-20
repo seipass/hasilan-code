@@ -170,9 +170,7 @@ export class HttpHost {
 			try {
 				this.security.authorizeWebSocket(request);
 				const url = this.security.parseUrl(request);
-				const accepted =
-					this.options.acceptWebSocket?.(url) ??
-					(url.pathname === "/api/events" || /^\/api\/terminals\/[^/]+\/events$/.test(url.pathname));
+				const accepted = this.options.acceptWebSocket?.(url) ?? url.pathname === "/api/events";
 				if (!this.options.handleWebSocket || !accepted) throw new HttpError(404, "WebSocket endpoint not found");
 				this.webSockets.handleUpgrade(request, socket, head, (webSocket) => {
 					webSocket.on("error", () => webSocket.close(1011, "WebSocket transport error"));

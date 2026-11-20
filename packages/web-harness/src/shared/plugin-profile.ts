@@ -61,6 +61,8 @@ export const SESSION_SEARCH_ID = "session-search";
 export const SESSION_IMPORT_ID = "session-import";
 export const SESSION_ARCHIVE_ID = "session-archive";
 export const STORAGE_USAGE_ID = "storage-usage";
+export const WORKSPACE_FILES_ID = "workspace-files";
+export const TERMINAL_ID = "terminal";
 
 export const DEFAULT_THEME_ID = "theme-default";
 export const themePluginSchema = Type.Object(

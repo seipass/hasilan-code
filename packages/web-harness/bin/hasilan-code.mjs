@@ -10,15 +10,11 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const args = process.argv.slice(2);
 
-/** Terminal support is a native addon: loading it here reports a missing build as guidance, not a stack trace. */
+/** Setup reports whether the terminal plugin can load its native addon. */
 function terminalModuleFailure() {
 	return terminalSupportFailure(() => createRequire(import.meta.url)("node-pty"), process.platform);
 }
 
-function requireTerminalSupport() {
-	const failure = terminalModuleFailure();
-	if (failure) throw failure;
-}
 try {
 	if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) {
 		console.log(`Hasilan Code ${manifest.version} (Pi ${manifest.hasilanCode.piVersion})`);
@@ -74,7 +70,6 @@ try {
 		const options = parseCliArgs(args);
 		if (options.help) console.log(CLI_HELP);
 		else {
-			requireTerminalSupport();
 			const child = spawn(process.execPath, [join(root, "dist/server/main.js"), ...args], { stdio: "inherit" });
 			child.once("error", (error) => {
 				console.error(error.message);
