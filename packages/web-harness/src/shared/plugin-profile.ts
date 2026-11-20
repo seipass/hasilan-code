@@ -62,6 +62,10 @@ export const SESSION_ARCHIVE_ID = "session-archive";
 export const STORAGE_USAGE_ID = "storage-usage";
 export const WORKSPACE_FILES_ID = "workspace-files";
 export const TERMINAL_ID = "terminal";
+export const GIT_REVIEW_ID = "git-review";
+export const TEXT_TRANSFORM_ID = "text-transform";
+export const BROWSER_ADJUSTMENTS_ID = "browser-adjustments";
+export const WORKSPACE_ROUTER_ID = "workspace-router";
 
 export const DEFAULT_THEME_ID = "theme-default";
 export const themePluginSchema = Type.Object(

@@ -1,6 +1,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
 import { type BrowserControl, type BrowserStyles, browserPreviewStyles } from "../shared/browser-adjustments.ts";
+import { BROWSER_ADJUSTMENTS_ID } from "../shared/plugin-profile.ts";
+import { usePluginProfile } from "./plugins/profile.tsx";
 import { api, errorMessage } from "./api.ts";
 import { BrowserAdjustmentControls } from "./BrowserAdjustmentControls.tsx";
 import { BrowserCssEditor } from "./BrowserCssEditor.tsx";
@@ -71,6 +73,7 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 	const [controls, setControls] = useState<BrowserControl[]>();
 	const [adjusted, setAdjusted] = useState<BrowserStyles>({});
 	const adjustedRef = useRef<BrowserStyles>({});
+	const adjustmentsEnabled = usePluginProfile()?.activeIds.includes(BROWSER_ADJUSTMENTS_ID) ?? true;
 	const [intent, setIntent] = useState("");
 	const [suggesting, setSuggesting] = useState(false);
 	const suggestionRequest = useRef<AbortController | undefined>(undefined);
@@ -368,7 +371,7 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 			<label>注釈<textarea autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="この箇所への指示" /></label>
 			{selection.adjustmentId !== undefined && <details className="browser-comment-tools">
 				<summary>見た目を調整</summary>
-			<div className="browser-adjustment-request">
+			{adjustmentsEnabled && <div className="browser-adjustment-request">
 				<input aria-label="調整したいこと" placeholder="例: ボタンを目立たせたい（任意）" maxLength={1000} value={intent} onChange={(event) => setIntent(event.target.value)}
 					onKeyDown={(event) => {
 						if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
@@ -378,7 +381,7 @@ export function BrowserPane({ initialUrl, visible, model }: { initialUrl?: strin
 				<button type="button" disabled={suggesting || !model} title={!model ? "会話のモデルを選択してください" : undefined} onClick={() => void suggestAdjustments()}>
 					{suggesting ? "調整項目を作成中…" : controls ? "項目を作り直す" : "AI で調整項目を作る"}
 				</button>
-			</div>
+			</div>}
 			{controls && <BrowserAdjustmentControls controls={controls} styles={selection.styles} adjusted={adjusted} onChange={(styles) => {
 				const next = { ...adjustedRef.current };
 				for (const key of Object.keys(styles)) delete next[key];

@@ -12,8 +12,10 @@ import { FilePreview } from "./files/FilePreview.tsx";
 import { Icon } from "./Icon.tsx";
 import { Select } from "./Select.tsx";
 import { nextClientId } from "./ids.ts";
+import { TEXT_TRANSFORM_ID } from "../shared/plugin-profile.ts";
 import { MotionItems, Presence } from "./Motion.tsx";
 import { MotionSwap, useMeasuredSize } from "./MotionSwap.tsx";
+import { usePluginProfile } from "./plugins/profile.tsx";
 import { preferences, usePreferenceString } from "./preferences.ts";
 import { type PaneIndex, SplitActions, SplitLayout } from "./SplitLayout.tsx";
 import { TerminalView, type TerminalViewState } from "./terminal/TerminalPane.tsx";
@@ -40,6 +42,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 	terminalEnabled?: boolean;
 }) {
 	const [layout, dispatch] = useReducer(detailTabsReducer, { ...emptyDetailTabs, tabs: [{ id: "initial-files", kind: filesEnabled ? "file" : "new", pane: 0 }], selected: ["initial-files", undefined] });
+	const transformEnabled = usePluginProfile()?.activeIds.includes(TEXT_TRANSFORM_ID) ?? true;
 	const layoutKey = `pi-web-tabs:${workspaceId}${filesEnabled ? "" : "-no-files"}${terminalEnabled ? "" : "-no-terminal"}`;
 	const [error, setError] = useState<string>();
 	const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number }>();
@@ -314,6 +317,6 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 		</div></Presence>
 		<Presence show={view === "team"} keepMounted><div id={`${id}-team`} className="detail-auxiliary">{team}</div></Presence>
 		<Presence show={view === "tools"} keepMounted><div id={`${id}-tools`} className="detail-auxiliary detail-tools">{tools}</div></Presence></div>
-		{contextMenu && createPortal(<div className="detail-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>{(["translate", "summarize"] as const).map((operation) => <button key={operation} type="button" role="menuitem" onClick={() => { const tab = layout.tabs.find((entry) => entry.id === contextMenu.id); if (tab?.kind === "file" && tab.file) { select(tab); setTransformRequest({ id: tab.id, path: tab.file.path, operation, requestId: nextClientId() }); } setContextMenu(undefined); }}>{operation === "translate" ? "翻訳" : "要約"}</button>)}</div>, document.body)}
+		{transformEnabled && contextMenu && createPortal(<div className="detail-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>{(["translate", "summarize"] as const).map((operation) => <button key={operation} type="button" role="menuitem" onClick={() => { const tab = layout.tabs.find((entry) => entry.id === contextMenu.id); if (tab?.kind === "file" && tab.file) { select(tab); setTransformRequest({ id: tab.id, path: tab.file.path, operation, requestId: nextClientId() }); } setContextMenu(undefined); }}>{operation === "translate" ? "翻訳" : "要約"}</button>)}</div>, document.body)}
 	</div>;
 }

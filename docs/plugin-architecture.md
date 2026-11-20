@@ -118,6 +118,10 @@ GitHub の活動と Pull request は `github-dashboard`、接続中のアカウ�
 
 ファイルツリー、ファイル名検索、プレビュー、エディターは `workspace-files` が提供する。ターミナルは `terminal` が提供する。外部プラグインは `webSocket(url)` で担当する URL を判定し、認証済みの接続を受け取るハンドラーを返せる。ターミナルのネイティブモジュールの読み込みに失敗した場合は、プラグイン管理画面に理由が表示される。
 
+変更の差分レビューは `git-review`、思考やファイルの翻訳・要約は `text-transform`、ブラウザー要素の AI スタイル調整提案は `browser-adjustments`、送信先ワークスペースの自動判定は `workspace-router` が提供する。それぞれ無効にすると対応する API と画面内の操作が閉じる。
+
+自作プラグイン・テーマのひな形は `packages/web-harness/examples/plugins/`（`sample-tool`・`sample-panel`・`sample-theme`）に同梱している。
+
 サイドバーの「プラグイン」で、現在の状態と次回起動時の設定を確認できる。設定の変更、ローカルモジュールの登録・置き換え、登録解除は次回起動時に反映される。登録解除してもモジュールやデータは削除しない。外部プラグインを無効化するときは、再有効化に必要なモジュールパスを `{ "enabled": false, "module": "./plugins/example.cjs" }` として保持する。
 
 ### 段階

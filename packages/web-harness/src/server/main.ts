@@ -23,7 +23,9 @@ import {
 } from "../shared/contracts.ts";
 import {
 	ACCOUNT_USAGE_ID,
+	BROWSER_ADJUSTMENTS_ID,
 	DEFAULT_THEME_ID,
+	GIT_REVIEW_ID,
 	GITHUB_DASHBOARD_ID,
 	PLUGIN_MANAGER_ID,
 	SESSION_ARCHIVE_ID,
@@ -32,20 +34,19 @@ import {
 	STORAGE_USAGE_ID,
 	standardTheme,
 	TERMINAL_ID,
+	TEXT_TRANSFORM_ID,
 	WORKSPACE_FILES_ID,
+	WORKSPACE_ROUTER_ID,
 	WORKSPACE_UI_ID,
 } from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
-import { workspaceRouteSchema } from "../shared/workspace-routing.ts";
 import { AgentWorktrees } from "./agent-worktrees.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
-import { browserAdjustmentSchema, suggestBrowserAdjustments } from "./browser-adjustments.ts";
 import { CLI_HELP, type CliOptions, openBrowser, parseCliArgs, resolveCliWorkspace } from "./cli.ts";
 import { createHarnessSettings, getHarnessAgentDir } from "./config.ts";
 import { EventHub } from "./events.ts";
 import { pickWorkspaceFolder } from "./folder-picker.ts";
-import { gitReview } from "./git-review.ts";
 import { createHttpHost, HttpError, readJson, sendJson } from "./http-host.ts";
 import { serveWorkspaceImage } from "./image-content.ts";
 import { canvasPlugin } from "./plugins/canvas.ts";
@@ -53,6 +54,12 @@ import { goalPlugin } from "./plugins/goal.ts";
 import { hyakkiPlugin } from "./plugins/hyakki.ts";
 import { accountUsagePlugin, githubDashboardPlugin } from "./plugins/integrations.ts";
 import { pluginManager } from "./plugins/manager.ts";
+import {
+	browserAdjustmentsPlugin,
+	gitReviewPlugin,
+	textTransformPlugin,
+	workspaceRouterPlugin,
+} from "./plugins/product-features.ts";
 import { runtimeContextPlugin } from "./plugins/runtime-context.ts";
 import { loadServerProfile, type ServerPlugin } from "./plugins/server-profile.ts";
 import { pluginSession } from "./plugins/session.ts";
@@ -72,14 +79,12 @@ import { readAttachmentImages, savePromptAttachments } from "./prompt-attachment
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
 import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./settings.ts";
 import { TeamManager } from "./team-manager.ts";
-import { textTransformSchema, transformText } from "./text-transform.ts";
 import { PythonDesktop } from "./tools/computer/backend.ts";
 import { ComputerManager } from "./tools/computer/index.ts";
 import { JevComputer } from "./tools/computer/jev.ts";
 import { LazyBrowserManager } from "./tools/lazy-browser.ts";
 import { UiPreferencesStore } from "./ui-preferences.ts";
 import { WorkspaceFiles } from "./workspace-files.ts";
-import { WorkspaceRouter } from "./workspace-router.ts";
 
 export interface HarnessHooks {
 	pickFolder?: (cwd: string, signal: AbortSignal) => Promise<string | undefined>;
@@ -140,6 +145,8 @@ async function createHarness(
 					tools: ({ sessionId }) => [
 						browser.createTool(sessionId, teams.agentIdForSession(sessionId)) as unknown as ToolDefinition,
 					],
+					closeSession: (sessionId) => browser.closeSession(sessionId),
+					close: () => browser.close(),
 				}),
 			],
 			[
@@ -149,6 +156,8 @@ async function createHarness(
 					tools: ({ sessionId }) => [
 						computer.createTool(sessionId, teams.agentIdForSession(sessionId)) as unknown as ToolDefinition,
 					],
+					closeSession: (sessionId) => computer.closeSession(sessionId),
+					close: () => computer.close(),
 				}),
 			],
 			[
@@ -189,6 +198,27 @@ async function createHarness(
 			[STORAGE_USAGE_ID, () => storageUsagePlugin(agentDir, (): SessionRegistry => registry)],
 			[WORKSPACE_FILES_ID, () => workspaceFilesPlugin(files)],
 			[TERMINAL_ID, () => terminalPlugin((id) => files.getWorkspaceRoot(id))],
+			[GIT_REVIEW_ID, () => gitReviewPlugin((): SessionRegistry => registry)],
+			[
+				TEXT_TRANSFORM_ID,
+				() =>
+					textTransformPlugin(
+						() => settings,
+						() => modelRuntime,
+						files,
+					),
+			],
+			[BROWSER_ADJUSTMENTS_ID, () => browserAdjustmentsPlugin(() => modelRuntime)],
+			[
+				WORKSPACE_ROUTER_ID,
+				() =>
+					workspaceRouterPlugin(
+						files,
+						() => modelRuntime,
+						() => settings,
+						(): SessionRegistry => registry,
+					),
+			],
 			[GITHUB_DASHBOARD_ID, githubDashboardPlugin],
 			[ACCOUNT_USAGE_ID, () => accountUsagePlugin(() => modelRuntime)],
 			[
@@ -245,13 +275,11 @@ async function createHarness(
 		getLimits: () => settings.get().teams,
 		onStopSession: async (id) => {
 			await plugins.closeSession(id);
-			await Promise.all([browser.closeSession(id), computer.closeSession(id)]);
 		},
 	});
 	await registry.initialize();
 	await teams.initialize();
 	await registry.addWorkspace(cwd);
-	const workspaceRouter = new WorkspaceRouter(files, modelRuntime, () => settings.get().jev.model, registry);
 	events = new EventHub(
 		(channel, id) =>
 			channel === "session"
@@ -353,8 +381,6 @@ async function createHarness(
 						selectingWorkspace = false;
 					}
 				}
-				if (url.pathname === "/api/workspaces/route" && method === "POST")
-					return reply(await workspaceRouter.select(await readJson(request, workspaceRouteSchema)));
 				if (url.pathname === "/api/sessions") {
 					if (method === "GET") return reply(registry.list(url.searchParams.get("workspaceId") ?? undefined));
 					if (method === "POST") {
@@ -374,8 +400,6 @@ async function createHarness(
 					if (parts.length === 3 && method === "DELETE") {
 						const deletedSessionIds = await registry.deleteSession(id);
 						for (const sessionId of deletedSessionIds) await plugins.closeSession(sessionId);
-						await Promise.allSettled(deletedSessionIds.map((sessionId) => browser.closeSession(sessionId)));
-						await Promise.allSettled(deletedSessionIds.map((sessionId) => computer.closeSession(sessionId)));
 						for (const sessionId of deletedSessionIds) artifacts.deleteSession(sessionId);
 						return reply({ deletedSessionIds });
 					}
@@ -383,15 +407,6 @@ async function createHarness(
 						const before = url.searchParams.get("before");
 						if (!before || before.length > 128) throw new HttpError(400, "before cursor is required");
 						return reply(registry.page(id, before));
-					}
-					if (parts[3] === "git-review" && parts.length === 4 && method === "GET") {
-						return reply(
-							await gitReview(
-								registry.descriptor(id).cwd,
-								url.searchParams.get("mode"),
-								url.searchParams.get("base"),
-							),
-						);
 					}
 					if (parts[3] === "tool-result" && parts.length === 4 && method === "GET") {
 						const key = url.searchParams.get("key");
@@ -452,34 +467,6 @@ async function createHarness(
 				if (url.pathname === "/api/models" && method === "GET") {
 					await settings.refreshModelsIfStale();
 					return reply(settings.getModels());
-				}
-				if (url.pathname === "/api/text-transform" && method === "POST") {
-					const input = await readJson(request, textTransformSchema, 512 * 1024);
-					const controller = new AbortController();
-					const abort = () => controller.abort();
-					response.once("close", abort);
-					try {
-						return reply(await transformText(input, settings, modelRuntime, files, controller.signal));
-					} finally {
-						response.off("close", abort);
-					}
-				}
-				if (url.pathname === "/api/browser-adjustments" && method === "POST") {
-					const input = await readJson(request, browserAdjustmentSchema, 32 * 1024);
-					const controller = new AbortController();
-					const abort = () => controller.abort();
-					response.once("close", abort);
-					try {
-						return reply(
-							await suggestBrowserAdjustments(
-								input,
-								modelRuntime,
-								AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),
-							),
-						);
-					} finally {
-						response.off("close", abort);
-					}
 				}
 				if (url.pathname === "/api/auth/login" && method === "POST") {
 					const { provider } = await readJson(request, authLoginSchema, 64 * 1024);
@@ -556,7 +543,7 @@ async function createHarness(
 		const owners = await Promise.allSettled([authLogin.close(), teams.close()]);
 		const [registryResult] = await Promise.allSettled([registry.close()]);
 		await plugins.close();
-		const results = await Promise.allSettled([browser.close(), computer.close(), uiPreferences.close()]);
+		const results = await Promise.allSettled([uiPreferences.close()]);
 		hub.close();
 		artifacts.close();
 		await host.close();

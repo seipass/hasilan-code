@@ -93,6 +93,10 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"storage-usage",
 				"workspace-files",
 				"terminal",
+				"git-review",
+				"text-transform",
+				"browser-adjustments",
+				"workspace-router",
 				"github-dashboard",
 				"account-usage",
 				"canvas",
@@ -151,6 +155,10 @@ it("applies plugin management changes on restart and preserves existing Canvas d
 				"storage-usage",
 				"workspace-files",
 				"terminal",
+				"git-review",
+				"text-transform",
+				"browser-adjustments",
+				"workspace-router",
 				"github-dashboard",
 				"account-usage",
 			],
@@ -259,8 +267,12 @@ exports.providers = [{
 			"/api/session-imports/sources",
 			"/api/session-archive",
 			"/api/storage",
+			"/api/sessions/missing/git-review",
 		]) {
 			expect((await api(route)).status).toBe(404);
+		}
+		for (const route of ["/api/text-transform", "/api/browser-adjustments", "/api/workspaces/route"]) {
+			expect((await api(route, {}, "POST")).status).toBe(404);
 		}
 	});
 	expect(await readFile(statePath, "utf8")).toBe(originalState);
@@ -472,5 +484,116 @@ it("does not expose Pi file or persistent shell tools when their plugins are dis
 	} finally {
 		await teams.close();
 		await registry.close();
+	}
+});
+
+it("loads the bundled sample external tool, panel, and theme plugins", async () => {
+	const examplesRoot = join(import.meta.dirname, "..", "examples", "plugins");
+	await writeFile(
+		join(dir, "plugins.json"),
+		JSON.stringify({
+			"sample-tool": join(examplesRoot, "sample-tool", "plugin.cjs"),
+			"sample-panel": join(examplesRoot, "sample-panel", "plugin.cjs"),
+			"sample-dusk": join(examplesRoot, "sample-theme", "plugin.cjs"),
+		}),
+	);
+	const profile = await loadServerProfile(dir, new Map());
+	expect(profile.profile.activeIds).toEqual(["sample-tool", "sample-panel", "sample-dusk"]);
+	expect(profile.profile.panels).toEqual([{ id: "sample-panel", title: "サンプルメモ" }]);
+	expect(profile.profile.themes).toContainEqual(
+		expect.objectContaining({ id: "sample-dusk", title: "Dusk (Sample)", customizable: false }),
+	);
+	expect((await profile.panelScript("sample-panel"))?.toString("utf8")).toContain("hasilan:panel");
+	const tools = profile.toolsForSession({ sessionId: "s1", workspaceId: "w1", cwd: dir });
+	expect(tools.map((tool) => tool.name)).toEqual(["workspace_info"]);
+});
+
+it("runs Pi with zero built-in plugins and responds using only external plugins", async () => {
+	vi.stubEnv("HASILAN_CODE_AGENT_DIR", dir);
+	vi.stubEnv("PI_OFFLINE", "1");
+	const examplesRoot = join(import.meta.dirname, "..", "examples", "plugins");
+	const faux = fauxProvider({ provider: "minimal-provider" });
+	faux.setResponses([fauxAssistantMessage("Minimal host response")]);
+	const modelRuntime = await ModelRuntime.create({
+		credentials: AuthStorage.inMemory(),
+		modelsPath: null,
+		modelsStore: new InMemoryModelsStore(),
+		allowModelNetwork: false,
+		refreshOnCreate: false,
+	});
+	modelRuntime.registerNativeProvider(faux.provider);
+	const builtIns = [
+		"hashline",
+		"shell-process",
+		"browser-tools",
+		"computer-tools",
+		"jev-computer",
+		"web-search",
+		"team-tools",
+		"model-providers",
+		"theme-default",
+		"hyakki",
+		"goal",
+		"plugin-manager",
+		"workspace-ui",
+		"runtime-context",
+		"session-storage",
+		"session-search",
+		"session-import",
+		"session-archive",
+		"storage-usage",
+		"workspace-files",
+		"terminal",
+		"git-review",
+		"text-transform",
+		"browser-adjustments",
+		"workspace-router",
+		"github-dashboard",
+		"account-usage",
+		"canvas",
+	];
+	await writeFile(
+		join(dir, "plugins.json"),
+		JSON.stringify({
+			...Object.fromEntries(builtIns.map((id) => [id, false])),
+			"sample-tool": join(examplesRoot, "sample-tool", "plugin.cjs"),
+		}),
+	);
+	const harness = await startHarness(
+		{ cwd: dir, port: 0, noOpen: true, help: false, lan: false, development: false },
+		{ modelRuntime },
+	);
+	try {
+		const { origin, launchUrl } = harness.launch;
+		const login = await fetch(launchUrl, { redirect: "manual" });
+		const cookie = login.headers.getSetCookie()[0].split(";")[0];
+		const api = (path: string, body?: unknown) =>
+			fetch(
+				origin + path,
+				body === undefined
+					? { headers: { cookie } }
+					: {
+							method: "POST",
+							headers: { cookie, origin, "Content-Type": "application/json" },
+							body: JSON.stringify(body),
+						},
+			);
+		const profile = await (await api("/api/plugin-profile")).json();
+		expect(profile.activeIds).toEqual(["sample-tool"]);
+		expect(profile.application).toBeNull();
+		const [{ workspaceId }] = await (await api("/api/workspaces")).json();
+		const { provider, id } = faux.getModel();
+		const created = await (await api("/api/sessions", { workspaceId, model: { provider, id } })).json();
+		expect((await api(`/api/sessions/${created.sessionId}/prompt`, { text: "Ping", mode: "prompt" })).status).toBe(
+			202,
+		);
+		await expect
+			.poll(async () => (await (await api(`/api/sessions/${created.sessionId}`)).json()).currentRun)
+			.toBeUndefined();
+		const detail = await (await api(`/api/sessions/${created.sessionId}`)).json();
+		expect(detail.messages.some((message: { role?: string }) => message.role === "assistant")).toBe(true);
+		expect(faux.state.callCount).toBe(1);
+	} finally {
+		await harness.shutdown();
 	}
 });

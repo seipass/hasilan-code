@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ATTACHMENT_LIMITS, type AttachmentUpload } from "../shared/attachments.ts";
+import { GIT_REVIEW_ID, WORKSPACE_ROUTER_ID } from "../shared/plugin-profile.ts";
 import type { ComposerDestination, ComposerSendResult, ConversationCandidate } from "../shared/workspace-routing.ts";
 import { errorMessage } from "./api.ts";
 import { Icon } from "./Icon.tsx";
@@ -12,6 +13,7 @@ import { Conversation } from "./Conversation.tsx";
 import { GitReview } from "./GitReview.tsx";
 import { fileChanges } from "./file-changes.ts";
 import { MotionItems, Presence, useLayoutMotion } from "./Motion.tsx";
+import { usePluginProfile } from "./plugins/profile.tsx";
 import { usePreferenceState, usePreferenceText } from "./preferences.ts";
 import { SessionOverview } from "./SessionOverview.tsx";
 import { COMPOSER_COMMANDS } from "./slash-command.ts";
@@ -60,6 +62,9 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const [chatWidth, setChatWidth] = usePreferenceState("pi-web-chat-width", 744);
 	const widthDrag = useRef<{ id: number; x: number; width: number } | undefined>(undefined);
 	const [sending, setSending] = useState(false);
+	const profile = usePluginProfile();
+	const gitReviewEnabled = profile?.activeIds.includes(GIT_REVIEW_ID) ?? true;
+	const workspaceRouterEnabled = profile?.activeIds.includes(WORKSPACE_ROUTER_ID) ?? true;
 	const [reviewOpen, setReviewOpen] = useState(false);
 	const [error, setError] = useState<string>();
 	const { attachments, reading, error: attachmentError, addFiles, remove } = useComposerAttachments(draftKey);
@@ -291,7 +296,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 					{canRouteWorkspace && <div className="composer-home-model">{modelControl}</div>}
 					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={canRouteWorkspace ? 2 : 1} disabled={sending} onKeyDown={(event) => {
 						if (event.nativeEvent.isComposing) return;
-						if (matchesAppKeybinding(event, "composer.routeWorkspace")) { event.preventDefault(); if (canRouteWorkspace && !event.repeat) void submit({ kind: "auto" }); return; }
+						if (matchesAppKeybinding(event, "composer.routeWorkspace")) { event.preventDefault(); if (canRouteWorkspace && workspaceRouterEnabled && !event.repeat) void submit({ kind: "auto" }); return; }
 						if (matchesAppKeybinding(event, "composer.followUp")) { event.preventDefault(); if (busy && !event.repeat) void submit(undefined, "followUp"); return; }
 						if (workspacePickerOpen && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setWorkspaceCandidates(undefined); return; }
 						if (workspacePickerOpen && workspaceCandidates && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -330,8 +335,8 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 			<Presence show={!!(error || attachmentError)} collapse><p className="composer-error" role="alert">{error ?? attachmentError}</p></Presence>
 		</div>
 		{dashboardVisible && homeDashboard}
-		{!surface && !empty && !(paneWidth >= 1100 && overviewWidth >= 160) && session?.availability === "ready" && <button type="button" className="chat-review-trigger" onClick={() => setReviewOpen(true)} title="変更をレビュー" aria-label="変更をレビュー"><Icon name="pencil" size="inline" /></button>}
-		{!surface && !empty && paneWidth >= 1100 && overviewWidth >= 160 && session?.availability === "ready" && <SessionOverview width={overviewWidth} session={session} team={team} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} onReview={() => setReviewOpen(true)} />}
-		{reviewOpen && session && <GitReview sessionId={session.sessionId} turn={session.latestRun ? fileChanges(session.toolCalls, session.latestRun.runId) : []} onClose={() => setReviewOpen(false)} onDraft={(value) => { setText((current) => [current.trimEnd(), value].filter(Boolean).join("\n\n")); setReviewOpen(false); requestAnimationFrame(() => input.current?.focus()); }} />}
+		{gitReviewEnabled && !surface && !empty && !(paneWidth >= 1100 && overviewWidth >= 160) && session?.availability === "ready" && <button type="button" className="chat-review-trigger" onClick={() => setReviewOpen(true)} title="変更をレビュー" aria-label="変更をレビュー"><Icon name="pencil" size="inline" /></button>}
+		{!surface && !empty && paneWidth >= 1100 && overviewWidth >= 160 && session?.availability === "ready" && <SessionOverview width={overviewWidth} session={session} team={team} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} onReview={gitReviewEnabled ? () => setReviewOpen(true) : undefined} />}
+		{gitReviewEnabled && reviewOpen && session && <GitReview sessionId={session.sessionId} turn={session.latestRun ? fileChanges(session.toolCalls, session.latestRun.runId) : []} onClose={() => setReviewOpen(false)} onDraft={(value) => { setText((current) => [current.trimEnd(), value].filter(Boolean).join("\n\n")); setReviewOpen(false); requestAnimationFrame(() => input.current?.focus()); }} />}
 	</section>;
 }
