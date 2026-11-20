@@ -26,13 +26,11 @@
 	flex: 0 0 auto;
 	flex-direction: column;
 	overflow: auto;
-	padding: 0 clamp(4px, 1vw, 12px) 0 0;
 	border: 0;
-	border-right: 1px solid var(--border-subtle);
 	mask-image: none;
 }
 .settings-layout .settings-tabs::after { display: none; }
-.settings-layout .settings-tabs button { text-align: left; padding-inline: clamp(6px, 1vw, 12px); }
+.settings-layout .settings-tabs button { text-align: left; }
 .settings-panels { position: relative; display: grid; flex: 1; min-width: 0; min-height: 0; }
 .settings-panels > .settings-content {
 	grid-area: 1 / 1;
@@ -46,17 +44,6 @@
 }
 .settings-panels > .settings-content[data-motion-exit="true"] { position: absolute; inset: 0; }
 .settings-dialog .settings-tabs [role="tab"] { position: relative; box-shadow: none; }
-.settings-tabs [role="tab"]::after {
-	content: "";
-	position: absolute;
-	inset: 6px auto 6px 0;
-	width: 2px;
-	border-radius: 2px;
-	background: var(--primary);
-	transform: scaleY(0);
-	transition: transform 160ms var(--motion-ease);
-}
-.settings-tabs [role="tab"][aria-selected="true"]::after { transform: scaleY(1); }
 @starting-style {
 	.dialog-backdrop:has(> .settings-dialog) { background-color: var(--dialog-scrim-clear); }
 	.settings-dialog.settings-dialog { opacity: 0; transform: translateY(10px) scale(.985); }
@@ -65,5 +52,5 @@
 	.settings-dialog.settings-dialog { height: calc(100dvh - 20px); }
 }
 @media (prefers-reduced-motion: reduce) {
-	.dialog-backdrop:has(> .settings-dialog), .settings-dialog.settings-dialog, .settings-tabs [role="tab"]::after { transition: none; }
+	.dialog-backdrop:has(> .settings-dialog), .settings-dialog.settings-dialog { transition: none; }
 }

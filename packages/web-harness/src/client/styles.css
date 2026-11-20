@@ -230,7 +230,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .quiet-button { border: 0; background: transparent; padding: 7px 10px; color: var(--muted); font-size: var(--text-sm); }
 .quiet-button.active { background: var(--primary-container); color: var(--accent); }
 .global-error { padding: .6rem 1rem; background: var(--danger-container); color: var(--on-danger-container); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-shrink: 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
-.main-layout { display: flex; flex: 1; min-height: 0; }
+.main-layout { position: relative; display: flex; flex: 1; min-height: 0; }
 .chat-column { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; container-type: inline-size; container-name: chat; }
 .connection-warning { padding: .5rem 1rem; margin: 0; background: var(--warning-container); color: var(--on-warning-container); font-size: var(--text-xs); }
 .chat-pane { position: relative; min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
@@ -405,7 +405,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .run-error > strong, .run-error > details > summary { user-select: none; }
 .back-to-bottom { position: absolute; bottom: 190px; align-self: center; z-index: 2; font-size: var(--text-xs); border-radius: 20px; box-shadow: 0 3px 12px #11111b66; }
 .right-panel { display: flex; flex-direction: column; flex-shrink: 0; min-width: 0; min-height: 0; border-left: 1px solid var(--border-subtle); background: var(--surface-panel); transform: translateX(0); visibility: visible; transition: margin-right var(--sidebar-motion) var(--motion-ease), transform var(--sidebar-motion) var(--motion-ease), visibility 0s; }
-.app-shell:not(.inspector-open) .right-panel { visibility: hidden; pointer-events: none; transition-delay: 0s, 0s, var(--sidebar-motion); }
+.app-shell:not(.inspector-open) .right-panel { position: absolute; inset: 0 0 0 auto; margin-right: 0 !important; transform: translateX(100%); visibility: hidden; pointer-events: none; transition-delay: 0s, 0s, var(--sidebar-motion); }
 .detail-resize-slot { display: flex; flex-shrink: 0; width: 8px; overflow: hidden; transition: width var(--sidebar-motion) var(--motion-ease); }
 .app-shell:not(.inspector-open) .detail-resize-slot { width: 0; pointer-events: none; }
 .right-panel-body { flex: 1; min-height: 0; overflow: auto; padding: 18px; }
