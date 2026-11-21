@@ -4,12 +4,14 @@
 .canvas-pane summary:focus-visible, .canvas-node:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .canvas-layout { display: flex; flex: 1; min-height: 0; }
 .canvas-drawing { position: relative; display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-sunken); }
-.canvas-view-controls { position: relative; z-index: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); border-radius: 10px 10px 0 0; flex: none; background: var(--surface-panel); }
-.canvas-view-controls button, .canvas-properties > summary { padding: 5px 8px; min-height: 32px; font-size: var(--text-sm); white-space: nowrap; }
-.canvas-view-controls output { color: var(--on-surface-muted); font-size: var(--text-xs); min-width: 38px; text-align: center; }
+.canvas-view-controls { position: relative; z-index: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); border-radius: 10px 10px 0 0; flex: none; background: var(--surface-panel); }
+.canvas-view-controls button, .canvas-properties > summary { padding: 4px 8px; min-height: 30px; font-size: var(--text-xs); white-space: nowrap; }
+.canvas-icon-btn { display: grid; place-items: center; width: 30px; padding: 0 !important; }
+.canvas-icon-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.canvas-view-controls output { color: var(--on-surface-muted); font-size: var(--text-xs); min-width: 36px; text-align: center; }
 .canvas-destination { display: flex; align-items: center; }
-.canvas-destination select { padding: 5px 8px; min-height: 32px; font-size: var(--text-sm); }
-.canvas-title { flex: 1; width: 180px; min-width: 120px; max-width: 260px; padding: 5px 8px; min-height: 32px; font-size: var(--text-md); font-weight: 600; background: transparent; border-color: transparent; }
+.canvas-destination select { padding: 4px 8px; min-height: 30px; font-size: var(--text-xs); }
+.canvas-title { flex: 1 1 160px; min-width: 120px; max-width: 240px; padding: 4px 8px; min-height: 30px; font-size: var(--text-sm); font-weight: 600; background: transparent; border-color: transparent; }
 .canvas-title:hover, .canvas-title:focus { border-color: var(--border-strong); background: var(--surface-raised); }
 .canvas-add, .canvas-use { border-color: var(--primary); color: var(--on-primary-container); background: var(--primary-container); }
 .canvas-toolbar-status { flex: 1; min-width: 72px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--on-surface-muted); }
@@ -34,7 +36,10 @@
 .canvas-tool-dock .canvas-tool-key { position: absolute; right: 3px; bottom: 1px; font-size: 9px; line-height: 1; opacity: .55; pointer-events: none; }
 .canvas-tool-sep { width: 1px; height: 20px; margin-inline: 3px; background: var(--border); flex: none; }
 
-.canvas-style-panel { position: absolute; top: 60px; left: 12px; z-index: 6; display: grid; gap: 10px; width: 212px; max-height: calc(100% - 76px); overflow-y: auto; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--surface-panel) 94%, transparent); backdrop-filter: var(--glass-filter); box-shadow: var(--popup-shadow); font-size: var(--text-xs); }
+.canvas-style-panel { position: absolute; top: 60px; left: 12px; z-index: 6; display: grid; gap: 10px; width: 204px; max-height: calc(100% - 76px); overflow-y: auto; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--surface-panel) 94%, transparent); backdrop-filter: var(--glass-filter); box-shadow: var(--popup-shadow); font-size: var(--text-xs); }
+.canvas-style-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.canvas-style-toggle { display: grid; place-items: center; width: 22px; height: 22px; min-height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--on-surface-muted); }
+.canvas-style-toggle:hover { background: var(--surface-hover); color: var(--on-surface); }
 .canvas-style-group { display: grid; gap: 5px; }
 .canvas-style-label { color: var(--on-surface-muted); font-size: 11px; }
 .canvas-swatches { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }

@@ -101,7 +101,8 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 	const [spaceHeld, setSpaceHeld] = useState(false);
 	const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number }>();
 	const [editingElementId, setEditingElementId] = useState<string>();
-	const { view, setView, animateView } = useAnimatedView({ x: 40, y: 40, zoom: 1 });
+	const [styleOpen, setStyleOpen] = useState(true);
+	const { view, setView, animateView } = useAnimatedView({ x: 240, y: 80, zoom: 1 });
 	const [moving, setMoving] = useState(false);
 	const [editingNode, setEditingNode] = useState<string>();
 	const [connectingFrom, setConnectingFrom] = useState<string>();
@@ -544,7 +545,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 	function startNodePointer(event: ReactPointerEvent<HTMLElement>, item: CanvasNode) {
 		if (event.button !== 0 || busyRef.current || !ready) return;
 		if (event.target instanceof Element && event.target.closest("button, input, textarea, select, a")) return;
-		if (spaceHeld || tool === "hand") return;
+		if (spaceHeld || tool !== "select") return;
 		event.stopPropagation();
 		if (connectingFrom || editingNode === item.id) return;
 		setMoving(true);
@@ -683,6 +684,8 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 				} else if (created.type !== "freedraw") {
 					if (created.width < 6 && created.height < 6) {
 						edit((current) => ({ ...current, elements: (current.elements ?? []).filter((el) => el.id !== created.id) }), false);
+						history.current.past.pop();
+						setHistoryVersion((v) => v + 1);
 						setSelection(undefined);
 					} else {
 						setTool("select");
@@ -741,6 +744,22 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 	}
 
 	function exportSvg() {
+		let minX = Infinity;
+		let minY = Infinity;
+		let maxX = -Infinity;
+		let maxY = -Infinity;
+		for (const el of elements) {
+			const b = elementBounds(el);
+			minX = Math.min(minX, b.x);
+			minY = Math.min(minY, b.y);
+			maxX = Math.max(maxX, b.x + b.width);
+			maxY = Math.max(maxY, b.y + b.height);
+		}
+		const pad = 32;
+		const vx = Number.isFinite(minX) ? Math.floor(minX - pad) : 0;
+		const vy = Number.isFinite(minY) ? Math.floor(minY - pad) : 0;
+		const vw = Number.isFinite(maxX) ? Math.max(100, Math.ceil(maxX - minX + pad * 2)) : 800;
+		const vh = Number.isFinite(maxY) ? Math.max(100, Math.ceil(maxY - minY + pad * 2)) : 600;
 		const items = elements.map((el) => {
 			const dash = elementStrokeDasharray(el.strokeStyle);
 			const opacity = el.opacity ?? 1;
@@ -752,7 +771,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 			const head = el.type === "arrow" ? `<path d="${arrowHeadPath(el)}" fill="none" stroke="${el.stroke}" stroke-width="${el.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" />` : "";
 			return `<g transform="translate(${el.x} ${el.y})" opacity="${opacity}"><path d="${d}" fill="${el.fill}" stroke="${el.stroke}" stroke-width="${el.strokeWidth}" ${dash ? `stroke-dasharray="${dash}"` : ""} stroke-linecap="round" stroke-linejoin="round" />${head}</g>`;
 		});
-		const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-400 -400 2000 1400">${items.join("")}</svg>\n`;
+		const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}">${items.join("")}</svg>\n`;
 		const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
 		const anchor = window.document.createElement("a");
 		anchor.href = url;
@@ -846,8 +865,8 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 					<div className="canvas-view-controls" aria-label="表示操作">
 						<input className="canvas-title" aria-label="設計タイトル" value={design.title} maxLength={CANVAS_LIMITS.title} placeholder="設計のタイトル" disabled={disabled} onChange={(event) => edit((current) => ({ ...current, title: event.target.value }))} />
 						<details className="canvas-properties canvas-description"><summary>概要</summary><div><label>目的・概要<textarea rows={4} value={design.description} maxLength={CANVAS_LIMITS.description} disabled={disabled} onChange={(event) => edit((current) => ({ ...current, description: event.target.value }))} /></label></div></details>
-						<button type="button" aria-label="元に戻す" title="元に戻す (Ctrl+Z)" disabled={disabled || !history.current.past.length} onClick={undo}>↶</button>
-						<button type="button" aria-label="やり直す" title="やり直す (Ctrl+Y)" disabled={disabled || !history.current.future.length} onClick={redo}>↷</button>
+						<button type="button" className="canvas-icon-btn" aria-label="元に戻す" title="元に戻す (Ctrl+Z)" disabled={disabled || !history.current.past.length} onClick={undo}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg></button>
+						<button type="button" className="canvas-icon-btn" aria-label="やり直す" title="やり直す (Ctrl+Y)" disabled={disabled || !history.current.future.length} onClick={redo}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg></button>
 						<button type="button" aria-label="縮小" onClick={() => zoomTo(view.zoom / 1.2)} disabled={view.zoom <= MIN_ZOOM}><Icon name="minus" size="inline" /></button>
 						<output aria-label="拡大率">{Math.round(view.zoom * 100)}%</output>
 						<button type="button" aria-label="拡大" onClick={() => zoomTo(view.zoom * 1.2)} disabled={view.zoom >= MAX_ZOOM}><Icon name="plus" size="inline" /></button>
@@ -918,7 +937,12 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 						</div>
 
 						{showStylePanel && (
-							<aside className="canvas-style-panel" aria-label="スタイル設定">
+							<aside className="canvas-style-panel" aria-label="スタイル設定" onPointerDown={(event) => event.stopPropagation()}>
+								<div className="canvas-style-header">
+									<span className="canvas-style-label">スタイル</span>
+									<button type="button" className="canvas-style-toggle" aria-label={styleOpen ? "スタイルを折りたたむ" : "スタイルを開く"} onClick={() => setStyleOpen((v) => !v)}>{styleOpen ? "−" : "＋"}</button>
+								</div>
+								{styleOpen && <>
 								<div className="canvas-style-group">
 									<span className="canvas-style-label">線の色</span>
 									<div className="canvas-swatches">
@@ -1041,6 +1065,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 										</div>
 									</div>
 								)}
+								</>}
 							</aside>
 						)}
 
@@ -1172,7 +1197,14 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 											false,
 										);
 									}}
-									onBlur={() => setEditingElementId(undefined)}
+									onBlur={(event) => {
+										if (event.relatedTarget instanceof Element && event.relatedTarget.closest(".canvas-style-panel")) return;
+										if (editingElement.type === "text" && !(editingElement.text ?? "").trim()) {
+											edit((current) => ({ ...current, elements: (current.elements ?? []).filter((el) => el.id !== editingElement.id) }), false);
+											setSelection(undefined);
+										}
+										setEditingElementId(undefined);
+									}}
 									onKeyDown={(event) => {
 										if (event.key === "Escape") {
 											event.stopPropagation();
