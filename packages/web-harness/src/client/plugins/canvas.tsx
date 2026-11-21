@@ -12,13 +12,13 @@ function CanvasView({ workspaceId, opened, onDraft, onDirtyChange }: WorkspacePa
 	return <CanvasPane
 		key={workspaceId}
 		workspaceId={workspaceId}
-		destinationControl={<label className="canvas-destination">
+		destinationControl={swarmEnabled ? <label className="canvas-destination">
 			<span className="sr-only">入力欄に追加する設計の送信先</span>
 			<Select aria-label="入力欄に追加する設計の送信先" value={destination} onChange={(value) => setDestination(value === "swarm" ? "swarm" : "chat")}>
 				<option value="chat">会話</option>
-				{swarmEnabled && <option value="swarm">Hyakki-Yako</option>}
+				<option value="swarm">Hyakki-Yako</option>
 			</Select>
-		</label>}
+		</label> : null}
 		onComposeDesign={(path) => {
 			const text = `設計ファイル ${JSON.stringify(path)} を読み、内容に沿って進めてください。`;
 			onDraft(destination === "swarm" ? `/hyakki ${text}` : text);

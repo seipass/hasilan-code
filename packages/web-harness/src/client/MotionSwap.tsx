@@ -52,10 +52,11 @@ export function MotionLabel({ value }: { value: string | number }) {
 }
 
 /** Only one live page exists: keep the old page until the next one is ready, then fade out and in. */
-export function MotionSwap({ identity, ready = true, enabled = true, children, className = "", animateHeight = false, inline = false }: {
+export function MotionSwap({ identity, ready = true, enabled = true, hidden = false, children, className = "", animateHeight = false, inline = false }: {
 	identity: string;
 	ready?: boolean;
 	enabled?: boolean;
+	hidden?: boolean;
 	children: ReactNode;
 	className?: string;
 	animateHeight?: boolean;
@@ -88,7 +89,7 @@ export function MotionSwap({ identity, ready = true, enabled = true, children, c
 		} else setPhase("stable");
 	};
 	const Tag = inline ? "span" : "div";
-	return <Tag ref={(node) => { outer.current = node; }} className={`motion-swap${inline ? " motion-swap-inline" : ""} ${className}`} aria-busy={!ready} inert={!ready || displayed !== identity || phase === "out"}>
+	return <Tag ref={(node) => { outer.current = node; }} className={`motion-swap${inline ? " motion-swap-inline" : ""} ${className}`} hidden={hidden || undefined} aria-busy={!ready} inert={hidden || !ready || displayed !== identity || phase === "out"}>
 		<Tag ref={(node) => { content.current = node; }} className="motion-swap-content" data-phase={phase} data-empty={!shown.current.children || undefined} onTransitionEnd={finish} onTransitionCancel={(event) => {
 			if ((!animationsEnabled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) || !event.currentTarget.getClientRects().length) finish(event);
 		}}>{shown.current.children}</Tag>

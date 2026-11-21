@@ -16,9 +16,9 @@ vi.mock("react", async () => ({
 }));
 
 let reduced = false;
-function render(identity: string, ready = true, enabled = true) {
+function render(identity: string, ready = true, enabled = true, hidden = false) {
 	hooks.refIndex = 0; hooks.stateIndex = 0; hooks.effects = [];
-	const result = MotionSwap({ identity, ready, enabled, children: createElement("textarea", { key: identity, id: "message" }) });
+	const result = MotionSwap({ identity, ready, enabled, hidden, children: createElement("textarea", { key: identity, id: "message" }) });
 	for (const effect of hooks.effects) effect();
 	return result;
 }
@@ -85,6 +85,12 @@ it("updates hidden tab content immediately without waiting for an event that can
 	hooks.refs[3].current = { getClientRects: () => [] };
 	render("new");
 	expect(body(render("new")).props.children.key).toBe("new");
+});
+
+it("applies hidden and inert when MotionSwap itself is hidden", () => {
+	const result = render("chat", true, true, true);
+	expect(result.props.hidden).toBe(true);
+	expect(result.props.inert).toBe(true);
 });
 
 it("measures intrinsic content and resumes a size change from the visible interpolation", () => {

@@ -326,12 +326,14 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				await panelButton.click();
 				await canvas.waitFor();
 				expect(await panelButton.getAttribute("aria-current")).toBe("page");
-				expect(await input.inputValue()).toBe("保存する下書き");
+				await input.waitFor({ state: "hidden" });
+				await fileTree.waitFor({ state: "hidden" });
+				expect(await page.getByRole("button", { name: "作業一覧", exact: true }).count()).toBe(0);
 				expect(page.url()).toBe(currentUrl);
-				await input.fill("/chat");
-				await input.press("Enter");
-				await input.press("Enter");
+				await page.getByRole("button", { name: "会話に戻る", exact: true }).click();
 				await canvas.waitFor({ state: "hidden" });
+				await input.waitFor();
+				expect(await input.inputValue()).toBe("保存する下書き");
 				expect(await panelButton.getAttribute("aria-current")).toBeNull();
 				const notesButton = page.getByRole("button", { name: "Notes", exact: true });
 				expect(scriptRequests).toEqual([]);

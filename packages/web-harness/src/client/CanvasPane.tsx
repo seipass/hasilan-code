@@ -792,6 +792,20 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 				fontSize: primaryElement.fontSize ?? 16,
 			}
 		: style;
+	const activeTypes: readonly CanvasElement["type"][] = selectedElements.length > 0
+		? selectedElements.map((el) => el.type)
+		: tool !== "select" && tool !== "hand"
+			? [tool]
+			: [];
+	const showFillStyle = activeTypes.some((type) => type === "rectangle" || type === "ellipse" || type === "diamond" || type === "sticky");
+	const showStrokeStyle = activeTypes.some((type) => type !== "text" && type !== "sticky");
+	const showRoughnessStyle = activeTypes.some((type) => type !== "text" && type !== "sticky" && type !== "freedraw");
+	const showFontSizeStyle = activeTypes.some((type) => type === "text" || type === "sticky" || type === "rectangle" || type === "ellipse" || type === "diamond");
+	const strokeLabel = activeTypes.length > 0 && activeTypes.every((type) => type === "text")
+		? "文字の色"
+		: activeTypes.length > 0 && activeTypes.every((type) => type === "sticky")
+			? "枠の色"
+			: "線の色";
 	const showStylePanel = ready && (tool !== "select" && tool !== "hand" || selectedElements.length > 0);
 	const handleSize = 8 / view.zoom;
 
@@ -944,7 +958,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 								</div>
 								{styleOpen && <>
 								<div className="canvas-style-group">
-									<span className="canvas-style-label">線の色</span>
+									<span className="canvas-style-label">{strokeLabel}</span>
 									<div className="canvas-swatches">
 										{STROKE_PALETTE.map((color) => (
 											<button
@@ -952,7 +966,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 												type="button"
 												className="canvas-swatch"
 												style={{ background: color }}
-												aria-label={`線の色 ${color}`}
+												aria-label={`${strokeLabel} ${color}`}
 												aria-pressed={activeStyle.stroke === color}
 												onClick={() => updateStyle("stroke", color)}
 											/>
@@ -960,83 +974,93 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 										<input
 											type="color"
 											className="canvas-color-input"
-											aria-label="線の色を自由に選ぶ"
+											aria-label={`${strokeLabel}を自由に選ぶ`}
 											value={activeStyle.stroke.startsWith("#") && activeStyle.stroke.length === 7 ? activeStyle.stroke : "#e8e8e8"}
 											onChange={(event) => updateStyle("stroke", event.currentTarget.value)}
 										/>
 									</div>
 								</div>
 
-								<div className="canvas-style-group">
-									<span className="canvas-style-label">塗りつぶし</span>
-									<div className="canvas-swatches">
-										{FILL_PALETTE.map((color) => (
-											<button
-												key={color}
-												type="button"
-												className={`canvas-swatch${color === "transparent" ? " is-transparent" : ""}`}
-												style={color === "transparent" ? undefined : { background: color }}
-												aria-label={color === "transparent" ? "塗りつぶしなし" : `塗りつぶし ${color}`}
-												aria-pressed={activeStyle.fill === color}
-												onClick={() => updateStyle("fill", color)}
+								{showFillStyle && (
+									<div className="canvas-style-group">
+										<span className="canvas-style-label">塗りつぶし</span>
+										<div className="canvas-swatches">
+											{FILL_PALETTE.map((color) => (
+												<button
+													key={color}
+													type="button"
+													className={`canvas-swatch${color === "transparent" ? " is-transparent" : ""}`}
+													style={color === "transparent" ? undefined : { background: color }}
+													aria-label={color === "transparent" ? "塗りつぶしなし" : `塗りつぶし ${color}`}
+													aria-pressed={activeStyle.fill === color}
+													onClick={() => updateStyle("fill", color)}
+												/>
+											))}
+											<input
+												type="color"
+												className="canvas-color-input"
+												aria-label="塗りつぶし色を自由に選ぶ"
+												value={activeStyle.fill.startsWith("#") && activeStyle.fill.length === 7 ? activeStyle.fill : "#242c38"}
+												onChange={(event) => updateStyle("fill", event.currentTarget.value)}
 											/>
-										))}
-										<input
-											type="color"
-											className="canvas-color-input"
-											aria-label="塗りつぶし色を自由に選ぶ"
-											value={activeStyle.fill.startsWith("#") && activeStyle.fill.length === 7 ? activeStyle.fill : "#242c38"}
-											onChange={(event) => updateStyle("fill", event.currentTarget.value)}
-										/>
+										</div>
 									</div>
-								</div>
+								)}
 
-								<div className="canvas-style-group">
-									<span className="canvas-style-label">線の太さ</span>
-									<div className="canvas-style-buttons">
-										{([1.5, 2.5, 4.5] as const).map((w, i) => (
-											<button key={w} type="button" aria-pressed={Math.abs(activeStyle.strokeWidth - w) < 0.6} onClick={() => updateStyle("strokeWidth", w)}>
-												{["細", "中", "太"][i]}
-											</button>
-										))}
-									</div>
-								</div>
+								{showStrokeStyle && (
+									<>
+										<div className="canvas-style-group">
+											<span className="canvas-style-label">線の太さ</span>
+											<div className="canvas-style-buttons">
+												{([1.5, 2.5, 4.5] as const).map((w, i) => (
+													<button key={w} type="button" aria-pressed={Math.abs(activeStyle.strokeWidth - w) < 0.6} onClick={() => updateStyle("strokeWidth", w)}>
+														{["細", "中", "太"][i]}
+													</button>
+												))}
+											</div>
+										</div>
 
-								<div className="canvas-style-group">
-									<span className="canvas-style-label">線種</span>
-									<div className="canvas-style-buttons">
-										{(
-											[
-												["solid", "実線"],
-												["dashed", "破線"],
-												["dotted", "点線"],
-											] as const
-										).map(([val, label]) => (
-											<button key={val} type="button" aria-pressed={activeStyle.strokeStyle === val} onClick={() => updateStyle("strokeStyle", val)}>
-												{label}
-											</button>
-										))}
-									</div>
-								</div>
+										<div className="canvas-style-group">
+											<span className="canvas-style-label">線種</span>
+											<div className="canvas-style-buttons">
+												{(
+													[
+														["solid", "実線"],
+														["dashed", "破線"],
+														["dotted", "点線"],
+													] as const
+												).map(([val, label]) => (
+													<button key={val} type="button" aria-pressed={activeStyle.strokeStyle === val} onClick={() => updateStyle("strokeStyle", val)}>
+														{label}
+													</button>
+												))}
+											</div>
+										</div>
+									</>
+								)}
 
-								<div className="canvas-style-group">
-									<span className="canvas-style-label">描き味</span>
-									<div className="canvas-style-buttons">
-										<button type="button" aria-pressed={activeStyle.roughness > 0} onClick={() => updateStyle("roughness", 1)}>スケッチ</button>
-										<button type="button" aria-pressed={activeStyle.roughness === 0} onClick={() => updateStyle("roughness", 0)}>クッキリ</button>
+								{showRoughnessStyle && (
+									<div className="canvas-style-group">
+										<span className="canvas-style-label">描き味</span>
+										<div className="canvas-style-buttons">
+											<button type="button" aria-pressed={activeStyle.roughness > 0} onClick={() => updateStyle("roughness", 1)}>スケッチ</button>
+											<button type="button" aria-pressed={activeStyle.roughness === 0} onClick={() => updateStyle("roughness", 0)}>クッキリ</button>
+										</div>
 									</div>
-								</div>
+								)}
 
-								<div className="canvas-style-group">
-									<span className="canvas-style-label">文字サイズ</span>
-									<div className="canvas-style-buttons">
-										{([14, 18, 24, 34] as const).map((sz, i) => (
-											<button key={sz} type="button" aria-pressed={activeStyle.fontSize === sz} onClick={() => updateStyle("fontSize", sz)}>
-												{["S", "M", "L", "XL"][i]}
-											</button>
-										))}
+								{showFontSizeStyle && (
+									<div className="canvas-style-group">
+										<span className="canvas-style-label">文字サイズ</span>
+										<div className="canvas-style-buttons">
+											{([14, 18, 24, 34] as const).map((sz, i) => (
+												<button key={sz} type="button" aria-pressed={activeStyle.fontSize === sz} onClick={() => updateStyle("fontSize", sz)}>
+													{["S", "M", "L", "XL"][i]}
+												</button>
+											))}
+										</div>
 									</div>
-								</div>
+								)}
 
 								<div className="canvas-style-group">
 									<label className="canvas-style-label">
@@ -1271,7 +1295,6 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 							<div className="canvas-empty">
 								<h3>自由に描いて設計する</h3>
 								<p>上のツールバーから四角・楕円・矢印・フリーハンド・テキスト・付箋を描画できます。</p>
-								<button className="canvas-add" type="button" disabled={disabled} onClick={() => addNode()}>＋ ノードを追加</button>
 							</div>
 						</Presence>
 					</div>
