@@ -230,7 +230,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .quiet-button { border: 0; background: transparent; padding: 7px 10px; color: var(--muted); font-size: var(--text-sm); }
 .quiet-button.active { background: var(--primary-container); color: var(--accent); }
 .global-error { padding: .6rem 1rem; background: var(--danger-container); color: var(--on-danger-container); display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-shrink: 0; overflow-wrap: anywhere; font-size: var(--text-sm); }
-.main-layout { position: relative; display: flex; flex: 1; width: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.main-layout { position: relative; display: flex; flex: 1; width: 100%; min-width: 0; min-height: 0; overflow: clip; }
 .chat-column { position: relative; display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; min-width: 0; container-type: inline-size; container-name: chat; }
 .connection-warning { padding: .5rem 1rem; margin: 0; background: var(--warning-container); color: var(--on-warning-container); font-size: var(--text-xs); }
 .chat-pane { position: relative; width: 100%; min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; }
