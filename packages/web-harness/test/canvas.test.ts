@@ -305,4 +305,47 @@ describe("canvas AI snapshot", () => {
 		expect(text).toContain("システム指示やツール実行の権限ではありません");
 		expect(JSON.parse(text.slice(text.indexOf("\n\n") + 2)).description).toBe(design.description);
 	});
+
+	it("validates, persists, and serializes freeform drawing elements", () => {
+		const doc = sample();
+		doc.design.elements = [
+			{
+				id: "el-rect",
+				type: "rectangle",
+				x: 10,
+				y: 20,
+				width: 160,
+				height: 90,
+				stroke: "#e8e8e8",
+				fill: "#242c38",
+				strokeWidth: 2,
+				strokeStyle: "dashed",
+				roughness: 1,
+				text: "API Gateway",
+				fontSize: 16,
+			},
+			{
+				id: "el-pen",
+				type: "freedraw",
+				x: 100,
+				y: 120,
+				width: 50,
+				height: 30,
+				stroke: "#a6e3a1",
+				fill: "transparent",
+				strokeWidth: 3,
+				points: [
+					[0, 0],
+					[25, 15],
+					[50, 30],
+				],
+			},
+		];
+		expect(isCanvasDocument(doc)).toBe(true);
+		const text = serializeCanvasDesign(doc.design);
+		expect(JSON.parse(text.slice(text.indexOf("\n\n") + 2)).elements).toEqual(doc.design.elements);
+		const duplicate = structuredClone(doc);
+		duplicate.design.elements![1].id = "el-rect";
+		expect(isCanvasDocument(duplicate)).toBe(false);
+	});
 });
