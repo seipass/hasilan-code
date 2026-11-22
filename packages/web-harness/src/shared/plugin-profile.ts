@@ -80,6 +80,6 @@ export type ThemePlugin = Static<typeof themePluginSchema>;
 
 export const standardTheme: ThemePlugin = {
 	title: "標準",
-	dark: { background: "#070708", foreground: "#ffffff", accent: "#2f71e3", contrast: 35 },
-	light: { background: "#ffffff", foreground: "#0a0a0c", accent: "#2f75c3", contrast: 35 },
+	dark: { background: "#141414", foreground: "#e8e8e8", accent: "#e8e8e8", contrast: 50 },
+	light: { background: "#ffffff", foreground: "#202124", accent: "#2563eb", contrast: 50 },
 };

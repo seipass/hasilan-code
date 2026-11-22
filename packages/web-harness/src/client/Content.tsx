@@ -1,13 +1,10 @@
-import type { Element as HastElement } from "hast";
-import { type ComponentPropsWithoutRef, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown, { type ExtraProps } from "react-markdown";
+import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isVisionImage } from "../shared/attachments.ts";
 import { TEXT_TRANSFORM_ID } from "../shared/plugin-profile.ts";
 import { api, errorMessage } from "./api.ts";
 import { ColorPreviewSpan, rehypeColorPreview } from "./ColorPreview.tsx";
-import { highlightLines } from "./highlight.tsx";
-import { Icon } from "./Icon.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import "./TextTransform.css";
 
@@ -15,85 +12,9 @@ export function record(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hastText(node: HastElement | undefined): string {
-	if (!node) return "";
-	let out = "";
-	for (const child of node.children) {
-		if (child.type === "text") out += child.value;
-		else if (child.type === "element") out += hastText(child);
-	}
-	return out;
-}
-
-function hastHasColorPreview(node: HastElement | undefined): boolean {
-	if (!node) return false;
-	for (const child of node.children) {
-		if (child.type === "element") {
-			if (typeof child.properties?.dataColorPreview === "string" || hastHasColorPreview(child)) return true;
-		}
-	}
-	return false;
-}
-
-function CodeBlock({ node, children }: ComponentPropsWithoutRef<"pre"> & ExtraProps) {
-	const [copied, setCopied] = useState(false);
-	const timer = useRef<number | undefined>(undefined);
-	useEffect(() => () => { if (timer.current !== undefined) window.clearTimeout(timer.current); }, []);
-	const codeChild = node?.children.find((child): child is HastElement => child.type === "element" && child.tagName === "code");
-	const rawClass: unknown = codeChild?.properties?.className;
-	const classNames = Array.isArray(rawClass) ? rawClass.map(String) : typeof rawClass === "string" ? rawClass.split(/\s+/) : [];
-	const langClass = classNames.find((entry) => entry.startsWith("language-"));
-	const language = langClass ? langClass.slice("language-".length).toLowerCase() : undefined;
-	const rawCode = useMemo(() => hastText(codeChild ?? node).replace(/\n$/, ""), [codeChild, node]);
-	const hasSwatches = useMemo(() => hastHasColorPreview(codeChild ?? node), [codeChild, node]);
-	const highlighted = useMemo(
-		() => (!hasSwatches && rawCode ? highlightLines(rawCode, language) : undefined),
-		[hasSwatches, rawCode, language],
-	);
-	return (
-		<div className="code-block-frame">
-			<div className="code-block-header">
-				<span className="code-block-language">{language || "text"}</span>
-				<button
-					type="button"
-					className="code-block-copy"
-					data-copied={copied || undefined}
-					aria-label={copied ? "コピーしました" : "コードをコピー"}
-					title={copied ? "コピーしました" : "コードをコピー"}
-					onClick={() => {
-						void navigator.clipboard?.writeText(rawCode).then(() => {
-							setCopied(true);
-							if (timer.current !== undefined) window.clearTimeout(timer.current);
-							timer.current = window.setTimeout(() => setCopied(false), 1400);
-						}, () => undefined);
-					}}
-				>
-					<Icon name={copied ? "check" : "copy"} size="inline" />
-					<span>{copied ? "Copied" : "Copy"}</span>
-				</button>
-			</div>
-			<pre className="code-block-pre">
-				{highlighted ? (
-					<code className={langClass}>
-						{highlighted.map((line, index) => (
-							<span key={index}>
-								{index > 0 ? "\n" : ""}
-								{line}
-							</span>
-						))}
-					</code>
-				) : (
-					children
-				)}
-			</pre>
-		</div>
-	);
-}
-
 export function Markdown({ text, onFile, colorPreview = false }: { text: string; onFile: (path: string, line?: number) => void; colorPreview?: boolean }) {
 	return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={colorPreview ? [rehypeColorPreview] : []} skipHtml components={{
 		span: ColorPreviewSpan,
-		pre: CodeBlock,
 		table: ({ children }) => <div className="markdown-table-scroll" tabIndex={0} role="region" aria-label="表"><table>{children}</table></div>,
 		a: ({ href, children }) => {
 			if (!href) return <span>{children}</span>;
