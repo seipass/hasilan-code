@@ -29,6 +29,17 @@ function useThemeSelection(themeId: string | undefined) {
 	return { themes, selectedTheme };
 }
 
+function relativeLuminance(hex: string): number {
+	const normalized = hex.startsWith("#") ? hex.slice(1) : hex;
+	const full = normalized.length === 3 ? normalized.split("").map((c) => c + c).join("") : normalized;
+	if (!/^[0-9a-fA-F]{6}$/.test(full)) return 0.2;
+	const channel = (start: number) => {
+		const srgb = Number.parseInt(full.slice(start, start + 2), 16) / 255;
+		return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+	};
+	return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
+
 /** Applies synchronized appearance preferences outside the settings dialog. */
 export function ApplicationTheme() {
 	const [settings] = usePreferenceState(KEY, DEFAULT, readAppearance);
@@ -47,26 +58,47 @@ export function ApplicationTheme() {
 		const code = settings.codeTheme === "auto" ? variant : settings.codeTheme;
 		const mix = (color: string, percent: number, base = theme.background) => `color-mix(in srgb, ${color} ${percent}%, ${base})`;
 		const amount = 0.65 + theme.contrast / 100;
+		const isDark = variant === "dark";
+		const onPrimary = relativeLuminance(theme.accent) > 0.42 ? "#111113" : "#ffffff";
 		const colors: Record<string, string> = {
-			"--surface": theme.background, "--surface-sunken": mix(variant === "dark" ? "#000" : "#fff", 18),
-			"--surface-panel": mix(theme.foreground, 3 * amount), "--surface-raised": mix(theme.foreground, 5 * amount),
-			"--surface-hover": mix(theme.foreground, 10 * amount), "--surface-inverse": theme.foreground,
+			"--surface": theme.background,
+			"--surface-sunken": isDark ? mix("#000", 24) : mix("#000", 3.5),
+			"--surface-panel": isDark ? mix(theme.foreground, 2.8 * amount) : mix(theme.foreground, 2.4 * amount),
+			"--surface-raised": isDark ? mix(theme.foreground, 5.8 * amount) : theme.background,
+			"--surface-hover": isDark ? mix(theme.foreground, 10.5 * amount) : mix(theme.foreground, 6 * amount),
+			"--surface-inverse": theme.foreground,
+			"--surface-sheen": isDark ? "rgb(255 255 255 / 0.08)" : "rgb(255 255 255 / 0.9)",
+			"--surface-sheen-strong": isDark ? "rgb(255 255 255 / 0.14)" : "rgb(255 255 255 / 0.98)",
+			"--surface-edge": isDark ? "rgb(255 255 255 / 0.09)" : "rgb(15 23 42 / 0.09)",
+			"--surface-edge-strong": isDark ? "rgb(255 255 255 / 0.16)" : "rgb(15 23 42 / 0.16)",
+			"--recessed-shadow": isDark ? "inset 0 1px 2px rgb(0 0 0 / 0.34)" : "inset 0 1px 2px rgb(15 23 42 / 0.06)",
+			"--elevation-1": isDark
+				? "0 1px 2px rgb(0 0 0 / 0.36), 0 4px 12px -4px rgb(0 0 0 / 0.36)"
+				: "0 1px 2px rgb(15 23 42 / 0.05), 0 4px 12px -4px rgb(15 23 42 / 0.07)",
+			"--elevation-2": isDark
+				? "0 2px 6px rgb(0 0 0 / 0.42), 0 14px 32px -10px rgb(0 0 0 / 0.58)"
+				: "0 2px 6px rgb(15 23 42 / 0.06), 0 12px 28px -8px rgb(15 23 42 / 0.1)",
+			"--elevation-3": isDark
+				? "0 4px 12px rgb(0 0 0 / 0.48), 0 24px 56px -12px rgb(0 0 0 / 0.72)"
+				: "0 4px 12px rgb(15 23 42 / 0.08), 0 24px 48px -12px rgb(15 23 42 / 0.14)",
+			"--ambient-glow": isDark ? `color-mix(in srgb, ${theme.accent} 7%, transparent)` : `color-mix(in srgb, ${theme.accent} 5.5%, transparent)`,
+			"--focus-glow": isDark ? `color-mix(in srgb, ${theme.accent} 18%, transparent)` : `color-mix(in srgb, ${theme.accent} 14%, transparent)`,
 			"--on-surface": theme.foreground, "--on-surface-secondary": mix(theme.foreground, 78),
-			"--on-surface-muted": mix(theme.foreground, 62), "--on-surface-inverse": theme.background,
-			"--primary": theme.accent, "--primary-hover": mix(theme.accent, 80, theme.foreground),
-			"--primary-container": mix(theme.accent, 16), "--on-primary": theme.background,
-			"--on-primary-container": theme.foreground, "--secondary": variant === "dark" ? "#9bbcf0" : "#245bb4",
-			"--secondary-hover": variant === "dark" ? "#c0d6f6" : "#17458d",
+			"--on-surface-muted": mix(theme.foreground, 58), "--on-surface-inverse": theme.background,
+			"--primary": theme.accent, "--primary-hover": mix(theme.accent, 82, isDark ? "#ffffff" : "#000000"),
+			"--primary-container": mix(theme.accent, 16), "--on-primary": onPrimary,
+			"--on-primary-container": theme.foreground, "--secondary": isDark ? "#9bbcf0" : "#245bb4",
+			"--secondary-hover": isDark ? "#c0d6f6" : "#17458d",
 			"--secondary-container": mix(theme.accent, 18), "--on-secondary-container": theme.foreground,
-			"--success": variant === "dark" ? "#a6e3a1" : "#26723b",
-			"--warning": variant === "dark" ? "#f9e2af" : "#805800",
-			"--danger": variant === "dark" ? "#f38ba8" : "#b3264c",
-			"--success-container": mix(variant === "dark" ? "#a6e3a1" : "#26723b", 15),
-			"--warning-container": mix(variant === "dark" ? "#f9e2af" : "#805800", 15),
-			"--danger-container": mix(variant === "dark" ? "#f38ba8" : "#b3264c", 15),
-			"--on-success-container": variant === "dark" ? "#a6e3a1" : "#26723b",
-			"--on-warning-container": variant === "dark" ? "#f9e2af" : "#805800",
-			"--on-danger-container": variant === "dark" ? "#f38ba8" : "#b3264c",
+			"--success": isDark ? "#a6e3a1" : "#26723b",
+			"--warning": isDark ? "#f9e2af" : "#805800",
+			"--danger": isDark ? "#f38ba8" : "#b3264c",
+			"--success-container": mix(isDark ? "#a6e3a1" : "#26723b", 15),
+			"--warning-container": mix(isDark ? "#f9e2af" : "#805800", 15),
+			"--danger-container": mix(isDark ? "#f38ba8" : "#b3264c", 15),
+			"--on-success-container": isDark ? "#a6e3a1" : "#26723b",
+			"--on-warning-container": isDark ? "#f9e2af" : "#805800",
+			"--on-danger-container": isDark ? "#f38ba8" : "#b3264c",
 			"--border-subtle": mix(theme.foreground, 6 * amount), "--border": mix(theme.foreground, 12 * amount),
 			"--border-strong": mix(theme.foreground, 22 * amount), "--scroll-thumb": mix(theme.foreground, 20),
 			"--scroll-thumb-hover": mix(theme.foreground, 32),
