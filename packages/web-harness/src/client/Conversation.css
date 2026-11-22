@@ -21,7 +21,7 @@
 	from { background-position: 150% 0; }
 	to { background-position: -50% 0; }
 }
-.turn-activity-items { padding-inline-start: 14px; margin-inline-start: 5px; border-inline-start: 1.5px solid var(--border); }
+.turn-activity-items { padding-inline-start: 12px; border-inline-start: 1px solid var(--border-subtle); }
 .turn-activity-items .message { margin-bottom: 8px; }
 .message.context-entry { margin-bottom: 8px; }
 .message.context-entry > summary { padding: 4px 6px; }

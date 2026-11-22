@@ -5,9 +5,8 @@
 .detail-tab-strip { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; height: 30px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .detail-tab-strip::-webkit-scrollbar { display: none; }
 .detail-tabs { display: flex; align-items: center; flex: none; min-width: 0; gap: 4px; }
-.detail-tab { position: relative; display: flex; align-items: center; flex: none; max-width: 240px; min-height: 28px; border: 1px solid transparent; border-radius: var(--item-radius); transition: background-color var(--motion-quick) ease, border-color var(--motion-quick) ease; }
-.detail-tab:hover:not([data-active="true"]) { background: color-mix(in srgb, var(--surface-hover) 50%, transparent); }
-.detail-tab[data-active="true"] { background: var(--surface-raised); border-color: var(--border-subtle); }
+.detail-tab { position: relative; display: flex; align-items: center; flex: none; max-width: 240px; min-height: 30px; border: 0; border-radius: var(--item-radius); transition: background-color var(--motion-quick) ease; }
+.detail-tab[data-active="true"] { background: var(--selection-fill); }
 .detail-tab[data-dragging="true"] { opacity: .5; }
 .detail-tab[data-drop]::after { content: ""; position: absolute; top: 3px; bottom: 3px; width: 3px; background: var(--primary); pointer-events: none; }
 .detail-tab[data-drop="before"]::after { left: 0; }
@@ -33,9 +32,8 @@
 .detail-tab-strip button:focus-visible { outline-offset: -2px; }
 .detail-toolbar > .split-actions { margin-left: auto; }
 .detail-panel-actions { display: flex; align-items: center; flex: none; gap: 2px; margin-left: 6px; padding: 0 6px; border-left: 0; }
-.detail-panel-icon { display: grid; place-items: center; width: 30px; height: 30px; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: var(--on-surface-muted); }
-.detail-panel-icon:hover { background: var(--surface-hover); color: var(--on-surface); }
-.detail-panel-icon[aria-pressed="true"] { color: var(--primary); background: var(--primary-container); }
+.detail-panel-icon { display: grid; place-items: center; width: 32px; height: 32px; padding: 6px; border: 0; background: transparent; color: var(--on-surface-muted); }
+.detail-panel-icon[aria-pressed="true"] { color: var(--primary-hover); background: var(--primary-container); }
 .detail-panel-icon svg, .detail-new-choices svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .detail-resource-area { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .detail-resource-area[hidden], .detail-auxiliary[hidden] { display: none; }

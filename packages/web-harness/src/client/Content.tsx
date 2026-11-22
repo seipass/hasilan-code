@@ -1,13 +1,10 @@
-import type { Element as HastElement, ElementContent } from "hast";
-import { cloneElement, isValidElement, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isVisionImage } from "../shared/attachments.ts";
 import { TEXT_TRANSFORM_ID } from "../shared/plugin-profile.ts";
 import { api, errorMessage } from "./api.ts";
-import { ColorPreviewSpan, rehypeColorPreview, splitColorPreview } from "./ColorPreview.tsx";
-import { highlightLines } from "./highlight.tsx";
-import { Icon } from "./Icon.tsx";
+import { ColorPreviewSpan, rehypeColorPreview } from "./ColorPreview.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import "./TextTransform.css";
 
@@ -15,74 +12,9 @@ export function record(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hastText(node: ElementContent): string {
-	if (node.type === "text") return node.value;
-	if (node.type === "element") return node.children.map(hastText).join("");
-	return "";
-}
-
-function decoratePreview(nodes: ReactNode[], prefix: string): ReactNode[] {
-	return nodes.map((part, index) => {
-		if (typeof part === "string") return splitColorPreview(part, `${prefix}-${index}`);
-		if (isValidElement<{ children?: ReactNode }>(part) && typeof part.props.children === "string") {
-			return cloneElement(part, { key: part.key ?? `${prefix}-${index}` }, splitColorPreview(part.props.children, `${prefix}-${index}`));
-		}
-		return part;
-	});
-}
-
-function CodeBlock({ code, language, colorPreview }: { code: string; language?: string; colorPreview: boolean }) {
-	const [copied, setCopied] = useState(false);
-	const timer = useRef<number | undefined>(undefined);
-	useEffect(() => () => window.clearTimeout(timer.current), []);
-	const highlighted = useMemo(() => {
-		const trimmed = code.endsWith("\n") ? code.slice(0, -1) : code;
-		const lines = highlightLines(trimmed, language, !language);
-		return lines.map((line, lineIndex) => {
-			const items = colorPreview ? decoratePreview(line, `l${lineIndex}`) : line;
-			return <span key={lineIndex} className="code-block-line">{items}{lineIndex < lines.length - 1 ? "\n" : null}</span>;
-		});
-	}, [code, language, colorPreview]);
-	async function copyCode() {
-		try {
-			await navigator.clipboard.writeText(code.endsWith("\n") ? code.slice(0, -1) : code);
-			setCopied(true);
-			window.clearTimeout(timer.current);
-			timer.current = window.setTimeout(() => setCopied(false), 1600);
-		} catch { /* Clipboard unavailable. */ }
-	}
-	return (
-		<div className="code-block">
-			<div className="code-block-header">
-				<span className="code-block-lang">{language || "code"}</span>
-				<button type="button" className="code-block-copy" aria-label={copied ? "コピーしました" : "コードをコピー"} onClick={() => { void copyCode(); }}>
-					<Icon name={copied ? "check" : "copy"} size="inline" />
-					<span>{copied ? "コピー済み" : "コピー"}</span>
-				</button>
-			</div>
-			<pre><code>{highlighted}</code></pre>
-		</div>
-	);
-}
-
 export function Markdown({ text, onFile, colorPreview = false }: { text: string; onFile: (path: string, line?: number) => void; colorPreview?: boolean }) {
 	return <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={colorPreview ? [rehypeColorPreview] : []} skipHtml components={{
 		span: ColorPreviewSpan,
-		pre: ({ node, children }) => {
-			const codeChild = node?.children.find((child): child is HastElement => child.type === "element" && child.tagName === "code");
-			if (!codeChild) return <pre>{children}</pre>;
-			const rawClass: unknown = codeChild.properties?.className;
-			const classes: string[] = Array.isArray(rawClass)
-				? rawClass.map(String)
-				: typeof rawClass === "string"
-					? rawClass.split(/\s+/)
-					: [];
-			const language = classes
-				.map((item) => /^language-([a-z0-9_+-]+)$/i.exec(item)?.[1])
-				.find(Boolean);
-			const rawCode = hastText(codeChild);
-			return <CodeBlock code={rawCode} language={language} colorPreview={colorPreview} />;
-		},
 		table: ({ children }) => <div className="markdown-table-scroll" tabIndex={0} role="region" aria-label="表"><table>{children}</table></div>,
 		a: ({ href, children }) => {
 			if (!href) return <span>{children}</span>;
@@ -171,5 +103,5 @@ function Thinking({ text, summary, redacted, onFile, initiallyOpen }: { text: st
 	const transformEnabled = usePluginProfile()?.activeIds.includes(TEXT_TRANSFORM_ID) ?? true;
 	const preview = tail.reverse().join("");
 	const previewTail = preview.length > 180 ? `…${preview.slice(-180)}` : preview;
-	return <details className="thinking" open={open} onToggle={(event) => { const next = event.currentTarget.open; if (next) setBodyPresent(true); setOpen(next); }} onTransitionEnd={(event) => { if (!open && event.target === event.currentTarget && event.propertyName === "height" && event.nativeEvent.pseudoElement === "::details-content") setBodyPresent(false); }}><summary onClick={(event) => { event.preventDefault(); if (!open) setBodyPresent(true); setOpen((current) => !current); }}><Icon name="sparkles" size="inline" className="thinking-icon" /><span className="thinking-title">{summary && !text ? "推論の要約" : "思考"}</span>{transformEnabled && <span className="thinking-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><button type="button" title="思考を翻訳" aria-label="思考を翻訳" disabled={busy || !(text || summary)} onClick={() => { void transform("translate"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h12M9 3v3c0 5-3 8-6 9M5 9c1 3 4 5 7 6M13 20l4-10 4 10M14.5 17h5" /></svg></button><button type="button" title="思考を要約" aria-label="思考を要約" disabled={busy || !(text || summary)} onClick={() => { void transform("summarize"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 11h16M4 16h10M4 21h7" /></svg></button></span>}<span className="thinking-preview"><span>{previewTail || (redacted ? "暗号化された推論（原記録に保持）" : "")}</span></span></summary>{bodyPresent && <>{result ? <div className="text-transform-result"><div className="text-transform-header"><strong>{result.operation === "translate" ? "翻訳" : "要約"}</strong><button type="button" onClick={() => { pending.current?.abort(); setBusy(false); setResult(undefined); }}>原文を表示</button></div>{busy ? <p role="status">処理中…</p> : result.error ? <p role="alert" className="error">{result.error}</p> : <Markdown text={result.text ?? ""} onFile={onFile} />}{result.source !== (text || summary || "") && <p className="muted">実行時の内容を表示しています。</p>}</div> : <>{text && <Markdown text={text} onFile={onFile} />}{summary && <div className="thinking-summary"><strong>保存された要約</strong><Markdown text={summary} onFile={onFile} /></div>}</>}{redacted && <p className="muted">暗号化された内容は復号していません。元のデータを保存しています。</p>}</>}</details>;
+	return <details className="thinking" open={open} onToggle={(event) => { const next = event.currentTarget.open; if (next) setBodyPresent(true); setOpen(next); }} onTransitionEnd={(event) => { if (!open && event.target === event.currentTarget && event.propertyName === "height" && event.nativeEvent.pseudoElement === "::details-content") setBodyPresent(false); }}><summary onClick={(event) => { event.preventDefault(); if (!open) setBodyPresent(true); setOpen((current) => !current); }}><span className="thinking-title">{summary && !text ? "推論の要約" : "思考"}</span>{transformEnabled && <span className="thinking-actions" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><button type="button" title="思考を翻訳" aria-label="思考を翻訳" disabled={busy || !(text || summary)} onClick={() => { void transform("translate"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h12M9 3v3c0 5-3 8-6 9M5 9c1 3 4 5 7 6M13 20l4-10 4 10M14.5 17h5" /></svg></button><button type="button" title="思考を要約" aria-label="思考を要約" disabled={busy || !(text || summary)} onClick={() => { void transform("summarize"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 11h16M4 16h10M4 21h7" /></svg></button></span>}<span className="thinking-preview"><span>{previewTail || (redacted ? "暗号化された推論（原記録に保持）" : "")}</span></span></summary>{bodyPresent && <>{result ? <div className="text-transform-result"><div className="text-transform-header"><strong>{result.operation === "translate" ? "翻訳" : "要約"}</strong><button type="button" onClick={() => { pending.current?.abort(); setBusy(false); setResult(undefined); }}>原文を表示</button></div>{busy ? <p role="status">処理中…</p> : result.error ? <p role="alert" className="error">{result.error}</p> : <Markdown text={result.text ?? ""} onFile={onFile} />}{result.source !== (text || summary || "") && <p className="muted">実行時の内容を表示しています。</p>}</div> : <>{text && <Markdown text={text} onFile={onFile} />}{summary && <div className="thinking-summary"><strong>保存された要約</strong><Markdown text={summary} onFile={onFile} /></div>}</>}{redacted && <p className="muted">暗号化された内容は復号していません。元のデータを保存しています。</p>}</>}</details>;
 }

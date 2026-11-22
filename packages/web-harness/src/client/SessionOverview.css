@@ -8,11 +8,10 @@
 	overflow: auto;
 	overscroll-behavior: contain;
 	padding: 12px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--border-subtle);
 	border-radius: 14px;
-	background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
-	backdrop-filter: var(--glass-filter);
-	box-shadow: var(--surface-specular), var(--card-shadow);
+	background: var(--surface-panel);
+	box-shadow: 0 8px 24px #0003;
 	color: var(--on-surface-secondary);
 	font-size: var(--text-sm);
 }

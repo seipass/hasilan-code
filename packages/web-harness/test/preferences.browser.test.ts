@@ -413,7 +413,7 @@ it("selects an external palette, keeps it after reload, and restores the built-i
 		await openAppearance();
 		await page.getByRole("combobox", { name: "配色", exact: true }).click();
 		await page.getByRole("option", { name: "標準", exact: true }).click();
-		await expect.poll(background).toBe(standardTheme.dark.background);
+		await expect.poll(background).toBe("#141414");
 	} finally {
 		await page.close();
 		hub.close();

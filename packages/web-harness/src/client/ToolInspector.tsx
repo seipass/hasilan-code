@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "./api.ts";
 import { Content, record } from "./Content.tsx";
-import { Icon, type IconName } from "./Icon.tsx";
 import { browserView } from "./tools/browser.tsx";
 import { computerView } from "./tools/computer.tsx";
 import { editView } from "./tools/edit.tsx";
@@ -13,17 +12,17 @@ import { writeView } from "./tools/write.tsx";
 import { flattenContent, type ToolDetails, type ToolView } from "./tools/tool-view.tsx";
 import type { ToolCall } from "./types.ts";
 
-const toolVisuals: Record<string, { label: string; kind: string; icon: IconName }> = {
-	read: { label: "Read file", kind: "file", icon: "file" },
-	edit: { label: "Edit files", kind: "edit", icon: "pencil" },
-	write: { label: "Create file", kind: "write", icon: "filePlus" },
-	bash: { label: "Run command", kind: "terminal", icon: "terminal" },
-	terminal: { label: "Terminal", kind: "terminal", icon: "terminal" },
-	browser: { label: "Browser", kind: "browser", icon: "globe" },
-	computer: { label: "Computer", kind: "browser", icon: "globe" },
-	web_search: { label: "Web search", kind: "search", icon: "search" },
-	team: { label: "Agent team", kind: "team", icon: "graph" },
-};
+const toolVisuals = {
+	read: { label: "Read file", kind: "file" },
+	edit: { label: "Edit files", kind: "edit" },
+	write: { label: "Create file", kind: "write" },
+	bash: { label: "Run command", kind: "terminal" },
+	terminal: { label: "Terminal", kind: "terminal" },
+	browser: { label: "Browser", kind: "browser" },
+	computer: { label: "Computer", kind: "browser" },
+	web_search: { label: "Web search", kind: "search" },
+	team: { label: "Agent team", kind: "team" },
+} as const;
 
 function countLabel(count: number, singular: string): string {
 	return `${count} ${singular}${count === 1 ? "" : "s"}`;
@@ -83,7 +82,7 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 	const structured = result && record(result.structuredContent) ? result.structuredContent : undefined;
 	const status = { running: "Running", success: "Success", error: "Error", cancelled: "Cancelled", incomplete: "未完了" }[tool.status];
 	const input = record(tool.input) ? tool.input : undefined;
-	const visual = toolVisuals[tool.name];
+	const visual = toolVisuals[tool.name as keyof typeof toolVisuals];
 	const summary = toolContext(tool.name, input);
 	const resultNote = tool.name === "web_search" && Array.isArray(details?.results) ? countLabel(details.results.length, "result")
 		: (tool.name === "bash" || tool.name === "terminal") && typeof structured?.exit_code === "number" ? `Exit ${structured.exit_code}`
@@ -95,7 +94,6 @@ export function ToolCard({ tool, onFile, expanded = false }: {
 		if (event.currentTarget.open) setVisited(true);
 	}}>
 		<summary>
-			<span className="tool-icon" aria-hidden="true"><Icon name={visual?.icon ?? "sparkles"} size="inline" /></span>
 			<span className="tool-heading"><strong>{visual?.label ?? tool.name}</strong></span>
 			{summary && <span className="tool-summary" title={summary}>{summary}</span>}
 			{resultNote && <span className="tool-result-note">{resultNote}</span>}

@@ -7,7 +7,7 @@ import "./FontAppearance.css";
 
 const FONT_KEY = "pi-web-ui-font";
 const APPEARANCE_KEY = "pi-web-appearance";
-const DEFAULT_FONT = "Gen Interface JP";
+const DEFAULT_FONT = "Yu Gothic UI";
 const DEFAULT_APPEARANCE: Appearance = {
 	mode: "dark",
 	dark: standardTheme.dark,
@@ -38,13 +38,12 @@ const GENERIC_FAMILIES = new Set([
 ]);
 
 const UI_PRESETS = [
-	{ value: DEFAULT_FONT, label: "Gen Interface JP（標準）" },
-	{ value: "Inter", label: "Inter" },
+	{ value: DEFAULT_FONT, label: "Yu Gothic UI（標準）" },
 	{ value: "system-ui", label: "システム標準" },
+	{ value: "Inter", label: "Inter" },
 	{ value: "Noto Sans JP", label: "Noto Sans JP" },
 	{ value: "BIZ UDPGothic", label: "BIZ UDPGothic" },
 	{ value: "Hiragino Sans", label: "Hiragino Sans" },
-	{ value: "Yu Gothic UI", label: "Yu Gothic UI" },
 	{ value: "Meiryo", label: "Meiryo" },
 	{ value: "Segoe UI", label: "Segoe UI" },
 ];
@@ -103,7 +102,7 @@ declare global {
 export function ApplicationFont() {
 	const [font] = usePreferenceState(FONT_KEY, DEFAULT_FONT);
 	useEffect(() => {
-		document.documentElement.style.fontFamily = formatFontStack(font || DEFAULT_FONT, '"Gen Interface JP", "Inter", "Hiragino Sans", "Yu Gothic UI", system-ui, sans-serif');
+		document.documentElement.style.fontFamily = formatFontStack(font || DEFAULT_FONT, '"Yu Gothic UI", sans-serif');
 		return () => {
 			document.documentElement.style.removeProperty("font-family");
 		};

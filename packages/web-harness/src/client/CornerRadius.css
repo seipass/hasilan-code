@@ -1,23 +1,23 @@
 /* Shared corner sizes for controls and floating surfaces. */
-button { border-radius: 8px; }
-input, textarea, select { border-radius: 8px; }
+button { border-radius: 10px; }
+input, textarea, select { border-radius: 9px; }
 pre { border-radius: 10px; }
 fieldset { border-radius: 12px; }
 
-:is(.workspace-accordion > summary, .files-tree-entry, .usage-popover-trigger) { border-radius: 7px; }
+:is(.workspace-accordion > summary, .files-tree-entry, .usage-popover-trigger) { border-radius: 9px; }
 :is(.new-conversation, .session-import-trigger, .composer-attachment, .session-context-menu,
-	.settings-provider-section, .settings-key-entry, .oauth-login, .canvas-properties > div, .team-graph-node) { border-radius: 10px; }
+	.settings-provider-section, .settings-key-entry, .oauth-login, .canvas-properties > div, .team-graph-node) { border-radius: 12px; }
 :is(.tool-card, .context-entry, .composer-notice, .command-picker-option, .settings-next-action, .settings-notice,
-	.model-picker-empty, .usage-panel-body, .canvas-message) { border-radius: 9px; }
+	.model-picker-empty, .usage-panel-body, .canvas-message) { border-radius: 10px; }
 :is(.command-picker, .usage-popover-content, .goal-panel, .team-overview, .team-focus, .team-empty,
-	.computer-activity, .home-background-preview, .account-usage-loading, .files-audio-artwork, .canvas-node) { border-radius: 12px; }
-:is(.composer-popover, .session-action-dialog, .team-graph-node.is-root) { border-radius: 14px; }
+	.computer-activity, .home-background-preview, .account-usage-loading, .files-audio-artwork, .canvas-node) { border-radius: 14px; }
+:is(.composer-popover, .session-action-dialog, .team-graph-node.is-root) { border-radius: 16px; }
 .session-import-dialog { border-radius: 16px; }
-.role-user .message-content { border-radius: 16px 16px 5px 16px; }
-:is(.composer, .settings-dialog) { border-radius: 16px; }
-.send-button, .stop-button { border-radius: 999px; }
-.sidebar { border-radius: 0; }
-.right-panel { --detail-corner: 0px; }
+.role-user .message-content { border-radius: 17px; }
+:is(.composer, .settings-dialog) { border-radius: 20px; }
+.send-button, .stop-button { border-radius: 13px; }
+.sidebar { border-radius: 0 14px 14px 0; }
+.right-panel { --detail-corner: 14px; }
 .canvas-drawing { border-radius: 12px; }
 .canvas-view-controls { border-radius: 12px 12px 0 0; }
 .canvas-viewport { border-radius: 0 0 12px 12px; }

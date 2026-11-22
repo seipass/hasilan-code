@@ -20,18 +20,6 @@
 	:where(button:not(:disabled), a[href], summary, [role="button"]:not([aria-disabled="true"]), [role="tab"], input, textarea, select) {
 		transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease !important;
 	}
-	.composer {
-		transition: border-color 160ms ease, box-shadow 160ms ease !important;
-	}
-	.tool-card, .home-card, .history-session-row {
-		transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease !important;
-	}
-	.message-actions, .history-session-row .session-menu-button, .history-session-row .session-recency {
-		transition: opacity 140ms ease !important;
-	}
-	.status-dot.status-running, .status-dot.status-queued, .status-dot.status-waiting {
-		animation: pulse 2s ease-in-out infinite !important;
-	}
 	.model-effort-control[data-dragging="false"] {
 		transition: --effort-progress 260ms cubic-bezier(.2, .75, .2, 1) !important;
 	}

@@ -62,11 +62,11 @@
 .model-effort-fill {
 	width: var(--effort-center);
 	height: 100%;
-	background: color-mix(in srgb, var(--primary) 80%, var(--surface-raised));
+	background: color-mix(in srgb, var(--primary) 72%, var(--surface-raised));
 }
 .model-effort-ticks { position: absolute; inset: 0 calc(var(--effort-thumb-radius) - 2px); display: flex; align-items: center; justify-content: space-between; }
 .model-effort-ticks > span { width: 4px; height: 4px; border-radius: 50%; background: var(--on-surface-muted); }
-.model-effort-ticks > span[data-filled="true"] { background: color-mix(in srgb, var(--on-primary) 65%, transparent); }
+.model-effort-ticks > span[data-filled="true"] { background: color-mix(in srgb, var(--on-primary) 55%, transparent); }
 .model-effort-thumb {
 	position: absolute;
 	top: 50%;
@@ -74,9 +74,9 @@
 	width: var(--effort-thumb-size);
 	height: var(--effort-thumb-size);
 	border-radius: 50%;
-	border: 2px solid var(--primary);
-	background: var(--surface-raised);
-	box-shadow: 0 2px 6px rgb(0 0 0 / 32%);
+	border: 1px solid var(--surface);
+	background: var(--on-surface);
+	box-shadow: 0 1px 3px #0004;
 	transform: translate(-50%, -50%);
 	pointer-events: none;
 }

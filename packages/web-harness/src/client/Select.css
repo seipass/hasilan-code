@@ -1,6 +1,6 @@
 .select-control { display: block; min-width: 0; }
-.select-control .select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--surface-sunken); color: var(--on-surface); font: inherit; text-align: left; }
-.select-control .select-trigger:hover:not(:disabled), .select-control .select-trigger[aria-expanded="true"] { border-color: var(--border-strong); background: var(--surface-hover); }
+.select-control .select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--surface-panel); color: var(--on-surface); font: inherit; text-align: left; }
+.select-control .select-trigger:hover:not(:disabled), .select-control .select-trigger[aria-expanded="true"] { border-color: var(--border-strong); background: var(--surface-raised); }
 .select-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select-trigger > svg { flex: none; color: var(--on-surface-muted); }
 .select-trigger:focus-visible { outline-offset: 1px; }
