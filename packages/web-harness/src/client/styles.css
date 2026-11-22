@@ -30,7 +30,7 @@
  * because neither face ships an italic and losing emphasis entirely is worse.
  */
 :root {
-	font-family: "Gen Interface JP", system-ui, sans-serif;
+	font-family: "Inter", "Gen Interface JP", "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", system-ui, -apple-system, sans-serif;
 	font-synthesis: style; color-scheme: dark; font-size: 14px; line-height: var(--leading-normal);
 	--text-2xs: 10px;
 	--text-xs: 11px;
@@ -47,57 +47,70 @@
 	--leading-normal: 1.6;
 	--leading-prose: 1.8;
 	--measure-code: 100%;
-	--primary: #cba6f7;
-	--primary-hover: #b4befe;
-	--primary-container: color-mix(in srgb, #cba6f7 18%, #1e1e2e);
-	--on-primary: #1e1e2e;
-	--on-primary-container: #cdd6f4;
-	--secondary: #89b4fa;
-	--secondary-hover: #b4befe;
-	--secondary-container: color-mix(in srgb, #89b4fa 18%, #1e1e2e);
-	--on-secondary-container: #cdd6f4;
-	--success: #a6e3a1;
-	--success-container: color-mix(in srgb, #a6e3a1 15%, #1e1e2e);
-	--on-success-container: #a6e3a1;
-	--warning: #f9e2af;
-	--warning-container: color-mix(in srgb, #f9e2af 15%, #1e1e2e);
-	--on-warning-container: #f9e2af;
-	--danger: #f38ba8;
-	--danger-container: color-mix(in srgb, #f38ba8 15%, #1e1e2e);
-	--on-danger-container: #f38ba8;
-	--surface: #1e1e2e;
-	--surface-sunken: #11111b;
-	--surface-panel: #181825;
-	--surface-raised: #1e1e2e;
-	--surface-hover: #313244;
-	--surface-inverse: #cdd6f4;
-	--on-surface: #cdd6f4;
-	--on-surface-secondary: #bac2de;
-	--on-surface-muted: #a6adc8;
-	--on-surface-inverse: #1e1e2e;
-	--border-subtle: #313244;
-	--border: #45475a;
-	--border-strong: #585b70;
+	--primary: #2f71e3;
+	--primary-hover: #4b87ed;
+	--primary-container: color-mix(in srgb, #2f71e3 18%, #070708);
+	--on-primary: #ffffff;
+	--on-primary-container: #ffffff;
+	--secondary: #6a9fcb;
+	--secondary-hover: #9cbedd;
+	--secondary-container: color-mix(in srgb, #2f71e3 18%, #070708);
+	--on-secondary-container: #ffffff;
+	--success: #7aae66;
+	--success-container: color-mix(in srgb, #7aae66 16%, #070708);
+	--on-success-container: #b0d2a3;
+	--warning: #e8975f;
+	--warning-container: color-mix(in srgb, #e8975f 16%, #070708);
+	--on-warning-container: #f4c29b;
+	--danger: #de5555;
+	--danger-container: color-mix(in srgb, #de5555 16%, #070708);
+	--on-danger-container: #f3aeae;
+	--surface: #070708;
+	--surface-sunken: #0c0c0f;
+	--surface-panel: #111114;
+	--surface-raised: #131317;
+	--surface-hover: #1c1c22;
+	--surface-inverse: #ffffff;
+	--onyx-shell: #111114;
+	--onyx-frame: #0d0d11;
+	--onyx-well: #111115;
+	--onyx-raised: #15151a;
+	--onyx-selected: #1f1f24;
+	--onyx-key: #24252a;
+	--card-edge: rgb(255 255 255 / 0.1);
+	--glass-border: rgb(255 255 255 / 0.085);
+	--glass-highlight: rgb(255 255 255 / 0.085);
+	--home-glow: color-mix(in srgb, var(--primary) 11%, transparent);
+	--sidebar-muted: rgb(255 255 255 / 0.048);
+	--sidebar-secondary: rgb(255 255 255 / 0.09);
+	--on-surface: #ffffff;
+	--on-surface-secondary: #bcbdc6;
+	--on-surface-muted: #87888f;
+	--placeholder: #636470;
+	--on-surface-inverse: #070708;
+	--border-subtle: rgb(255 255 255 / 0.06);
+	--border: rgb(255 255 255 / 0.08);
+	--border-strong: rgb(255 255 255 / 0.14);
 	--chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E");
-	--scroll-thumb: #45475a;
+	--scroll-thumb: rgb(255 255 255 / 0.18);
 	/* Code surfaces share one family, size, rhythm and tab width. JetBrains covers
 	   Latin in 92 KB; UDEV takes over only for the Japanese glyphs it alone has. */
-	--font-code: "JetBrains Mono", "UDEV Gothic", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--font-code: "Google Sans Code", "JetBrains Mono", "UDEV Gothic", ui-monospace, SFMono-Regular, Menlo, monospace;
 	--text-code: 13px;
 	--leading-code: 1.7;
 	--leading-diff: 1.7;
 	--tab-code: 2;
 	--code-gutter: 4.2rem;
-	--syntax-comment: #7f849c;
-	--syntax-keyword: #cba6f7;
-	--syntax-string: #a6e3a1;
-	--syntax-number: #fab387;
-	--syntax-function: #89b4fa;
-	--syntax-type: #f9e2af;
-	--syntax-property: #94e2d5;
-	--syntax-meta: #f38ba8;
-	--scroll-thumb-hover: #6c7086;
-	color: var(--on-surface); background: var(--surface);
+	--syntax-comment: #8292a2;
+	--syntax-keyword: #66d9ef;
+	--syntax-string: #a6e22e;
+	--syntax-number: #ae81ff;
+	--syntax-function: #e6db74;
+	--syntax-type: #e6db74;
+	--syntax-property: #f92672;
+	--syntax-meta: #fd971f;
+	--scroll-thumb-hover: rgb(255 255 255 / 0.3);
+	color: var(--on-surface); background: var(--onyx-shell, var(--surface-panel));
 	--panel: var(--surface-panel); --muted: var(--on-surface-muted); --accent: var(--primary);
 }
 * { box-sizing: border-box; }
@@ -136,6 +149,7 @@ p { line-height: var(--leading-prose); text-wrap: pretty; }
 /* Code keeps its own scale: mono faces look smaller at the same size, so it is one step up
    from body text and never inherits prose leading. */
 pre, code, kbd, samp { font-family: var(--font-code); font-size: var(--text-code); line-height: var(--leading-code); tab-size: var(--tab-code); font-variant-ligatures: none; }
+:not(pre) > code { padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 5px; background: var(--surface-raised); color: var(--on-surface); font-size: 0.92em; }
 pre {
 	margin: 1em 0;
 	background: var(--surface-sunken);
@@ -149,6 +163,58 @@ pre {
 	hyphens: none;
 }
 pre code { font-size: inherit; line-height: inherit; }
+.code-block-frame {
+	margin: 12px 0;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--code-surface, var(--surface-sunken));
+	overflow: hidden;
+}
+.code-block-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	min-height: 28px;
+	padding: 3px 10px;
+	border-bottom: 1px solid var(--border-subtle);
+	background: var(--surface-panel);
+	color: var(--on-surface-muted);
+	font-size: var(--text-xs);
+	line-height: var(--leading-tight);
+	user-select: none;
+}
+.code-block-language {
+	font-family: inherit;
+	color: var(--on-surface-muted);
+}
+.code-block-copy {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	min-height: 22px;
+	padding: 2px 8px;
+	border: 0;
+	border-radius: 9999px;
+	background: transparent;
+	color: var(--on-surface-secondary);
+	font-size: var(--text-2xs);
+	line-height: var(--leading-tight);
+}
+.code-block-copy:hover:not(:disabled) {
+	background: var(--surface-hover);
+	color: var(--on-surface);
+}
+.code-block-copy[data-copied="true"] {
+	color: var(--success);
+}
+.code-block-pre {
+	margin: 0 !important;
+	border: 0 !important;
+	border-radius: 0 !important;
+	padding: 12px 14px;
+	background: transparent !important;
+}
 summary { cursor: pointer; }
 .sidebar { user-select: none; }
 .sidebar input { user-select: text; }

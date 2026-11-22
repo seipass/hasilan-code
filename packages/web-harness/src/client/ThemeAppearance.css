@@ -1,8 +1,11 @@
 .theme-appearance { display: grid; gap: 14px; }
 .theme-appearance h3, .theme-appearance h4, .theme-appearance p { margin: 0; }
-.theme-modes, .theme-variants, .theme-heading, .theme-heading > div { display: flex; align-items: center; gap: 6px; }
+.theme-modes, .theme-variants { display: inline-flex; align-items: center; gap: 2px; width: fit-content; padding: 2px; border: 1px solid var(--border-subtle); border-radius: 9999px; background: var(--onyx-well, var(--surface-sunken)); box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.2); }
+.theme-modes button, .theme-variants button { border: 0; border-radius: 9999px; background: transparent; padding: 5px 12px; color: var(--on-surface-secondary); }
+.theme-modes button:hover:not([aria-pressed="true"]), .theme-variants button:hover:not([aria-pressed="true"]) { color: var(--on-surface); background: transparent; }
+.theme-heading, .theme-heading > div { display: flex; align-items: center; gap: 6px; }
 .theme-heading { justify-content: space-between; margin-top: 8px; }
-.theme-modes button[aria-pressed="true"], .theme-variants button[aria-pressed="true"] { background: var(--selection-fill); border-color: var(--border); }
+.theme-modes button[aria-pressed="true"], .theme-variants button[aria-pressed="true"] { background: var(--onyx-key, var(--surface-raised)); color: var(--on-surface); box-shadow: inset 0 1px 0 var(--glass-highlight, rgb(255 255 255 / 0.11)), 0 0 0 0.5px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.25), 0 3px 8px -2px rgb(0 0 0 / 0.2); }
 .theme-color-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .theme-color-grid label { gap: 6px; }
 .theme-color-grid label span { display: flex; align-items: center; gap: 8px; }

@@ -13,13 +13,12 @@ html[data-desktop-platform] .sidebar::before {
 	position: absolute;
 	top: calc(-1 * var(--desktop-titlebar-height));
 	left: 0;
-	width: calc(100% + 1px);
+	width: 100%;
 	height: var(--desktop-titlebar-height);
-	background: var(--panel);
-	border-right: 1px solid var(--border);
+	background: var(--onyx-shell, var(--panel));
 	pointer-events: none;
 }
-html[data-desktop-platform] .sidebar-toggle { top: calc(15px + var(--desktop-titlebar-height)); }
+html[data-desktop-platform] .sidebar-toggle { top: calc(6px + var(--desktop-titlebar-height)); }
 .desktop-titlebar {
 	position: fixed;
 	top: 0;
@@ -65,7 +64,7 @@ html[data-desktop-platform="darwin"] .desktop-titlebar-icon { margin-left: 80px;
 	display: flex;
 	width: 138px;
 	height: 35px;
-	background: color-mix(in srgb, var(--surface-panel, #181825) 80%, transparent);
+	background: color-mix(in srgb, var(--onyx-shell, var(--surface-panel, #111114)) 80%, transparent);
 	backdrop-filter: blur(12px);
 	zoom: calc(1 / var(--desktop-zoom));
 	-webkit-app-region: no-drag;
@@ -85,19 +84,19 @@ html[data-desktop-platform="darwin"] .desktop-titlebar-icon { margin-left: 80px;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
-	color: var(--on-surface, #cdd6f4);
+	color: var(--on-surface, #ffffff);
 	cursor: default;
 	transition: none;
 }
 .desktop-window-controls .window-icon svg { width: 16px; height: 16px; fill: currentColor; }
-.desktop-window-controls[data-focused="false"] > .window-icon { color: var(--on-surface-muted, #a6adc8); }
+.desktop-window-controls[data-focused="false"] > .window-icon { color: var(--on-surface-muted, #87888f); }
 .desktop-window-controls > .window-icon:hover { background: rgb(255 255 255 / 10%); }
 .desktop-window-controls > .window-close:hover { background: rgb(232 17 35 / 90%); color: white; }
-.desktop-window-controls > .window-icon:focus-visible { outline: 1px solid var(--accent, #cba6f7); outline-offset: -2px; }
+.desktop-window-controls > .window-icon:focus-visible { outline: 1px solid var(--accent, #2f71e3); outline-offset: -2px; }
 .desktop-link-menu { position: fixed; z-index: 2999; display: flex; gap: 4px; padding: 5px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: 0 8px 24px #0008; }
 .desktop-link-menu button { padding: 7px 9px; white-space: nowrap; font-size: 12px; }
 @media (min-width: 901px) {
-	html[data-desktop-platform] .right-panel::before { top: calc(-62px - var(--desktop-titlebar-height)); }
+	html[data-desktop-platform] .app-shell[data-home-background="true"] .right-panel::before { top: calc(-40px - var(--desktop-titlebar-height)); }
 }
 @media (max-width: 900px) {
 	html[data-desktop-platform] .sidebar { position: fixed; top: var(--desktop-titlebar-height); }

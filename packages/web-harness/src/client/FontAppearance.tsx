@@ -1,8 +1,8 @@
 import { useEffect, useId, useState } from "react";
-import { Check } from "typebox/value";
 import { standardTheme } from "../shared/plugin-profile.ts";
-import { type Appearance, appearanceSchema } from "../shared/ui-preferences.ts";
+import type { Appearance } from "../shared/ui-preferences.ts";
 import { usePreferenceState } from "./preferences.ts";
+import { readAppearance } from "./ThemeAppearance.tsx";
 import "./FontAppearance.css";
 
 const FONT_KEY = "pi-web-ui-font";
@@ -68,15 +68,6 @@ const CODE_PRESETS = [
 	{ value: "monospace", label: "monospace" },
 ];
 
-function readAppearance(raw: string | null): Appearance {
-	try {
-		const value: unknown = JSON.parse(raw ?? "null");
-		return Check(appearanceSchema, value) ? (value as Appearance) : DEFAULT_APPEARANCE;
-	} catch {
-		return DEFAULT_APPEARANCE;
-	}
-}
-
 /** Formats a single font name or comma-separated CSS font stack safely. */
 export function formatFontStack(value: string, fallback: string): string {
 	const parts = value
@@ -102,7 +93,10 @@ declare global {
 export function ApplicationFont() {
 	const [font] = usePreferenceState(FONT_KEY, DEFAULT_FONT);
 	useEffect(() => {
-		document.documentElement.style.fontFamily = formatFontStack(font || DEFAULT_FONT, '"Yu Gothic UI", sans-serif');
+		document.documentElement.style.fontFamily = formatFontStack(
+			font || DEFAULT_FONT,
+			'"Inter", "Gen Interface JP", "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", system-ui, -apple-system, sans-serif',
+		);
 		return () => {
 			document.documentElement.style.removeProperty("font-family");
 		};

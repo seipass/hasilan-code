@@ -10,14 +10,15 @@
 
 @supports (backdrop-filter: blur(1px)) {
 	:root {
-		--glass-surface: color-mix(in srgb, var(--surface-raised) 88%, transparent);
-		--glass-panel: color-mix(in srgb, var(--surface-panel) 91%, transparent);
-		--glass-popup: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+		--glass-surface: color-mix(in srgb, var(--onyx-raised, var(--surface-raised)) 94%, transparent);
+		--glass-panel: color-mix(in srgb, var(--surface) 94%, transparent);
+		--glass-popup: color-mix(in srgb, var(--onyx-raised, var(--surface-raised)) 96%, transparent);
 		--glass-filter: blur(24px);
 	}
 }
 
 .composer {
+	position: relative;
 	background: transparent;
 	isolation: isolate;
 }
@@ -65,7 +66,7 @@
 .app-shell[data-home-background="true"] .topbar .quiet-button:hover { background: color-mix(in srgb, var(--surface-hover) 85%, transparent); }
 
 /* One shared boundary keeps the resize handle attached to the docked panel. */
-.right-panel { --detail-corner: 12px; border-left: 0; border-radius: var(--detail-corner) 0 0 var(--detail-corner); background: transparent; isolation: isolate; box-shadow: none; }
+.right-panel { --detail-corner: 0px; border-left: 1px solid var(--border-subtle); border-radius: var(--detail-corner) 0 0 var(--detail-corner); background: transparent; isolation: isolate; box-shadow: none; }
 .right-panel-body.detail-panel-body { border-radius: inherit; }
 /* A single background keeps every detail view at the same opacity. */
 .right-panel::before {
@@ -89,8 +90,8 @@
 .right-panel .files-line-number { background: transparent; }
 .right-panel .files-selected-line .files-line-number { background: var(--secondary-container); }
 @media (min-width: 901px) {
-	/* Continue the docked background behind the top bar instead of cutting off the image. */
-	.right-panel::before { top: -62px; }
+	/* Continue the docked background behind the top bar when a home background image is active. */
+	.app-shell[data-home-background="true"] .right-panel::before { top: -40px; }
 	.topbar { position: relative; z-index: 1; }
 	.app-shell .detail-resize-slot { position: relative; width: 0; overflow: visible; z-index: 2; }
 	.app-shell:not(.inspector-open) .detail-resize-slot { visibility: hidden; }
