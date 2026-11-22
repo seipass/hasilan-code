@@ -1,10 +1,10 @@
 .select-control { display: block; min-width: 0; }
-.select-control .select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--surface-edge, var(--border)); border-radius: var(--control-radius); background: var(--surface-sunken); box-shadow: var(--recessed-shadow); color: var(--on-surface); font: inherit; text-align: left; }
-.select-control .select-trigger:hover:not(:disabled), .select-control .select-trigger[aria-expanded="true"] { border-color: var(--surface-edge-strong, var(--border-strong)); background: var(--surface-panel); }
+.select-control .select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 32px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--control-radius); background: var(--surface-panel); color: var(--on-surface); font: inherit; text-align: left; }
+.select-control .select-trigger:hover:not(:disabled), .select-control .select-trigger[aria-expanded="true"] { border-color: var(--border-strong); background: var(--surface-raised); }
 .select-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select-trigger > svg { flex: none; color: var(--on-surface-muted); }
 .select-trigger:focus-visible { outline-offset: 1px; }
-.select-menu { position: fixed; inset: auto; margin: 0; z-index: 100; display: flex; flex-direction: column; min-height: 0; padding: 5px; border: 1px solid var(--surface-edge-strong, var(--border)); border-radius: var(--popup-radius); background: var(--glass-popup); backdrop-filter: var(--glass-filter); box-shadow: inset 0 1px 0 var(--surface-sheen-strong, rgb(255 255 255 / 0.12)), var(--popup-shadow); font-size: var(--text-control); line-height: 18px; color: var(--on-surface); }
+.select-menu { position: fixed; inset: auto; margin: 0; z-index: 100; display: flex; flex-direction: column; min-height: 0; padding: 4px; border: 1px solid var(--border); border-radius: var(--popup-radius); background: var(--glass-popup); backdrop-filter: var(--glass-filter); box-shadow: var(--popup-shadow); font-size: var(--text-control); line-height: 18px; color: var(--on-surface); }
 .select-menu > input { flex: none; width: 100%; min-height: 30px; padding: 5px 8px; margin-bottom: 4px; }
 .select-options { overflow-y: auto; min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; }
 .select-options [role='option'] { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 28px; padding: 5px 8px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }

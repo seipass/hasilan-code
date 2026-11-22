@@ -18,7 +18,6 @@
 }
 
 .composer {
-	position: relative;
 	background: transparent;
 	isolation: isolate;
 }
@@ -30,7 +29,7 @@
 	z-index: -1;
 	border-radius: inherit;
 	pointer-events: none;
-	background: linear-gradient(180deg, color-mix(in srgb, var(--glass-surface) 97%, var(--on-surface) 3%), var(--glass-surface));
+	background: var(--glass-surface);
 	backdrop-filter: var(--glass-filter);
 }
 .command-picker, .model-popover, .usage-popover-content, .quick-open, .session-context-menu, .detail-context-menu,
@@ -78,10 +77,6 @@
 	pointer-events: none;
 	background: var(--glass-panel);
 	backdrop-filter: var(--glass-filter);
-	box-shadow: inset 1px 0 0 var(--surface-sheen, rgb(255 255 255 / 0.08)), -12px 0 32px -18px rgb(0 0 0 / 0.45);
-}
-:root[data-theme="light"] .right-panel::before {
-	box-shadow: inset 1px 0 0 var(--surface-sheen, rgb(255 255 255 / 0.9)), -10px 0 24px -18px rgb(15 23 42 / 0.14);
 }
 .right-panel :is(.files-pane, .detail-toolbar, .detail-new-tab, .detail-file-empty, .files-tree, .files-view-mode, .files-viewer, .files-splitter, .detail-auxiliary, .team-pane, .team-graph, .team-graph-viewport) { background-color: transparent; }
 /* The independently toggled file tree uses the same glass as the detail panel. */
