@@ -3,8 +3,10 @@
 .mode-page[data-motion-exit="true"] { position: absolute; inset: 0; }
 .sidebar-plugin-panels { display: grid; gap: 2px; margin-block-start: 4px; }
 .sidebar-conversation-actions > .new-conversation:only-child { grid-column: 1 / -1; }
-.sidebar-plugin-panels > button { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 10px; border: 0; border-radius: 6px; background: transparent; font-size: var(--text-sm); text-align: start; }
-.sidebar-plugin-panels > button:hover:not(:disabled), .sidebar-plugin-panels > button[aria-current="page"] { background: var(--surface-hover); }
+.sidebar-plugin-panels > button { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 5px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--on-surface-secondary); font-size: var(--text-sm); text-align: start; }
+.sidebar-plugin-panels > button:hover:not(:disabled) { background: color-mix(in srgb, var(--surface-hover) 65%, transparent); color: var(--on-surface); }
+.sidebar-plugin-panels > button[aria-current="page"] { background: var(--selection-fill); box-shadow: inset 2.5px 0 0 var(--primary); color: var(--on-surface); font-weight: 500; }
+.sidebar-plugin-panels > button[aria-current="page"] svg { color: var(--primary); }
 @media (max-width: 900px) { .sidebar-plugin-panels > button { min-height: 44px; } }
 .chat-pane.has-surface { flex: none; max-height: 45%; overflow-y: auto; }
 .chat-pane.has-surface .composer-area { margin-block: 0; }

@@ -13,8 +13,8 @@
 .browser-toolbar button { flex: none; padding: 5px 6px; font-size: var(--text-sm); }
 .browser-toolbar > button { min-height: 30px; }
 .browser-toolbar > button[aria-expanded="true"] { background: var(--surface-hover); }
-.browser-address { position: relative; display: flex; flex: 1; align-items: center; min-width: 0; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-sunken); }
-.browser-address:focus-within { border-color: var(--primary); }
+.browser-address { position: relative; display: flex; flex: 1; align-items: center; min-width: 0; border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--surface-sunken); padding-inline: 4px; }
+.browser-address:focus-within { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent); }
 .browser-address input { flex: 1; min-width: 0; padding: 6px 8px; border: 0; outline: none; background: transparent; font-size: var(--text-sm); }
 .browser-address button { background: transparent; border: 0; }
 .browser-address-suggestions { position: absolute; inset: calc(100% + 4px) 0 auto; margin: 0; padding: 4px; list-style: none; max-height: 40vh; overflow: auto; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-panel); box-shadow: 0 8px 24px #0004; }

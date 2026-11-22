@@ -53,19 +53,24 @@
 	background: color-mix(in srgb, var(--surface-panel) 55%, transparent);
 }
 
+.app-shell[data-home-background="true"] .topbar {
+	border-bottom-color: transparent;
+	background: transparent;
+}
 .app-shell[data-home-background="true"] :is(.topbar-leading, .topbar .quiet-button) {
 	background: var(--glass-surface);
 	backdrop-filter: var(--glass-filter);
-	border-radius: 10px;
+	border: 1px solid var(--border);
+	border-radius: 9px;
 	color: var(--on-surface);
 }
-.app-shell[data-home-background="true"] .topbar-leading { min-height: 36px; padding: 7px 12px; }
-.app-shell.sidebar-closed[data-home-background="true"] .topbar-leading { padding-left: 46px; }
+.app-shell[data-home-background="true"] .topbar-leading { min-height: 32px; padding: 5px 11px; }
+.app-shell.sidebar-closed[data-home-background="true"] .topbar-leading { padding-left: 42px; }
 .app-shell[data-home-background="true"] :is(.page-title, .sidebar-toggle) { color: var(--on-surface); }
 .app-shell[data-home-background="true"] .topbar .quiet-button:hover { background: color-mix(in srgb, var(--surface-hover) 85%, transparent); }
 
 /* One shared boundary keeps the resize handle attached to the docked panel. */
-.right-panel { --detail-corner: 12px; border-left: 0; border-radius: var(--detail-corner) 0 0 var(--detail-corner); background: transparent; isolation: isolate; box-shadow: none; }
+.right-panel { --detail-corner: 0px; border-left: 1px solid var(--border-subtle); border-radius: var(--detail-corner) 0 0 var(--detail-corner); background: transparent; isolation: isolate; box-shadow: none; }
 .right-panel-body.detail-panel-body { border-radius: inherit; }
 /* A single background keeps every detail view at the same opacity. */
 .right-panel::before {
@@ -90,10 +95,12 @@
 .right-panel .files-selected-line .files-line-number { background: var(--secondary-container); }
 @media (min-width: 901px) {
 	/* Continue the docked background behind the top bar instead of cutting off the image. */
-	.right-panel::before { top: -62px; }
+	.right-panel::before { top: -46px; }
 	.topbar { position: relative; z-index: 1; }
 	.app-shell .detail-resize-slot { position: relative; width: 0; overflow: visible; z-index: 2; }
 	.app-shell:not(.inspector-open) .detail-resize-slot { visibility: hidden; }
 	.detail-resize-slot .panel-resize { position: absolute; inset: 0 auto 0 -4px; width: 8px; }
-	.detail-resize-slot .panel-resize::after { top: 12px; bottom: 12px; left: 3px; width: 1px; }
+	.detail-resize-slot .panel-resize::after { top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; }
+	.detail-resize-slot .panel-resize:hover::after,
+	.detail-resize-slot .panel-resize:focus-visible::after { background: var(--primary); width: 2px; }
 }

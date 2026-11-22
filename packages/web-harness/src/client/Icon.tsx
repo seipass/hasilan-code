@@ -31,6 +31,12 @@ const paths = {
 	copy: "M9 9h10v10H9zM5 15V5h10",
 	undo: "M9 14L4 9l5-5M4 9h9a6 6 0 016 6v4",
 	retry: "M20 11a8 8 0 10-2.5 5.7M20 5v6h-6",
+	file: "M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5",
+	filePlus: "M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5M12 11v6M9 14h6",
+	terminal: "M4 17l6-6-6-6M12 19h8",
+	globe: "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18",
+	sparkles: "M12 3l1.8 4.6L18.5 9.5l-4.7 1.9L12 16l-1.8-4.6L5.5 9.5l4.7-1.9zM19 16l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z",
+	paperclip: "M20 11l-8.4 8.4a5 5 0 01-7.1-7.1L13 3.8a3.3 3.3 0 014.7 4.7l-8.5 8.4a1.6 1.6 0 01-2.3-2.3L15 6.2",
 	// Filled shapes are drawn as full-size squares; the path strings are unused.
 	stop: "",
 	stopAll: "",

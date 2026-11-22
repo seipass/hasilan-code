@@ -8,19 +8,21 @@
   <style>
     :root {
       color-scheme: dark;
-      font-family: "Yu Gothic UI", system-ui, sans-serif;
-      background: #141414;
-      color: #f0f0f0;
+      font-family: "Inter", "Gen Interface JP", system-ui, sans-serif;
+      background: #12161f;
+      color: #e6ecf5;
     }
     body {
       margin: 0;
       min-height: 100vh;
       display: grid;
       place-items: center;
-      background: radial-gradient(ellipse 380px 260px at 50% 42%, #202430, transparent);
+      background:
+        radial-gradient(ellipse 460px 300px at 50% 40%, rgb(107 158 255 / 12%), transparent 72%),
+        radial-gradient(ellipse 320px 220px at 50% 45%, #1c2230, transparent);
     }
     main { width: min(440px, calc(100% - 48px)); padding-block: 56px; text-align: center }
-    img { display: block; width: 56px; height: 56px; margin-inline: auto; border-radius: 14px }
+    img { display: block; width: 56px; height: 56px; margin-inline: auto; border-radius: 14px; box-shadow: 0 8px 28px rgb(0 0 0 / 35%) }
     main > p { margin-top: 16px }
     .status-panel {
       display: grid;
@@ -28,19 +30,19 @@
       gap: 12px;
       margin-top: 16px;
       padding: 16px 18px;
-      border: 1px solid #35363b;
+      border: 1px solid rgb(216 228 255 / 12%);
       border-radius: 12px;
-      background: #1c1d21;
+      background: #181d29;
       text-align: start;
     }
     [role="status"] { width: 100%; min-width: 0 }
-    .status-label { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; font-size: 12px; font-weight: 650 }
-    .status-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #f4a7a7 }
-    p { margin: 0; color: #b9bac2; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere }
+    .status-label { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; font-size: 12px; font-weight: 600 }
+    .status-label::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #f5859f }
+    p { margin: 0; color: #b4bfd4; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere }
     #message { max-height: 30vh; overflow: auto }
-    a { color: #f0f0f0; background: #2b2d35; border: 1px solid #434550; border-radius: 7px; padding: 7px 12px; font-size: 13px; text-decoration: none }
-    a:hover { background: #353843 }
-    a:focus-visible { outline: 2px solid #a9b8ff; outline-offset: 3px }
+    a { color: #e6ecf5; background: #232b3d; border: 1px solid rgb(216 228 255 / 16%); border-radius: 8px; padding: 7px 14px; font-size: 13px; text-decoration: none }
+    a:hover { background: #2d374e }
+    a:focus-visible { outline: 2px solid #6b9eff; outline-offset: 3px }
     [hidden] { display: none }
   </style>
 </head>

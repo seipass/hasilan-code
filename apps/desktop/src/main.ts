@@ -244,7 +244,7 @@ async function start(): Promise<void> {
 		minHeight: 480,
 		show: false,
 		title: "Hasilan Code",
-		backgroundColor: "#141414",
+		backgroundColor: "#12161f",
 		titleBarStyle: "hidden",
 		titleBarOverlay: process.platform === "darwin" ? { height: 35 } : false,
 		autoHideMenuBar: false,

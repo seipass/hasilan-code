@@ -49,6 +49,16 @@ export function languageForPath(path: string | undefined): string | undefined {
 	return extension ? extensions[extension] : undefined;
 }
 
+/** Resolves a fenced code language tag or alias to a registered highlight.js grammar. */
+export function resolveHighlightLanguage(language: string | undefined): string | undefined {
+	if (!language) return undefined;
+	const key = language.trim().toLowerCase();
+	if (!key) return undefined;
+	if (highlighter.getLanguage(key)) return key;
+	const mapped = extensions[key];
+	return mapped && highlighter.getLanguage(mapped) ? mapped : undefined;
+}
+
 /**
  * Split highlighted HTML into one fragment list per source line so callers can put a
  * gutter next to code or reuse the plain text. Only highlight.js's escaped output
@@ -57,9 +67,10 @@ export function languageForPath(path: string | undefined): string | undefined {
 export function highlightLines(text: string, language?: string, auto = false): ReactNode[][] {
 	// Without a DOM (server rendering, tests) the text still has to come back intact.
 	if (typeof DOMParser === "undefined") return text.split("\n").map((line) => [line]);
-	if ((!language || !highlighter.getLanguage(language)) && !auto) return text.split("\n").map((line) => [line]);
-	const result = language && highlighter.getLanguage(language)
-		? highlighter.highlight(text, { language, ignoreIllegals: true })
+	const resolved = resolveHighlightLanguage(language);
+	if (!resolved && !auto) return text.split("\n").map((line) => [line]);
+	const result = resolved
+		? highlighter.highlight(text, { language: resolved, ignoreIllegals: true })
 		: highlighter.highlightAuto(text, ["javascript", "typescript", "python", "json", "bash", "css", "xml", "sql"]);
 	const document = new DOMParser().parseFromString(result.value, "text/html");
 	const lines: ReactNode[][] = [[]];

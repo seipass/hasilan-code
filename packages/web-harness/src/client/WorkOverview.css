@@ -4,24 +4,26 @@
 	max-width: none;
 	padding: 0;
 	border: 1px solid var(--border);
-	border-radius: 12px;
-	background: var(--panel);
-	color: var(--text);
+	border-radius: var(--dialog-radius, 16px);
+	background: var(--surface-raised);
+	box-shadow: var(--dialog-shadow);
+	color: var(--on-surface);
 }
 .work-overview[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
-.work-overview::backdrop { background: rgb(0 0 0 / 55%); }
+.work-overview::backdrop { background: var(--dialog-scrim, rgb(0 0 0 / 55%)); backdrop-filter: var(--dialog-scrim-filter, blur(3px)); }
 .work-overview > header, .work-overview-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.work-overview > header { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.work-overview > header { padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-panel); }
 .work-overview h2, .work-overview h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
 .work-overview-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); min-height: 0; }
-.work-overview-list, .work-overview-detail { min-width: 0; overflow: auto; padding: 12px 16px; }
-.work-overview-list { border-right: 1px solid var(--border); }
-.work-overview input { width: 100%; }
+.work-overview-list, .work-overview-detail { min-width: 0; overflow: auto; padding: 14px 16px; }
+.work-overview-list { border-right: 1px solid var(--border-subtle); background: var(--surface-panel); }
+.work-overview input { width: 100%; background: var(--surface-sunken); }
 .work-overview-filters { display: flex; flex-wrap: wrap; gap: 4px; margin-block: 8px; }
 .work-overview-list ul { padding: 0; margin: 0; list-style: none; }
 .work-overview-list li + li { margin-top: 2px; }
-.work-overview-list li button { display: grid; gap: 3px; width: 100%; padding: 7px 8px; text-align: left; }
-.work-overview-list button[aria-pressed="true"] { background: var(--surface-hover); border-color: var(--border); }
+.work-overview-list li button { display: grid; gap: 3px; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; text-align: left; }
+.work-overview-list li button:hover { background: color-mix(in srgb, var(--surface-hover) 65%, transparent); }
+.work-overview-list button[aria-pressed="true"] { background: var(--selection-fill); color: var(--on-surface); }
 .work-overview-list li strong { font-weight: 600; }
 .work-overview-list li span, .work-overview-detail p, .work-overview h4 span { color: var(--muted); }
 .work-overview-list li strong, .work-overview-list li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
