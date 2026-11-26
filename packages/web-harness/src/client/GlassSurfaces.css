@@ -2,26 +2,46 @@
 	--glass-surface: var(--surface-raised);
 	--glass-panel: var(--surface-panel);
 	--glass-popup: var(--surface-raised);
+	--glass-card: var(--surface-raised);
+	--glass-pill: var(--surface-hover);
+	--glass-rim: rgba(255, 255, 255, 0.11);
+	--glass-rim-soft: rgba(255, 255, 255, 0.06);
+	--glass-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.72);
+	--glass-shadow-sm: 0 4px 14px -6px rgba(0, 0, 0, 0.54);
 	--glass-filter: none;
 	--dialog-scrim: #0006;
 	--dialog-scrim-clear: #0000;
-	--dialog-scrim-filter: blur(3px);
+	--dialog-scrim-filter: blur(4px);
 }
 
 @supports (backdrop-filter: blur(1px)) {
 	:root {
-		--glass-surface: color-mix(in srgb, var(--surface-raised) 88%, transparent);
-		--glass-panel: color-mix(in srgb, var(--surface-panel) 91%, transparent);
-		--glass-popup: color-mix(in srgb, var(--surface-raised) 96%, transparent);
-		--glass-filter: blur(24px);
+		--glass-surface: color-mix(in srgb, var(--surface-raised) 76%, transparent);
+		--glass-panel: color-mix(in srgb, var(--surface-panel) 84%, transparent);
+		--glass-popup: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+		--glass-card: color-mix(in srgb, var(--surface-raised) 74%, transparent);
+		--glass-pill: color-mix(in srgb, var(--surface-hover) 62%, transparent);
+		--glass-filter: blur(20px) saturate(145%);
 	}
 }
+
+/* Liquid Glass x Flat Design midpoint:
+   Reading canvas stays flat and calm; interactive floating chrome, cards, pills, and
+   popovers gain subtle translucency, 1px hairline borders, and a soft top specular edge. */
 
 .composer {
 	background: transparent;
 	isolation: isolate;
+	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow-sm);
 }
-/* Keep the popup outside the composer's backdrop root so it can blur the image. */
+.composer:focus-within {
+	border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+	box-shadow:
+		inset 0 1px 0 var(--glass-rim),
+		0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent),
+		var(--glass-shadow);
+}
+/* Keep the popup outside the composer's backdrop root so it can blur behind cleanly. */
 .composer::before {
 	content: "";
 	position: absolute;
@@ -29,15 +49,78 @@
 	z-index: -1;
 	border-radius: inherit;
 	pointer-events: none;
-	background: var(--glass-surface);
+	background: linear-gradient(180deg, color-mix(in srgb, var(--glass-rim) 36%, var(--glass-surface)), var(--glass-surface));
 	backdrop-filter: var(--glass-filter);
 }
-.command-picker, .model-popover, .usage-popover-content, .quick-open, .session-context-menu, .detail-context-menu,
-.settings-dialog, .mobile-sheet:has(.mobile-model-menu) {
+
+html body .composer-dock-tray,
+html body .ap-card,
+html body .pr-card,
+html body .sp-card,
+html body .sp-notice,
+html body .home-card,
+html body .token-usage-card {
+	background: var(--glass-card);
+	backdrop-filter: blur(14px) saturate(135%);
+	box-shadow: inset 0 1px 0 var(--glass-rim-soft), var(--glass-shadow-sm);
+}
+
+html body .pr-dock-diffstat-pill {
+	background: var(--glass-pill);
+	backdrop-filter: blur(12px) saturate(135%);
+	box-shadow: inset 0 1px 0 var(--glass-rim-soft), var(--glass-shadow-sm);
+}
+
+html body .command-picker,
+html body .model-popover,
+html body .usage-popover-content,
+html body .cw-popover,
+html body .cw-flyout,
+html body .pr-conflict-popover,
+html body .pr-check-tooltip,
+html body .ap-popover,
+html body .quick-open,
+html body .session-context-menu,
+html body .detail-context-menu,
+html body .settings-dialog,
+html body .mobile-sheet:has(.mobile-model-menu) {
 	background: var(--glass-popup);
 	backdrop-filter: var(--glass-filter);
+	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
 }
 .usage-popover-content { z-index: 18; }
+
+/* Tactile glass sheen on primary brand CTAs without breaking flat hierarchy. */
+html body .send-button:not(:disabled),
+html body .ap-approve-button:not(:disabled),
+html body .pr-cta-btn.is-primary:not(:disabled),
+html body .pr-dock-action-btn.is-primary:not(:disabled),
+html body .sp-btn.is-primary:not(:disabled) {
+	background: linear-gradient(180deg, color-mix(in srgb, #ffffff 16%, var(--primary)), var(--primary));
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.24),
+		0 2px 10px -2px color-mix(in srgb, var(--primary) 48%, transparent);
+}
+html body .send-button:hover:not(:disabled),
+html body .ap-approve-button:hover:not(:disabled),
+html body .pr-cta-btn.is-primary:hover:not(:disabled),
+html body .pr-dock-action-btn.is-primary:hover:not(:disabled),
+html body .sp-btn.is-primary:hover:not(:disabled) {
+	background: linear-gradient(180deg, color-mix(in srgb, #ffffff 20%, var(--primary-hover)), var(--primary-hover));
+}
+
+/* Brand-tinted translucent selection pill in sidebar (echoes Hasilan Pass). */
+html body .history-session-row:has(.session-button.selected) {
+	box-shadow:
+		inset 0 1px 0 var(--glass-rim-soft),
+		inset 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.topbar {
+	background: color-mix(in srgb, var(--surface) 82%, transparent);
+	backdrop-filter: blur(16px) saturate(135%);
+}
+
 /* Settings contents cross-fade directly so the dialog keeps blurring the live page. */
 .settings-dialog { view-transition-name: none; }
 /* Team details use the same live transition with and without View Transition support. */
@@ -58,6 +141,7 @@
 	backdrop-filter: var(--glass-filter);
 	border-radius: 10px;
 	color: var(--on-surface);
+	box-shadow: inset 0 1px 0 var(--glass-rim-soft);
 }
 .app-shell[data-home-background="true"] .topbar-leading { min-height: 36px; padding: 7px 12px; }
 .app-shell.sidebar-closed[data-home-background="true"] .topbar-leading { padding-left: 46px; }
@@ -77,6 +161,7 @@
 	pointer-events: none;
 	background: var(--glass-panel);
 	backdrop-filter: var(--glass-filter);
+	box-shadow: inset 1px 0 0 var(--glass-rim-soft);
 }
 .right-panel :is(.files-pane, .detail-toolbar, .detail-new-tab, .detail-file-empty, .files-tree, .files-view-mode, .files-viewer, .files-splitter, .detail-auxiliary, .team-pane, .team-graph, .team-graph-viewport) { background-color: transparent; }
 /* The independently toggled file tree uses the same glass as the detail panel. */

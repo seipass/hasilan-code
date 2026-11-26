@@ -3,13 +3,16 @@ html body .composer {
 	padding: 13px 13px 10px;
 	border: 1px solid var(--border);
 	border-radius: 20px;
-	box-shadow: 0 2px 14px #0000001e;
+	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow-sm);
 	transition: none;
 	animation: none;
 }
 html body .composer:focus-within {
-	border-color: var(--border-strong);
-	box-shadow: 0 4px 18px #00000028;
+	border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+	box-shadow:
+		inset 0 1px 0 var(--glass-rim),
+		0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent),
+		var(--glass-shadow);
 }
 html body .composer-home {
 	padding: 14px 14px 11px;
@@ -69,7 +72,8 @@ html body .composer-footer .composer-attach-button {
 	padding: 0;
 	border-radius: 999px;
 	border: 1px solid var(--border-subtle);
-	background: color-mix(in srgb, var(--surface-hover) 68%, transparent);
+	background: var(--glass-pill);
+	box-shadow: inset 0 1px 0 var(--glass-rim-soft);
 	color: var(--on-surface-secondary);
 	flex: none;
 }
@@ -88,7 +92,8 @@ html body .composer-workspace-pill {
 	padding: 0 11px 0 9px;
 	border-radius: 999px;
 	border: 1px solid var(--border-subtle);
-	background: color-mix(in srgb, var(--surface-hover) 56%, transparent);
+	background: var(--glass-pill);
+	box-shadow: inset 0 1px 0 var(--glass-rim-soft);
 	color: var(--on-surface-secondary);
 	font-size: var(--text-xs);
 	line-height: 1;
