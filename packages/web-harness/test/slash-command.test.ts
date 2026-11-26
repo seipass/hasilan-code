@@ -87,7 +87,7 @@ describe("shared composer slash commands", () => {
 		expect(() => parseComposerCommand(`/goal ${"a".repeat(1024 * 1024 + 1)}`)).toThrow("文字以内");
 	});
 
-	it("parses /plan and /split with a task body and rejects empty arguments", () => {
+	it("parses /plan, /split, and /pr commands", () => {
 		expect(parseComposerCommand("/plan Add rate limiting to the API")).toEqual({
 			kind: "plan",
 			task: "Add rate limiting to the API",
@@ -98,6 +98,11 @@ describe("shared composer slash commands", () => {
 			task: "Fix mobile footer",
 		});
 		expect(() => parseComposerCommand("/split   ")).toThrow("使い方");
+		expect(parseComposerCommand("/pr")).toEqual({ kind: "pr" });
+		expect(parseComposerCommand("/pr Add checkout promo")).toEqual({
+			kind: "pr",
+			title: "Add checkout promo",
+		});
 	});
 
 	it.each(["/unknown objective", "/canvas-extra", "/Hyakki objective", "/", "/goal/status"])(

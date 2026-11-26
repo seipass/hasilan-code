@@ -3,6 +3,7 @@ import type { HistoryPosition } from "../shared/session-history.ts";
 import type { SessionSurface, SurfaceAction } from "../shared/surfaces.ts";
 import { ActionPlanCard } from "./ActionPlanCard.tsx";
 import { ComputerActivity } from "./ComputerActivity.tsx";
+import { PrLifecycleCard } from "./PrLifecycleCard.tsx";
 import { SplitNoticeCard, SplitProposalCard } from "./SplitProposalCard.tsx";
 import { conversationRows } from "./computer-activity.ts";
 import { Presence } from "./Motion.tsx";
@@ -366,6 +367,8 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 						return <SplitProposalCard key={surface.surfaceId} surface={surface} onAction={onSurfaceAction} onSelectSession={onSelectSession} />;
 					if (surface.kind === "split_notice")
 						return <SplitNoticeCard key={surface.surfaceId} surface={surface} onSelectSession={onSelectSession} />;
+					if (surface.kind === "pr_lifecycle" && onSurfaceAction)
+						return <PrLifecycleCard key={surface.surfaceId} surface={surface} onAction={onSurfaceAction} onFile={openFile} />;
 					return null;
 				})}
 				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>

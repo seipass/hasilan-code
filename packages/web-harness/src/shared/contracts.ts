@@ -57,6 +57,15 @@ export const sessionCompactSchema = Type.Object(
 	{ instructions: Type.Optional(Type.String({ maxLength: 16_384 })) },
 	{ additionalProperties: false },
 );
+export const prCreateSchema = Type.Object(
+	{
+		title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+		baseBranch: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+		commitMessage: Type.Optional(Type.String({ minLength: 1, maxLength: 400 })),
+		draft: Type.Optional(Type.Boolean()),
+	},
+	{ additionalProperties: false },
+);
 
 export const pendingInputActionSchema = Type.Union([
 	Type.Object(

@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ATTACHMENT_LIMITS, type AttachmentUpload } from "../shared/attachments.ts";
 import { GIT_REVIEW_ID, WORKSPACE_ROUTER_ID } from "../shared/plugin-profile.ts";
+import type { PrLifecycleSurface, WorkspaceGitSummary } from "../shared/pr-lifecycle.ts";
 import type { SurfaceAction } from "../shared/surfaces.ts";
 import type { ComposerDestination, ComposerSendResult, ConversationCandidate } from "../shared/workspace-routing.ts";
-import { errorMessage } from "./api.ts";
+import { api, errorMessage } from "./api.ts";
 import { Icon } from "./Icon.tsx";
 import { matchesAppKeybinding } from "./app-keybindings.ts";
 import type { BrowserAnnotation, BrowserAnnotationDelivery } from "./BrowserPane.tsx";
@@ -16,6 +17,7 @@ import { Conversation } from "./Conversation.tsx";
 import { GitReview } from "./GitReview.tsx";
 import { fileChanges } from "./file-changes.ts";
 import { MotionItems, Presence, useLayoutMotion } from "./Motion.tsx";
+import { PrDockTray } from "./PrDockTray.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import { usePreferenceState, usePreferenceText } from "./preferences.ts";
 import { SessionOverview } from "./SessionOverview.tsx";
@@ -32,7 +34,7 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
+export function ChatPane({ session, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, gitRefreshToken = 0, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
 	team?: TeamSnapshot;
 	loading?: boolean;
@@ -46,12 +48,14 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	composerDock?: ReactNode;
 	homeDashboard?: ReactNode;
 	surface?: boolean;
+	gitRefreshToken?: number;
 	commands?: readonly (typeof COMPOSER_COMMANDS)[number][];
 	draftInsertion?: { id: string; text: string };
 	onDraftInserted: () => void;
 	onSend: (text: string, mode: "prompt" | "steer" | "followUp", attachments: AttachmentUpload[], destination?: ComposerDestination) => Promise<ComposerSendResult>;
 	onPendingInputAction: (inputId: string, action: PendingInputAction) => Promise<void>;
 	onSurfaceAction?: (surfaceId: string, action: SurfaceAction) => Promise<void>;
+	onCreatePr?: (title?: string) => Promise<void>;
 	onFile: (path: string, line?: number) => void;
 	onStop: () => void;
 	onParent: (sessionId: string) => void;
@@ -70,6 +74,8 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const gitReviewEnabled = profile?.activeIds.includes(GIT_REVIEW_ID) ?? true;
 	const workspaceRouterEnabled = profile?.activeIds.includes(WORKSPACE_ROUTER_ID) ?? true;
 	const [reviewOpen, setReviewOpen] = useState(false);
+	const [gitSummary, setGitSummary] = useState<WorkspaceGitSummary>();
+	const [creatingPr, setCreatingPr] = useState(false);
 	const [error, setError] = useState<string>();
 	const { attachments, reading, error: attachmentError, addFiles, remove } = useComposerAttachments(draftKey);
 	const [browserAnnotations, setBrowserAnnotations] = useState<BrowserAnnotation[]>(() => annotationDrafts.get(draftKey) ?? []);
@@ -115,9 +121,46 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	}, [attachments, browserAnnotations, draftKey, reading, sending]);
 	function chooseCommand(command: string) {
 		setWorkspaceCandidates(undefined);
-		setText(`${command}${command === "/hyakki" || command === "/goal" || command === "/plan" || command === "/split" ? " " : ""}`);
+		setText(`${command}${command === "/hyakki" || command === "/goal" || command === "/plan" || command === "/split" || command === "/pr" ? " " : ""}`);
 		setPickerDismissed(true);
 		input.current?.focus();
+	}
+	const activePrSurface = session?.surfaces?.findLast(
+		(entry): entry is PrLifecycleSurface => entry.kind === "pr_lifecycle",
+	);
+	const sessionIdForGit = session?.sessionId;
+	const sessionAvailability = session?.availability;
+	const latestSettledAt = session?.latestRun?.settledAt;
+	const currentRunId = session?.currentRun?.runId;
+	useEffect(() => {
+		if (!sessionIdForGit || sessionAvailability !== "ready" || surface) {
+			setGitSummary(undefined);
+			return;
+		}
+		const controller = new AbortController();
+		void api<WorkspaceGitSummary>(
+			`/api/sessions/${encodeURIComponent(sessionIdForGit)}/git-status`,
+			{ signal: controller.signal },
+		)
+			.then((summary) => {
+				if (!controller.signal.aborted) setGitSummary(summary);
+			})
+			.catch(() => {
+				if (!controller.signal.aborted) setGitSummary(undefined);
+			});
+		return () => controller.abort();
+	}, [sessionIdForGit, sessionAvailability, latestSettledAt, currentRunId, gitRefreshToken, surface]);
+	async function handleCreatePr() {
+		if (!onCreatePr || creatingPr) return;
+		setCreatingPr(true);
+		setError(undefined);
+		try {
+			await onCreatePr();
+		} catch (reason) {
+			setError(errorMessage(reason));
+		} finally {
+			setCreatingPr(false);
+		}
 	}
 	useEffect(() => {
 		if (!draftInsertion || insertedDraft.current === draftInsertion.id) return;
@@ -254,7 +297,20 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 		<Presence show={session?.availability === "missing"} collapse><div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div></Presence>
 		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} surfaces={session.surfaces} onSurfaceAction={onSurfaceAction} onSelectSession={onParent} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); input.current?.focus(); }} />}
 		<div className="composer-area">
-			<ComposerDock>{composerDock}</ComposerDock>
+			<ComposerDock>
+				{composerDock}
+				{!surface && session?.availability === "ready" && (
+					<PrDockTray
+						gitSummary={gitSummary}
+						surface={activePrSurface}
+						creating={creatingPr}
+						onCreatePr={onCreatePr ? handleCreatePr : undefined}
+						onOpenReview={gitReviewEnabled ? () => setReviewOpen(true) : undefined}
+						onSurfaceAction={onSurfaceAction}
+						onFile={onFile}
+					/>
+				)}
+			</ComposerDock>
 			<Presence show={pendingInputs.length > 0} collapse><div ref={pendingList} className="pending-input-list" role="list" aria-label="予約中の追加指示">
 				<MotionItems items={pendingInputs} itemKey={(pendingInput) => pendingInput.inputId}>{(pendingInput) => {
 					const editing = editingInput?.inputId === pendingInput.inputId;

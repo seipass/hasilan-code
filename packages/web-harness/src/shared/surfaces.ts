@@ -1,4 +1,5 @@
 import { type Static, Type } from "typebox";
+import type { PrLifecycleSurface } from "./pr-lifecycle.ts";
 
 export const SURFACE_CUSTOM_TYPE = "harness-surface";
 
@@ -86,7 +87,7 @@ export interface SplitNoticeSurface {
 	updatedAt: string;
 }
 
-export type SessionSurface = ActionPlanSurface | SplitProposalSurface | SplitNoticeSurface;
+export type SessionSurface = ActionPlanSurface | SplitProposalSurface | SplitNoticeSurface | PrLifecycleSurface;
 
 export const surfaceActionSchema = Type.Union([
 	Type.Object(
@@ -114,6 +115,33 @@ export const surfaceActionSchema = Type.Union([
 	),
 	Type.Object({ type: Type.Literal("accept_split") }, { additionalProperties: false }),
 	Type.Object({ type: Type.Literal("keep_here") }, { additionalProperties: false }),
+	Type.Object(
+		{
+			type: Type.Literal("set_pr_view_mode"),
+			viewMode: Type.Union([
+				Type.Literal("inline"),
+				Type.Literal("docked_collapsed"),
+				Type.Literal("docked_expanded"),
+			]),
+		},
+		{ additionalProperties: false },
+	),
+	Type.Object({ type: Type.Literal("refresh_pr") }, { additionalProperties: false }),
+	Type.Object({ type: Type.Literal("resolve_conflicts") }, { additionalProperties: false }),
+	Type.Object(
+		{
+			type: Type.Literal("fix_ci"),
+			checkName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+		},
+		{ additionalProperties: false },
+	),
+	Type.Object(
+		{
+			type: Type.Literal("merge_pr"),
+			method: Type.Optional(Type.Union([Type.Literal("merge"), Type.Literal("squash"), Type.Literal("rebase")])),
+		},
+		{ additionalProperties: false },
+	),
 ]);
 
 export type SurfaceAction = Static<typeof surfaceActionSchema>;
@@ -125,5 +153,7 @@ export function isSessionSurface(value: unknown): value is SessionSurface {
 	if (candidate.kind === "action_plan") return Array.isArray(candidate.steps);
 	if (candidate.kind === "split_proposal") return typeof candidate.promptText === "string";
 	if (candidate.kind === "split_notice") return typeof candidate.childSessionId === "string";
+	if (candidate.kind === "pr_lifecycle")
+		return typeof candidate.headBranch === "string" && Array.isArray(candidate.commits);
 	return false;
 }

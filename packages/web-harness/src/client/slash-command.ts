@@ -5,6 +5,7 @@ export type ComposerCommand =
 	| { kind: "prompt"; text: string }
 	| { kind: "plan"; task: string }
 	| { kind: "split"; task: string }
+	| { kind: "pr"; title?: string }
 	| { kind: "chat" }
 	| { kind: "canvas" }
 	| { kind: "hyakki"; objective: string }
@@ -14,6 +15,7 @@ export type ComposerCommand =
 export const COMPOSER_COMMANDS = [
 	{ command: "/plan", syntax: "/plan 作業内容", description: "編集・承認できる実行プランを作成して開始" },
 	{ command: "/split", syntax: "/split 作業内容", description: "独立した Worktree ブランチで並列セッションを開始" },
+	{ command: "/pr", syntax: "/pr [タイトル]", description: "現在の変更から Pull Request を作成・監視" },
 	{ command: "/hyakki", syntax: "/hyakki 目的", description: "スウォームを開始 · continue で再開" },
 	{ command: "/canvas", syntax: "/canvas", description: "設計エディターを開く（モデル不要）" },
 	{ command: "/chat", syntax: "/chat", description: "会話に戻る" },
@@ -40,6 +42,10 @@ export function parseComposerCommand(text: string): ComposerCommand {
 		if (!args) throw new Error("使い方: /split 並列で進める作業内容");
 		if (args.length > 1024 * 1024) throw new Error("作業内容は 1,048,576 文字以内にしてください。");
 		return { kind: "split", task: args };
+	}
+	if (name === "/pr") {
+		if (args.length > 200) throw new Error("PR タイトルは 200 文字以内にしてください。");
+		return args ? { kind: "pr", title: args } : { kind: "pr" };
 	}
 	if (name === "/canvas" || name === "/chat") {
 		if (args) throw new Error(`${name} に引数は指定できません。`);

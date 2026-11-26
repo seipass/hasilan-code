@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import type { AgentSessionEvent, SessionManager, ToolDefinition } from "@hasilan-code/pi-coding-agent";
 import { Type } from "typebox";
+import type { PrLifecycleSurface } from "../shared/pr-lifecycle.ts";
 import {
 	type ActionPlanFileChange,
 	type ActionPlanStep,
@@ -373,6 +374,26 @@ export class SurfaceManager {
 				};
 		this.upsert(sessionId, surface, true);
 		return structuredClone(surface);
+	}
+
+	upsertPrSurface(sessionId: string, surface: PrLifecycleSurface, persist = true): PrLifecycleSurface {
+		const copy = structuredClone(surface);
+		this.upsert(sessionId, copy, persist);
+		return structuredClone(copy);
+	}
+
+	getPrSurface(sessionId: string, surfaceId?: string): PrLifecycleSurface | undefined {
+		const map = this.sessions.get(sessionId);
+		if (!map) return undefined;
+		if (surfaceId) {
+			const exact = map.get(surfaceId);
+			return exact?.kind === "pr_lifecycle" ? structuredClone(exact) : undefined;
+		}
+		const prSurfaces = [...map.values()].filter(
+			(entry): entry is PrLifecycleSurface => entry.kind === "pr_lifecycle",
+		);
+		const latest = prSurfaces.findLast((entry) => entry.phase !== "merged") ?? prSurfaces.at(-1);
+		return latest ? structuredClone(latest) : undefined;
 	}
 
 	handleAction(sessionId: string, surfaceId: string, action: SurfaceAction): SessionSurface {

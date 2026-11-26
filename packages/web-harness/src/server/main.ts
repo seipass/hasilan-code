@@ -12,6 +12,7 @@ import {
 	credentialSchema,
 	modelSchema,
 	pendingInputActionSchema,
+	prCreateSchema,
 	promptSchema,
 	responsibilitySchema,
 	sessionCompactSchema,
@@ -77,6 +78,7 @@ import { terminalPlugin } from "./plugins/terminal.ts";
 import { webSearchPlugin } from "./plugins/web-search.ts";
 import { workspaceFilesPlugin } from "./plugins/workspace-files.ts";
 import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts";
+import { PrLifecycleManager } from "./pr-lifecycle.ts";
 import { acquireProfile } from "./profile-lock.ts";
 import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
@@ -294,6 +296,7 @@ async function createHarness(
 		(channel, id) => (channel === "session" ? registry.retainHistory(id) : () => {}),
 	);
 	const hub = events;
+	const prLifecycle = new PrLifecycleManager(registry.surfaces);
 	registry.subscribe((event) => {
 		if (event.sessionId) {
 			if (event.type === "session_deleted") hub.removeSession(event.sessionId);
@@ -303,7 +306,11 @@ async function createHarness(
 	});
 	registry.onExecutionEvent((sessionId, event) => {
 		if (event.type !== "agent_settled") return;
-		const child = registry.state.sessions.find((entry) => entry.sessionId === sessionId);
+		const sessionRecord = registry.state.sessions.find((entry) => entry.sessionId === sessionId);
+		if (sessionRecord) {
+			void prLifecycle.onAgentSettled(sessionId, sessionRecord.cwd);
+		}
+		const child = sessionRecord;
 		if (!child?.splitFromSessionId) return;
 		if (!registry.state.sessions.some((entry) => entry.sessionId === child.splitFromSessionId)) return;
 		const snapshot = registry.projection(sessionId);
@@ -419,6 +426,7 @@ async function createHarness(
 					}
 					if (parts.length === 3 && method === "DELETE") {
 						const deletedSessionIds = await registry.deleteSession(id);
+						for (const sessionId of deletedSessionIds) prLifecycle.closeSession(sessionId);
 						for (const sessionId of deletedSessionIds) await plugins.closeSession(sessionId);
 						for (const sessionId of deletedSessionIds) artifacts.deleteSession(sessionId);
 						return reply({ deletedSessionIds });
@@ -522,6 +530,15 @@ async function createHarness(
 					if (parts[3] === "usage-attribution" && parts.length === 4 && method === "GET") {
 						return reply(registry.usageAttribution(id));
 					}
+					if (parts[3] === "git-status" && parts.length === 4 && method === "GET") {
+						const descriptor = registry.descriptor(id);
+						return reply(await prLifecycle.inspect(descriptor.cwd));
+					}
+					if (parts[3] === "pr" && parts.length === 4 && method === "POST") {
+						const descriptor = registry.descriptor(id);
+						const input = await readJson(request, prCreateSchema, 64 * 1024);
+						return reply(await prLifecycle.createOrAttach(id, descriptor.cwd, input), 202);
+					}
 					if (
 						parts[3] === "surfaces" &&
 						parts[4] &&
@@ -530,6 +547,34 @@ async function createHarness(
 						method === "POST"
 					) {
 						const action = await readJson(request, surfaceActionSchema, 256 * 1024);
+						if (action.type === "set_pr_view_mode") {
+							return reply(prLifecycle.setViewMode(id, parts[4], action.viewMode));
+						}
+						if (action.type === "refresh_pr") {
+							const descriptor = registry.descriptor(id);
+							return reply(await prLifecycle.refresh(id, parts[4], descriptor.cwd));
+						}
+						if (action.type === "resolve_conflicts") {
+							const descriptor = registry.descriptor(id);
+							return reply(
+								await prLifecycle.startResolveConflicts(id, parts[4], descriptor.cwd, async (promptText) => {
+									const current = registry.projection(id).currentRun;
+									await teams.prompt(id, { text: promptText, mode: current ? "steer" : "prompt" });
+								}),
+							);
+						}
+						if (action.type === "fix_ci") {
+							return reply(
+								await prLifecycle.startFixCi(id, parts[4], action.checkName, async (promptText) => {
+									const current = registry.projection(id).currentRun;
+									await teams.prompt(id, { text: promptText, mode: current ? "steer" : "prompt" });
+								}),
+							);
+						}
+						if (action.type === "merge_pr") {
+							const descriptor = registry.descriptor(id);
+							return reply(await prLifecycle.merge(id, parts[4], descriptor.cwd, action.method));
+						}
 						if (action.type === "accept_split" || action.type === "keep_here") {
 							const surface = registry.surfaces.get(id, parts[4]);
 							if (!surface || surface.kind !== "split_proposal")
@@ -638,6 +683,7 @@ async function createHarness(
 		if (shuttingDown) return;
 		shuttingDown = true;
 		folderPickerAbort.abort();
+		prLifecycle.close();
 		// Attempt every cleanup even when a device or PTY refuses to close.
 		const owners = await Promise.allSettled([authLogin.close(), teams.close()]);
 		const [registryResult] = await Promise.allSettled([registry.close()]);
