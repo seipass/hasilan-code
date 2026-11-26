@@ -1,7 +1,7 @@
 .composer-popover.model-popover {
-	padding: 4px;
-	border-radius: var(--popup-radius);
-	box-shadow: var(--popup-shadow);
+	padding: 6px;
+	border-radius: 14px;
+	box-shadow: var(--glass-shadow);
 	overflow: hidden;
 	transform-origin: bottom center;
 }

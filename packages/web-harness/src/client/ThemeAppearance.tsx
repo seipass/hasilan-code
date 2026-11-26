@@ -101,6 +101,8 @@ export function ApplicationTheme() {
 			"--glass-rim-soft": variant === "dark" ? "rgba(255, 255, 255, 0.06)" : "rgba(255, 255, 255, 0.68)",
 			"--glass-shadow": variant === "dark" ? "0 12px 32px -12px rgba(0, 0, 0, 0.72)" : "0 10px 28px -12px rgba(20, 20, 18, 0.14)",
 			"--glass-shadow-sm": variant === "dark" ? "0 4px 14px -6px rgba(0, 0, 0, 0.54)" : "0 2px 10px -4px rgba(20, 20, 18, 0.09)",
+			"--glass-dialog-shadow": variant === "dark" ? "0 24px 70px -16px rgba(0, 0, 0, 0.84)" : "0 22px 58px -18px rgba(20, 20, 18, 0.22)",
+			"--dialog-scrim": variant === "dark" ? "rgba(0, 0, 0, 0.62)" : "rgba(20, 20, 18, 0.34)",
 			"--font-content": formatFontStack(settings.contentFont, "inherit"),
 			"--font-code": formatFontStack(settings.codeFont, '"JetBrains Mono", "UDEV Gothic", monospace'),
 			"--text-code": `${settings.codeSize}px`, "--text-reading": `${settings.uiSize + 1}px`,

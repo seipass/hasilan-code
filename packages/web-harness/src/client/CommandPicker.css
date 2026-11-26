@@ -1,12 +1,12 @@
 .chat-pane.has-surface:has(.command-picker), .chat-pane.is-empty:has(.command-picker) { overflow: visible; z-index: 6; }
 .command-picker-anchor { position: relative; }
-.command-picker { position: absolute; z-index: 5; inset-inline: 0; bottom: calc(100% + 8px); display: flex; flex-direction: column; max-height: min(50dvh, var(--command-picker-available-height, 390px)); padding: 6px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-raised); box-shadow: 0 15px 55px #11111b80; }
+.command-picker { position: absolute; z-index: 5; inset-inline: 0; bottom: calc(100% + 8px); display: flex; flex-direction: column; max-height: min(50dvh, var(--command-picker-available-height, 390px)); padding: 6px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised); box-shadow: var(--glass-shadow); }
 .command-picker { transform-origin: bottom center; animation: surface-enter var(--motion-base) var(--motion-ease); }
 .command-picker.is-below { top: calc(100% + 8px); bottom: auto; transform-origin: top center; }
 .command-picker.is-below .command-picker-description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.command-picker-options { display: grid; gap: 4px; min-height: 0; max-height: min(38dvh, 300px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
-.command-picker-option { --command-color: var(--primary-hover); display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; text-align: left; background: transparent; transition: background 100ms ease, border-color 100ms ease; }
-.command-picker-option[aria-selected="true"], .command-picker-option:hover { border-color: color-mix(in srgb, var(--command-color) 30%, transparent); background: color-mix(in srgb, var(--command-color) 9%, var(--surface-raised)); }
+.command-picker-options { display: grid; gap: 2px; min-height: 0; max-height: min(38dvh, 300px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+.command-picker-option { --command-color: var(--on-surface); display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; text-align: left; background: transparent; transition: background 100ms ease, border-color 100ms ease; }
+.command-picker-option[aria-selected="true"], .command-picker-option:hover { border-color: transparent; background: var(--selection-fill); }
 .command-picker-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .command-picker-title { color: var(--on-surface); font-weight: 600; font-size: var(--text-sm); line-height: var(--leading-snug); }
 .command-picker-description { color: var(--on-surface-muted); font-size: var(--text-xs); line-height: var(--leading-normal); }

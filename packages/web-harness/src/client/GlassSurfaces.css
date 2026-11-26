@@ -8,17 +8,18 @@
 	--glass-rim-soft: rgba(255, 255, 255, 0.06);
 	--glass-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.72);
 	--glass-shadow-sm: 0 4px 14px -6px rgba(0, 0, 0, 0.54);
+	--glass-dialog-shadow: 0 24px 70px -16px rgba(0, 0, 0, 0.84);
 	--glass-filter: none;
-	--dialog-scrim: #0006;
+	--dialog-scrim: rgba(0, 0, 0, 0.62);
 	--dialog-scrim-clear: #0000;
-	--dialog-scrim-filter: blur(4px);
+	--dialog-scrim-filter: blur(8px);
 }
 
 @supports (backdrop-filter: blur(1px)) {
 	:root {
 		--glass-surface: color-mix(in srgb, var(--surface-raised) 76%, transparent);
 		--glass-panel: color-mix(in srgb, var(--surface-panel) 84%, transparent);
-		--glass-popup: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+		--glass-popup: color-mix(in srgb, var(--surface-raised) 88%, transparent);
 		--glass-card: color-mix(in srgb, var(--surface-raised) 74%, transparent);
 		--glass-pill: color-mix(in srgb, var(--surface-hover) 62%, transparent);
 		--glass-filter: blur(20px) saturate(145%);
@@ -26,20 +27,13 @@
 }
 
 /* Liquid Glass x Flat Design midpoint:
-   Reading canvas stays flat and calm; interactive floating chrome, cards, pills, and
-   popovers gain subtle translucency, 1px hairline borders, and a soft top specular edge. */
+   Reading canvas stays flat and calm; interactive floating chrome, modals, cards,
+   pills, and popovers gain subtle translucency, 1px hairline borders, and a soft top rim. */
 
 .composer {
 	background: transparent;
 	isolation: isolate;
 	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow-sm);
-}
-.composer:focus-within {
-	border-color: var(--border-strong);
-	box-shadow:
-		inset 0 1px 0 var(--glass-rim),
-		0 0 0 3px color-mix(in srgb, var(--on-surface) 8%, transparent),
-		var(--glass-shadow);
 }
 /* Keep the popup outside the composer's backdrop root so it can blur behind cleanly. */
 .composer::before {
@@ -71,6 +65,7 @@ html body .pr-dock-diffstat-pill {
 	box-shadow: inset 0 1px 0 var(--glass-rim-soft), var(--glass-shadow-sm);
 }
 
+/* Unified Floating Popovers & Context Menus */
 html body .command-picker,
 html body .model-popover,
 html body .usage-popover-content,
@@ -79,24 +74,70 @@ html body .cw-flyout,
 html body .pr-conflict-popover,
 html body .pr-check-tooltip,
 html body .ap-popover,
-html body .quick-open,
 html body .session-context-menu,
-html body .detail-context-menu,
-html body .settings-dialog,
-html body .mobile-sheet:has(.mobile-model-menu) {
+html body .detail-context-menu {
+	border-color: var(--border);
 	background: var(--glass-popup);
 	backdrop-filter: var(--glass-filter);
 	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow);
 }
 .usage-popover-content { z-index: 18; }
 
+/* Unified Modal Dialogs & Sheets */
+html body .settings-dialog.settings-dialog,
+html body .session-import-dialog.session-import-dialog,
+html body .work-overview,
+html body .git-review,
+html body .session-action-dialog,
+html body .quick-open {
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	background: var(--glass-popup);
+	color: var(--on-surface);
+	backdrop-filter: var(--glass-filter);
+	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-dialog-shadow);
+}
+html body .settings-dialog > .panel-heading > button {
+	padding: 5px 11px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+}
+html body .settings-dialog > .panel-heading > button:hover {
+	background: var(--surface-hover);
+	color: var(--on-surface);
+}
+html body .settings-dialog .settings-layout .settings-tabs {
+	border-right: 1px solid var(--border-subtle);
+}
+html body :is(.session-import-dialog, .work-overview, .git-review, .session-action-dialog, .quick-open)::backdrop {
+	background: var(--dialog-scrim);
+	backdrop-filter: var(--dialog-scrim-filter);
+}
+html body .mobile-sheet {
+	border-color: var(--border);
+	background: var(--glass-popup);
+	backdrop-filter: var(--glass-filter);
+	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-dialog-shadow);
+}
+html body .mobile-sheet::backdrop {
+	background: var(--dialog-scrim);
+	backdrop-filter: blur(6px);
+}
+
 /* Tactile glass sheen on primary inverse CTAs without breaking flat hierarchy. */
 html body .send-button:not(:disabled),
 html body .ap-approve-button:not(:disabled),
 html body .pr-cta-btn.is-primary:not(:disabled),
 html body .pr-dock-action-btn.is-primary:not(:disabled),
-html body .sp-btn.is-primary:not(:disabled) {
+html body .sp-btn.is-primary:not(:disabled),
+html body .settings-actions button[type="submit"]:not(:disabled),
+html body .session-import-actions > button:not(:disabled),
+html body .session-action-buttons button[type="submit"]:not(.danger):not(:disabled) {
 	background: linear-gradient(180deg, color-mix(in srgb, #ffffff 14%, var(--primary)), var(--primary));
+	border-color: transparent;
 	color: var(--on-primary);
 	box-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.32),
@@ -106,8 +147,12 @@ html body .send-button:hover:not(:disabled),
 html body .ap-approve-button:hover:not(:disabled),
 html body .pr-cta-btn.is-primary:hover:not(:disabled),
 html body .pr-dock-action-btn.is-primary:hover:not(:disabled),
-html body .sp-btn.is-primary:hover:not(:disabled) {
+html body .sp-btn.is-primary:hover:not(:disabled),
+html body .settings-actions button[type="submit"]:hover:not(:disabled),
+html body .session-import-actions > button:hover:not(:disabled),
+html body .session-action-buttons button[type="submit"]:not(.danger):hover:not(:disabled) {
 	background: linear-gradient(180deg, color-mix(in srgb, #ffffff 18%, var(--primary-hover)), var(--primary-hover));
+	color: var(--on-primary);
 }
 
 /* Frosted monochrome selection pill in sidebar. */
@@ -129,7 +174,6 @@ html body .history-session-row:has(.session-button.selected) {
 .inspector-open:not(:has(.settings-dialog)) .team-focus { view-transition-name: none; }
 /* Fade the dimmer color; animating parent opacity would isolate the modal's blur. */
 .dialog-backdrop { background: var(--dialog-scrim); backdrop-filter: var(--dialog-scrim-filter); animation-name: glass-backdrop-enter; }
-.dialog-backdrop:has(> .settings-dialog) { backdrop-filter: none; }
 .dialog-backdrop[data-closing="true"] { animation-name: glass-backdrop-exit; }
 @keyframes glass-backdrop-enter { from { background-color: var(--dialog-scrim-clear); } to { background-color: var(--dialog-scrim); } }
 @keyframes glass-backdrop-exit { from { background-color: var(--dialog-scrim); } to { background-color: var(--dialog-scrim-clear); } }
@@ -182,4 +226,9 @@ html body .history-session-row:has(.session-button.selected) {
 	.app-shell:not(.inspector-open) .detail-resize-slot { visibility: hidden; }
 	.detail-resize-slot .panel-resize { position: absolute; inset: 0 auto 0 -4px; width: 8px; }
 	.detail-resize-slot .panel-resize::after { top: 12px; bottom: 12px; left: 3px; width: 1px; }
+}
+@media (max-width: 600px) {
+	html body .session-import-dialog.session-import-dialog,
+	html body .work-overview,
+	html body .git-review { border-radius: 0; }
 }

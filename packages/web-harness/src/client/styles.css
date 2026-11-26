@@ -871,13 +871,13 @@ a { transition: color var(--motion-quick) ease, background-color var(--motion-qu
 @media (hover: none) { .message-actions { opacity: 1; } }
 
 /* Quick open: filename fuzzy search over the workspace. */
-.quick-open { width: min(640px, calc(100vw - 32px)); max-height: min(70dvh, 560px); padding: 0; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-raised); color: var(--on-surface); box-shadow: 0 24px 70px #11111b99; }
-.quick-open::backdrop { background: #11111b66; }
+.quick-open { width: min(640px, calc(100vw - 32px)); max-height: min(70dvh, 560px); padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-raised); color: var(--on-surface); box-shadow: var(--glass-dialog-shadow); }
+.quick-open::backdrop { background: var(--dialog-scrim); }
 .quick-open-input { width: 100%; padding: 14px 16px; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: transparent; font-size: var(--text-base); }
-.quick-open-input:focus-visible { outline: none; border-bottom-color: var(--primary); }
-.quick-open-results { display: flex; flex-direction: column; max-height: min(58dvh, 460px); overflow-y: auto; padding: 6px; }
+.quick-open-input:focus-visible { outline: none; border-bottom-color: var(--border-strong); }
+.quick-open-results { display: flex; flex-direction: column; gap: 2px; max-height: min(58dvh, 460px); overflow-y: auto; padding: 6px; }
 .quick-open-results button { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
-.quick-open-results button[aria-selected="true"] { background: var(--primary-container); }
+.quick-open-results button[aria-selected="true"] { background: var(--selection-fill); }
 .quick-open-name { font-size: var(--text-md); }
 .quick-open-path { color: var(--on-surface-muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quick-open-empty { margin: 12px 10px; color: var(--on-surface-muted); font-size: var(--text-sm); }

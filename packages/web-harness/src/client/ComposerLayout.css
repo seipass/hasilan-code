@@ -7,13 +7,6 @@ html body .composer {
 	transition: none;
 	animation: none;
 }
-html body .composer:focus-within {
-	border-color: var(--border-strong);
-	box-shadow:
-		inset 0 1px 0 var(--glass-rim),
-		0 0 0 3px color-mix(in srgb, var(--on-surface) 8%, transparent),
-		var(--glass-shadow);
-}
 html body .composer-home {
 	padding: 14px 14px 11px;
 }
