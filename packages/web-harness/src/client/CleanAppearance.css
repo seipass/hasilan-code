@@ -29,10 +29,10 @@
 	--on-surface-secondary: #b8b8b3;
 	--on-surface-muted: #767672;
 	--on-surface-inverse: #050507;
-	--primary: #6c6ff6;
-	--primary-hover: #8588ff;
-	--primary-container: #1b1c36;
-	--on-primary: #ffffff;
+	--primary: #f2f2ef;
+	--primary-hover: #ffffff;
+	--primary-container: #1f1f24;
+	--on-primary: #050507;
 	--on-primary-container: #f2f2ef;
 	--secondary: #4b8dff;
 	--secondary-hover: #78abff;
@@ -49,8 +49,8 @@
 	--border-strong: #ffffff36;
 	--scroll-thumb: #ffffff24;
 	--scroll-thumb-hover: #ffffff3d;
-	--selection-fill: color-mix(in srgb, var(--primary) 16%, transparent);
-	--focus-ring: color-mix(in srgb, var(--primary) 72%, transparent);
+	--selection-fill: color-mix(in srgb, var(--on-surface) 11%, transparent);
+	--focus-ring: color-mix(in srgb, var(--on-surface) 38%, transparent);
 	--control-radius: 7px;
 	--item-radius: 6px;
 	--popup-radius: 10px;

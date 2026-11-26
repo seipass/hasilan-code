@@ -35,10 +35,10 @@
 	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-shadow-sm);
 }
 .composer:focus-within {
-	border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+	border-color: var(--border-strong);
 	box-shadow:
 		inset 0 1px 0 var(--glass-rim),
-		0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent),
+		0 0 0 3px color-mix(in srgb, var(--on-surface) 8%, transparent),
 		var(--glass-shadow);
 }
 /* Keep the popup outside the composer's backdrop root so it can blur behind cleanly. */
@@ -90,30 +90,31 @@ html body .mobile-sheet:has(.mobile-model-menu) {
 }
 .usage-popover-content { z-index: 18; }
 
-/* Tactile glass sheen on primary brand CTAs without breaking flat hierarchy. */
+/* Tactile glass sheen on primary inverse CTAs without breaking flat hierarchy. */
 html body .send-button:not(:disabled),
 html body .ap-approve-button:not(:disabled),
 html body .pr-cta-btn.is-primary:not(:disabled),
 html body .pr-dock-action-btn.is-primary:not(:disabled),
 html body .sp-btn.is-primary:not(:disabled) {
-	background: linear-gradient(180deg, color-mix(in srgb, #ffffff 16%, var(--primary)), var(--primary));
+	background: linear-gradient(180deg, color-mix(in srgb, #ffffff 14%, var(--primary)), var(--primary));
+	color: var(--on-primary);
 	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.24),
-		0 2px 10px -2px color-mix(in srgb, var(--primary) 48%, transparent);
+		inset 0 1px 0 rgba(255, 255, 255, 0.32),
+		0 2px 10px -2px rgba(0, 0, 0, 0.45);
 }
 html body .send-button:hover:not(:disabled),
 html body .ap-approve-button:hover:not(:disabled),
 html body .pr-cta-btn.is-primary:hover:not(:disabled),
 html body .pr-dock-action-btn.is-primary:hover:not(:disabled),
 html body .sp-btn.is-primary:hover:not(:disabled) {
-	background: linear-gradient(180deg, color-mix(in srgb, #ffffff 20%, var(--primary-hover)), var(--primary-hover));
+	background: linear-gradient(180deg, color-mix(in srgb, #ffffff 18%, var(--primary-hover)), var(--primary-hover));
 }
 
-/* Brand-tinted translucent selection pill in sidebar (echoes Hasilan Pass). */
+/* Frosted monochrome selection pill in sidebar. */
 html body .history-session-row:has(.session-button.selected) {
 	box-shadow:
-		inset 0 1px 0 var(--glass-rim-soft),
-		inset 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+		inset 0 1px 0 var(--glass-rim),
+		inset 0 0 0 1px var(--border);
 }
 
 .topbar {
