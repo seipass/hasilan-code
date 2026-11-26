@@ -342,13 +342,9 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 					</div>;
 				}}</MotionItems>
 			</div></Presence>
-			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath} aria-label={workspacePath}>{workspaceLabel(workspacePath, [])}</code>}</div></Presence>
+			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span></div></Presence>
 			<Presence show={!!goalControl}><div className="motion-contents">{goalControl}</div></Presence>
-			{!canRouteWorkspace && <div className="composer-meta">
-				<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><ContextWindowPopover session={session} contextWindow={contextLimit} /></div></Presence>
-				{modelControl}
-			</div>}
-			<form className={`composer command-picker-anchor${canRouteWorkspace ? " composer-home" : ""}${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
+			<form className={`composer command-picker-anchor${canRouteWorkspace ? " composer-home" : ""}${shownWidth <= 440 ? " is-compact" : ""}${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return;
 				event.preventDefault(); event.dataTransfer.dropEffect = sending || reading ? "none" : "copy"; setDragging(!sending && !reading);
 			}} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }} onDrop={(event) => {
@@ -361,10 +357,8 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 				{browserAnnotations.length > 0 && <ul className="browser-annotation-list" aria-label="ブラウザ注釈">{browserAnnotations.map((annotation, index) => <li key={`${annotation.selection.url}:${index}`}><img src={annotation.image} alt="選択箇所のスクリーンショット" /><span><strong>{annotation.selection.title || annotation.selection.url}</strong><small>{annotation.note}</small></span><button type="button" aria-label={`注釈 ${index + 1} を削除`} disabled={sending} onClick={() => setBrowserAnnotations((current) => { const next = current.filter((_, itemIndex) => itemIndex !== index); if (next.length) annotationDrafts.set(draftKey, next); else annotationDrafts.delete(draftKey); return next; })}><Icon name="close" size="inline" /></button></li>)}</ul>}
 				<input ref={fileInput} type="file" multiple hidden aria-label="添付ファイルを選択" disabled={sending || reading} onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void attach(files); }} />
 				<label className="sr-only" htmlFor="message">メッセージ</label>
-				<div className={`composer-input-row${canRouteWorkspace ? " is-home" : text.includes("\n") ? " is-multiline" : ""}${canRouteWorkspace && shownWidth <= 420 ? " is-compact" : ""}`}>
-					<button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}>{canRouteWorkspace ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 11-8.4 8.4a5 5 0 0 1-7.1-7.1L13 3.8a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.4a1.6 1.6 0 0 1-2.3-2.3L15 6.2" /></svg> : <Icon name="plus" size="primary" />}</button>
-					{canRouteWorkspace && <div className="composer-home-model">{modelControl}</div>}
-					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={canRouteWorkspace ? 2 : 1} disabled={sending} onKeyDown={(event) => {
+				<div className={`composer-input-row${canRouteWorkspace ? " is-home" : ""}`}>
+					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={2} disabled={sending} onKeyDown={(event) => {
 						if (event.nativeEvent.isComposing) return;
 						if (matchesAppKeybinding(event, "composer.routeWorkspace")) { event.preventDefault(); if (canRouteWorkspace && workspaceRouterEnabled && !event.repeat) void submit({ kind: "auto" }); return; }
 						if (matchesAppKeybinding(event, "composer.followUp")) { event.preventDefault(); if (busy && !event.repeat) void submit(undefined, "followUp"); return; }
@@ -395,9 +389,19 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 						if (pasted) { const { selectionStart, selectionEnd } = event.currentTarget; setText((current) => current.slice(0, selectionStart) + pasted + current.slice(selectionEnd)); }
 						void attach(files);
 					}} />
-					<div className="composer-delivery">
-						{busy && <button className="stop-button" type="button" aria-label="実行を停止" title="実行を停止" onClick={onStop}><Icon name="stop" size="primary" /></button>}
-						<button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Enter で送信 · Shift + Enter で改行 · Ctrl / Cmd + Shift + Enter で送信先を選択" : busy ? "Enter で実行中に指示 · Ctrl / Cmd + Enter で完了後に指示 · Shift + Enter で改行" : "Enter で送信 · Shift + Enter で改行"} disabled={sending || reading || (!text.trim() && !attachments.length && !browserAnnotations.length) || !slashInput && (!connected || session?.availability === "missing")}>{sending ? <span className="motion-label" aria-hidden="true">…</span> : <Icon name="send" size="primary" />}</button>
+				</div>
+				<div className="composer-footer">
+					<div className="composer-footer-left">
+						<button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}><Icon name="plus" size="control" /></button>
+						{workspacePath && <span className="composer-workspace-pill" title={workspacePath} aria-label={workspacePath}><Icon name="folder" size="inline" /><span>{workspaceLabel(workspacePath, [])}</span></span>}
+					</div>
+					<div className="composer-footer-right">
+						{modelControl}
+						{!canRouteWorkspace && <Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><ContextWindowPopover session={session} contextWindow={contextLimit} /></div></Presence>}
+						<div className="composer-delivery">
+							{busy && <button className="stop-button" type="button" aria-label="実行を停止" title="実行を停止" onClick={onStop}><Icon name="stop" size="control" /></button>}
+							<button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Enter で送信 · Shift + Enter で改行 · Ctrl / Cmd + Shift + Enter で送信先を選択" : busy ? "Enter で実行中に指示 · Ctrl / Cmd + Enter で完了後に指示 · Shift + Enter で改行" : "Enter で送信 · Shift + Enter で改行"} disabled={sending || reading || (!text.trim() && !attachments.length && !browserAnnotations.length) || !slashInput && (!connected || session?.availability === "missing")}>{sending ? <span className="motion-label" aria-hidden="true">…</span> : <Icon name="send" size="control" />}</button>
+						</div>
 					</div>
 				</div>
 			</form>

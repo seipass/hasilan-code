@@ -258,6 +258,7 @@ export function PrDockTray({
 						disabled={!onOpenReview}
 						title="変更の差分をレビュー"
 					>
+						<span className="pr-diff-files">{gitSummary.filesChanged} ファイル</span>
 						<span className="is-add">+{gitSummary.additions}</span>
 						<span className="is-del">-{gitSummary.deletions}</span>
 						<span className="pr-diff-squares" aria-hidden="true">
@@ -265,7 +266,6 @@ export function PrDockTray({
 								<span key={index} className={`pr-diff-sq is-${tone}`} />
 							))}
 						</span>
-						<span className="pr-diff-files">{gitSummary.filesChanged} ファイル</span>
 					</button>
 				)}
 				{onCreatePr && (

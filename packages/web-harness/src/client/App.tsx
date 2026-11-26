@@ -592,11 +592,44 @@ export function App() {
 	}
 	const thinking = session?.thinkingLevel ?? draftThinking;
 	const thinkingLabel = thinking ?? "自動";
+	const effortBars =
+		thinking === "off"
+			? 0
+			: thinking === "minimal" || thinking === "low"
+				? 1
+				: thinking === "high"
+					? 3
+					: thinking === "xhigh" || thinking === "max"
+						? 4
+						: 2;
 	// Every level the trigger can show reserves its width, so changing Thinking does not resize the
 	// chip and move the popover anchored to it.
 	const thinkingLabels = [...new Set([...(catalogModel?.thinkingLevels ?? []), thinkingLabel])];
 	const modelControl = <div className="model-control">
-		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} aria-label={`モデル・Thinkingを選択: ${selectedModel?.name ?? selectedModel?.id ?? "未選択"} · ${thinkingLabel}`} title={`${selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"} · ${thinkingLabel}`} onClick={() => setModelOpen((value) => !value)}><Icon name="graph" className="model-trigger-icon" /><span className="model-trigger-name">{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}</span><span className="model-trigger-thinking">{thinkingLabels.map((label) => <span key={label} className={label === thinkingLabel ? undefined : "model-trigger-thinking-ghost"}>{label}</span>)}</span><Icon name="chevronDown" className="model-trigger-chevron" size="inline" /></button>
+		<button className="composer-chip model-trigger" type="button" aria-haspopup="dialog" aria-expanded={modelOpen} disabled={!!session?.currentRun} aria-label={`モデル・Thinkingを選択: ${selectedModel?.name ?? selectedModel?.id ?? "未選択"} · ${thinkingLabel}`} title={`${selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"} · ${thinkingLabel}`} onClick={() => setModelOpen((value) => !value)}>
+			<Icon name="graph" className="model-trigger-icon" />
+			<span className="model-trigger-name">{selectedModel?.name ?? selectedModel?.id ?? "モデルを選択"}</span>
+			<svg className="model-effort-bars" width="14" height="12" viewBox="0 0 14 12" aria-hidden="true">
+				{[
+					{ x: 1, y: 8, h: 3 },
+					{ x: 4.5, y: 6, h: 5 },
+					{ x: 8, y: 3.5, h: 7.5 },
+					{ x: 11.5, y: 1, h: 10 },
+				].map((bar, index) => (
+					<rect
+						key={bar.x}
+						x={bar.x}
+						y={bar.y}
+						width="2"
+						height={bar.h}
+						rx="0.8"
+						fill={index < effortBars ? "currentColor" : "var(--border-strong)"}
+					/>
+				))}
+			</svg>
+			<span className="model-trigger-thinking">{thinkingLabels.map((label) => <span key={label} className={label === thinkingLabel ? undefined : "model-trigger-thinking-ghost"}>{label}</span>)}</span>
+			<Icon name="chevronDown" className="model-trigger-chevron" size="inline" />
+		</button>
 	</div>;
 	const rightMaximum = Math.max(480, viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 260 : 0) - 320);
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);

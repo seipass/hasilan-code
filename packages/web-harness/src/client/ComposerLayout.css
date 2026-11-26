@@ -1,36 +1,204 @@
-/* The model and context stay above the input; the input grows in place. */
-html body .composer-meta {
+/* Unified two-row composer: spacious input plane on top, calm pill toolbar below. */
+html body .composer {
+	padding: 13px 13px 10px;
+	border: 1px solid var(--border);
+	border-radius: 20px;
+	box-shadow: 0 2px 14px #0000001e;
+	transition: none;
+	animation: none;
+}
+html body .composer:focus-within {
+	border-color: var(--border-strong);
+	box-shadow: 0 4px 18px #00000028;
+}
+html body .composer-home {
+	padding: 14px 14px 11px;
+}
+
+html body .composer-input-row {
+	display: block;
+	min-height: 40px;
+}
+html body .composer-input-row.is-home {
+	min-height: 52px;
+}
+html body .composer-input-row textarea {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	min-height: 40px;
+	padding: 1px 4px 8px;
+	line-height: 22px;
+	transition: none;
+	animation: none;
+}
+html body .composer-input-row.is-home textarea {
+	min-height: 52px;
+}
+
+html body .composer-footer {
 	display: flex;
 	align-items: center;
-	justify-content: flex-end;
-	gap: 4px;
+	justify-content: space-between;
+	gap: 8px;
+	padding-top: 4px;
+	min-height: 32px;
 	min-width: 0;
-	margin: 0 0 5px;
 }
-html body .composer-meta .model-control { min-width: 0; max-width: calc(100% - 36px); }
-html body .composer-meta .model-trigger { max-width: 100%; }
-html body .composer-meta .model-trigger-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-html body .composer { padding: 7px 8px; transition: none; animation: none; }
-html body .composer-input-row { display: flex; align-items: flex-end; gap: 6px; min-height: 32px; }
-html body .composer-input-row textarea { flex: 1 1 auto; width: 0; min-width: 0; min-height: 32px; padding: 6px 2px; line-height: 20px; transition: none; animation: none; }
-html body .composer-input-row .composer-attach-button { width: 32px; height: 32px; }
-html body .composer-input-row .composer-delivery { flex: none; align-self: flex-end; gap: 4px; margin: 0; }
-/* On a line break the draft takes the full width above its controls. */
-html body .composer-input-row.is-multiline,
-html body .composer-input-row.is-home { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 6px; }
-html body .composer-input-row:is(.is-multiline, .is-home) textarea { grid-column: 1 / -1; grid-row: 1; width: 100%; }
-html body .composer-input-row:is(.is-multiline, .is-home) .composer-attach-button { grid-column: 1; grid-row: 2; }
-html body .composer-input-row:is(.is-multiline, .is-home) .composer-delivery { grid-column: 3; grid-row: 2; }
-html body .composer-home { padding: 12px; }
-html body .composer-input-row.is-home textarea { min-height: 54px; padding: 4px 6px 4px 4px; }
-html body .composer-home-model { grid-column: 2; grid-row: 2; min-width: 0; align-self: center; }
-html body .composer-input-row.is-home.is-compact .composer-home-model { justify-self: end; }
-html body .composer-input-row.is-home.is-compact .model-trigger { display: grid; place-items: center; width: 28px; height: 28px; min-height: 28px; padding: 0; }
-html body .composer-input-row.is-home.is-compact .model-trigger :is(.model-trigger-name, .model-trigger-thinking, .model-trigger-chevron) { display: none; }
-html body .composer-input-row.is-home.is-compact .model-trigger .model-trigger-icon { display: block; }
+html body .composer-footer-left {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	flex: 0 1 auto;
+}
+html body .composer-footer-right {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	margin-inline-start: auto;
+	flex: 0 1 auto;
+}
+
+html body .composer-footer .composer-attach-button {
+	display: grid;
+	place-items: center;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border-radius: 999px;
+	border: 1px solid var(--border-subtle);
+	background: color-mix(in srgb, var(--surface-hover) 68%, transparent);
+	color: var(--on-surface-secondary);
+	flex: none;
+}
+html body .composer-footer .composer-attach-button:hover:not(:disabled) {
+	background: var(--surface-hover);
+	border-color: var(--border);
+	color: var(--on-surface);
+}
+
+html body .composer-workspace-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	max-width: 196px;
+	padding: 0 11px 0 9px;
+	border-radius: 999px;
+	border: 1px solid var(--border-subtle);
+	background: color-mix(in srgb, var(--surface-hover) 56%, transparent);
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+	line-height: 1;
+	min-width: 0;
+	user-select: none;
+}
+html body .composer-workspace-pill > svg {
+	flex: none;
+	color: var(--on-surface-muted);
+}
+html body .composer-workspace-pill > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+html body .composer-footer-right .model-control {
+	min-width: 0;
+	flex: 0 1 auto;
+}
+html body .composer-footer-right .model-trigger {
+	height: 30px;
+	min-height: 30px;
+	padding: 0 9px;
+	gap: 6px;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+	max-width: 100%;
+}
+html body .composer-footer-right .model-trigger:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--surface-hover) 72%, transparent);
+	color: var(--on-surface);
+}
+html body .composer-footer-right .model-trigger-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 168px;
+}
+html body .composer-footer-right .model-effort-bars {
+	display: block;
+	flex: none;
+	color: var(--on-surface-secondary);
+}
+html body .composer-footer-right .model-trigger-thinking {
+	font-size: var(--text-xs);
+	color: var(--on-surface-muted);
+}
+html body .composer-footer-right .model-trigger-chevron {
+	opacity: 0.65;
+}
+
+html body .composer-footer-right .composer-usage-slot {
+	display: flex;
+	align-items: center;
+	flex: none;
+}
+html body .composer-footer-right .cw-trigger {
+	width: 30px;
+	height: 30px;
+	min-height: 30px;
+}
+
+html body .composer-footer-right .composer-delivery {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	margin: 0;
+	flex: none;
+}
+html body .composer-footer-right .send-button,
+html body .composer-footer-right .stop-button {
+	width: 30px;
+	height: 30px;
+	border-radius: 999px;
+}
+
+/* Compact widths keep every control on a single calm bar without wrapping. */
+html body .composer.is-compact .composer-workspace-pill {
+	max-width: 112px;
+	padding-inline: 8px;
+}
+html body .composer.is-compact .model-trigger-name,
+html body .composer.is-compact .model-trigger-chevron {
+	display: none;
+}
+
 @media (max-width: 520px) {
-	html body .composer { padding: 7px 8px; }
-	html body .composer-home { padding: 12px 9px 9px; }
-	html body .composer-input-row.is-home textarea { min-height: 44px; }
-	html body .composer-meta .model-trigger { max-width: 100%; }
+	html body .composer {
+		padding: 11px 10px 9px;
+		border-radius: 17px;
+	}
+	html body .composer-input-row,
+	html body .composer-input-row textarea {
+		min-height: 38px;
+	}
+	html body .composer-workspace-pill {
+		max-width: 108px;
+		padding-inline: 8px;
+	}
+	html body .composer-footer-right .model-trigger {
+		padding-inline: 6px;
+		gap: 4px;
+	}
+	html body .composer-footer-right .model-trigger-name {
+		max-width: 96px;
+	}
+	html body .composer-footer-right .model-trigger-chevron {
+		display: none;
+	}
 }
