@@ -10,8 +10,9 @@ import { observeConversation } from "./conversation-resize.ts";
 import { RUN_LABELS } from "./TeamPane.tsx";
 import { MessageActions } from "./MessageActions.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
+import { ThinkingTimeline, useThinkingDuration } from "./ThinkingTimeline.tsx";
 import { type TurnActivity, turnActivityLabel, turnActivityRows } from "./turn-activity.ts";
-import { usePreferenceState } from "./preferences.ts";
+import { preferences, usePreferenceState } from "./preferences.ts";
 import type { ChatMessage, ToolCall } from "./types.ts";
 import { Icon } from "./Icon.tsx";
 import { UserMessageContent } from "./UserMessageContent.tsx";
@@ -125,6 +126,7 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 	opened: Map<string, { active: boolean; open: boolean }>;
 }) {
 	const [, setVersion] = useState(0);
+	const duration = useThinkingDuration(block);
 	let state = opened.get(block.key);
 	if (!state || state.active !== block.active) {
 		state = { active: block.active, open: block.active };
@@ -143,11 +145,11 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 					setVersion((version) => version + 1);
 				}
 			}}>
-				<summary><span className="turn-activity-label" role={block.active ? "status" : undefined}>{label}</span></summary>
-				{open && <div className="turn-activity-items">{block.items.map((row) => row.kind === "computer"
+				<summary><span className="turn-activity-label" role={block.active ? "status" : undefined}>{label}</span>{duration !== undefined && <span className="turn-activity-duration">{duration}s</span>}</summary>
+				{open && <ThinkingTimeline block={block} onFile={onFile} rawChildren={block.items.map((row) => row.kind === "computer"
 					? <ComputerActivity key={row.key} group={row.group} onFile={onFile} />
 					: <Message key={row.key} rowKey={row.key} grouped message={row.message} tools={row.tools} onFile={onFile} expansions={expansions} />,
-				)}</div>}
+				)} />}
 			</details>}
 	</div>;
 }
@@ -194,7 +196,9 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const [nearBottom, setNearBottom] = useState(true);
 	const rows = useMemo(() => {
 		const items = conversationRows(allMessages, tools, activeRunId);
-		return activityBeta ? turnActivityRows(items, activeRunId) : items;
+		const explicitlyDisabled = preferences.getItem("pi-web-beta-turn-activity") === "false";
+		const useTimeline = activityBeta || (!explicitlyDisabled && tools.some((tool) => tool.name !== "action_plan"));
+		return useTimeline ? turnActivityRows(items, activeRunId) : items;
 	}, [allMessages, tools, activeRunId, activityBeta]);
 	const surfacesByCallId = useMemo(() => {
 		if (!surfaces?.length) return undefined;

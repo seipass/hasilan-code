@@ -74,7 +74,22 @@ function isCommentary(part: unknown): boolean {
 	}
 }
 
-/** Group adjacent thinking and tool calls. Prose, context, and the computer viewer stay in the timeline. */
+function isInteractivePlanCall(part: unknown, tool: ToolCall | undefined): boolean {
+	const name = tool?.name ?? (record(part) && typeof part.name === "string" ? part.name : undefined);
+	if (name !== "action_plan") return false;
+	const input =
+		tool && record(tool.input) ? tool.input : record(part) && record(part.arguments) ? part.arguments : undefined;
+	return input?.action === "propose";
+}
+
+function isActivityPart(part: unknown, tool: ToolCall | undefined): boolean {
+	if (!record(part)) return false;
+	if (part.type === "thinking") return true;
+	if (part.type === "toolCall") return !isInteractivePlanCall(part, tool);
+	return false;
+}
+
+/** Group adjacent thinking and tool calls. Prose, context, interactive plan cards, and the computer viewer stay in the timeline. */
 export function turnActivityRows(rows: ConversationRow[], activeRunId?: string): (ConversationRow | TurnActivity)[] {
 	const output: (ConversationRow | TurnActivity)[] = [];
 	let current: TurnActivity | undefined;
@@ -110,14 +125,16 @@ export function turnActivityRows(rows: ConversationRow[], activeRunId?: string):
 				index++;
 				continue;
 			}
-			const work = record(first) && (first.type === "toolCall" || first.type === "thinking");
+			const peekTool = record(first) && first.type === "toolCall" ? row.tools[callIndex] : undefined;
+			const work = isActivityPart(first, peekTool);
 			const from = index;
 			const tools: MessageRow["tools"] = [];
 			const content: unknown[] = [];
 			for (; index < parts.length; index++) {
 				const part: unknown = parts[index];
 				if (record(part) && part.type === "text" && typeof part.text === "string" && !part.text.trim()) continue;
-				const activityPart = record(part) && (part.type === "toolCall" || part.type === "thinking");
+				const nextTool = record(part) && part.type === "toolCall" ? row.tools[callIndex] : undefined;
+				const activityPart = isActivityPart(part, nextTool);
 				if (activityPart !== work) break;
 				if (record(part) && part.type === "toolCall") {
 					const tool = row.tools[callIndex++];
