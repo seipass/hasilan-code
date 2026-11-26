@@ -2,6 +2,7 @@ import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import type { AgentModels } from "../shared/agent-categories.ts";
 import type { PromptAttachment } from "../shared/attachments.ts";
 import type { ComputerStatus } from "../shared/computer.ts";
+import type { ContextBreakdown } from "../shared/context-window.ts";
 import type { Goal } from "../shared/goals.ts";
 import type { HistoryMessage, HistoryPosition, HistoryTool } from "../shared/session-history.ts";
 import type { Swarm } from "../shared/swarm.ts";
@@ -83,6 +84,7 @@ export type ToolCall = HistoryTool;
 export interface SessionDetail extends SessionSummary {
 	history?: HistoryPosition;
 	contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
+	contextBreakdown?: ContextBreakdown;
 	messages: ChatMessage[];
 	toolCalls: ToolCall[];
 	activity: { queue?: { steering: string[]; followUp: string[] }; retry?: unknown; compaction?: unknown };

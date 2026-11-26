@@ -11,6 +11,43 @@ export interface ModelUsage {
 	auxiliary: number;
 }
 
+export interface DailyUsagePoint {
+	date: string;
+	totalTokens: number;
+	cachedTokens: number;
+	cost: number;
+	responses: number;
+}
+
+export interface UsageAttribution {
+	window5h: {
+		thisChatTokens: number;
+		otherChatsTokens: number;
+	};
+	window7d: {
+		models: { provider: string; model: string; tokens: number }[];
+		totalTokens: number;
+	};
+}
+
+export function aggregateDailyUsage(groups: readonly (readonly DailyUsagePoint[])[]): DailyUsagePoint[] {
+	const byDate = new Map<string, DailyUsagePoint>();
+	for (const group of groups) {
+		for (const point of group) {
+			const existing = byDate.get(point.date);
+			if (!existing) {
+				byDate.set(point.date, { ...point });
+				continue;
+			}
+			existing.totalTokens += point.totalTokens;
+			existing.cachedTokens += point.cachedTokens;
+			existing.cost += point.cost;
+			existing.responses += point.responses;
+		}
+	}
+	return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function aggregateUsage(groups: readonly (readonly ModelUsage[])[]): ModelUsage[] {
 	const models = new Map<string, ModelUsage>();
 	for (const group of groups)

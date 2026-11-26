@@ -9,6 +9,7 @@ import type { BrowserAnnotation, BrowserAnnotationDelivery } from "./BrowserPane
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH, clampChatWidth } from "./chat-width.ts";
 import { CommandPicker } from "./CommandPicker.tsx";
 import { ComposerAttachments, useComposerAttachments } from "./ComposerAttachments.tsx";
+import { ContextWindowPopover } from "./ContextWindowPopover.tsx";
 import { Conversation } from "./Conversation.tsx";
 import { GitReview } from "./GitReview.tsx";
 import { fileChanges } from "./file-changes.ts";
@@ -18,7 +19,6 @@ import { usePreferenceState, usePreferenceText } from "./preferences.ts";
 import { SessionOverview } from "./SessionOverview.tsx";
 import { COMPOSER_COMMANDS } from "./slash-command.ts";
 import type { PendingInputAction, SessionDetail, TeamSnapshot } from "./types.ts";
-import { UsagePanel } from "./UsagePanel.tsx";
 import { useComposerSize } from "./use-composer-size.ts";
 import { workspaceLabel } from "./workspace-label.ts";
 import "./ChatWidth.css";
@@ -211,8 +211,6 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const latestError = session?.latestRun?.status === "failed" ? session.latestRun.error : undefined;
 	const usage = session?.contextUsage;
 	const contextLimit = usage?.contextWindow ?? contextWindow;
-	const contextTokens = usage?.tokens;
-	const compactTokens = (value: number) => new Intl.NumberFormat("ja-JP", { notation: "compact", maximumFractionDigits: 1 }).format(value);
 	const hasContextLimit = contextLimit !== undefined && contextLimit > 0;
 	const pendingInputs = session?.pendingInput.filter((input) => !input.fromAgentId && !input.completionRunId) ?? [];
 	useLayoutMotion(pendingList, pendingInputs, true, true);
@@ -275,7 +273,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath} aria-label={workspacePath}>{workspaceLabel(workspacePath, [])}</code>}</div></Presence>
 			<Presence show={!!goalControl}><div className="motion-contents">{goalControl}</div></Presence>
 			{!canRouteWorkspace && <div className="composer-meta">
-				<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><UsagePanel title="この会話の使用量" groups={session ? [{ id: session.sessionId, label: session.parentSessionId ? "子AI" : "親AI", usage: session.usage }] : []} trigger={<span className="context-usage" aria-label={`${contextTokens == null ? "—" : compactTokens(contextTokens)} / ${compactTokens(contextLimit ?? 0)}${usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}`}><svg className="context-usage-ring" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><circle cx="10" cy="10" r="7" pathLength="100" strokeDasharray={`${Math.min(100, Math.max(0, usage?.percent ?? 0))} 100`} /></svg><span className="context-usage-tooltip" role="tooltip">{contextTokens == null ? "—" : compactTokens(contextTokens)} / {compactTokens(contextLimit ?? 0)}{usage?.percent != null ? ` (${Math.round(usage.percent)}%)` : ""}</span></span>} /></div></Presence>
+				<Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><ContextWindowPopover session={session} contextWindow={contextLimit} /></div></Presence>
 				{modelControl}
 			</div>}
 			<form className={`composer command-picker-anchor${canRouteWorkspace ? " composer-home" : ""}${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {

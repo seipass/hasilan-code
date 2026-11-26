@@ -44,6 +44,10 @@ export const sessionRenameSchema = Type.Object(
 	{ title: Type.String({ minLength: 1, maxLength: 200 }) },
 	{ additionalProperties: false },
 );
+export const sessionCompactSchema = Type.Object(
+	{ instructions: Type.Optional(Type.String({ maxLength: 16_384 })) },
+	{ additionalProperties: false },
+);
 
 export const pendingInputActionSchema = Type.Union([
 	Type.Object(

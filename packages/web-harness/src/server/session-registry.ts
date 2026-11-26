@@ -7,6 +7,7 @@ import { clampThinkingLevel, getSupportedThinkingLevels, type ImageContent } fro
 import {
 	type AgentSessionEvent,
 	createAgentSession,
+	DEFAULT_COMPACTION_SETTINGS,
 	DefaultResourceLoader,
 	estimateProjectedContextTokens,
 	type ModelRuntime,
@@ -24,6 +25,7 @@ import {
 	type ContextInjection,
 	isContextInjection,
 } from "../shared/context-injection.ts";
+import type { CompactionSummaryResponse, ContextBreakdown } from "../shared/context-window.ts";
 import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal } from "../shared/goals.ts";
 import { nextId } from "../shared/ids.ts";
@@ -43,9 +45,10 @@ import {
 	SESSION_IMPORT_SOURCES,
 } from "../shared/session-import.ts";
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
-import type { ModelUsage } from "../shared/usage.ts";
+import { aggregateDailyUsage, type DailyUsagePoint, type ModelUsage, type UsageAttribution } from "../shared/usage.ts";
 import type { AgentWorktree, AgentWorktrees } from "./agent-worktrees.ts";
 import { createHarnessSettings } from "./config.ts";
+import { type ActiveToolSchemaInfo, computeContextBreakdown } from "./context-breakdown.ts";
 import { modelGuidance } from "./model-guidance.ts";
 import { standardRuntimeSections } from "./plugins/runtime-context.ts";
 import { pluginSession, type RuntimeContextFactory } from "./plugins/session.ts";
@@ -107,6 +110,7 @@ export interface PendingInputProjection extends PendingInput {
 export interface SessionSnapshot extends SessionDescriptor {
 	title?: string;
 	contextUsage?: ContextUsageSnapshot;
+	contextBreakdown?: ContextBreakdown;
 	usage?: ModelUsage[];
 	messages: ProjectedMessage[];
 	toolCalls: ProjectedTool[];
@@ -141,7 +145,10 @@ export interface ExecutionAdapter {
 	waitForIdle(): Promise<void>;
 	clearQueue(): unknown;
 	getActiveToolNames(): string[];
+	getActiveToolSchemas?(): readonly ActiveToolSchemaInfo[];
+	getCompactionLimits?(): { reserveTokens: number; maxContextTokens?: number };
 	getContextUsage?(): ContextUsageSnapshot | undefined;
+	compact?(customInstructions?: string): Promise<CompactionSummaryResponse>;
 	getThinkingLevel?(): ThinkingLevel;
 	setThinkingLevel?(level: ThinkingLevel): void;
 	setModel(selection: ModelSelection): Promise<void>;
@@ -191,6 +198,7 @@ interface LiveSession {
 	finalError?: string;
 	aborted: boolean;
 	idleContextUsage?: { model: string; value: ContextUsageSnapshot };
+	cachedBreakdown?: { key: string; value: ContextBreakdown };
 	/** Implementation grants retained while the manager uses a read-only orchestration loadout. */
 	delegatedTools?: string[];
 }
@@ -498,6 +506,9 @@ export class SessionRegistry {
 	private restoredState?: HarnessState;
 	private readonly live = new Map<string, LiveSession>();
 	private readonly usageSummaries = new Map<string, ModelUsage[]>();
+	private readonly dailyUsageSummaries = new Map<string, DailyUsagePoint[]>();
+	private readonly window5hSummaries = new Map<string, number>();
+	private readonly window7dSummaries = new Map<string, { provider: string; model: string; tokens: number }[]>();
 	private readonly historyReaders = new Map<string, number>();
 	private readonly toolResultCache = new WeakMap<ProjectedTool, string>();
 	private readonly listeners = new Set<(event: RegistryEvent) => void>();
@@ -607,6 +618,11 @@ export class SessionRegistry {
 			const descriptor = this.state.sessions.find((session) => session.sessionId === id);
 			if (id === protectedId || this.historyReaders.has(id) || !descriptor?.materialized) continue;
 			this.usageSummaries.set(id, live.usage.snapshot());
+			this.dailyUsageSummaries.set(id, live.usage.dailySnapshot());
+			this.window5hSummaries.set(id, live.usage.windowTokens(Date.now() - 5 * 60 * 60 * 1000).totalTokens);
+			this.window7dSummaries.set(id, [
+				...live.usage.windowTokens(Date.now() - 7 * 24 * 60 * 60 * 1000).byModel.values(),
+			]);
 			this.live.delete(id);
 			count--;
 			bytes -= live.historyBytes;
@@ -631,7 +647,13 @@ export class SessionRegistry {
 				try {
 					const manager = SessionManager.open(descriptor.path);
 					if (manager.getSessionId() !== id) throw new Error("Conversation ID differs from web-harness state");
-					this.usageSummaries.set(id, new SessionUsage(manager).snapshot());
+					const usage = new SessionUsage(manager);
+					this.usageSummaries.set(id, usage.snapshot());
+					this.dailyUsageSummaries.set(id, usage.dailySnapshot());
+					this.window5hSummaries.set(id, usage.windowTokens(Date.now() - 5 * 60 * 60 * 1000).totalTokens);
+					this.window7dSummaries.set(id, [
+						...usage.windowTokens(Date.now() - 7 * 24 * 60 * 60 * 1000).byModel.values(),
+					]);
 					this.changed(id);
 				} catch (error) {
 					console.error("Could not restore conversation history:", error instanceof Error ? error.message : error);
@@ -1094,6 +1116,9 @@ export class SessionRegistry {
 				live?.adapter?.dispose();
 				this.live.delete(sessionId);
 				this.usageSummaries.delete(sessionId);
+				this.dailyUsageSummaries.delete(sessionId);
+				this.window5hSummaries.delete(sessionId);
+				this.window7dSummaries.delete(sessionId);
 				this.emit({ type: "session_deleted", sessionId, workspaceId: descriptor.workspaceId });
 			}
 			this.emit({ type: "workspace_changed", workspaceId: descriptor.workspaceId });
@@ -1148,26 +1173,54 @@ export class SessionRegistry {
 		const currentRun = runs.find((run) => !["completed", "failed", "cancelled", "interrupted"].includes(run.status));
 		const live = this.live.get(id);
 		let contextUsage = live?.adapter?.getContextUsage?.();
+		const modelWindow =
+			contextUsage?.contextWindow ??
+			(descriptor.model
+				? this.options.modelRuntime?.getModel(descriptor.model.provider, descriptor.model.id)?.contextWindow
+				: undefined);
 		if (live && !live.adapter && descriptor.materialized && descriptor.model) {
 			const modelKey = `${descriptor.model.provider}/${descriptor.model.id}`;
-			const contextWindow = this.options.modelRuntime?.getModel(
-				descriptor.model.provider,
-				descriptor.model.id,
-			)?.contextWindow;
-			if (contextWindow && contextWindow > 0) {
+			if (modelWindow && modelWindow > 0) {
 				const tokens =
 					live.idleContextUsage?.model === modelKey
 						? live.idleContextUsage.value.tokens
 						: estimateProjectedContextTokens(live.manager.buildSessionProjection(), live.manager.getBranch())
 								.tokens;
-				contextUsage = { tokens, contextWindow, percent: tokens === null ? null : (tokens / contextWindow) * 100 };
+				contextUsage = {
+					tokens,
+					contextWindow: modelWindow,
+					percent: tokens === null ? null : (tokens / modelWindow) * 100,
+				};
 				live.idleContextUsage = { model: modelKey, value: contextUsage };
+			}
+		}
+		let contextBreakdown: ContextBreakdown | undefined;
+		if (live && modelWindow && modelWindow > 0) {
+			const limits = live.adapter?.getCompactionLimits?.() ?? {
+				reserveTokens: DEFAULT_COMPACTION_SETTINGS.reserveTokens,
+				maxContextTokens: 96_000,
+			};
+			const activeToolKey = live.adapter ? live.adapter.getActiveToolNames().join(",") : "idle";
+			const breakdownKey = `${descriptor.model?.provider ?? ""}/${descriptor.model?.id ?? ""}:${modelWindow}:${live.manager.getEntryCount()}:${contextUsage?.tokens ?? "null"}:${limits.reserveTokens}:${limits.maxContextTokens ?? ""}:${activeToolKey}`;
+			if (live.cachedBreakdown?.key === breakdownKey) {
+				contextBreakdown = live.cachedBreakdown.value;
+			} else {
+				contextBreakdown = computeContextBreakdown({
+					manager: live.manager,
+					contextWindow: modelWindow,
+					reportedTotalTokens: contextUsage?.tokens,
+					reserveTokens: limits.reserveTokens,
+					maxContextTokens: limits.maxContextTokens,
+					activeTools: live.adapter?.getActiveToolSchemas?.(),
+				});
+				live.cachedBreakdown = { key: breakdownKey, value: contextBreakdown };
 			}
 		}
 		return {
 			...projection,
 			...descriptor,
 			contextUsage,
+			contextBreakdown,
 			usage: this.live.get(id)?.usage.snapshot(),
 			thinkingLevel: this.live.get(id)?.adapter?.getThinkingLevel?.() ?? descriptor.thinkingLevel,
 			title: descriptor.title ?? runs[0]?.task,
@@ -1544,7 +1597,38 @@ export class SessionRegistry {
 						},
 						clearQueue: () => session.clearQueue(),
 						getActiveToolNames: () => session.getActiveToolNames(),
+						getActiveToolSchemas: () => {
+							const active = new Set(session.getActiveToolNames());
+							return session
+								.getAllTools()
+								.filter((tool) => active.has(tool.name))
+								.map((tool) => ({
+									name: tool.name,
+									description: tool.description,
+									parameters: tool.parameters,
+								}));
+						},
+						getCompactionLimits: () => {
+							const compaction = settingsManager.getSettings().compaction;
+							return {
+								reserveTokens: compaction?.reserveTokens ?? DEFAULT_COMPACTION_SETTINGS.reserveTokens,
+								maxContextTokens: compaction?.maxContextTokens,
+							};
+						},
 						getContextUsage: () => session.getContextUsage(),
+						compact: async (customInstructions?: string) => {
+							const result = await session.compact(customInstructions);
+							const tokensAfter =
+								result.estimatedTokensAfter ??
+								estimateProjectedContextTokens(live.manager.buildSessionProjection(), live.manager.getBranch())
+									.tokens;
+							return {
+								tokensBefore: result.tokensBefore,
+								tokensAfter,
+								freedTokens: Math.max(0, result.tokensBefore - tokensAfter),
+								summary: result.summary,
+							};
+						},
 						getThinkingLevel: () => session.thinkingLevel,
 						setThinkingLevel: (level) => session.setThinkingLevel(level),
 						setModel: async (selection) => {
@@ -1785,6 +1869,96 @@ export class SessionRegistry {
 			this.changed(id);
 		});
 	}
+	dailyUsage(): DailyUsagePoint[] {
+		const groups: DailyUsagePoint[][] = [];
+		for (const session of this.state.sessions) {
+			const live = this.live.get(session.sessionId);
+			if (live) {
+				groups.push(live.usage.dailySnapshot());
+				continue;
+			}
+			const cached = this.dailyUsageSummaries.get(session.sessionId);
+			if (cached) {
+				groups.push(cached);
+				continue;
+			}
+			if (session.materialized && session.path && session.availability !== "missing" && existsSync(session.path)) {
+				try {
+					const manager = SessionManager.open(session.path);
+					if (manager.getSessionId() === session.sessionId) {
+						const usage = new SessionUsage(manager);
+						const daily = usage.dailySnapshot();
+						this.usageSummaries.set(session.sessionId, usage.snapshot());
+						this.dailyUsageSummaries.set(session.sessionId, daily);
+						this.window5hSummaries.set(
+							session.sessionId,
+							usage.windowTokens(Date.now() - 5 * 60 * 60 * 1000).totalTokens,
+						);
+						this.window7dSummaries.set(session.sessionId, [
+							...usage.windowTokens(Date.now() - 7 * 24 * 60 * 60 * 1000).byModel.values(),
+						]);
+						groups.push(daily);
+					}
+				} catch {
+					/* Skip unreadable transcripts; hydration logs failures. */
+				}
+			}
+		}
+		return aggregateDailyUsage(groups);
+	}
+
+	usageAttribution(sessionId: string): UsageAttribution {
+		this.descriptor(sessionId);
+		const now = Date.now();
+		const since5h = now - 5 * 60 * 60 * 1000;
+		const since7d = now - 7 * 24 * 60 * 60 * 1000;
+		let thisChatTokens = 0;
+		let otherChatsTokens = 0;
+		const weeklyByModel = new Map<string, { provider: string; model: string; tokens: number }>();
+		let weeklyTotalTokens = 0;
+		for (const session of this.state.sessions) {
+			const live = this.live.get(session.sessionId);
+			const tokens5h = live
+				? live.usage.windowTokens(since5h).totalTokens
+				: (this.window5hSummaries.get(session.sessionId) ?? 0);
+			if (session.sessionId === sessionId) thisChatTokens += tokens5h;
+			else otherChatsTokens += tokens5h;
+			const entries7d = live
+				? [...live.usage.windowTokens(since7d).byModel.values()]
+				: (this.window7dSummaries.get(session.sessionId) ?? []);
+			for (const entry of entries7d) {
+				weeklyTotalTokens += entry.tokens;
+				const key = `${entry.provider}\0${entry.model}`;
+				const existing = weeklyByModel.get(key);
+				if (existing) existing.tokens += entry.tokens;
+				else weeklyByModel.set(key, { ...entry });
+			}
+		}
+		const models = [...weeklyByModel.values()].sort((a, b) => b.tokens - a.tokens);
+		return {
+			window5h: { thisChatTokens, otherChatsTokens },
+			window7d: { models, totalTokens: weeklyTotalTokens },
+		};
+	}
+
+	async compact(id: string, customInstructions?: string): Promise<CompactionSummaryResponse> {
+		if (this.get(id).currentRun)
+			throw new HarnessError("実行中の会話は圧縮できません。完了または停止してから実行してください。", 409);
+		const live = this.ensureLive(id);
+		if (!live) throw new HarnessError("会話ファイルが見つかりません。", 409);
+		const adapter = await this.adapter(id);
+		if (!adapter.compact) throw new HarnessError("このセッションは圧縮に対応していません。", 409);
+		try {
+			const result = await adapter.compact(customInstructions);
+			live.idleContextUsage = undefined;
+			live.cachedBreakdown = undefined;
+			this.changed(id);
+			return result;
+		} catch (error) {
+			throw new HarnessError(error instanceof Error ? error.message : "コンテキストを圧縮できませんでした。", 409);
+		}
+	}
+
 	async close(): Promise<void> {
 		this.accepting = false;
 		clearTimeout(this.hydrationTimer);
@@ -1801,6 +1975,9 @@ export class SessionRegistry {
 		await this.saveQueue;
 		this.live.clear();
 		this.usageSummaries.clear();
+		this.dailyUsageSummaries.clear();
+		this.window5hSummaries.clear();
+		this.window7dSummaries.clear();
 		this.historyReaders.clear();
 	}
 }

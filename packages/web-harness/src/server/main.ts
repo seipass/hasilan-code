@@ -14,6 +14,7 @@ import {
 	pendingInputActionSchema,
 	promptSchema,
 	responsibilitySchema,
+	sessionCompactSchema,
 	sessionCreateSchema,
 	sessionRenameSchema,
 	teamMessageSchema,
@@ -352,6 +353,7 @@ async function createHarness(
 					response.end(script);
 					return true;
 				}
+				if (url.pathname === "/api/usage/daily" && method === "GET") return reply({ days: registry.dailyUsage() });
 				if (url.pathname === "/api/work" && method === "GET") return reply(teams.workOverview());
 				if (parts[1] === "work" && parts.length === 4 && parts[3] === "diff" && method === "GET")
 					return reply(await teams.agentWork(parts[2], "diff"));
@@ -452,6 +454,13 @@ async function createHarness(
 						const { level } = await readJson(request, thinkingSchema);
 						await registry.setThinkingLevel(id, level);
 						return reply(registry.page(id));
+					}
+					if (parts[3] === "compact" && parts.length === 4 && method === "POST") {
+						const { instructions } = await readJson(request, sessionCompactSchema);
+						return reply(await registry.compact(id, instructions));
+					}
+					if (parts[3] === "usage-attribution" && parts.length === 4 && method === "GET") {
+						return reply(registry.usageAttribution(id));
 					}
 				}
 				if (url.pathname === "/api/settings") {

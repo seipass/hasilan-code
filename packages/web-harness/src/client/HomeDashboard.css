@@ -10,8 +10,10 @@ html body .chat-pane.has-home-dashboard > .composer-area { position: relative; z
 .home-recent { grid-column: span 2; }
 .home-usage { grid-column: span 2; }
 .home-pulls { grid-column: span 5; }
+.home-token-usage { grid-column: 1 / -1; }
 .home-dashboard[data-github="false"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .home-dashboard[data-github="false"] > .home-card { grid-column: auto; grid-row: auto; }
+.home-dashboard[data-github="false"] > .home-token-usage { grid-column: 1 / -1; }
 .home-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 20px; margin-bottom: 8px; }
 .home-card-heading { display: flex; align-items: center; gap: 8px; color: var(--on-surface); font-size: 13px; line-height: 18px; font-weight: 600; }
 .home-card-heading > svg { color: var(--on-surface-muted); flex: none; }

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import type { GithubDashboard } from "../shared/home-dashboard.ts";
 import { GITHUB_DASHBOARD_ID } from "../shared/plugin-profile.ts";
-import { aggregateUsage, cacheReadPercent } from "../shared/usage.ts";
+import { aggregateUsage, cacheReadPercent, type DailyUsagePoint } from "../shared/usage.ts";
 import { api } from "./api.ts";
 import { Icon } from "./Icon.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import { sessionRecency } from "./session-recency.ts";
+import { TokenUsageChart } from "./TokenUsageChart.tsx";
 import type { SessionSummary, Workspace } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import { workspaceLabel } from "./workspace-label.ts";
@@ -18,6 +19,17 @@ export function HomeDashboard({ sessions, workspaces, onSession }: { sessions: S
 	const githubEnabled = usePluginProfile()?.activeIds.includes(GITHUB_DASHBOARD_ID) ?? false;
 	const [github, setGithub] = useState<GithubDashboard>();
 	const [refresh, setRefresh] = useState(0);
+	const [dailyUsage, setDailyUsage] = useState<DailyUsagePoint[]>([]);
+	const [dailyLoading, setDailyLoading] = useState(true);
+	useEffect(() => {
+		const controller = new AbortController();
+		setDailyLoading(true);
+		void api<{ days: DailyUsagePoint[] }>("/api/usage/daily", { signal: controller.signal })
+			.then((value) => { if (!controller.signal.aborted) setDailyUsage(value.days); })
+			.catch(() => { if (!controller.signal.aborted) setDailyUsage([]); })
+			.finally(() => { if (!controller.signal.aborted) setDailyLoading(false); });
+		return () => controller.abort();
+	}, [sessions.length]);
 	useEffect(() => {
 		if (!githubEnabled) return;
 		const controller = new AbortController();
@@ -56,5 +68,8 @@ export function HomeDashboard({ sessions, workspaces, onSession }: { sessions: S
 		{githubEnabled && <section className="home-card home-pulls" aria-label="Pull requests"><header><span className="home-card-heading"><Icon name="graph" />Pull requests</span><span className="home-card-label">自分の未完了PR{github?.pullRequestCount !== undefined && ` · ${github.pullRequestCount}`}</span></header>
 			{github?.state === "ready" ? <div className="home-pull-list">{github.pullRequests?.map((pr) => <a key={pr.url} href={pr.url} target="_blank" rel="noreferrer"><span className={`home-pr-icon${pr.draft ? " is-draft" : ""}`}><Icon name="graph" /></span><span><strong>{pr.title}</strong><small>{pr.repository} #{pr.number} · {pr.draft ? "Draft" : pr.review === "APPROVED" ? "Approved" : pr.review === "CHANGES_REQUESTED" ? "Changes requested" : "Open"} · {sessionRecency(pr.updatedAt)}</small></span><Icon name="arrowUpRight" size="inline" /></a>)}{!github.pullRequests?.length && <p className="home-inline-empty">未完了のPull requestはありません。</p>}</div> : <p className="home-inline-empty">{github ? github.message : "Pull requestsを読み込み中…"}</p>}
 		</section>}
+		<section className="home-card home-token-usage" aria-label="Token usage"><header><span className="home-card-heading"><Icon name="gauge" />Token usage</span><span className="home-card-label">日別推移</span></header>
+			<TokenUsageChart days={dailyUsage} loading={dailyLoading} unpriced={unpriced} />
+		</section>
 	</div>;
 }
