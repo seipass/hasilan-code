@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ATTACHMENT_LIMITS, type AttachmentUpload } from "../shared/attachments.ts";
 import { GIT_REVIEW_ID, WORKSPACE_ROUTER_ID } from "../shared/plugin-profile.ts";
+import type { SurfaceAction } from "../shared/surfaces.ts";
 import type { ComposerDestination, ComposerSendResult, ConversationCandidate } from "../shared/workspace-routing.ts";
 import { errorMessage } from "./api.ts";
 import { Icon } from "./Icon.tsx";
@@ -9,6 +10,7 @@ import type { BrowserAnnotation, BrowserAnnotationDelivery } from "./BrowserPane
 import { CHAT_MAX_WIDTH, CHAT_MIN_WIDTH, clampChatWidth } from "./chat-width.ts";
 import { CommandPicker } from "./CommandPicker.tsx";
 import { ComposerAttachments, useComposerAttachments } from "./ComposerAttachments.tsx";
+import { ComposerDock } from "./ComposerDock.tsx";
 import { ContextWindowPopover } from "./ContextWindowPopover.tsx";
 import { Conversation } from "./Conversation.tsx";
 import { GitReview } from "./GitReview.tsx";
@@ -30,7 +32,7 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, homeDashboard, surface, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
+export function ChatPane({ session, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
 	team?: TeamSnapshot;
 	loading?: boolean;
@@ -41,6 +43,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	draftKey: string;
 	modelControl: ReactNode;
 	goalControl: ReactNode;
+	composerDock?: ReactNode;
 	homeDashboard?: ReactNode;
 	surface?: boolean;
 	commands?: readonly (typeof COMPOSER_COMMANDS)[number][];
@@ -48,6 +51,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	onDraftInserted: () => void;
 	onSend: (text: string, mode: "prompt" | "steer" | "followUp", attachments: AttachmentUpload[], destination?: ComposerDestination) => Promise<ComposerSendResult>;
 	onPendingInputAction: (inputId: string, action: PendingInputAction) => Promise<void>;
+	onSurfaceAction?: (surfaceId: string, action: SurfaceAction) => Promise<void>;
 	onFile: (path: string, line?: number) => void;
 	onStop: () => void;
 	onParent: (sessionId: string) => void;
@@ -111,7 +115,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	}, [attachments, browserAnnotations, draftKey, reading, sending]);
 	function chooseCommand(command: string) {
 		setWorkspaceCandidates(undefined);
-		setText(`${command}${command === "/hyakki" || command === "/goal" ? " " : ""}`);
+		setText(`${command}${command === "/hyakki" || command === "/goal" || command === "/plan" ? " " : ""}`);
 		setPickerDismissed(true);
 		input.current?.focus();
 	}
@@ -237,8 +241,9 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 		{loading && <div className="conversation conversation-loading" role="status">会話を読み込んでいます…</div>}
 		<Presence show={!!session?.parentSessionId} collapse><div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session?.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div></Presence>
 		<Presence show={session?.availability === "missing"} collapse><div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div></Presence>
-		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); input.current?.focus(); }} />}
+		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} surfaces={session.surfaces} onSurfaceAction={onSurfaceAction} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); input.current?.focus(); }} />}
 		<div className="composer-area">
+			<ComposerDock>{composerDock}</ComposerDock>
 			<Presence show={pendingInputs.length > 0} collapse><div ref={pendingList} className="pending-input-list" role="list" aria-label="予約中の追加指示">
 				<MotionItems items={pendingInputs} itemKey={(pendingInput) => pendingInput.inputId}>{(pendingInput) => {
 					const editing = editingInput?.inputId === pendingInput.inputId;

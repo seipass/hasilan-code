@@ -41,6 +41,7 @@ import {
 	WORKSPACE_UI_ID,
 } from "../shared/plugin-profile.ts";
 import { TOOL_RESULT_PAGE_CHARS } from "../shared/session-history.ts";
+import { surfaceActionSchema } from "../shared/surfaces.ts";
 import { AgentWorktrees } from "./agent-worktrees.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { AuthLoginManager, authLoginPromptSchema, authLoginSchema } from "./auth-login.ts";
@@ -461,6 +462,16 @@ async function createHarness(
 					}
 					if (parts[3] === "usage-attribution" && parts.length === 4 && method === "GET") {
 						return reply(registry.usageAttribution(id));
+					}
+					if (
+						parts[3] === "surfaces" &&
+						parts[4] &&
+						parts[5] === "action" &&
+						parts.length === 6 &&
+						method === "POST"
+					) {
+						const action = await readJson(request, surfaceActionSchema, 256 * 1024);
+						return reply(registry.surfaces.handleAction(id, parts[4], action));
 					}
 				}
 				if (url.pathname === "/api/settings") {

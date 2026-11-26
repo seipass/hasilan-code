@@ -1,5 +1,7 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HistoryPosition } from "../shared/session-history.ts";
+import type { SessionSurface, SurfaceAction } from "../shared/surfaces.ts";
+import { ActionPlanCard } from "./ActionPlanCard.tsx";
 import { ComputerActivity } from "./ComputerActivity.tsx";
 import { conversationRows } from "./computer-activity.ts";
 import { Presence } from "./Motion.tsx";
@@ -47,13 +49,15 @@ interface MessageProps {
 	grouped?: boolean;
 	message: ChatMessage;
 	tools: (ToolCall | undefined)[];
+	surfacesByCallId?: Map<string, SessionSurface>;
+	onSurfaceAction?: (surfaceId: string, action: SurfaceAction) => Promise<void>;
 	onFile: (path: string, line?: number) => void;
 	onRetry?: (messageId: string) => void;
 	onEdit?: (messageId: string, text: string) => void;
 	expansions: Map<string, boolean[]>;
 	changes?: FileChangeSummary[];
 }
-const Message = memo(function Message({ rowKey, grouped, message, tools, onFile, onRetry, onEdit, expansions, changes }: MessageProps) {
+const Message = memo(function Message({ rowKey, grouped, message, tools, surfacesByCallId, onSurfaceAction, onFile, onRetry, onEdit, expansions, changes }: MessageProps) {
 	const element = useRef<HTMLDivElement>(null);
 	useLayoutEffect(() => {
 		const row = element.current;
@@ -82,6 +86,12 @@ const Message = memo(function Message({ rowKey, grouped, message, tools, onFile,
 				<div className="message-content">{message.role === "user" ? <UserMessageContent value={content} onFile={onFile} /> : <Content value={content} onFile={onFile} activeThinking={activeThinking} colorPreview={message.role === "assistant"} />}{calls.map((part, index) => {
 					const tool = tools[index];
 					if (tool?.name === "computer") return null;
+					const callId = tool?.callId ?? (record(part) && typeof part.id === "string" ? part.id : undefined);
+					const surface = callId ? surfacesByCallId?.get(callId) : undefined;
+					if (surface?.kind === "action_plan" && onSurfaceAction) {
+						return <ActionPlanCard key={surface.surfaceId} surface={surface} onAction={onSurfaceAction} onFile={onFile} />;
+					}
+					if (tool?.name === "action_plan" || (record(part) && part.name === "action_plan")) return null;
 					return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>;
 				})}{message.partial && <span className="streaming-dot" aria-label="応答中" />}</div>
 				{hasAssistantText(message) && <div className="message-meta">
@@ -103,6 +113,8 @@ const Message = memo(function Message({ rowKey, grouped, message, tools, onFile,
 	previous.onEdit === next.onEdit &&
 	previous.expansions === next.expansions &&
 	previous.changes === next.changes &&
+	previous.surfacesByCallId === next.surfacesByCallId &&
+	previous.onSurfaceAction === next.onSurfaceAction &&
 	previous.tools.length === next.tools.length &&
 	previous.tools.every((tool, index) => tool === next.tools[index]));
 
@@ -140,9 +152,11 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 	</div>;
 }
 
-export const Conversation = memo(function Conversation({ messages: allMessages, tools, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError, onRetry, onEdit }: {
+export const Conversation = memo(function Conversation({ messages: allMessages, tools, surfaces, onSurfaceAction, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError, onRetry, onEdit }: {
 	messages: ChatMessage[];
 	tools: ToolCall[];
+	surfaces?: SessionSurface[];
+	onSurfaceAction?: (surfaceId: string, action: SurfaceAction) => Promise<void>;
 	activeRunId?: string;
 	history?: HistoryPosition;
 	loading?: boolean;
@@ -182,6 +196,23 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 		const items = conversationRows(allMessages, tools, activeRunId);
 		return activityBeta ? turnActivityRows(items, activeRunId) : items;
 	}, [allMessages, tools, activeRunId, activityBeta]);
+	const surfacesByCallId = useMemo(() => {
+		if (!surfaces?.length) return undefined;
+		const map = new Map<string, SessionSurface>();
+		for (const surface of surfaces) {
+			if (surface.anchorCallId) map.set(surface.anchorCallId, surface);
+		}
+		return map;
+	}, [surfaces]);
+	const unanchoredSurfaces = useMemo(() => {
+		if (!surfaces?.length) return [];
+		const anchoredIds = new Set<string>();
+		for (const row of rows) {
+			if (row.kind !== "message") continue;
+			for (const tool of row.tools) if (tool?.callId) anchoredIds.add(tool.callId);
+		}
+		return surfaces.filter((surface) => !surface.anchorCallId || !anchoredIds.has(surface.anchorCallId));
+	}, [surfaces, rows]);
 	const changesByRow = useMemo(() => {
 		const lastByRun = new Map<string, string>();
 		for (const row of rows) {
@@ -315,10 +346,13 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 				{rows.slice(start, end).map((row) => row.kind === "computer"
 					? <div key={row.key} className="virtual-message" data-message-id={row.key}><ComputerActivity group={row.group} onFile={openFile} /></div>
 					: row.kind === "activity" ? <ActivityBlock key={row.key} block={row} onFile={openFile} expansions={expansions.current} opened={openedActivity.current} />
-					: <Message key={row.key} rowKey={row.key} message={row.message} tools={row.tools} onFile={openFile} expansions={expansions.current} changes={changesByRow.get(row.key)}
+					: <Message key={row.key} rowKey={row.key} message={row.message} tools={row.tools} surfacesByCallId={surfacesByCallId} onSurfaceAction={onSurfaceAction} onFile={openFile} expansions={expansions.current} changes={changesByRow.get(row.key)}
 						onRetry={onRetry && row.key === lastAssistantKey ? retryMessage : undefined}
 						onEdit={onEdit ? editMessage : undefined} />)}
 				<div className="history-spacer" aria-hidden="true" style={{ height: total - offsets[end] }} />
+				{onSurfaceAction && unanchoredSurfaces.map((surface) => surface.kind === "action_plan"
+					? <ActionPlanCard key={surface.surfaceId} surface={surface} onAction={onSurfaceAction} onFile={openFile} />
+					: null)}
 				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>
 			</div>
 		</div>

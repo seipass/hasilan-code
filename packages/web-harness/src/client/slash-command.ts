@@ -3,6 +3,7 @@ import { SWARM_OBJECTIVE_MAX_LENGTH } from "../shared/swarm.ts";
 
 export type ComposerCommand =
 	| { kind: "prompt"; text: string }
+	| { kind: "plan"; task: string }
 	| { kind: "chat" }
 	| { kind: "canvas" }
 	| { kind: "hyakki"; objective: string }
@@ -10,6 +11,7 @@ export type ComposerCommand =
 	| { kind: "goal"; action: GoalAction };
 
 export const COMPOSER_COMMANDS = [
+	{ command: "/plan", syntax: "/plan 作業内容", description: "編集・承認できる実行プランを作成して開始" },
 	{ command: "/hyakki", syntax: "/hyakki 目的", description: "スウォームを開始 · continue で再開" },
 	{ command: "/canvas", syntax: "/canvas", description: "設計エディターを開く（モデル不要）" },
 	{ command: "/chat", syntax: "/chat", description: "会話に戻る" },
@@ -27,6 +29,11 @@ export function parseComposerCommand(text: string): ComposerCommand {
 	const separator = trimmed.search(/\s/);
 	const name = separator < 0 ? trimmed : trimmed.slice(0, separator);
 	const args = separator < 0 ? "" : trimmed.slice(separator).trim();
+	if (name === "/plan") {
+		if (!args) throw new Error("使い方: /plan 実行したい作業内容");
+		if (args.length > 1024 * 1024) throw new Error("作業内容は 1,048,576 文字以内にしてください。");
+		return { kind: "plan", task: args };
+	}
 	if (name === "/canvas" || name === "/chat") {
 		if (args) throw new Error(`${name} に引数は指定できません。`);
 		return { kind: name === "/canvas" ? "canvas" : "chat" };
@@ -39,7 +46,7 @@ export function parseComposerCommand(text: string): ComposerCommand {
 		return { kind: "hyakki", objective: args };
 	}
 	if (name !== "/goal")
-		throw new Error(`不明なコマンド: ${name}。/hyakki、/canvas、/chat、/goal を使用してください。`);
+		throw new Error(`不明なコマンド: ${name}。/plan、/hyakki、/canvas、/chat、/goal を使用してください。`);
 	const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(args);
 	const subcommand = match?.[1] ?? "status";
 	let rest = match?.[2]?.trim() ?? "";

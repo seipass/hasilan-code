@@ -5,6 +5,7 @@ import type { ComputerStatus } from "../shared/computer.ts";
 import type { ContextBreakdown } from "../shared/context-window.ts";
 import type { Goal } from "../shared/goals.ts";
 import type { HistoryMessage, HistoryPosition, HistoryTool } from "../shared/session-history.ts";
+import type { SessionSurface } from "../shared/surfaces.ts";
 import type { Swarm } from "../shared/swarm.ts";
 import type { ModelUsage } from "../shared/usage.ts";
 import type { JevStatus } from "../shared/workspace-routing.ts";
@@ -87,6 +88,7 @@ export interface SessionDetail extends SessionSummary {
 	contextBreakdown?: ContextBreakdown;
 	messages: ChatMessage[];
 	toolCalls: ToolCall[];
+	surfaces?: SessionSurface[];
 	activity: { queue?: { steering: string[]; followUp: string[] }; retry?: unknown; compaction?: unknown };
 }
 export interface TeamAgent {

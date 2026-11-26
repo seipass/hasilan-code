@@ -44,6 +44,7 @@ import {
 	SESSION_IMPORT_RECORD_TYPE,
 	SESSION_IMPORT_SOURCES,
 } from "../shared/session-import.ts";
+import type { SessionSurface } from "../shared/surfaces.ts";
 import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
 import { aggregateDailyUsage, type DailyUsagePoint, type ModelUsage, type UsageAttribution } from "../shared/usage.ts";
 import type { AgentWorktree, AgentWorktrees } from "./agent-worktrees.ts";
@@ -60,6 +61,7 @@ import { sameWorkspace } from "./session-import/common.ts";
 import { importedRecord, storeImport } from "./session-import/persistence.ts";
 import { type ImportAsset, projectImport } from "./session-import/projection.ts";
 import { SessionUsage } from "./session-usage.ts";
+import { SurfaceManager } from "./surface-manager.ts";
 import type { AgentRecord, PendingInput, RunRecord, TeamRecord } from "./team-manager.ts";
 import { limitToolContext } from "./tool-context.ts";
 
@@ -114,6 +116,7 @@ export interface SessionSnapshot extends SessionDescriptor {
 	usage?: ModelUsage[];
 	messages: ProjectedMessage[];
 	toolCalls: ProjectedTool[];
+	surfaces?: SessionSurface[];
 	activity: {
 		queue?: { steering: readonly string[]; followUp: readonly string[] };
 		retry?: unknown;
@@ -505,6 +508,7 @@ export class SessionRegistry {
 	private readonly restoreFromDisk: boolean;
 	private restoredState?: HarnessState;
 	private readonly live = new Map<string, LiveSession>();
+	readonly surfaces: SurfaceManager;
 	private readonly usageSummaries = new Map<string, ModelUsage[]>();
 	private readonly dailyUsageSummaries = new Map<string, DailyUsagePoint[]>();
 	private readonly window5hSummaries = new Map<string, number>();
@@ -522,6 +526,13 @@ export class SessionRegistry {
 		this.restoreFromDisk = persistence === undefined;
 		this.storage = this.restoreFromDisk ? fileSessionStorage(options.agentDir) : persistence?.storage;
 		this.restoredState = persistence?.restoredState;
+		this.surfaces = new SurfaceManager({
+			getManager: (sessionId) => this.live.get(sessionId)?.manager,
+			getRunId: (sessionId) => this.live.get(sessionId)?.runId,
+			onChanged: (sessionId) => {
+				if (this.state.sessions.some((entry) => entry.sessionId === sessionId)) this.changed(sessionId);
+			},
+		});
 	}
 	async initialize(): Promise<void> {
 		let restored = this.restoredState;
@@ -766,6 +777,7 @@ export class SessionRegistry {
 			importAssets: imported.assets,
 			aborted: false,
 		});
+		this.surfaces.restore(descriptor.sessionId, manager);
 		this.trimHistoryCache(descriptor.sessionId);
 	}
 	listWorkspaces(): WorkspaceDirectory[] {
@@ -1115,6 +1127,7 @@ export class SessionRegistry {
 				live?.unsubscribe?.();
 				live?.adapter?.dispose();
 				this.live.delete(sessionId);
+				this.surfaces.closeSession(sessionId);
 				this.usageSummaries.delete(sessionId);
 				this.dailyUsageSummaries.delete(sessionId);
 				this.window5hSummaries.delete(sessionId);
@@ -1216,9 +1229,11 @@ export class SessionRegistry {
 				live.cachedBreakdown = { key: breakdownKey, value: contextBreakdown };
 			}
 		}
+		const surfaces = this.surfaces.list(id);
 		return {
 			...projection,
 			...descriptor,
+			...(surfaces.length > 0 ? { surfaces } : {}),
 			contextUsage,
 			contextBreakdown,
 			usage: this.live.get(id)?.usage.snapshot(),
@@ -1399,7 +1414,14 @@ export class SessionRegistry {
 									event.systemPromptOptions.defaultPreamble =
 										"You are an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files.";
 									event.systemPromptOptions.includeDocumentation = false;
-									event.systemPromptOptions.promptGuidelines.push(...modelGuidance(ctx.model?.id));
+									event.systemPromptOptions.promptGuidelines.push(
+										...modelGuidance(ctx.model?.id),
+										...(!descriptor.parentSessionId
+											? [
+													"When the user asks for an interactive plan (e.g. via /plan) or requests planning before implementation of a multi-step change, explore the relevant files first and then call the action_plan tool with action 'propose' so the user can edit, reorder, and approve the steps before editing files. After approval, call action_plan start_step and complete_step around each approved step.",
+												]
+											: []),
+									);
 									event.systemPromptOptions.selectedTools.sort();
 								});
 							},
@@ -1425,10 +1447,14 @@ export class SessionRegistry {
 								(name) => !selectedTools.includes(name),
 							)
 						: [];
-					const customTools = this.options.customTools?.(descriptor);
+					const pluginTools = this.options.customTools?.(descriptor) ?? [];
+					const customTools =
+						!descriptor.parentSessionId && !pluginTools.some((tool) => tool.name === "action_plan")
+							? [...pluginTools, this.surfaces.createActionPlanTool(descriptor.sessionId)]
+							: pluginTools;
 					// Do not fall back to Pi's unrestricted implementation for a tool owned by a disabled plugin.
 					const excludeTools = this.options.pluginOwnedTools?.filter(
-						(name) => !customTools?.some((tool) => tool.name === name),
+						(name) => !customTools.some((tool) => tool.name === name),
 					);
 					const { session } = await createAgentSession({
 						cwd: descriptor.cwd,
@@ -1733,6 +1759,7 @@ export class SessionRegistry {
 				tool.runId === live.runId && tool.status === "running" ? { ...tool, status: "cancelled" } : tool,
 			);
 		}
+		this.surfaces.onExecutionEvent(id, event);
 		for (const listener of this.executionListeners) listener(id, event);
 		this.changed(id);
 	}
@@ -1974,6 +2001,7 @@ export class SessionRegistry {
 		await this.persist();
 		await this.saveQueue;
 		this.live.clear();
+		this.surfaces.close();
 		this.usageSummaries.clear();
 		this.dailyUsageSummaries.clear();
 		this.window5hSummaries.clear();

@@ -1,0 +1,43 @@
+.composer-dock {
+	display: grid;
+	gap: 6px;
+	margin: 0 0 6px;
+	width: 100%;
+	min-width: 0;
+}
+.composer-dock:empty { display: none; }
+.composer-dock-pills {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.composer-dock-tray {
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: var(--surface-raised);
+	box-shadow: 0 8px 24px #0004;
+	overflow: hidden;
+}
+.composer-dock-tray-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 36px;
+	padding: 6px 10px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--on-surface);
+	font-size: var(--text-xs);
+	text-align: left;
+	font-variant-numeric: tabular-nums;
+}
+.composer-dock-tray-header:hover { background: var(--surface-hover); }
+.composer-dock-tray-body {
+	border-top: 1px solid var(--border-subtle);
+	max-height: min(44vh, 320px);
+	overflow-y: auto;
+}
