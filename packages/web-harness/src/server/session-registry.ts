@@ -87,6 +87,7 @@ export interface SessionDescriptor {
 	path?: string;
 	materialized: boolean;
 	parentSessionId?: string;
+	splitFromSessionId?: string;
 	role?: string;
 	systemPrompt?: string;
 	title?: string;
@@ -811,6 +812,7 @@ export class SessionRegistry {
 	create(options: {
 		workspaceId: string;
 		parentSessionId?: string;
+		splitFromSessionId?: string;
 		role?: string;
 		systemPrompt?: string;
 		model?: ModelSelection;
@@ -818,6 +820,43 @@ export class SessionRegistry {
 		tools?: string[];
 	}): Promise<SessionDescriptor> {
 		return this.mutate(() => this.createWithinMutation(options));
+	}
+	createSplitSession(
+		parentSessionId: string,
+		options: { title: string; branchName: string },
+	): Promise<SessionDescriptor> {
+		return this.mutate(async () => {
+			if (!this.accepting) throw new HarnessError("Host is shutting down", 503);
+			const parent = this.descriptor(parentSessionId);
+			const descriptor: SessionDescriptor = {
+				sessionId: randomUUID(),
+				workspaceId: parent.workspaceId,
+				cwd: this.getWorkspaceRoot(parent.workspaceId),
+				materialized: false,
+				availability: "ready",
+				splitFromSessionId: parentSessionId,
+				title: options.title.trim().slice(0, 200) || undefined,
+				model: parent.model ? { ...parent.model } : undefined,
+				thinkingLevel: parent.thinkingLevel,
+			};
+			if (this.options.agentWorktrees) {
+				const worktree = await this.options.agentWorktrees.create(
+					this.getWorkspaceRoot(parent.workspaceId),
+					options.branchName,
+				);
+				if (worktree) {
+					descriptor.worktree = worktree;
+					await this.registerWorktree(descriptor);
+				}
+			}
+			const manager = this.newManager(descriptor);
+			descriptor.path = manager.getSessionFile();
+			this.state.sessions.push(descriptor);
+			this.addLive(descriptor, manager);
+			await this.persist();
+			this.changed(descriptor.sessionId);
+			return structuredClone(descriptor);
+		});
 	}
 	importSession(
 		workspaceId: string,
@@ -1111,7 +1150,13 @@ export class SessionRegistry {
 					thinkingLevel: session.thinkingLevel,
 				};
 			}
-			this.state.sessions = previous.sessions.filter((session) => !ids.has(session.sessionId));
+			this.state.sessions = previous.sessions
+				.filter((session) => !ids.has(session.sessionId))
+				.map((session) =>
+					session.splitFromSessionId && ids.has(session.splitFromSessionId)
+						? { ...session, splitFromSessionId: undefined }
+						: session,
+				);
 			this.state.teams = previous.teams.filter((team) => !agents.has(team.rootAgentId));
 			this.state.agents = previous.agents.filter((agent) => !agents.has(agent.agentId));
 			this.state.runs = previous.runs.filter((run) => !agents.has(run.agentId));
@@ -1233,6 +1278,7 @@ export class SessionRegistry {
 		return {
 			...projection,
 			...descriptor,
+			...(descriptor.worktree?.branch ? { splitBranch: descriptor.worktree.branch } : {}),
 			...(surfaces.length > 0 ? { surfaces } : {}),
 			contextUsage,
 			contextBreakdown,
@@ -1288,7 +1334,63 @@ export class SessionRegistry {
 	sessionPaths(): string[] {
 		return this.state.sessions.flatMap((session) => (session.path ? [session.path] : []));
 	}
-	list(workspaceId?: string): Omit<SessionSnapshot, "messages" | "toolCalls" | "activity">[] {
+	/** Count distinct files created or edited in a session's recorded tool calls. */
+	changedFileCount(sessionId: string): number {
+		const tools = this.live.get(sessionId)?.projection.toolCalls ?? [];
+		const paths = new Set<string>();
+		for (const tool of tools) {
+			if (tool.status !== "success") continue;
+			if (tool.name !== "edit" && tool.name !== "write") continue;
+			const input =
+				typeof tool.input === "object" && tool.input !== null ? (tool.input as Record<string, unknown>) : undefined;
+			const result =
+				typeof tool.result === "object" && tool.result !== null
+					? (tool.result as Record<string, unknown>)
+					: undefined;
+			const details =
+				result && typeof result.details === "object" && result.details !== null
+					? (result.details as Record<string, unknown>)
+					: result;
+			if (typeof details?.path === "string") paths.add(details.path);
+			else if (typeof input?.path === "string") paths.add(input.path);
+			else if (typeof details?.diff === "string") {
+				for (const match of details.diff.matchAll(/^\+\+\+ (.+)$/gm)) {
+					if (match[1] && match[1] !== "/dev/null") paths.add(match[1]);
+				}
+			}
+		}
+		return paths.size;
+	}
+
+	private activeActivityLabel(sessionId: string): string | undefined {
+		const live = this.live.get(sessionId);
+		if (!live) return undefined;
+		const runningTool = live.projection.toolCalls.findLast((tool) => tool.status === "running");
+		if (runningTool) {
+			const input =
+				typeof runningTool.input === "object" && runningTool.input !== null
+					? (runningTool.input as Record<string, unknown>)
+					: undefined;
+			const target =
+				typeof input?.path === "string"
+					? basename(input.path)
+					: typeof input?.command === "string"
+						? input.command.trim().split(/\r?\n/, 1)[0].slice(0, 44)
+						: typeof input?.query === "string"
+							? input.query.slice(0, 44)
+							: undefined;
+			return target ? `${runningTool.name} · ${target}` : `${runningTool.name} を実行中`;
+		}
+		const lastMsg = live.projection.messages.at(-1);
+		if (lastMsg?.partial && lastMsg.role === "assistant") return "思考中…";
+		return undefined;
+	}
+
+	list(workspaceId?: string): (Omit<SessionSnapshot, "messages" | "toolCalls" | "activity"> & {
+		splitBranch?: string;
+		activeActivity?: string;
+		changedFileCount?: number;
+	})[] {
 		return this.state.sessions
 			.filter((entry) => !workspaceId || entry.workspaceId === workspaceId)
 			.map((descriptor) => {
@@ -1300,8 +1402,13 @@ export class SessionRegistry {
 				const latest = runs.at(-1);
 				// Lists render titles and state only; prompts, paths and run bodies come with the page.
 				const { systemPrompt: _systemPrompt, path: _path, ...summary } = descriptor;
+				const changedFiles = this.changedFileCount(descriptor.sessionId);
+				const activeActivity = currentRun ? this.activeActivityLabel(descriptor.sessionId) : undefined;
 				return structuredClone({
 					...summary,
+					...(descriptor.worktree?.branch ? { splitBranch: descriptor.worktree.branch } : {}),
+					...(activeActivity ? { activeActivity } : {}),
+					...(changedFiles > 0 ? { changedFileCount: changedFiles } : {}),
 					usage:
 						this.live.get(descriptor.sessionId)?.usage.snapshot() ??
 						this.usageSummaries.get(descriptor.sessionId),

@@ -17,6 +17,7 @@ import {
 	sessionCompactSchema,
 	sessionCreateSchema,
 	sessionRenameSchema,
+	sessionSplitSchema,
 	teamMessageSchema,
 	thinkingSchema,
 	workspaceCreateSchema,
@@ -79,6 +80,7 @@ import { hashlinePlugin, shellProcessPlugin } from "./plugins/workspace-tools.ts
 import { acquireProfile } from "./profile-lock.ts";
 import { readAttachmentImages, savePromptAttachments } from "./prompt-attachments.ts";
 import { HarnessError, SessionRegistry } from "./session-registry.ts";
+import { classifyMidTurnSplit, deriveSplitMetadata } from "./session-splitter.ts";
 import { type SearchProviderId, SettingsService, settingsPatchSchema } from "./settings.ts";
 import { TeamManager } from "./team-manager.ts";
 import { PythonDesktop } from "./tools/computer/backend.ts";
@@ -299,6 +301,21 @@ async function createHarness(
 		}
 		hub.publish("workspace", event.workspaceId);
 	});
+	registry.onExecutionEvent((sessionId, event) => {
+		if (event.type !== "agent_settled") return;
+		const child = registry.state.sessions.find((entry) => entry.sessionId === sessionId);
+		if (!child?.splitFromSessionId) return;
+		if (!registry.state.sessions.some((entry) => entry.sessionId === child.splitFromSessionId)) return;
+		const snapshot = registry.projection(sessionId);
+		const failed = snapshot.latestRun?.status === "failed";
+		registry.surfaces.addSplitNotice(child.splitFromSessionId, {
+			childSessionId: sessionId,
+			childTitle: snapshot.title ?? "分割セッション",
+			branchName: child.worktree?.branch,
+			changedFiles: registry.changedFileCount(sessionId),
+			status: failed ? "failed" : "completed",
+		});
+	});
 	teams.subscribe((event) => {
 		hub.publish("workspace", event.workspaceId);
 		void computer
@@ -431,12 +448,54 @@ async function createHarness(
 						const descriptor = registry.descriptor(id);
 						if (!input.text.trim() && !input.attachments?.length)
 							throw new HttpError(400, "メッセージか添付ファイルを追加してください。");
+						const snapshot = registry.projection(id);
+						if (
+							input.mode === "steer" &&
+							!input.skipSplitCheck &&
+							!input.attachments?.length &&
+							!descriptor.parentSessionId &&
+							snapshot.currentRun
+						) {
+							const decision = await classifyMidTurnSplit({
+								currentTask: snapshot.title ?? snapshot.currentRun.task,
+								incomingText: input.text,
+								runtime: modelRuntime,
+								getClassifier: () => settings.get().jev.model,
+							});
+							if (decision.shouldSplit) {
+								const proposal = registry.surfaces.createSplitProposal(id, {
+									promptText: input.text,
+									suggestedTitle: decision.suggestedTitle,
+									branchName: decision.branchName,
+									explanation: decision.explanation,
+								});
+								return reply(
+									{
+										runId: snapshot.currentRun.runId,
+										disposition: "split_proposed",
+										surfaceId: proposal.surfaceId,
+									},
+									202,
+								);
+							}
+						}
 						const attachments = await savePromptAttachments(
 							files,
 							descriptor.workspaceId,
 							input.attachments ?? [],
 						);
 						return reply(await teams.prompt(id, { text: input.text, mode: input.mode, attachments }), 202);
+					}
+					if (parts[3] === "split" && parts.length === 4 && method === "POST") {
+						const input = await readJson(request, sessionSplitSchema, ATTACHMENT_LIMITS.requestBytes);
+						const meta = deriveSplitMetadata(input.text);
+						const child = await registry.createSplitSession(id, {
+							title: input.title ?? meta.suggestedTitle,
+							branchName: input.branchName ?? meta.branchName,
+						});
+						await teams.ensureRoot(child.sessionId);
+						await teams.prompt(child.sessionId, { text: input.text, mode: "prompt" });
+						return reply({ session: registry.page(child.sessionId) }, 201);
 					}
 					if (parts[3] === "pending-inputs" && parts.length === 5 && method === "PATCH") {
 						await teams.updatePendingInput(id, parts[4], await readJson(request, pendingInputActionSchema));
@@ -471,6 +530,26 @@ async function createHarness(
 						method === "POST"
 					) {
 						const action = await readJson(request, surfaceActionSchema, 256 * 1024);
+						if (action.type === "accept_split" || action.type === "keep_here") {
+							const surface = registry.surfaces.get(id, parts[4]);
+							if (!surface || surface.kind !== "split_proposal")
+								throw new HttpError(404, "対象の分割提案が見つかりません。");
+							if (surface.status !== "pending")
+								throw new HttpError(409, "この分割提案はすでに処理されています。");
+							if (action.type === "accept_split") {
+								const child = await registry.createSplitSession(id, {
+									title: surface.suggestedTitle,
+									branchName: surface.branchName,
+								});
+								await teams.ensureRoot(child.sessionId);
+								await teams.prompt(child.sessionId, { text: surface.promptText, mode: "prompt" });
+								return reply(registry.surfaces.resolveSplitProposal(id, parts[4], "split", child.sessionId));
+							}
+							const resolved = registry.surfaces.resolveSplitProposal(id, parts[4], "kept");
+							const current = registry.projection(id).currentRun;
+							await teams.prompt(id, { text: surface.promptText, mode: current ? "steer" : "prompt" });
+							return reply(resolved);
+						}
 						return reply(registry.surfaces.handleAction(id, parts[4], action));
 					}
 				}

@@ -68,6 +68,10 @@ export interface SessionSummary {
 	workspaceId: string;
 	cwd: string;
 	parentSessionId?: string;
+	splitFromSessionId?: string;
+	splitBranch?: string;
+	activeActivity?: string;
+	changedFileCount?: number;
 	role?: string;
 	model?: Model;
 	thinkingLevel?: ThinkingLevel;

@@ -37,6 +37,15 @@ export const promptSchema = Type.Object(
 		text: Type.String({ maxLength: 1024 * 1024 }),
 		mode: Type.Union([Type.Literal("prompt"), Type.Literal("steer"), Type.Literal("followUp")]),
 		attachments: Type.Optional(Type.Array(attachmentUploadSchema, { maxItems: ATTACHMENT_LIMITS.files })),
+		skipSplitCheck: Type.Optional(Type.Boolean()),
+	},
+	{ additionalProperties: false },
+);
+export const sessionSplitSchema = Type.Object(
+	{
+		text: Type.String({ minLength: 1, maxLength: 1024 * 1024 }),
+		title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+		branchName: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
 	},
 	{ additionalProperties: false },
 );

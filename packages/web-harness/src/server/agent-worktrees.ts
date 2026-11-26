@@ -11,6 +11,7 @@ export interface AgentWorktree {
 	id: string;
 	baseline: string;
 	status: "active" | "adopted" | "discarded";
+	branch?: string;
 }
 
 export class AgentWorktrees {
@@ -81,7 +82,7 @@ export class AgentWorktrees {
 		return { head, tree: (await this.git(repository, ["write-tree"], index)).trim() };
 	}
 
-	async create(source: string): Promise<AgentWorktree | undefined> {
+	async create(source: string, preferredBranch?: string): Promise<AgentWorktree | undefined> {
 		const repository = await this.repository(source);
 		if (!repository) return undefined;
 		const worktreeLocation = relative(repository, this.directory);
@@ -104,8 +105,29 @@ export class AgentWorktrees {
 					"Agent worktree baseline",
 				])
 			).trim();
-			const worktree: AgentWorktree = { id: randomUUID(), baseline, status: "active" };
-			await this.git(repository, ["worktree", "add", "--detach", "--", this.checkout(worktree), commit]);
+			const id = randomUUID();
+			let branch: string | undefined;
+			if (preferredBranch?.trim()) {
+				const sanitized = preferredBranch
+					.trim()
+					.replace(/[^a-zA-Z0-9/_-]+/g, "-")
+					.replace(/\/+/g, "/")
+					.replace(/^-+|-+$|^\/+|\/+$/g, "")
+					.slice(0, 72);
+				if (sanitized && !sanitized.includes("..")) {
+					const exists = await this.git(repository, ["show-ref", "--verify", "--quiet", `refs/heads/${sanitized}`])
+						.then(() => true)
+						.catch(() => false);
+					branch = exists ? `${sanitized}-${id.slice(0, 6)}` : sanitized;
+				}
+			}
+			const worktree: AgentWorktree = { id, baseline, status: "active", ...(branch ? { branch } : {}) };
+			await this.git(
+				repository,
+				branch
+					? ["worktree", "add", "-b", branch, "--", this.checkout(worktree), commit]
+					: ["worktree", "add", "--detach", "--", this.checkout(worktree), commit],
+			);
 			return worktree;
 		} finally {
 			await rm(join(scratch, "index"), { force: true });

@@ -32,6 +32,7 @@ describe("ActionPlan SurfaceManager and card", () => {
 		);
 
 		const [draft] = surfaces.list("s1");
+		if (draft?.kind !== "action_plan") throw new Error("Expected action_plan draft");
 		expect(draft.phase).toBe("draft");
 		expect(draft.steps).toHaveLength(2);
 		expect(draft.anchorCallId).toBe("call-plan-1");
@@ -107,6 +108,7 @@ describe("ActionPlan SurfaceManager and card", () => {
 		await tool.execute("call-c1", { action: "complete_step", stepId: "custom_1", note: "Nothing to edit" }, new AbortController().signal, undefined, {} as never);
 
 		const [completed] = surfaces.list("s1");
+		if (completed?.kind !== "action_plan") throw new Error("Expected action_plan completed");
 		expect(completed.phase).toBe("completed");
 		expect(completed.steps[1].files[0]).toMatchObject({ path: "src/rate-limit.ts", added: 3, removed: 0, isNew: true });
 		expect(completed.steps[2].files[0]).toMatchObject({ path: "src/rate-limit.ts", added: 1, removed: 1 });

@@ -11,6 +11,8 @@ import {
 	type ActionPlanToolTrace,
 	isSessionSurface,
 	type SessionSurface,
+	type SplitNoticeSurface,
+	type SplitProposalSurface,
 	SURFACE_CUSTOM_TYPE,
 	type SurfaceAction,
 } from "../shared/surfaces.ts";
@@ -293,10 +295,92 @@ export class SurfaceManager {
 		return plans.findLast((plan) => plan.phase === "executing") ?? plans.at(-1);
 	}
 
+	createSplitProposal(
+		sessionId: string,
+		options: { promptText: string; suggestedTitle: string; branchName: string; explanation: string },
+	): SplitProposalSurface {
+		const now = new Date().toISOString();
+		const surface: SplitProposalSurface = {
+			kind: "split_proposal",
+			surfaceId: `split-${randomUUID()}`,
+			sessionId,
+			promptText: options.promptText,
+			suggestedTitle: options.suggestedTitle,
+			branchName: options.branchName,
+			explanation: options.explanation,
+			status: "pending",
+			createdAt: now,
+			updatedAt: now,
+		};
+		this.upsert(sessionId, surface, true);
+		return structuredClone(surface);
+	}
+
+	resolveSplitProposal(
+		sessionId: string,
+		surfaceId: string,
+		status: "split" | "kept",
+		childSessionId?: string,
+	): SplitProposalSurface {
+		const existing = this.sessions.get(sessionId)?.get(surfaceId);
+		if (!existing || existing.kind !== "split_proposal")
+			throw new HarnessError("対象の分割提案が見つかりません。", 404);
+		if (existing.status !== "pending") throw new HarnessError("この分割提案はすでに処理されています。", 409);
+		existing.status = status;
+		if (childSessionId) existing.childSessionId = childSessionId;
+		this.upsert(sessionId, existing, true);
+		return structuredClone(existing);
+	}
+
+	addSplitNotice(
+		sessionId: string,
+		options: {
+			childSessionId: string;
+			childTitle: string;
+			branchName?: string;
+			changedFiles: number;
+			status: "completed" | "failed";
+		},
+	): SplitNoticeSurface {
+		const map = this.sessions.get(sessionId);
+		const existing = map
+			? [...map.values()].find(
+					(entry): entry is SplitNoticeSurface =>
+						entry.kind === "split_notice" && entry.childSessionId === options.childSessionId,
+				)
+			: undefined;
+		const now = new Date().toISOString();
+		const surface: SplitNoticeSurface = existing
+			? {
+					...existing,
+					childTitle: options.childTitle,
+					branchName: options.branchName,
+					changedFiles: options.changedFiles,
+					status: options.status,
+					updatedAt: now,
+				}
+			: {
+					kind: "split_notice",
+					surfaceId: `notice-${randomUUID()}`,
+					sessionId,
+					childSessionId: options.childSessionId,
+					childTitle: options.childTitle,
+					branchName: options.branchName,
+					changedFiles: options.changedFiles,
+					status: options.status,
+					createdAt: now,
+					updatedAt: now,
+				};
+		this.upsert(sessionId, surface, true);
+		return structuredClone(surface);
+	}
+
 	handleAction(sessionId: string, surfaceId: string, action: SurfaceAction): SessionSurface {
 		const existing = this.sessions.get(sessionId)?.get(surfaceId);
 		if (!existing) throw new HarnessError("対象のカードが見つかりません。", 404);
 		if (existing.kind !== "action_plan") throw new HarnessError("この操作には対応していません。", 400);
+		if (action.type !== "approve_plan" && action.type !== "cancel_plan")
+			throw new HarnessError("この操作には対応していません。", 400);
 		if (existing.phase !== "draft") throw new HarnessError("このプランはすでに確定しています。", 409);
 
 		const waiterKey = `${sessionId}:${surfaceId}`;

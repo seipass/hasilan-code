@@ -18,6 +18,7 @@ import { nextClientId } from "./ids.ts";
 import { ModelMenu } from "./ModelMenu.tsx";
 import { MotionItems, Presence } from "./Motion.tsx";
 import { MotionSwap } from "./MotionSwap.tsx";
+import { MultiSessionTray } from "./MultiSessionTray.tsx";
 import { PanelResize } from "./PanelResize.tsx";
 import { preferences, usePreferenceState } from "./preferences.ts";
 import { PreferenceStatus } from "./PreferenceStatus.tsx";
@@ -472,6 +473,11 @@ export function App() {
 				const planPrompt = `${parsed.task}\n\nまず関連ファイルを調査し、変更を加える前に action_plan ツールの propose で編集・承認可能なステップ一覧を提示してください。承認後は各ステップの前後で action_plan の start_step / complete_step を呼び出して進捗を記録してください。`;
 				result = await command<{ runId: string; disposition: "queued" | "started" }>(`/api/sessions/${encodeURIComponent(target)}/prompt`, { text: planPrompt, mode: executionMode });
 				setSessionId(target);
+			} else if (parsed.kind === "split") {
+				const target = await inputSession();
+				const created = await command<{ session: SessionDetail }>(`/api/sessions/${encodeURIComponent(target)}/split`, { text: parsed.task });
+				setSessionId(created.session.sessionId);
+				result = { notice: "新しいワークツリーセッションを開始しました。" };
 			} else {
 				const target = await inputSession();
 				result = await command<{ runId: string; disposition: "queued" | "started" }>(`/api/sessions/${encodeURIComponent(target)}/prompt`, { text: parsed.text, mode: executionMode, ...(attachments.length ? { attachments } : {}) });
@@ -584,6 +590,23 @@ export function App() {
 	const panelWidth = `min(${rightWidth}px, max(480px, calc(100cqw - 320px)))`;
 	const canvasMode = mode === canvasPanel.id;
 	const homeBackgroundVisible = !!background && !sessionId && mode === "chat";
+	const traySessions = useMemo(() => {
+		if (!sessionId || !workspaceId) return [];
+		const workspaceRoots = summaries.filter((entry) => entry.workspaceId === workspaceId && !entry.parentSessionId);
+		const currentSummary = workspaceRoots.find((entry) => entry.sessionId === sessionId);
+		const rootFamilyId = currentSummary?.splitFromSessionId ?? sessionId;
+		const related = workspaceRoots.filter(
+			(entry) =>
+				entry.sessionId === rootFamilyId ||
+				entry.splitFromSessionId === rootFamilyId ||
+				entry.sessionId === sessionId ||
+				!!entry.currentRun,
+		);
+		return related.length >= 2 ? related : [];
+	}, [summaries, sessionId, workspaceId]);
+	const composerDock = traySessions.length >= 2
+		? <MultiSessionTray sessions={traySessions} activeSessionId={sessionId} onSelect={selectSession} />
+		: undefined;
 	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`} data-home-background={homeBackgroundVisible || undefined}>
 		{workspaces.filter((entry) => entry.workspaceId !== workspaceId && (expandedWorkspaces[entry.workspaceId] ?? false)).map((entry) => <WorkspaceFeed key={entry.workspaceId} id={entry.workspaceId} onUpdate={updateProjection} onFiles={filesChanged} />)}
 		<button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><Icon name={sidebarOpen ? "chevronLeft" : "menu"} size="chrome" /></button>
@@ -635,7 +658,7 @@ export function App() {
 				{activePanels?.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
 					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={(dirty) => setDirtyPanels((previous) => dirty === previous.includes(id) ? previous : dirty ? [...previous, id] : previous.filter((entry) => entry !== id))} />
 				</div></Presence>)}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={canvasMode} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={canvasMode} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={!canvasMode && modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined }}>

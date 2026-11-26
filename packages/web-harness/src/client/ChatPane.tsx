@@ -115,7 +115,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	}, [attachments, browserAnnotations, draftKey, reading, sending]);
 	function chooseCommand(command: string) {
 		setWorkspaceCandidates(undefined);
-		setText(`${command}${command === "/hyakki" || command === "/goal" || command === "/plan" ? " " : ""}`);
+		setText(`${command}${command === "/hyakki" || command === "/goal" || command === "/plan" || command === "/split" ? " " : ""}`);
 		setPickerDismissed(true);
 		input.current?.focus();
 	}
@@ -240,8 +240,19 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 		}} />}
 		{loading && <div className="conversation conversation-loading" role="status">会話を読み込んでいます…</div>}
 		<Presence show={!!session?.parentSessionId} collapse><div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session?.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div></Presence>
+		<Presence show={!!session?.splitFromSessionId} collapse><div className="split-child-bar">
+			<button type="button" className="split-back-button" onClick={() => { if (session?.splitFromSessionId) onParent(session.splitFromSessionId); }}><Icon name="chevronLeft" size="inline" />メインチャット</button>
+			<span className="split-child-title">{session?.title ?? "分割セッション"}</span>
+			{session?.splitBranch && <code className="split-child-branch">{session.splitBranch}</code>}
+			<span className="split-child-status">
+				<span className={`mst-row-glyph is-${session?.currentRun ? "working" : session?.latestRun?.status === "failed" ? "failed" : "done"}`} aria-hidden="true">
+					{!session?.currentRun && <Icon name={session?.latestRun?.status === "failed" ? "close" : "check"} size="inline" />}
+				</span>
+				<span>{session?.currentRun ? "実行中" : session?.latestRun?.status === "failed" ? "失敗" : "完了"}</span>
+			</span>
+		</div></Presence>
 		<Presence show={session?.availability === "missing"} collapse><div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div></Presence>
-		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} surfaces={session.surfaces} onSurfaceAction={onSurfaceAction} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); input.current?.focus(); }} />}
+		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} surfaces={session.surfaces} onSurfaceAction={onSurfaceAction} onSelectSession={onParent} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); input.current?.focus(); }} />}
 		<div className="composer-area">
 			<ComposerDock>{composerDock}</ComposerDock>
 			<Presence show={pendingInputs.length > 0} collapse><div ref={pendingList} className="pending-input-list" role="list" aria-label="予約中の追加指示">

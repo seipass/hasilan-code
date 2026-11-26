@@ -59,7 +59,34 @@ export interface ActionPlanSurface {
 	updatedAt: string;
 }
 
-export type SessionSurface = ActionPlanSurface;
+export interface SplitProposalSurface {
+	kind: "split_proposal";
+	surfaceId: string;
+	sessionId: string;
+	promptText: string;
+	suggestedTitle: string;
+	branchName: string;
+	explanation: string;
+	status: "pending" | "split" | "kept";
+	childSessionId?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface SplitNoticeSurface {
+	kind: "split_notice";
+	surfaceId: string;
+	sessionId: string;
+	childSessionId: string;
+	childTitle: string;
+	branchName?: string;
+	changedFiles: number;
+	status: "completed" | "failed";
+	createdAt: string;
+	updatedAt: string;
+}
+
+export type SessionSurface = ActionPlanSurface | SplitProposalSurface | SplitNoticeSurface;
 
 export const surfaceActionSchema = Type.Union([
 	Type.Object(
@@ -85,6 +112,8 @@ export const surfaceActionSchema = Type.Union([
 		},
 		{ additionalProperties: false },
 	),
+	Type.Object({ type: Type.Literal("accept_split") }, { additionalProperties: false }),
+	Type.Object({ type: Type.Literal("keep_here") }, { additionalProperties: false }),
 ]);
 
 export type SurfaceAction = Static<typeof surfaceActionSchema>;
@@ -92,10 +121,9 @@ export type SurfaceAction = Static<typeof surfaceActionSchema>;
 export function isSessionSurface(value: unknown): value is SessionSurface {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 	const candidate = value as Partial<SessionSurface>;
-	return (
-		candidate.kind === "action_plan" &&
-		typeof candidate.surfaceId === "string" &&
-		typeof candidate.sessionId === "string" &&
-		Array.isArray(candidate.steps)
-	);
+	if (typeof candidate.surfaceId !== "string" || typeof candidate.sessionId !== "string") return false;
+	if (candidate.kind === "action_plan") return Array.isArray(candidate.steps);
+	if (candidate.kind === "split_proposal") return typeof candidate.promptText === "string";
+	if (candidate.kind === "split_notice") return typeof candidate.childSessionId === "string";
+	return false;
 }

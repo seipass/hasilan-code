@@ -3,6 +3,7 @@ import type { HistoryPosition } from "../shared/session-history.ts";
 import type { SessionSurface, SurfaceAction } from "../shared/surfaces.ts";
 import { ActionPlanCard } from "./ActionPlanCard.tsx";
 import { ComputerActivity } from "./ComputerActivity.tsx";
+import { SplitNoticeCard, SplitProposalCard } from "./SplitProposalCard.tsx";
 import { conversationRows } from "./computer-activity.ts";
 import { Presence } from "./Motion.tsx";
 import { Content, record } from "./Content.tsx";
@@ -154,11 +155,12 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 	</div>;
 }
 
-export const Conversation = memo(function Conversation({ messages: allMessages, tools, surfaces, onSurfaceAction, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError, onRetry, onEdit }: {
+export const Conversation = memo(function Conversation({ messages: allMessages, tools, surfaces, onSurfaceAction, onSelectSession, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError, onRetry, onEdit }: {
 	messages: ChatMessage[];
 	tools: ToolCall[];
 	surfaces?: SessionSurface[];
 	onSurfaceAction?: (surfaceId: string, action: SurfaceAction) => Promise<void>;
+	onSelectSession?: (sessionId: string) => void;
 	activeRunId?: string;
 	history?: HistoryPosition;
 	loading?: boolean;
@@ -204,7 +206,7 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 		if (!surfaces?.length) return undefined;
 		const map = new Map<string, SessionSurface>();
 		for (const surface of surfaces) {
-			if (surface.anchorCallId) map.set(surface.anchorCallId, surface);
+			if (surface.kind === "action_plan" && surface.anchorCallId) map.set(surface.anchorCallId, surface);
 		}
 		return map;
 	}, [surfaces]);
@@ -215,7 +217,10 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 			if (row.kind !== "message") continue;
 			for (const tool of row.tools) if (tool?.callId) anchoredIds.add(tool.callId);
 		}
-		return surfaces.filter((surface) => !surface.anchorCallId || !anchoredIds.has(surface.anchorCallId));
+		return surfaces.filter(
+			(surface) =>
+				surface.kind !== "action_plan" || !surface.anchorCallId || !anchoredIds.has(surface.anchorCallId),
+		);
 	}, [surfaces, rows]);
 	const changesByRow = useMemo(() => {
 		const lastByRun = new Map<string, string>();
@@ -354,9 +359,15 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 						onRetry={onRetry && row.key === lastAssistantKey ? retryMessage : undefined}
 						onEdit={onEdit ? editMessage : undefined} />)}
 				<div className="history-spacer" aria-hidden="true" style={{ height: total - offsets[end] }} />
-				{onSurfaceAction && unanchoredSurfaces.map((surface) => surface.kind === "action_plan"
-					? <ActionPlanCard key={surface.surfaceId} surface={surface} onAction={onSurfaceAction} onFile={openFile} />
-					: null)}
+				{unanchoredSurfaces.map((surface) => {
+					if (surface.kind === "action_plan" && onSurfaceAction)
+						return <ActionPlanCard key={surface.surfaceId} surface={surface} onAction={onSurfaceAction} onFile={openFile} />;
+					if (surface.kind === "split_proposal" && onSurfaceAction)
+						return <SplitProposalCard key={surface.surfaceId} surface={surface} onAction={onSurfaceAction} onSelectSession={onSelectSession} />;
+					if (surface.kind === "split_notice")
+						return <SplitNoticeCard key={surface.surfaceId} surface={surface} onSelectSession={onSelectSession} />;
+					return null;
+				})}
 				<Presence show={!!latestError} collapse><div className="run-error" role="alert"><strong>応答を取得できませんでした</strong><details><summary>エラーの詳細</summary><pre>{latestError}</pre></details></div></Presence>
 			</div>
 		</div>
