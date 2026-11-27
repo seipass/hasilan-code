@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -122,6 +122,31 @@ describe("agent Git worktrees", () => {
 			expect((await service.changes(second)).diff).toContain("+second");
 		} finally {
 			await rm(directory, { recursive: true, force: true });
+		}
+	}, 30_000);
+
+	it("resolves symlinked private directories and source paths consistently with git", async () => {
+		const realRoot = await mkdtemp(join(tmpdir(), "hasilan-agent-worktree-link-"));
+		const linkParent = await mkdtemp(join(tmpdir(), "hasilan-agent-worktree-alias-"));
+		try {
+			const linkedRoot = join(linkParent, "alias");
+			await symlink(realRoot, linkedRoot, process.platform === "win32" ? "junction" : "dir");
+			const source = join(linkedRoot, "source");
+			const subdir = join(source, "nested");
+			await mkdir(subdir, { recursive: true });
+			git(source, "init", "-q");
+			await writeFile(join(subdir, "note.txt"), "initial\n");
+			const service = new AgentWorktrees(linkedRoot);
+			const worktree = await service.create(subdir);
+			if (!worktree) throw new Error("Worktree was not created");
+			const worktreeCwd = await service.cwd(worktree, subdir);
+			await writeFile(join(worktreeCwd, "note.txt"), "updated\n");
+			const applied = await service.changes(worktree, subdir);
+			expect(applied.changed).toBe(true);
+			expect(await readFile(join(realRoot, "source", "nested", "note.txt"), "utf8")).toMatch(/^updated\r?\n$/);
+		} finally {
+			await rm(linkParent, { recursive: true, force: true });
+			await rm(realRoot, { recursive: true, force: true });
 		}
 	}, 30_000);
 });

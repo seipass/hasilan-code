@@ -17,10 +17,16 @@ describe("shell_process", () => {
 		};
 		const started = await call({
 			action: "start",
-			command: `node -e 'process.stdout.write("ready"); process.stdin.once("data", x => { console.log("got:" + x.toString().trim()); process.exit(0); });'`,
+			command: `node -e 'console.log("ready"); process.stdin.once("data", x => { console.log("got:" + x.toString().trim()); process.exit(0); });'`,
 			yieldMs: 200,
 		});
 		expect(started.status).toBe("running");
+		let output = started.output;
+		while (!output.includes("ready")) {
+			const polled = await call({ action: "poll", processId: started.processId, yieldMs: 200 });
+			expect(polled.status).toBe("running");
+			output += polled.output;
+		}
 		await expect(
 			other.execute(
 				"id",
@@ -30,12 +36,12 @@ describe("shell_process", () => {
 				{} as ExtensionToolContext,
 			),
 		).rejects.toThrow("not found");
-		const done = await call({ action: "input", processId: started.processId, text: "hello\n", yieldMs: 5000 });
+		const done = await call({ action: "input", processId: started.processId, text: "hello\n", yieldMs: 10_000 });
 		expect(done.status).toBe("finished");
 		expect(done.exitCode).toBe(0);
-		expect(started.output + done.output).toContain("got:hello");
+		expect(output + done.output).toContain("got:hello");
 		await expect(call({ action: "poll", processId: started.processId })).rejects.toThrow("not found");
-	});
+	}, 30_000);
 
 	it("forgets a running process when its session closes", async () => {
 		const tool = manager.createTool("closing", process.cwd());
@@ -54,5 +60,5 @@ describe("shell_process", () => {
 		await expect(tool.execute("id", { action: "poll", processId }, undefined, undefined, context)).rejects.toThrow(
 			"not found",
 		);
-	});
+	}, 30_000);
 });

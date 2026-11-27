@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, open, rm, rmdir } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { mkdir, mkdtemp, open, realpath, rm, rmdir } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
@@ -39,9 +39,33 @@ export class AgentWorktrees {
 		return stdout;
 	}
 
+	private async canonical(target: string): Promise<string> {
+		let current = resolve(target);
+		const missing: string[] = [];
+		while (true) {
+			try {
+				return join(await realpath(current), ...missing.reverse());
+			} catch (error) {
+				const parent = dirname(current);
+				if (
+					!error ||
+					typeof error !== "object" ||
+					!("code" in error) ||
+					error.code !== "ENOENT" ||
+					parent === current
+				) {
+					return resolve(target);
+				}
+				missing.push(basename(current));
+				current = parent;
+			}
+		}
+	}
+
 	private async repository(cwd: string): Promise<string | undefined> {
 		try {
-			return (await this.git(cwd, ["rev-parse", "--show-toplevel"])).trimEnd();
+			const top = (await this.git(cwd, ["rev-parse", "--show-toplevel"])).trimEnd();
+			return top ? await this.canonical(top) : undefined;
 		} catch (error) {
 			if (
 				error &&
@@ -62,11 +86,12 @@ export class AgentWorktrees {
 	}
 
 	async cwd(worktree: AgentWorktree, source: string): Promise<string> {
-		const repository = await this.repository(source);
-		const checkout = this.checkout(worktree);
-		if (!repository || resolve((await this.repository(checkout)) ?? "") !== resolve(checkout))
+		const canonicalSource = await this.canonical(source);
+		const repository = await this.repository(canonicalSource);
+		const checkout = await this.canonical(this.checkout(worktree));
+		if (!repository || (await this.repository(checkout)) !== checkout)
 			throw new Error("Agent worktree is unavailable");
-		return join(checkout, relative(repository, source));
+		return join(checkout, relative(repository, canonicalSource));
 	}
 
 	private async snapshot(repository: string, scratch: string): Promise<{ head: string; tree: string }> {
@@ -85,7 +110,7 @@ export class AgentWorktrees {
 	async create(source: string, preferredBranch?: string): Promise<AgentWorktree | undefined> {
 		const repository = await this.repository(source);
 		if (!repository) return undefined;
-		const worktreeLocation = relative(repository, this.directory);
+		const worktreeLocation = relative(repository, await this.canonical(this.directory));
 		if (!isAbsolute(worktreeLocation) && worktreeLocation !== ".." && !worktreeLocation.startsWith(`..${sep}`))
 			throw new Error("Agent worktree storage must be outside the source repository");
 		await mkdir(this.directory, { recursive: true, mode: 0o700 });
@@ -139,9 +164,8 @@ export class AgentWorktrees {
 		worktree: AgentWorktree,
 		destination?: string,
 	): Promise<{ diff: string; truncated: boolean; baseline: string; changed: boolean }> {
-		const checkout = this.checkout(worktree);
-		if (resolve((await this.repository(checkout)) ?? "") !== resolve(checkout))
-			throw new Error("Agent worktree is unavailable");
+		const checkout = await this.canonical(this.checkout(worktree));
+		if ((await this.repository(checkout)) !== checkout) throw new Error("Agent worktree is unavailable");
 		const scratch = await mkdtemp(join(this.directory, "diff-"));
 		const patch = join(scratch, "changes.patch");
 		try {
@@ -163,7 +187,11 @@ export class AgentWorktrees {
 				const repository = await this.repository(destination);
 				if (!repository) throw new Error("The receiving workspace is no longer a Git repository");
 				const commonDir = ["rev-parse", "--path-format=absolute", "--git-common-dir"];
-				if ((await this.git(repository, commonDir)).trimEnd() !== (await this.git(checkout, commonDir)).trimEnd())
+				const [repoCommon, checkoutCommon] = await Promise.all([
+					this.git(repository, commonDir).then((value) => this.canonical(value.trimEnd())),
+					this.git(checkout, commonDir).then((value) => this.canonical(value.trimEnd())),
+				]);
+				if (repoCommon !== checkoutCommon)
 					throw new Error("The receiving workspace belongs to a different repository");
 				// Pin the tree before applying it so later comparisons survive Git garbage collection.
 				await this.git(checkout, [
