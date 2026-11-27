@@ -58,7 +58,11 @@ export function Select({ children, value, onChange, disabled, id, "aria-label": 
 	const menu = open && <div ref={popup} popover="manual" className="select-menu" tabIndex={-1} style={{ left: bounds.left, top: bounds.top, width: bounds.width, maxHeight: bounds.height }} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => {
 		if (event.nativeEvent.isComposing) return;
 		event.stopPropagation();
-		if (event.key === "Escape") { event.preventDefault(); close(true); }
+		if (event.key === "Escape") {
+			event.preventDefault();
+			if (query && options.length <= 10) { setQuery(""); setCursor(0); return; }
+			close(true);
+		}
 		else if (event.key === "Tab") { close(true); }
 		else if (event.key === "Enter" || event.key === " " && !(event.target instanceof HTMLInputElement)) { event.preventDefault(); if (filtered[cursor]) choose(filtered[cursor]); }
 		else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
@@ -66,9 +70,19 @@ export function Select({ children, value, onChange, disabled, id, "aria-label": 
 			const indices = filtered.flatMap((option, index) => option.disabled ? [] : [index]);
 			const position = indices.indexOf(cursor);
 			setCursor(event.key === "Home" ? indices[0] ?? 0 : event.key === "End" ? indices.at(-1) ?? 0 : indices[(position + (event.key === "ArrowDown" ? 1 : -1) + indices.length) % indices.length] ?? 0);
+		} else if (!(event.target instanceof HTMLInputElement)) {
+			if (event.key === "Backspace" && query) {
+				event.preventDefault();
+				setQuery((current) => current.slice(0, -1));
+				setCursor(0);
+			} else if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1 && event.key !== " ") {
+				event.preventDefault();
+				setQuery((current) => current + event.key);
+				setCursor(0);
+			}
 		}
 	}}>
-		{options.length > 10 && <input type="search" aria-label="選択肢を検索" placeholder="検索…" value={query} onChange={(event) => { setQuery(event.target.value); setCursor(0); }} />}
+		{options.length > 10 ? <input type="search" aria-label="選択肢を検索" placeholder="検索…" value={query} onChange={(event) => { setQuery(event.target.value); setCursor(0); }} /> : query && <div className="select-type-filter" role="status"><Icon name="search" size="inline" /><span>{query}</span><button type="button" aria-label="絞り込みをクリア" onClick={() => { setQuery(""); setCursor(0); popup.current?.focus(); }}><Icon name="close" size="inline" /></button></div>}
 		<div className="select-options" role="listbox" id={listId} aria-label={label ?? "選択肢"} aria-activedescendant={filtered[cursor] ? `${listId}-${cursor}` : undefined}>
 			{filtered.map((option, index) => <div key={option.value}>{option.group && option.group !== filtered[index - 1]?.group && <div className="select-group">{option.group}</div>}<button type="button" role="option" id={`${listId}-${index}`} aria-selected={option.value === value} disabled={option.disabled} tabIndex={-1} data-highlighted={index === cursor} onMouseMove={() => setCursor(index)} onClick={() => choose(option)}><span>{option.label}</span>{option.value === value && <Icon name="check" size="inline" />}</button></div>)}
 			{!filtered.length && <p>一致する項目はありません。</p>}

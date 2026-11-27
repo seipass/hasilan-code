@@ -6,6 +6,7 @@ import { usePreferenceState } from "../preferences.ts";
 import { draftKey, isDraftDirty, subscribeDraftStatus, draftStatusVersion } from "./file-drafts.ts";
 import { FileIcon } from "./FileIcon.tsx";
 import { Icon } from "../Icon.tsx";
+import { Tooltip } from "../Tooltip.tsx";
 import { QuickOpen } from "./QuickOpen.tsx";
 import "./FilePane.css";
 
@@ -114,8 +115,8 @@ export function FilePane({ enabled = true, workspaceId, activePath, refreshToken
 	const tree = enabled ? <nav className="files-tree" id={treeId} aria-label="作業フォルダーのファイル" style={{ width: mobile ? undefined : displayedTreeWidth }} hidden={!effectiveTreeVisible}>
 		<div className="files-tree-toolbar">
 			<input type="search" className="files-tree-filter" aria-label="ファイル名で絞り込み" placeholder="ファイル名で絞り込み" value={filter} onChange={(event) => setFilter(event.target.value.toLowerCase())} />
-			<button type="button" className="files-tree-action" aria-label="ファイル一覧を更新" title="ファイル一覧を更新" disabled={refreshing} onClick={() => { void refreshTree(); }}>{refreshing ? "…" : <Icon name="refresh" size="inline" />}</button>
-			<button type="button" className="files-tree-action" aria-label="ファイル名から開く" title="ファイル名から開く（Ctrl / Cmd + P）" onClick={() => setQuickOpen(true)}><Icon name="search" size="inline" /></button>
+			<Tooltip label="ファイル一覧を更新"><button type="button" className="files-tree-action" aria-label="ファイル一覧を更新" disabled={refreshing} onClick={() => { void refreshTree(); }}>{refreshing ? "…" : <Icon name="refresh" size="inline" />}</button></Tooltip>
+			<Tooltip label="ファイル名から開く" shortcut="mod+p"><button type="button" className="files-tree-action" aria-label="ファイル名から開く" onClick={() => setQuickOpen(true)}><Icon name="search" size="inline" /></button></Tooltip>
 		</div>
 		<Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${localRefresh}`} activePath={activePath} visible={visible && effectiveTreeVisible && (!mobile || mobileTreeOpen)} onOpen={(path) => { onOpen(path); if (mobile) setMobileTreeOpen(false); }} open={treePreferences.open} filter={filter} onToggle={(path) => setTreePreferences((previous) => ({ ...previous, open: previous.open.includes(path) ? previous.open.filter((value) => value !== path) : [...previous.open, path] }))} />
 	</nav> : null;

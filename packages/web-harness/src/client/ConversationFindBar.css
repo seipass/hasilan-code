@@ -1,0 +1,80 @@
+.conversation-find-bar {
+	position: absolute;
+	top: 10px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 6;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: min(380px, calc(100% - 32px));
+	padding: 4px 6px 4px 10px;
+	border: 1px solid var(--stroke-secondary, var(--border));
+	border-radius: 9px;
+	background: var(--surface-raised);
+	box-shadow: var(--glass-shadow-sm);
+	color: var(--on-surface);
+	font-size: var(--text-xs);
+}
+.conversation-find-icon {
+	flex: none;
+	color: var(--icon-secondary, var(--on-surface-muted));
+}
+.conversation-find-bar .conversation-find-input {
+	flex: 1;
+	min-width: 0;
+	height: 24px;
+	padding: 2px 4px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--on-surface);
+	font-size: var(--text-sm);
+	line-height: 18px;
+}
+.conversation-find-input:focus-visible { outline: none; border-color: transparent; }
+.conversation-find-input::placeholder { color: var(--input-placeholder); }
+.conversation-find-input::-webkit-search-cancel-button { display: none; }
+
+.conversation-find-count {
+	flex: none;
+	padding-inline: 4px;
+	color: var(--text-tertiary, var(--on-surface-muted));
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.conversation-find-count.is-empty { color: var(--danger); }
+
+.conversation-find-actions {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	flex: none;
+}
+.conversation-find-btn {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--icon-secondary, var(--on-surface-muted));
+}
+.conversation-find-btn:hover:not(:disabled) {
+	background: var(--list-hover-bg, var(--surface-hover));
+	color: var(--icon-primary, var(--on-surface));
+}
+.conversation-find-btn:disabled { opacity: .35; cursor: default; }
+
+::highlight(conversation-find-all) {
+	background-color: color-mix(in srgb, var(--warning) 30%, transparent);
+	color: var(--on-surface);
+}
+::highlight(conversation-find-current) {
+	background-color: color-mix(in srgb, var(--secondary) 55%, transparent);
+	color: var(--on-surface);
+}

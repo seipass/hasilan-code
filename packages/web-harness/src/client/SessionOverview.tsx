@@ -6,6 +6,7 @@ import { FileIcon } from "./files/FileIcon.tsx";
 import { Icon } from "./Icon.tsx";
 import { userText } from "./MessageActions.tsx";
 import { usePreferenceState } from "./preferences.ts";
+import { Tooltip } from "./Tooltip.tsx";
 import type { ChatMessage, SessionDetail, TeamAgent, TeamSnapshot } from "./types.ts";
 import { workspaceLabel } from "./workspace-label.ts";
 import "./SessionOverview.css";
@@ -55,7 +56,7 @@ function agentStatus(agent: TeamAgent): { tone: "running" | "completed" | "faile
 	return { tone: "idle", label: "待機中" };
 }
 
-export function SessionOverview({ width, session, team, gitSummary, onFile, onSession, onAttach, attachDisabled, onReview }: {
+export function SessionOverview({ width, session, team, gitSummary, onFile, onSession, onAttach, attachDisabled, onReview, onFind }: {
 	width: number;
 	session: SessionDetail;
 	team?: TeamSnapshot;
@@ -65,6 +66,7 @@ export function SessionOverview({ width, session, team, gitSummary, onFile, onSe
 	onAttach: () => void;
 	attachDisabled: boolean;
 	onReview?: () => void;
+	onFind?: () => void;
 }) {
 	const [collapsed, setCollapsed] = usePreferenceState("pi-web-session-overview-collapsed", false);
 	const [allFiles, setAllFiles] = useState(false);
@@ -134,9 +136,12 @@ export function SessionOverview({ width, session, team, gitSummary, onFile, onSe
 					<span className="session-overview-workspace-name">{workspaceName}</span>
 					<Icon name={copiedPath ? "check" : "copy"} size="inline" className="session-overview-copy-icon" />
 				</button>
-				<button type="button" className="session-overview-icon-btn" aria-expanded={true} aria-label="会話の概要を折りたたむ" title="折りたたむ" onClick={() => setCollapsed(true)}>
+				{onFind && <Tooltip label="会話内を検索" shortcut="mod+f"><button type="button" className="session-overview-icon-btn" aria-label="会話内を検索" onClick={onFind}>
+					<Icon name="search" size="inline" />
+				</button></Tooltip>}
+				<Tooltip label="概要を折りたたむ"><button type="button" className="session-overview-icon-btn" aria-expanded={true} aria-label="会話の概要を折りたたむ" onClick={() => setCollapsed(true)}>
 					<Icon name="chevronRight" size="inline" />
-				</button>
+				</button></Tooltip>
 			</div>
 			{(branch || openPr) && <div className="session-overview-git-meta">
 				{branch && <span className="session-overview-branch" title={branch}>

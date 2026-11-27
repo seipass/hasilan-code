@@ -88,8 +88,9 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+.session-overview-workspace > svg:first-child { color: var(--icon-secondary, var(--on-surface-muted)); }
 .session-overview-copy-icon {
-	color: var(--on-surface-muted);
+	color: var(--icon-tertiary, var(--on-surface-muted));
 	opacity: 0;
 	transition: opacity 120ms ease, color 120ms ease;
 }
@@ -109,11 +110,11 @@
 	border: 0;
 	border-radius: 5px;
 	background: transparent;
-	color: var(--on-surface-muted);
+	color: var(--icon-secondary, var(--on-surface-muted));
 }
 .session-overview-icon-btn:hover:not(:disabled) {
 	background: var(--list-hover-bg, var(--surface-hover));
-	color: var(--on-surface);
+	color: var(--icon-primary, var(--on-surface));
 }
 
 .session-overview-git-meta {

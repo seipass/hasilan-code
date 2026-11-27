@@ -74,6 +74,24 @@
 	background: var(--surface-sunken);
 	color: var(--on-surface);
 }
+.select-type-filter {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	min-height: 26px;
+	padding: 2px 4px 2px 8px;
+	margin-bottom: 4px;
+	border: 1px solid var(--stroke-secondary, var(--border));
+	border-radius: 6px;
+	background: var(--surface-sunken);
+	color: var(--on-surface);
+	font-size: var(--text-xs);
+}
+.select-type-filter > svg { flex: none; color: var(--icon-secondary, var(--on-surface-muted)); }
+.select-type-filter > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-type-filter > button { display: grid; place-items: center; flex: none; width: 20px; height: 20px; min-height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--icon-secondary, var(--on-surface-muted)); }
+.select-type-filter > button:hover { background: var(--surface-hover); color: var(--on-surface); }
 .select-options { overflow-y: auto; min-height: 0; overscroll-behavior: contain; scrollbar-width: thin; }
 .select-options [role='option'] {
 	display: flex;

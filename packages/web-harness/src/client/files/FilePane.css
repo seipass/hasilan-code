@@ -52,7 +52,7 @@
 .files-view-mode { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; padding: 8px 14px; border-bottom: 1px solid var(--border-subtle); }
 .files-view-mode button { padding: 5px 10px; font-size: var(--text-sm); }
 .files-view-mode button, .files-tree-entry { transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease; }
-.files-view-mode [aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); border-color: var(--primary); }
+.files-view-mode [aria-pressed="true"] { background: var(--surface-raised); color: var(--on-surface); border-color: var(--stroke-secondary, var(--border)); }
 .files-viewer { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(100%, auto); align-content: start; flex: 1; min-height: 0; min-width: 0; overflow: auto; background: var(--surface); }
 .files-viewer.is-editing { grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .files-viewer.is-editing .files-content { min-height: 0; }

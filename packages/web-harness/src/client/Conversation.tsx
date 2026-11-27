@@ -1,8 +1,16 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HistoryPosition } from "../shared/session-history.ts";
 import type { SessionSurface, SurfaceAction } from "../shared/surfaces.ts";
 import { ActionPlanCard } from "./ActionPlanCard.tsx";
 import { ComputerActivity } from "./ComputerActivity.tsx";
+import { ConversationFindBar } from "./ConversationFindBar.tsx";
+import {
+	applyConversationHighlights,
+	clearConversationHighlights,
+	collectConversationMatches,
+	extractActivitySearchText,
+	extractMessageSearchText,
+} from "./conversation-find.ts";
 import { PrLifecycleCard } from "./PrLifecycleCard.tsx";
 import { SplitNoticeCard, SplitProposalCard } from "./SplitProposalCard.tsx";
 import { conversationRows } from "./computer-activity.ts";
@@ -10,7 +18,7 @@ import { Presence } from "./Motion.tsx";
 import { Content, record } from "./Content.tsx";
 import { observeConversation } from "./conversation-resize.ts";
 import { RUN_LABELS } from "./TeamPane.tsx";
-import { MessageActions } from "./MessageActions.tsx";
+import { MessageActions, userText } from "./MessageActions.tsx";
 import { ToolCard } from "./ToolInspector.tsx";
 import { ThinkingTimeline, useThinkingDuration } from "./ThinkingTimeline.tsx";
 import { type TurnActivity, turnActivityLabel, turnActivityRows } from "./turn-activity.ts";
@@ -45,6 +53,10 @@ function hasAssistantText(message: ChatMessage): boolean {
 	const { content } = message;
 	return typeof content === "string" ? Boolean(content.trim()) : Array.isArray(content)
 		&& content.some((part) => record(part) && part.type === "text" && typeof part.text === "string" && part.text.trim());
+}
+
+function hasUserActions(message: ChatMessage): boolean {
+	return message.role === "user" && !message.contextInjection && !message.importedContext && Boolean(userText(message));
 }
 
 interface MessageProps {
@@ -97,13 +109,13 @@ const Message = memo(function Message({ rowKey, grouped, message, tools, surface
 					if (tool?.name === "action_plan" || (record(part) && part.name === "action_plan")) return null;
 					return tool ? <ToolCard key={tool.key} tool={tool} onFile={onFile} /> : <p key={index} className="tool-preparing">{record(part) && typeof part.name === "string" ? part.name : "ツール"} を準備中…</p>;
 				})}{message.partial && <span className="streaming-dot" aria-label="応答中" />}</div>
-				{hasAssistantText(message) && <div className="message-meta">
+				{(hasAssistantText(message) || hasUserActions(message)) && <div className="message-meta">
 					{message.timestamp && Number.isFinite(Date.parse(message.timestamp)) && <time dateTime={message.timestamp}>{new Date(message.timestamp).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>}
-					{message.usage && <span className="message-usage" title="この応答の概算">{`${formatTokens(message.usage.input + message.usage.cacheRead + message.usage.cacheWrite + message.usage.output)} tok · $${message.usage.cost.toFixed(3)}`}</span>}
+					{message.role === "assistant" && message.usage && <span className="message-usage" title="この応答の概算">{`${formatTokens(message.usage.input + message.usage.cacheRead + message.usage.cacheWrite + message.usage.output)} tok · $${message.usage.cost.toFixed(3)}`}</span>}
 					<MessageActions message={message} content={content} onRetry={onRetry ? () => onRetry(message.messageId) : undefined} onEdit={onEdit ? (text) => onEdit(message.messageId, text) : undefined} />
 				</div>}
 			</article>}
-		{!!changes?.length && <FileChanges files={changes} />}
+		{!!changes?.length && <FileChanges files={changes} onFile={onFile} />}
 	</div>;
 }, (previous, next) =>
 	previous.rowKey === next.rowKey &&
@@ -156,7 +168,7 @@ function ActivityBlock({ block, onFile, expansions, opened }: {
 	</div>;
 }
 
-export const Conversation = memo(function Conversation({ messages: allMessages, tools, surfaces, onSurfaceAction, onSelectSession, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError, onRetry, onEdit }: {
+export const Conversation = memo(function Conversation({ messages: allMessages, tools, surfaces, onSurfaceAction, onSelectSession, activeRunId, history, loading, error, onLoadOlder, onFile, followRequest, fallback, latestError, onRetry, onEdit, findOpen = false, findFocusToken = 0, onCloseFind }: {
 	messages: ChatMessage[];
 	tools: ToolCall[];
 	surfaces?: SessionSurface[];
@@ -173,6 +185,9 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	latestError?: string;
 	onRetry?: (messageId: string) => void;
 	onEdit?: (messageId: string, text: string) => void;
+	findOpen?: boolean;
+	findFocusToken?: number;
+	onCloseFind?: () => void;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const rowsStart = useRef<HTMLDivElement>(null);
@@ -197,6 +212,10 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 	const [measureVersion, setMeasureVersion] = useState(0);
 	const [viewport, setViewport] = useState({ top: 0, height: 600 });
 	const [nearBottom, setNearBottom] = useState(true);
+	const [findQuery, setFindQuery] = useState("");
+	const [findIndex, setFindIndex] = useState(0);
+	const [findJumpNonce, setFindJumpNonce] = useState(0);
+	const pendingRangeScroll = useRef(false);
 	const rows = useMemo(() => {
 		const items = conversationRows(allMessages, tools, activeRunId);
 		const explicitlyDisabled = preferences.getItem("pi-web-beta-turn-activity") === "false";
@@ -335,12 +354,70 @@ export const Conversation = memo(function Conversation({ messages: allMessages, 
 		geometry.current = { rows, offsets };
 		updateViewport();
 	}, [rows, offsets, rowIndexes, start, end, topInset, fallback, latestError, viewport.height, captureScroll, updateViewport]);
+	const searchableRows = useMemo(() => {
+		if (!findOpen) return [];
+		return rows.map((row) => ({
+			key: row.key,
+			text:
+				row.kind === "message"
+					? extractMessageSearchText(row.message, row.tools)
+					: row.kind === "activity"
+						? extractActivitySearchText(row)
+						: "",
+		}));
+	}, [findOpen, rows]);
+	const findMatches = useMemo(() => (findOpen ? collectConversationMatches(searchableRows, findQuery) : []), [findOpen, searchableRows, findQuery]);
+	const clampedFindIndex = findMatches.length > 0 ? Math.min(findIndex, findMatches.length - 1) : 0;
+	const activeFindMatch = findMatches[clampedFindIndex];
+	useEffect(() => {
+		if (!findOpen) {
+			clearConversationHighlights();
+			return;
+		}
+		if (!activeFindMatch) return;
+		const element = scroller.current;
+		if (!element) return;
+		const rowTop = origin.current + (geometry.current.offsets[activeFindMatch.rowIndex] ?? 0);
+		following.current = false;
+		pendingRangeScroll.current = true;
+		element.scrollTop = Math.max(0, rowTop - Math.round(element.clientHeight * 0.28));
+		captureScroll(element);
+		updateViewport();
+	}, [findOpen, activeFindMatch?.rowKey, activeFindMatch?.occurrenceInRow, findJumpNonce, captureScroll, updateViewport]);
+	useEffect(() => {
+		if (!findOpen) {
+			clearConversationHighlights();
+			return;
+		}
+		const currentRange = applyConversationHighlights(scroller.current, findQuery, activeFindMatch);
+		if (currentRange && pendingRangeScroll.current && scroller.current) {
+			pendingRangeScroll.current = false;
+			const scrollerRect = scroller.current.getBoundingClientRect();
+			const rangeRect = currentRange.getBoundingClientRect();
+			if (rangeRect.height > 0 && (rangeRect.top < scrollerRect.top + 56 || rangeRect.bottom > scrollerRect.bottom - 32)) {
+				scroller.current.scrollTop += rangeRect.top - scrollerRect.top - Math.round(scrollerRect.height * 0.34);
+				captureScroll(scroller.current);
+				updateViewport();
+			}
+		}
+		return () => { clearConversationHighlights(); };
+	}, [findOpen, findQuery, activeFindMatch, start, end, rows, captureScroll, updateViewport]);
 	useLayoutEffect(() => {
 		if (lastFollowRequest.current === followRequest) return;
 		lastFollowRequest.current = followRequest;
 		followLatest();
 	}, [followRequest, followLatest]);
 	return <>
+		{findOpen && <ConversationFindBar
+			query={findQuery}
+			total={findMatches.length}
+			activeIndex={clampedFindIndex}
+			focusToken={findFocusToken}
+			onQueryChange={(value) => { setFindQuery(value); setFindIndex(0); setFindJumpNonce((n) => n + 1); }}
+			onNext={() => { if (!findMatches.length) return; setFindIndex((current) => (current + 1) % findMatches.length); setFindJumpNonce((n) => n + 1); }}
+			onPrev={() => { if (!findMatches.length) return; setFindIndex((current) => (current - 1 + findMatches.length) % findMatches.length); setFindJumpNonce((n) => n + 1); }}
+			onClose={() => { clearConversationHighlights(); onCloseFind?.(); }}
+		/>}
 		<div className="conversation virtual-conversation" ref={scroller} onScroll={() => {
 			const element = scroller.current;
 			if (!element) return;

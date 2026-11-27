@@ -22,6 +22,7 @@ import { usePluginProfile } from "./plugins/profile.tsx";
 import { usePreferenceState, usePreferenceText } from "./preferences.ts";
 import { SessionOverview } from "./SessionOverview.tsx";
 import { COMPOSER_COMMANDS } from "./slash-command.ts";
+import { Tooltip } from "./Tooltip.tsx";
 import type { PendingInputAction, SessionDetail, TeamSnapshot } from "./types.ts";
 import { useComposerSize } from "./use-composer-size.ts";
 import { workspaceLabel } from "./workspace-label.ts";
@@ -34,8 +35,9 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, gitRefreshToken = 0, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
+export function ChatPane({ session, parentSessionTitle, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, gitRefreshToken = 0, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
+	parentSessionTitle?: string;
 	team?: TeamSnapshot;
 	loading?: boolean;
 	workspacePath?: string;
@@ -74,6 +76,8 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const gitReviewEnabled = profile?.activeIds.includes(GIT_REVIEW_ID) ?? true;
 	const workspaceRouterEnabled = profile?.activeIds.includes(WORKSPACE_ROUTER_ID) ?? true;
 	const [reviewOpen, setReviewOpen] = useState(false);
+	const [findOpen, setFindOpen] = useState(false);
+	const [findFocusToken, setFindFocusToken] = useState(0);
 	const [gitSummary, setGitSummary] = useState<WorkspaceGitSummary>();
 	const [creatingPr, setCreatingPr] = useState(false);
 	const [error, setError] = useState<string>();
@@ -194,6 +198,23 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const clampWidth = (value: number) => clampChatWidth(value, paneWidth);
 	const shownWidth = clampWidth(chatWidth);
 	const overviewWidth = Math.floor((paneWidth - shownWidth) / 2) - 32;
+	const canFind = !surface && !empty && session?.availability === "ready";
+	useEffect(() => {
+		if (!canFind) setFindOpen(false);
+	}, [canFind, session?.sessionId]);
+	useEffect(() => {
+		if (!canFind) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "f") return;
+			const target = event.target instanceof Element ? event.target : document.activeElement;
+			if (target?.closest(".right-panel, dialog[open], .cm-editor, .xterm")) return;
+			event.preventDefault();
+			setFindOpen(true);
+			setFindFocusToken((value) => value + 1);
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [canFind]);
 	// A fresh conversation should be ready to type in; the sidebar button keeps focus otherwise.
 	useEffect(() => {
 		if (loading || surface || !empty) return;
@@ -259,6 +280,9 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 	const usage = session?.contextUsage;
 	const contextLimit = usage?.contextWindow ?? contextWindow;
 	const hasContextLimit = contextLimit !== undefined && contextLimit > 0;
+	const currentAgent = session ? team?.agents.find((agent) => agent.sessionId === session.sessionId) : undefined;
+	const siblingAgents = currentAgent ? team?.agents.filter((agent) => agent.teamId === currentAgent.teamId && agent.parentAgentId) ?? [] : [];
+	const parentCrumbLabel = (parentSessionTitle?.replace(/\s+/g, " ").trim() || "親の会話").slice(0, 40);
 	const pendingInputs = session?.pendingInput.filter((input) => !input.fromAgentId && !input.completionRunId) ?? [];
 	useLayoutMotion(pendingList, pendingInputs, true, true);
 	return <section ref={pane} className={`chat-pane ${surface ? "has-surface" : empty ? "is-empty" : "has-messages"}${dashboardVisible ? " has-home-dashboard" : ""}`} aria-label="会話" style={{ "--chat-content-width": `${shownWidth}px` } as CSSProperties}>
@@ -282,7 +306,29 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 			setChatWidth((width) => clampWidth(width + (event.key === "ArrowLeft" ? step : -step)));
 		}} />}
 		{loading && <div className="conversation conversation-loading" role="status">会話を読み込んでいます…</div>}
-		<Presence show={!!session?.parentSessionId} collapse><div className="child-banner">この会話はチームエージェントの作業です。<button className="text-link" onClick={() => { if (session?.parentSessionId) onParent(session.parentSessionId); }}>親の会話に戻る</button></div></Presence>
+		<Presence show={!!session?.parentSessionId} collapse><nav className="subagent-breadcrumb" aria-label="エージェント階層">
+			<div className="subagent-breadcrumb-trail">
+				<button type="button" className="subagent-breadcrumb-parent" title="親の会話に戻る" aria-label="親の会話に戻る" onClick={() => { if (session?.parentSessionId) onParent(session.parentSessionId); }}>
+					<Icon name="chevronLeft" size="inline" />
+					<span>{parentCrumbLabel}</span>
+				</button>
+				<Icon name="chevronRight" size="inline" className="subagent-breadcrumb-sep" />
+				<span className="subagent-breadcrumb-current">
+					<span className={`subagent-breadcrumb-dot is-${session?.currentRun ? "running" : session?.latestRun?.status === "completed" ? "completed" : session?.latestRun?.status === "failed" ? "failed" : "idle"}`} aria-hidden="true" />
+					<strong>{currentAgent?.name ?? session?.title ?? "サブエージェント"}</strong>
+				</span>
+			</div>
+			{siblingAgents.length > 1 && <div className="subagent-breadcrumb-siblings" role="group" aria-label="チームのエージェント">
+				{siblingAgents.map((agent) => {
+					const active = agent.sessionId === session?.sessionId;
+					const tone = agent.currentRun ? "running" : agent.latestRun?.status === "completed" ? "completed" : agent.latestRun?.status === "failed" ? "failed" : "idle";
+					return <button key={agent.agentId} type="button" className="subagent-breadcrumb-chip" aria-current={active ? "page" : undefined} title={agent.name} onClick={() => onParent(agent.sessionId)}>
+						<span className={`subagent-breadcrumb-dot is-${tone}`} aria-hidden="true" />
+						<span>{agent.name}</span>
+					</button>;
+				})}
+			</div>}
+		</nav></Presence>
 		<Presence show={!!session?.splitFromSessionId} collapse><div className="split-child-bar">
 			<button type="button" className="split-back-button" onClick={() => { if (session?.splitFromSessionId) onParent(session.splitFromSessionId); }}><Icon name="chevronLeft" size="inline" />メインチャット</button>
 			<span className="split-child-title">{session?.title ?? "分割セッション"}</span>
@@ -295,7 +341,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 			</span>
 		</div></Presence>
 		<Presence show={session?.availability === "missing"} collapse><div className="error" role="alert">保存された会話ファイルが見つかりません。新しい会話を開始してください。</div></Presence>
-		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} surfaces={session.surfaces} onSurfaceAction={onSurfaceAction} onSelectSession={onParent} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); input.current?.focus(); }} />}
+		{!surface && !empty && session && <Conversation messages={session.messages} tools={session.toolCalls} surfaces={session.surfaces} onSurfaceAction={onSurfaceAction} onSelectSession={onParent} activeRunId={session.currentRun?.runId} history={session.history} loading={historyLoading} error={historyError} onLoadOlder={onLoadOlder} onFile={onFile} followRequest={followRequest} fallback={latestRunFallback?.task} latestError={latestError} onRetry={onRetry ? () => onRetry() : undefined} onEdit={(_, value) => { setText(value); input.current?.focus(); }} findOpen={findOpen} findFocusToken={findFocusToken} onCloseFind={() => setFindOpen(false)} />}
 		<div className="composer-area">
 			<ComposerDock>
 				{composerDock}
@@ -319,11 +365,18 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 						session?.availability === "missing" ||
 						!pendingInput.manageable ||
 						mutatingInputId !== undefined;
-					return <div className={`pending-input-row${pendingInput.manageable ? "" : " unavailable"}`} role="listitem" key={pendingInput.inputId}>
+					return <div className={`pending-input-row${pendingInput.manageable ? "" : " unavailable"}`} data-editing={editing || undefined} role="listitem" key={pendingInput.inputId}>
 						<div className="pending-input-content">
 							<span className="pending-input-mode">{pendingInput.mode === "followUp" ? "完了後に指示" : "実行中に指示"}</span>
 							{editing
-								? <textarea className="pending-input-edit motion-label" aria-label="追加指示を編集" value={editingInput?.text ?? ""} rows={2} onChange={(event) => setEditingInput((current) => current?.inputId === pendingInput.inputId ? { ...current, text: event.target.value } : current)} />
+								? <textarea className="pending-input-edit motion-label" aria-label="追加指示を編集" value={editingInput?.text ?? ""} rows={2} onChange={(event) => setEditingInput((current) => current?.inputId === pendingInput.inputId ? { ...current, text: event.target.value } : current)} onKeyDown={(event) => {
+									if (event.nativeEvent.isComposing) return;
+									if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setEditingInput(undefined); return; }
+									if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !disabled && editingInput?.text.trim()) {
+										event.preventDefault();
+										void mutatePendingInput(pendingInput.inputId, { type: "edit", text: editingInput.text });
+									}
+								}} />
 								: <p className="pending-input-text motion-label">{pendingInput.text}</p>}
 							{!!pendingInput.attachments?.length && <div className="pending-input-attachments">{pendingInput.attachments.map((attachment, index) => <button type="button" className="text-link" key={`${attachment.path}:${index}`} onClick={() => onFile(attachment.path)}>{attachment.name}</button>)}</div>}
 						</div>
@@ -395,11 +448,11 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 						{modelControl}
 					</div>
 					<div className="composer-footer-right">
-						<button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}><Icon name="plus" size="control" /></button>
+						<Tooltip label="ファイルを添付" placement="top"><button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} disabled={sending || reading} onClick={() => fileInput.current?.click()}><Icon name="plus" size="control" /></button></Tooltip>
 						{!canRouteWorkspace && <Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><ContextWindowPopover session={session} contextWindow={contextLimit} /></div></Presence>}
 						<div className="composer-delivery">
-							{busy && <button className="stop-button" type="button" aria-label="実行を停止" title="実行を停止" onClick={onStop}><Icon name="stop" size="control" /></button>}
-							<button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} title={canRouteWorkspace ? "Enter で送信 · Shift + Enter で改行 · Ctrl / Cmd + Shift + Enter で送信先を選択" : busy ? "Enter で実行中に指示 · Ctrl / Cmd + Enter で完了後に指示 · Shift + Enter で改行" : "Enter で送信 · Shift + Enter で改行"} disabled={sending || reading || (!text.trim() && !attachments.length && !browserAnnotations.length) || !slashInput && (!connected || session?.availability === "missing")}>{sending ? <span className="motion-label" aria-hidden="true">…</span> : <Icon name="send" size="control" />}</button>
+							{busy && <Tooltip label="実行を停止" placement="top"><button className="stop-button" type="button" aria-label="実行を停止" onClick={onStop}><Icon name="stop" size="control" /></button></Tooltip>}
+							<Tooltip label={busy ? "実行中に指示" : "送信"} shortcut="enter" placement="top"><button className="send-button" type="submit" aria-label={sending ? "送信中" : "送信"} disabled={sending || reading || (!text.trim() && !attachments.length && !browserAnnotations.length) || !slashInput && (!connected || session?.availability === "missing")}>{sending ? <span className="motion-label" aria-hidden="true">…</span> : <Icon name="send" size="control" />}</button></Tooltip>
 						</div>
 					</div>
 				</div>
@@ -409,7 +462,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 		</div>
 		{dashboardVisible && homeDashboard}
 		{gitReviewEnabled && !surface && !empty && !(paneWidth >= 1100 && overviewWidth >= 160) && session?.availability === "ready" && <button type="button" className={`chat-review-trigger${gitSummary && gitSummary.filesChanged > 0 ? " has-changes" : ""}`} onClick={() => setReviewOpen(true)} title={gitSummary?.filesChanged ? `変更をレビュー（${gitSummary.filesChanged}件）` : "変更をレビュー"} aria-label="変更をレビュー"><Icon name="pencil" size="inline" />{gitSummary && gitSummary.filesChanged > 0 && <span className="chat-review-trigger-count">{gitSummary.filesChanged}</span>}</button>}
-		{!surface && !empty && paneWidth >= 1100 && overviewWidth >= 160 && session?.availability === "ready" && <SessionOverview width={overviewWidth} session={session} team={team} gitSummary={gitSummary} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} onReview={gitReviewEnabled ? () => setReviewOpen(true) : undefined} />}
+		{!surface && !empty && paneWidth >= 1100 && overviewWidth >= 160 && session?.availability === "ready" && <SessionOverview width={overviewWidth} session={session} team={team} gitSummary={gitSummary} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} onReview={gitReviewEnabled ? () => setReviewOpen(true) : undefined} onFind={() => { setFindOpen(true); setFindFocusToken((value) => value + 1); }} />}
 		{gitReviewEnabled && reviewOpen && session && <GitReview sessionId={session.sessionId} turn={session.latestRun ? fileChanges(session.toolCalls, session.latestRun.runId) : []} onClose={() => setReviewOpen(false)} onDraft={(value) => { setText((current) => [current.trimEnd(), value].filter(Boolean).join("\n\n")); setReviewOpen(false); requestAnimationFrame(() => input.current?.focus()); }} />}
 	</section>;
 }

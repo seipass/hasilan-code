@@ -1,0 +1,44 @@
+.ui-tooltip {
+	position: fixed;
+	z-index: 120;
+	pointer-events: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	max-width: min(300px, calc(100vw - 16px));
+	padding: 4px 8px;
+	border: 1px solid var(--stroke-secondary, var(--border));
+	border-radius: 6px;
+	background: var(--surface-raised);
+	box-shadow: var(--glass-shadow-sm);
+	color: var(--on-surface);
+	font-size: 11px;
+	line-height: 16px;
+	white-space: nowrap;
+}
+.ui-tooltip-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ui-tooltip-keys {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	flex: none;
+}
+.ui-tooltip-keys kbd {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border: 1px solid var(--stroke-tertiary, var(--border-subtle));
+	border-radius: 4px;
+	background: var(--surface-panel);
+	color: var(--text-tertiary, var(--on-surface-muted));
+	font-family: var(--font-code);
+	font-size: 10px;
+	line-height: 1;
+}
