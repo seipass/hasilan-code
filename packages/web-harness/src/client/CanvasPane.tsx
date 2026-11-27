@@ -1,4 +1,4 @@
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
 	CANVAS_LIMITS,
 	type CanvasDesign,
@@ -8,6 +8,13 @@ import {
 	emptyCanvasDocument,
 	isCanvasDocument,
 } from "../shared/canvas.ts";
+import {
+	type CanvasImportResult,
+	type CanvasImportSource,
+	detectCanvasImportSource,
+	mergeImportedCanvas,
+	parseCanvasImport,
+} from "../shared/canvas-import.ts";
 import { nextId } from "../shared/ids.ts";
 import { useAnimatedView } from "./animated-view.ts";
 import { api, command, errorMessage } from "./api.ts";
@@ -77,6 +84,12 @@ const SHORTCUT_TO_TOOL: Record<string, CanvasTool> = {
 	s: "sticky", "0": "sticky",
 };
 
+const IMPORT_SOURCE_LABELS: Record<CanvasImportSource, string> = {
+	excalidraw: "Excalidraw",
+	tldraw: "tldraw",
+	hasilan: "キャンバス JSON",
+};
+
 function clampCoord(value: number): number {
 	return Math.round(Math.max(-CANVAS_LIMITS.coordinate, Math.min(CANVAS_LIMITS.coordinate, value)) * 10) / 10;
 }
@@ -107,10 +120,14 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 	const [editingNode, setEditingNode] = useState<string>();
 	const [connectingFrom, setConnectingFrom] = useState<string>();
 	const [connectionPointer, setConnectionPointer] = useState<{ x: number; y: number }>();
+	const [fileDragActive, setFileDragActive] = useState(false);
+	const [pendingImport, setPendingImport] = useState<{ result: CanvasImportResult; fileName?: string }>();
 	const history = useRef<{ past: CanvasDesign[]; future: CanvasDesign[] }>({ past: [], future: [] });
 	const [, setHistoryVersion] = useState(0);
 	const inlineTitle = useRef<HTMLInputElement>(null);
 	const inlineTextRef = useRef<HTMLTextAreaElement>(null);
+	const importInputRef = useRef<HTMLInputElement>(null);
+	const fileMenuRef = useRef<HTMLDetailsElement>(null);
 	const viewport = useRef<HTMLDivElement>(null);
 	const pointerSession = useRef<PointerSession | undefined>(undefined);
 	const lastTouchedNode = useRef<string | undefined>(undefined);
@@ -713,9 +730,9 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		});
 	}
 
-	function fitDesign() {
+	function fitBounds(targetNodes: readonly CanvasNode[], targetElements: readonly CanvasElement[]) {
 		const bounds = viewport.current?.getBoundingClientRect();
-		if (!bounds || (!design.nodes.length && !elements.length)) {
+		if (!bounds || (!targetNodes.length && !targetElements.length)) {
 			animateView({ x: 40, y: 40, zoom: 1 });
 			return;
 		}
@@ -723,13 +740,13 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		let minY = Infinity;
 		let maxX = -Infinity;
 		let maxY = -Infinity;
-		for (const item of design.nodes) {
+		for (const item of targetNodes) {
 			minX = Math.min(minX, item.x);
 			minY = Math.min(minY, item.y);
 			maxX = Math.max(maxX, item.x + CARD_WIDTH);
 			maxY = Math.max(maxY, item.y + CARD_HEIGHT);
 		}
-		for (const el of elements) {
+		for (const el of targetElements) {
 			const b = elementBounds(el);
 			minX = Math.min(minX, b.x);
 			minY = Math.min(minY, b.y);
@@ -740,6 +757,129 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		const height = Math.max(100, maxY - minY);
 		const zoom = Math.max(MIN_ZOOM, Math.min(1, (bounds.width - 96) / width, (bounds.height - 96) / height));
 		animateView({ zoom, x: (bounds.width - width * zoom) / 2 - minX * zoom, y: (bounds.height - height * zoom) / 2 - minY * zoom });
+	}
+
+	function fitDesign() {
+		fitBounds(design.nodes, elements);
+	}
+
+	function applyImportedCanvas(result: CanvasImportResult, mode: "replace" | "append", anchor?: { x: number; y: number }) {
+		if (!ready || busyRef.current) return;
+		const merged = mergeImportedCanvas(design, result, mode, { anchor });
+		if (!isCanvasDocument({ revision: document.revision, design: merged.design })) {
+			setError("インポート後のデータ検証に失敗しました。");
+			return;
+		}
+		pushHistory(design);
+		setDocument((current) => ({ ...current, design: merged.design }));
+		setPendingImport(undefined);
+		setError(undefined);
+		setEditingNode(undefined);
+		setEditingElementId(undefined);
+		cancelConnection();
+		setTool("select");
+
+		const importedTotal = merged.addedElementIds.length + merged.addedNodeIds.length;
+		const sourceLabel = IMPORT_SOURCE_LABELS[result.source];
+		const skippedSuffix = result.skippedCount > 0 ? `（未対応 ${result.skippedCount} 件をスキップ）` : "";
+		setNotice(`${sourceLabel} から ${importedTotal} 件をインポートしました${skippedSuffix}。`);
+
+		if (mode === "append" && merged.addedElementIds.length > 0) {
+			setSelection({ kind: "elements", ids: merged.addedElementIds });
+		} else if (mode === "append" && merged.addedNodeIds.length > 0) {
+			setSelection({ kind: "node", id: merged.addedNodeIds[0] });
+		} else {
+			setSelection(undefined);
+			fitBounds(merged.design.nodes, merged.design.elements ?? []);
+		}
+	}
+
+	async function importFromText(rawText: string, fileName?: string, trigger: "file" | "paste" = "file") {
+		if (!ready || busyRef.current) return;
+		setError(undefined);
+		try {
+			const darkCanvas = window.document.documentElement.dataset.theme !== "light";
+			const parsed = await parseCanvasImport(rawText, { fileName, darkCanvas });
+			const count = parsed.elements.length + parsed.nodes.length;
+			if (count === 0) {
+				setError(
+					parsed.skippedCount > 0
+						? `インポート可能な図形が見つかりませんでした（未対応の要素 ${parsed.skippedCount} 件）。`
+						: "インポート可能な要素が含まれていません。",
+				);
+				return;
+			}
+			const hasExistingContent = design.nodes.length > 0 || elements.length > 0;
+			if (trigger === "paste") {
+				const bounds = viewport.current?.getBoundingClientRect();
+				const center = bounds
+					? { x: (bounds.width / 2 - view.x) / view.zoom, y: (bounds.height / 2 - view.y) / view.zoom }
+					: undefined;
+				applyImportedCanvas(parsed, hasExistingContent ? "append" : "replace", hasExistingContent ? center : undefined);
+				return;
+			}
+			if (!hasExistingContent) {
+				applyImportedCanvas(parsed, "replace");
+				return;
+			}
+			setPendingImport({ result: parsed, fileName });
+		} catch (reason) {
+			setError(errorMessage(reason));
+		}
+	}
+
+	async function importFiles(files: FileList | readonly File[], trigger: "file" | "paste" = "file") {
+		const file = files[0];
+		if (!file) return;
+		if (file.size > 16 * 1024 * 1024) {
+			setError("ファイルサイズが大きすぎます（16 MB 以下にしてください）。");
+			return;
+		}
+		try {
+			const text = await file.text();
+			await importFromText(text, file.name, trigger);
+		} catch (reason) {
+			setError(errorMessage(reason));
+		}
+	}
+
+	function handleCanvasPaste(event: ReactClipboardEvent<HTMLElement>) {
+		if (!ready || busyRef.current) return;
+		if (event.target instanceof Element && event.target.closest("input, textarea, select")) return;
+		if (event.clipboardData.files.length > 0) {
+			const candidate = event.clipboardData.files[0];
+			if (/\.(excalidraw|tldr|json|svg)$/i.test(candidate.name) || candidate.type.includes("json") || candidate.type.includes("svg")) {
+				event.preventDefault();
+				void importFiles([candidate], "paste");
+				return;
+			}
+		}
+		const text = event.clipboardData.getData("text/plain");
+		if (text && detectCanvasImportSource(text)) {
+			event.preventDefault();
+			void importFromText(text, undefined, "paste");
+		}
+	}
+
+	function handleViewportDragOver(event: ReactDragEvent<HTMLDivElement>) {
+		if (!ready || busyRef.current) return;
+		if (!event.dataTransfer.types.includes("Files")) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = "copy";
+		if (!fileDragActive) setFileDragActive(true);
+	}
+
+	function handleViewportDragLeave(event: ReactDragEvent<HTMLDivElement>) {
+		if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+			setFileDragActive(false);
+		}
+	}
+
+	function handleViewportDrop(event: ReactDragEvent<HTMLDivElement>) {
+		setFileDragActive(false);
+		if (!ready || busyRef.current || !event.dataTransfer.files.length) return;
+		event.preventDefault();
+		void importFiles(event.dataTransfer.files, "file");
 	}
 
 	function exportDesign() {
@@ -822,6 +962,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 			className="canvas-pane"
 			aria-label="プロジェクト設計キャンバス"
 			aria-busy={busy}
+			onPaste={handleCanvasPaste}
 			onKeyUp={(event) => {
 				if (event.code === "Space") setSpaceHeld(false);
 			}}
@@ -830,6 +971,10 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 				const inInput = event.target instanceof Element && !!event.target.closest("input, textarea, select");
 				if (event.key === "Escape") {
 					event.preventDefault();
+					if (pendingImport) {
+						setPendingImport(undefined);
+						return;
+					}
 					cancelConnection();
 					setEditingElementId(undefined);
 					if (editingNode) {
@@ -910,24 +1055,65 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 						<button type="button" onClick={() => { void perform("save"); }} disabled={disabled || !dirty}>{busy && pending === "save" ? "保存中…" : "保存"}</button>
 						{destinationControl}
 						<button className="canvas-use" type="button" onClick={() => { void perform("use"); }} disabled={disabled}>AI に相談する下書きへ</button>
-						<details className="canvas-properties canvas-file-menu"><summary>ファイル</summary><div>
-							<button type="button" onClick={() => { void perform("load"); }} disabled={busy}>保存済みを読み込む</button>
-							<button type="button" onClick={exportDesign} disabled={disabled}>JSON 書き出し</button>
-							<button type="button" onClick={exportSvg} disabled={disabled || !elements.length}>SVG 書き出し</button>
+						<input
+							ref={importInputRef}
+							type="file"
+							accept=".excalidraw,.tldr,.json,.svg,application/json,image/svg+xml"
+							hidden
+							aria-label="Excalidraw / tldraw / JSON ファイルをインポート"
+							disabled={disabled}
+							onChange={(event) => {
+								const files = event.currentTarget.files;
+								if (files?.length) void importFiles(files, "file");
+								event.currentTarget.value = "";
+							}}
+						/>
+						<details ref={fileMenuRef} className="canvas-properties canvas-file-menu"><summary>ファイル</summary><div>
+							<button
+								type="button"
+								onClick={() => {
+									fileMenuRef.current?.removeAttribute("open");
+									importInputRef.current?.click();
+								}}
+								disabled={disabled}
+							>
+								インポート (Excalidraw / tldraw)
+							</button>
+							<button type="button" onClick={() => { fileMenuRef.current?.removeAttribute("open"); void perform("load"); }} disabled={busy}>保存済みを読み込む</button>
+							<button type="button" onClick={() => { fileMenuRef.current?.removeAttribute("open"); exportDesign(); }} disabled={disabled}>JSON 書き出し</button>
+							<button type="button" onClick={() => { fileMenuRef.current?.removeAttribute("open"); exportSvg(); }} disabled={disabled || !elements.length}>SVG 書き出し</button>
 						</div></details>
 					</div>
 
 					<Presence show={!!error}><p className="error canvas-message" role="alert">{error}</p></Presence>
+					<Presence show={!!pendingImport}>
+						{pendingImport && (
+							<div className="canvas-import-bar" role="dialog" aria-label="インポート方法の選択">
+								<span className="canvas-import-summary">
+									{pendingImport.fileName ? `「${pendingImport.fileName}」` : ""}
+									{IMPORT_SOURCE_LABELS[pendingImport.result.source]}（
+									{pendingImport.result.elements.length + pendingImport.result.nodes.length}件
+									{pendingImport.result.skippedCount > 0 ? ` · 未対応 ${pendingImport.result.skippedCount}件スキップ` : ""}
+									）のインポート方法を選択してください
+								</span>
+								<div className="canvas-import-actions">
+									<button type="button" className="canvas-add" onClick={() => applyImportedCanvas(pendingImport.result, "append")}>現在のキャンバスに追加</button>
+									<button type="button" className="danger" onClick={() => applyImportedCanvas(pendingImport.result, "replace")}>内容を置き換え</button>
+									<button type="button" onClick={() => setPendingImport(undefined)}>キャンセル</button>
+								</div>
+							</div>
+						)}
+					</Presence>
 
 					<div
 						ref={viewport}
-						className={`canvas-viewport${connectionSource ? " is-connecting" : ""}`}
+						className={`canvas-viewport${connectionSource ? " is-connecting" : ""}${fileDragActive ? " is-file-drop" : ""}`}
 						data-tool={tool}
 						data-space={spaceHeld || undefined}
 						data-dragging={moving}
 						tabIndex={0}
 						role="group"
-						aria-label="自由設計キャンバス。ツールバーまたはショートカット（V/H/R/O/D/A/L/P/T/S）で図形やフリーハンドを描画できます。Space+ドラッグで移動、ホイールで拡大縮小。"
+						aria-label="自由設計キャンバス。ツールバーまたはショートカット（V/H/R/O/D/A/L/P/T/S）で図形やフリーハンドを描画できます。Excalidraw・tldraw ファイルのドロップや貼り付けにも対応しています。"
 						onClick={(event) => {
 							if (!connectingFrom || disabled || (event.target instanceof Element && event.target.closest(".canvas-node, .canvas-edge-hit"))) return;
 							const world = toWorld(event.clientX, event.clientY);
@@ -941,6 +1127,9 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 							if (event.target instanceof Element && event.target.closest("input, textarea")) return;
 							event.preventDefault();
 						}}
+						onDragOver={handleViewportDragOver}
+						onDragLeave={handleViewportDragLeave}
+						onDrop={handleViewportDrop}
 						onPointerDown={startViewportPointer}
 						onPointerMove={movePointer}
 						onPointerUp={finishPointer}
@@ -1165,7 +1354,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 												<foreignObject x={0} y={0} width={Math.max(40, el.width)} height={Math.max(24, el.height)}>
 													<div
 														className={`canvas-element-text-box${isTextOnly ? " is-text" : ""}${isSticky ? " is-sticky" : ""}`}
-														style={{ color: isSticky ? "#1e1e2e" : el.stroke, fontSize: el.fontSize ?? 16 }}
+														style={{ color: isSticky ? "#1e1e2e" : el.stroke === "transparent" ? "var(--on-surface)" : el.stroke, fontSize: el.fontSize ?? 16 }}
 													>
 														{el.text || (isTextOnly ? "テキスト" : "")}
 													</div>
@@ -1312,10 +1501,29 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 							</div>}</MotionItems>
 						</div>
 
+						<Presence show={fileDragActive}>
+							<div className="canvas-drop-overlay" aria-hidden="true">
+								<span>ここにドロップして Excalidraw / tldraw / JSON をインポート</span>
+							</div>
+						</Presence>
+
 						<Presence show={ready && design.nodes.length === 0 && elements.length === 0}>
 							<div className="canvas-empty">
 								<h3>自由に描いて設計する</h3>
 								<p>上のツールバーから四角・楕円・矢印・フリーハンド・テキスト・付箋を描画できます。</p>
+								<p className="canvas-empty-hint">Excalidraw (.excalidraw / .svg) や tldraw (.tldr) のドロップ・貼り付けにも対応しています。</p>
+								<button
+									type="button"
+									className="canvas-empty-import"
+									disabled={disabled}
+									onPointerDown={(event) => event.stopPropagation()}
+									onClick={(event) => {
+										event.stopPropagation();
+										importInputRef.current?.click();
+									}}
+								>
+									Excalidraw / tldraw をインポート
+								</button>
 							</div>
 						</Presence>
 					</div>
