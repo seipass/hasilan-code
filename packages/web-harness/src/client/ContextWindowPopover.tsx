@@ -1,7 +1,11 @@
-import type { AccountUsageMetric } from "@hasilan-code/pi-ai";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ProviderAccountUsageView } from "../shared/account-usage.ts";
+import {
+	formatRateLimitReset,
+	pickRateLimitMetrics,
+	type ProviderAccountUsageView,
+	type RateLimitSelection,
+} from "../shared/account-usage.ts";
 import type { CompactionSummaryResponse, ContextBreakdown } from "../shared/context-window.ts";
 import { ACCOUNT_USAGE_ID } from "../shared/plugin-profile.ts";
 import type { ModelUsage, UsageAttribution } from "../shared/usage.ts";
@@ -18,41 +22,6 @@ function formatTokens(value: number): string {
 	if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
 	if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
 	return Math.round(value).toLocaleString("ja-JP");
-}
-
-function formatResetTime(resetsAt?: number): string | undefined {
-	if (resetsAt === undefined || !Number.isFinite(resetsAt)) return undefined;
-	const diffMs = resetsAt - Date.now();
-	if (diffMs <= 0) return "まもなくリセット";
-	const totalMinutes = Math.round(diffMs / 60_000);
-	if (totalMinutes < 24 * 60) {
-		const hours = Math.floor(totalMinutes / 60);
-		const minutes = totalMinutes % 60;
-		return hours > 0 ? `あと ${hours}時間${minutes}分` : `あと ${minutes}分`;
-	}
-	const date = new Date(resetsAt);
-	return date.toLocaleString("ja-JP", { weekday: "short", hour: "2-digit", minute: "2-digit" });
-}
-
-function pickRateLimitMetrics(
-	views: readonly ProviderAccountUsageView[],
-	preferredProvider?: string,
-): { session?: AccountUsageMetric; weekly?: AccountUsageMetric } {
-	const okViews = views.filter((entry) => entry.status === "ok" && entry.usage?.metrics.length);
-	const chosen = okViews.find((entry) => entry.provider === preferredProvider) ?? okViews[0];
-	if (!chosen?.usage) return {};
-	const percentMetrics = chosen.usage.metrics.filter(
-		(metric) => !metric.unlimited && metric.usedPercent !== undefined && Number.isFinite(metric.usedPercent),
-	);
-	if (!percentMetrics.length) return {};
-	const session =
-		percentMetrics.find((metric) => /5\s*h|session|short|daily|日|時間/i.test(`${metric.id} ${metric.label}`)) ??
-		percentMetrics[0];
-	const weekly =
-		percentMetrics.find(
-			(metric) => metric !== session && /week|7\s*d|long|週/i.test(`${metric.id} ${metric.label}`),
-		) ?? percentMetrics.find((metric) => metric !== session);
-	return { session, weekly };
 }
 
 function shortModelName(model: string): string {
@@ -75,7 +44,7 @@ export function ContextWindowPopover({
 	const [position, setPosition] = useState<{ left: number; bottom: number; maxHeight: number; flyoutSide: "right" | "left" | "inline" }>();
 	const [hoveredCategory, setHoveredCategory] = useState<ContextCategory | null>(null);
 	const [hoveredLimit, setHoveredLimit] = useState<"session" | "weekly" | null>(null);
-	const [rateLimits, setRateLimits] = useState<{ session?: AccountUsageMetric; weekly?: AccountUsageMetric }>({});
+	const [rateLimits, setRateLimits] = useState<RateLimitSelection>({});
 	const [attribution, setAttribution] = useState<UsageAttribution>();
 	const [compacting, setCompacting] = useState(false);
 	const [compactProgress, setCompactProgress] = useState(0);
@@ -163,9 +132,19 @@ export function ContextWindowPopover({
 	}, [open]);
 
 	useEffect(() => {
+		function onToggle() {
+			setOpen((value) => !value);
+		}
+		window.addEventListener("hasilan:toggle-context-popover", onToggle);
+		return () => window.removeEventListener("hasilan:toggle-context-popover", onToggle);
+	}, []);
+
+	useEffect(() => {
 		if (!open) return;
 		function onPointerDown(event: PointerEvent) {
-			if (!rootRef.current?.contains(event.target as Node | null) && !popoverRef.current?.contains(event.target as Node | null)) {
+			const target = event.target as Element | null;
+			if (target?.closest("[data-context-popover-toggle]")) return;
+			if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
 				setOpen(false);
 				setHoveredCategory(null);
 				setHoveredLimit(null);
@@ -488,7 +467,7 @@ export function ContextWindowPopover({
 										) : (
 											<div className="cw-limit-header">
 												<span>セッション枠 <strong>{Math.round(sessionLimitPct)}%</strong></span>
-												<span className="cw-limit-reset">{formatResetTime(rateLimits.session.resetsAt) ?? rateLimits.session.label}</span>
+												<span className="cw-limit-reset">{formatRateLimitReset(rateLimits.session.resetsAt) ?? rateLimits.session.label}</span>
 											</div>
 										)}
 										<div className="cw-limit-track">
@@ -518,7 +497,7 @@ export function ContextWindowPopover({
 										) : (
 											<div className="cw-limit-header">
 												<span>週次枠 <strong>{Math.round(weeklyLimitPct)}%</strong></span>
-												<span className="cw-limit-reset">{formatResetTime(rateLimits.weekly.resetsAt) ?? rateLimits.weekly.label}</span>
+												<span className="cw-limit-reset">{formatRateLimitReset(rateLimits.weekly.resetsAt) ?? rateLimits.weekly.label}</span>
 											</div>
 										)}
 										<div className="cw-limit-track">

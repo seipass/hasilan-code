@@ -199,6 +199,7 @@ html {
 		.right-panel { inset: 0 0 0 auto; }
 		.detail-workspace { padding-bottom: env(safe-area-inset-bottom); }
 		.composer-area { padding-bottom: max(14px, calc(8px + env(safe-area-inset-bottom))); }
+		.app-shell.has-status-bar .composer-area { padding-bottom: 10px; }
 		html[data-keyboard="open"] .composer-area { padding-bottom: 8px; }
 		.dialog-backdrop { padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 		.files-viewer,
@@ -244,6 +245,7 @@ html {
 	html body .topbar .detail-toggle { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
 	html body .conversation { padding-left: 14px; padding-right: 14px; }
 	html body .composer-area { padding: 8px 12px max(14px, calc(8px + env(safe-area-inset-bottom))); }
+	html body .app-shell.has-status-bar .composer-area { padding-bottom: 10px; }
 	html[data-keyboard="open"] body .composer-area { padding-bottom: 8px; }
 	html body .composer { padding: 10px 10px 8px; }
 	html body .composer-footer { gap: 6px; padding-top: 6px; }

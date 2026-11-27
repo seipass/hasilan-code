@@ -395,6 +395,17 @@ async function createHarness(
 					await registry.removeWorkspace(parts[2]);
 					return reply({ removed: true });
 				}
+				if (
+					parts[1] === "workspaces" &&
+					parts[2] &&
+					parts[3] === "git-status" &&
+					parts.length === 4 &&
+					method === "GET"
+				) {
+					const folder = registry.listWorkspaces().find((entry) => entry.id === parts[2]);
+					if (!folder) throw new HttpError(404, "ワークスペースが見つかりません。");
+					return reply(await prLifecycle.inspect(folder.path));
+				}
 				if (url.pathname === "/api/workspaces/pick" && method === "POST") {
 					await readJson(request, workspacePickerSchema);
 					if (selectingWorkspace) throw new HttpError(409, "フォルダー選択はすでに開いています。");

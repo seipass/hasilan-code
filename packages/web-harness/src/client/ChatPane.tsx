@@ -35,7 +35,7 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, parentSessionTitle, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, suppressFloatingActions = false, gitRefreshToken = 0, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
+export function ChatPane({ session, parentSessionTitle, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, suppressFloatingActions = false, gitRefreshToken = 0, gitSummary: externalGitSummary, gitSummaryManaged = false, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
 	parentSessionTitle?: string;
 	team?: TeamSnapshot;
@@ -52,6 +52,8 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 	surface?: boolean;
 	suppressFloatingActions?: boolean;
 	gitRefreshToken?: number;
+	gitSummary?: WorkspaceGitSummary;
+	gitSummaryManaged?: boolean;
 	commands?: readonly (typeof COMPOSER_COMMANDS)[number][];
 	draftInsertion?: { id: string; text: string };
 	onDraftInserted: () => void;
@@ -79,7 +81,8 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 	const [reviewOpen, setReviewOpen] = useState(false);
 	const [findOpen, setFindOpen] = useState(false);
 	const [findFocusToken, setFindFocusToken] = useState(0);
-	const [gitSummary, setGitSummary] = useState<WorkspaceGitSummary>();
+	const [localGitSummary, setLocalGitSummary] = useState<WorkspaceGitSummary>();
+	const gitSummary = gitSummaryManaged ? externalGitSummary : localGitSummary;
 	const [creatingPr, setCreatingPr] = useState(false);
 	const [error, setError] = useState<string>();
 	const { attachments, reading, error: attachmentError, addFiles, remove } = useComposerAttachments(draftKey);
@@ -138,8 +141,9 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 	const latestSettledAt = session?.latestRun?.settledAt;
 	const currentRunId = session?.currentRun?.runId;
 	useEffect(() => {
+		if (gitSummaryManaged) return;
 		if (!sessionIdForGit || sessionAvailability !== "ready" || surface) {
-			setGitSummary(undefined);
+			setLocalGitSummary(undefined);
 			return;
 		}
 		const controller = new AbortController();
@@ -148,13 +152,13 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 			{ signal: controller.signal },
 		)
 			.then((summary) => {
-				if (!controller.signal.aborted) setGitSummary(summary);
+				if (!controller.signal.aborted) setLocalGitSummary(summary);
 			})
 			.catch(() => {
-				if (!controller.signal.aborted) setGitSummary(undefined);
+				if (!controller.signal.aborted) setLocalGitSummary(undefined);
 			});
 		return () => controller.abort();
-	}, [sessionIdForGit, sessionAvailability, latestSettledAt, currentRunId, gitRefreshToken, surface]);
+	}, [gitSummaryManaged, sessionIdForGit, sessionAvailability, latestSettledAt, currentRunId, gitRefreshToken, surface]);
 	async function handleCreatePr() {
 		if (!onCreatePr || creatingPr) return;
 		setCreatingPr(true);

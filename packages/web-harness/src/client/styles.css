@@ -228,6 +228,8 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .icon-button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; font-size: var(--text-2xl); color: var(--muted); flex-shrink: 0; }
 .app-shell { --sidebar-width: 260px; --sidebar-motion: 300ms; height: 100dvh; display: flex; overflow: clip; }
+.app-shell:has(> .app-body) { flex-direction: column; }
+.app-body { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; overflow: clip; }
 .sidebar { width: var(--sidebar-width); flex-shrink: 0; display: flex; flex-direction: column; padding: 18px 14px 12px; background: var(--surface); border-right: 1px solid var(--border-sidebar); min-height: 0; margin-left: 0; transform: translateX(0); visibility: visible; transition: margin-left var(--sidebar-motion) var(--motion-ease), transform var(--sidebar-motion) var(--motion-ease), visibility 0s; }
 .sidebar-closed .sidebar { margin-left: calc(-1 * var(--sidebar-width)); visibility: hidden; pointer-events: none; transition-delay: 0s, 0s, var(--sidebar-motion); }
 .sidebar-brand { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 23px; }

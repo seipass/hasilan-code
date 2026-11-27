@@ -38,6 +38,7 @@ const paths = {
 	dock: "M15 9l5-5M20 4h-4M20 4v4M9 15l-5 5M4 20h4M4 20v-4",
 	split: "M16 3h5v5M21 3l-7 7M16 21h5v-5M21 21l-7-7M3 12h11",
 	warning: "M12 3L2.5 20h19L12 3zM12 10v4M12 17h.01",
+	clock: "M12 6v6l4 2M12 21a9 9 0 100-18 9 9 0 000 18z",
 	chevronUp: "M18 15l-6-6-6 6",
 	// Filled shapes are drawn as full-size squares; the path strings are unused.
 	stop: "",

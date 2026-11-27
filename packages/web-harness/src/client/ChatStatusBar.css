@@ -1,0 +1,369 @@
+/* VS Code-inspired single-line full-width bottom status bar for chat mode. */
+.chat-status-bar {
+	position: relative;
+	z-index: 6;
+	display: flex;
+	align-items: stretch;
+	justify-content: space-between;
+	gap: 8px;
+	flex: none;
+	width: 100%;
+	height: 24px;
+	padding-inline: 6px;
+	border-top: 1px solid var(--border-subtle);
+	background: var(--surface);
+	color: var(--on-surface-muted);
+	font-size: 11px;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	user-select: none;
+	overflow: hidden;
+}
+
+.app-shell[data-home-background="true"] .chat-status-bar {
+	background: var(--glass-panel);
+	backdrop-filter: var(--glass-filter);
+}
+
+.chat-status-group {
+	display: flex;
+	align-items: stretch;
+	min-width: 0;
+	gap: 1px;
+}
+
+.chat-status-group.is-left {
+	flex: 1 1 auto;
+	overflow: hidden;
+}
+
+.chat-status-group.is-right {
+	flex: 0 0 auto;
+	justify-content: flex-end;
+}
+
+.chat-status-item,
+html body .chat-status-bar .usage-popover-trigger {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 100%;
+	min-height: 0;
+	min-width: 0;
+	max-width: none;
+	margin: 0;
+	padding: 0 7px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--on-surface-muted);
+	font: inherit;
+	font-size: 11px;
+	line-height: 1;
+	white-space: nowrap;
+	text-decoration: none;
+	flex: 0 0 auto;
+}
+
+.chat-status-bar .usage-popover {
+	display: flex;
+	align-items: stretch;
+	height: 100%;
+	flex: 0 0 auto;
+}
+
+.chat-status-item > svg,
+.chat-status-bar .usage-popover-trigger > svg {
+	width: 12px;
+	height: 12px;
+	flex: none;
+	opacity: 0.85;
+}
+
+button.chat-status-item:hover:not(:disabled),
+a.chat-status-item:hover,
+.chat-status-bar .usage-popover-trigger:hover,
+button.chat-status-item.is-open {
+	background: var(--tint-hover);
+	color: var(--on-surface);
+}
+
+button.chat-status-item:focus-visible,
+a.chat-status-item:focus-visible,
+.chat-status-bar .usage-popover-trigger:focus-visible {
+	outline: 1px solid var(--focus-ring);
+	outline-offset: -1px;
+}
+
+.chat-status-branch-btn,
+.chat-status-item:has(> .chat-status-branch) {
+	flex: 0 1 auto;
+	min-width: 0;
+}
+
+.chat-status-branch {
+	max-width: 180px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.chat-status-model {
+	flex: 0 1 auto;
+	min-width: 0;
+}
+
+.chat-status-model-name {
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.chat-status-usage-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.chat-status-muted {
+	color: var(--text-tertiary, var(--on-surface-muted));
+}
+
+.chat-status-sep {
+	opacity: 0.55;
+}
+
+.chat-status-add {
+	color: var(--git-added, var(--success));
+}
+
+.chat-status-del {
+	color: var(--git-deleted, var(--danger));
+}
+
+.chat-status-item.is-active {
+	color: var(--secondary);
+}
+
+.chat-status-item.is-success {
+	color: var(--success);
+}
+
+.chat-status-item.is-warning {
+	color: var(--warning);
+}
+
+.chat-status-item.is-danger {
+	color: var(--danger);
+}
+
+.chat-status-running {
+	font-weight: 500;
+}
+
+.chat-status-elapsed {
+	font-family: var(--font-code);
+	font-size: 11px;
+}
+
+.chat-status-pulse {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+	flex: none;
+	animation: chat-status-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes chat-status-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-status-pulse { animation: none; }
+}
+
+/* GitHub status popover anchored upward above the status bar. */
+.chat-status-popover {
+	position: fixed;
+	z-index: 30;
+	width: min(360px, calc(100vw - 24px));
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: var(--popup-radius, 10px);
+	background: var(--glass-popup, var(--surface-raised));
+	backdrop-filter: var(--glass-filter);
+	box-shadow: var(--popup-shadow, 0 12px 36px #0006);
+	color: var(--on-surface);
+	font-size: var(--text-xs);
+}
+
+.chat-status-popover[hidden] {
+	display: none;
+}
+
+.chat-status-popover-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--border-subtle);
+}
+
+.chat-status-popover-head > a {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--on-surface);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.chat-status-popover-head > a:hover {
+	text-decoration: underline;
+}
+
+.chat-status-popover-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.chat-status-popover-actions button {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
+	border: 0;
+	border-radius: 5px;
+	background: transparent;
+	color: var(--on-surface-muted);
+}
+
+.chat-status-popover-actions button:hover {
+	background: var(--surface-hover);
+	color: var(--on-surface);
+}
+
+.chat-status-popover-meta {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--border-subtle);
+	color: var(--on-surface-muted);
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+}
+
+.chat-status-popover-body {
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 8px 12px 10px;
+}
+
+.chat-status-popover-section-title {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 6px;
+	color: var(--on-surface-muted);
+	font-size: var(--text-2xs);
+	font-weight: 600;
+}
+
+.chat-status-pr-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 2px;
+}
+
+.chat-status-pr-list a {
+	display: grid;
+	gap: 2px;
+	padding: 6px 8px;
+	margin-inline: -8px;
+	border-radius: 6px;
+	text-decoration: none;
+	color: var(--on-surface);
+}
+
+.chat-status-pr-list a:hover {
+	background: var(--surface-hover);
+}
+
+.chat-status-pr-list strong {
+	font-size: var(--text-xs);
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chat-status-pr-list small {
+	color: var(--on-surface-muted);
+	font-size: var(--text-2xs);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chat-status-popover-empty {
+	margin: 6px 0 2px;
+	color: var(--on-surface-muted);
+	font-size: var(--text-xs);
+}
+
+@media (max-width: 900px) {
+	.chat-status-hide-medium {
+		display: none;
+	}
+	.chat-status-bar {
+		height: calc(26px + env(safe-area-inset-bottom, 0px));
+		padding-bottom: env(safe-area-inset-bottom, 0px);
+		padding-inline: 4px;
+		gap: 4px;
+	}
+	.chat-status-item,
+	html body .chat-status-bar .usage-popover-trigger {
+		min-height: 0;
+		height: 26px;
+		padding: 0 5px;
+		gap: 4px;
+	}
+	.chat-status-branch {
+		max-width: 112px;
+	}
+	html[data-keyboard="open"] .chat-status-bar {
+		display: none;
+	}
+}
+
+@media (max-width: 640px) {
+	.chat-status-hide-narrow {
+		display: none;
+	}
+	.chat-status-branch {
+		max-width: 108px;
+	}
+}
+
+@media (pointer: coarse) {
+	.chat-status-popover-actions button {
+		width: 36px;
+		height: 36px;
+		min-width: 36px;
+		min-height: 36px;
+	}
+	.chat-status-pr-list a {
+		padding: 8px;
+	}
+}

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
 import { GIT_REVIEW_ID, SESSION_IMPORT_ID, SESSION_SEARCH_ID, TERMINAL_ID, WORKSPACE_FILES_ID } from "../shared/plugin-profile.ts";
+import type { WorkspaceGitSummary } from "../shared/pr-lifecycle.ts";
 import type { SurfaceAction } from "../shared/surfaces.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
@@ -10,6 +11,7 @@ import { useAttention } from "./attention.ts";
 import { Icon } from "./Icon.tsx";
 import { userText } from "./MessageActions.tsx";
 import { ChatPane } from "./ChatPane.tsx";
+import { ChatStatusBar } from "./ChatStatusBar.tsx";
 import { DetailPane, type DetailView } from "./DetailPane.tsx";
 import type { FileTarget } from "./files/FilePane.tsx";
 import { HomeBackdrop, useHomeBackground } from "./HomeAppearance.tsx";
@@ -156,6 +158,7 @@ export function App() {
 	const [fileTarget, setFileTarget] = useState<FileTarget>();
 	const [browserTarget, setBrowserTarget] = useState<{ id: string; url: string }>();
 	const [filesVersion, setFilesVersion] = useState(0);
+	const [gitSummary, setGitSummary] = useState<WorkspaceGitSummary>();
 	const draftSession = useRef<string | undefined>(undefined);
 	const searchInput = useRef<HTMLInputElement>(null);
 	const commandPending = useRef(false);
@@ -168,6 +171,32 @@ export function App() {
 	const workspaceChannel = useChannel<WorkspaceProjection>("workspace", workspaceId, () => setFilesVersion((value) => value + 1));
 	const sessionChannel = useChannel<SessionDetail>("session", sessionId, undefined, () => newConversation());
 	const session = sessionChannel.data;
+	const gitSessionId = session?.sessionId;
+	const gitSessionAvailability = session?.availability;
+	const gitLatestSettledAt = session?.latestRun?.settledAt;
+	const gitCurrentRunId = session?.currentRun?.runId;
+	useEffect(() => {
+		if (mode !== "chat") return;
+		const endpoint =
+			gitSessionId && gitSessionAvailability === "ready"
+				? `/api/sessions/${encodeURIComponent(gitSessionId)}/git-status`
+				: workspaceId
+					? `/api/workspaces/${encodeURIComponent(workspaceId)}/git-status`
+					: undefined;
+		if (!endpoint) {
+			setGitSummary(undefined);
+			return;
+		}
+		const controller = new AbortController();
+		void api<WorkspaceGitSummary>(endpoint, { signal: controller.signal })
+			.then((summary) => {
+				if (!controller.signal.aborted) setGitSummary(summary);
+			})
+			.catch(() => {
+				if (!controller.signal.aborted) setGitSummary(undefined);
+			});
+		return () => controller.abort();
+	}, [mode, gitSessionId, gitSessionAvailability, gitLatestSettledAt, gitCurrentRunId, workspaceId, filesVersion]);
 	const model = session?.model ?? draftModel;
 	const catalogModel = catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id);
 	const selectedModel = catalogModel ?? model;
@@ -669,7 +698,9 @@ export function App() {
 		? <MultiSessionTray sessions={traySessions} activeSessionId={sessionId} onSelect={selectSession} />
 		: undefined;
 	const activeConversationReady = mode === "chat" && !!session && session.availability === "ready" && (session.messages.length > 0 || (session.latestRun !== undefined && session.latestRun.inputKind !== "context"));
-	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`} data-home-background={homeBackgroundVisible || undefined}>
+	const showStatusBar = mode === "chat";
+	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}${showStatusBar ? " has-status-bar" : ""}`} data-home-background={homeBackgroundVisible || undefined}>
+		<div className="app-body">
 		{workspaces.filter((entry) => entry.workspaceId !== workspaceId && (expandedWorkspaces[entry.workspaceId] ?? false)).map((entry) => <WorkspaceFeed key={entry.workspaceId} id={entry.workspaceId} onUpdate={updateProjection} onFiles={filesChanged} />)}
 		<Tooltip label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"}><button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><Icon name={sidebarOpen ? "chevronLeft" : "menu"} size="chrome" /></button></Tooltip>
 		<button className="navigation-scrim" aria-label="履歴を閉じる" title="履歴を閉じる" aria-hidden={!sidebarOpen} inert={!sidebarOpen} tabIndex={-1} onClick={() => setSidebarOpen(false)} />
@@ -718,7 +749,7 @@ export function App() {
 				{activePanels?.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
 					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={(dirty) => setDirtyPanels((previous) => dirty === previous.includes(id) ? previous : dirty ? [...previous, id] : previous.filter((entry) => entry !== id))} />
 				</div></Presence>)}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={hideComposer} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} parentSessionTitle={session?.parentSessionId ? summaries.find((entry) => entry.sessionId === session.parentSessionId)?.title : undefined} team={team} surface={mode !== "chat"} suppressFloatingActions={narrowViewport} gitRefreshToken={filesVersion} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onCreatePr={createPr} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={hideComposer} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} parentSessionTitle={session?.parentSessionId ? summaries.find((entry) => entry.sessionId === session.parentSessionId)?.title : undefined} team={team} surface={mode !== "chat"} suppressFloatingActions={narrowViewport} gitRefreshToken={filesVersion} gitSummary={gitSummary} gitSummaryManaged draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onCreatePr={createPr} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={!hideComposer && modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} onResizingChange={setRightResizing} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} data-resizing={rightResizing || undefined} data-settled-closed={(!rightOpen && rightSettledClosed) || undefined} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
@@ -729,7 +760,24 @@ export function App() {
 					</div>
 				</aside>
 			</div>
-		</div>{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} onSessionRestored={async () => {
+		</div>
+		</div>
+		{showStatusBar && <ChatStatusBar
+			session={session}
+			summaries={summaries}
+			workspaceId={workspaceId}
+			gitSummary={gitSummary}
+			model={selectedModel}
+			thinkingLabel={thinkingLabel}
+			contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow}
+			connection={sessionId ? sessionChannel.connection : workspaceChannel.connection}
+			canOpenReview={gitReviewEnabled && activeConversationReady}
+			onOpenReview={() => window.dispatchEvent(new Event("hasilan:git-review"))}
+			onOpenWorkOverview={() => setWorkOpen(true)}
+			onOpenModelMenu={() => setModelOpen((value) => !value)}
+			onOpenSettings={() => setSettingsOpen(true)}
+		/>}
+		{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} onSessionRestored={async () => {
 			const [folders, sessions] = await Promise.all([api<Workspace[]>("/api/workspaces"), api<SessionSummary[]>("/api/sessions")]);
 			setWorkspaces(folders);
 			setInitialSessions(sessions);
