@@ -121,10 +121,9 @@ try {
 	if (process.platform !== "darwin") {
 		const close = page.getByRole("button", { name: "ウィンドウを閉じる", exact: true });
 		await close.hover();
-		assert.equal(
-			await close.evaluate((button) => getComputedStyle(button).backgroundColor),
-			"rgba(232, 17, 35, 0.9)",
-		);
+		await expect
+			.poll(() => close.evaluate((button) => getComputedStyle(button).backgroundColor))
+			.toBe("rgba(232, 17, 35, 0.9)");
 		const maximize = page.getByRole("button", { name: "最大化", exact: true });
 		const maximizeIcon = await maximize.locator("path").getAttribute("d");
 		await maximize.click();
