@@ -215,7 +215,26 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			{archiveEnabled && <Presence show={tab === "archive"}><section className="settings-content" role="tabpanel" id={`${tabsId}-archive-panel`} aria-labelledby={`${tabsId}-archive-tab`}>
 				<SessionArchivePanel onRestored={onSessionRestored} />
 			</section></Presence>}
-			<Presence show={tab === "appearance"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
+			<Presence show={tab === "appearance"} keepMounted><section className="settings-content appearance-stack" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
+				<nav className="appearance-jump-nav" aria-label="外観セクションへ移動">
+					{(
+						[
+							["appearance-theme", "テーマ"],
+							["appearance-font", "フォント"],
+							["appearance-home", "ホーム画面"],
+							["appearance-notify", "通知"],
+							["appearance-keys", "キー割り当て"],
+						] as const
+					).map(([targetId, label]) => (
+						<button
+							key={targetId}
+							type="button"
+							onClick={() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+						>
+							{label}
+						</button>
+					))}
+				</nav>
 				<HomeAppearance background={homeBackground} onChange={onHomeBackgroundChange} />
 				<NotificationPreference />
 				<KeybindingSettings />

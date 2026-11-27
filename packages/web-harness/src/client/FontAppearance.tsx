@@ -148,19 +148,85 @@ export function FontAppearance() {
 	const codeSuggestions = [...new Set([...CODE_PRESETS.map((entry) => entry.value).filter(Boolean), ...localFonts])];
 
 	return (
-		<section className="settings-section font-appearance">
-			<div className="font-appearance-header">
-				<h3>フォント</h3>
-				<div className="font-appearance-actions">
+		<section id="appearance-font" className="appearance-card font-appearance">
+			<div className="appearance-card-header">
+				<div>
+					<h3>フォント</h3>
+					<p className="appearance-card-desc">UI・本文・コードの書体と文字サイズ（変更は即座に反映されます）</p>
+				</div>
+				<div className="appearance-card-actions">
 					{canQueryLocal && (
-						<button type="button" disabled={loadingFonts} onClick={() => { void loadLocalFonts(); }}>
+						<button type="button" className="appearance-ghost-btn" disabled={loadingFonts} onClick={() => { void loadLocalFonts(); }}>
 							{loadingFonts ? "読み込み中…" : "端末のフォントを取得"}
 						</button>
 					)}
-					<button type="button" onClick={resetFonts}>
+					<button type="button" className="appearance-ghost-btn" onClick={resetFonts}>
 						標準に戻す
 					</button>
 				</div>
+			</div>
+
+			<div className="font-preview" aria-label="フォントのプレビュー">
+				<p className="font-preview-ui">画面 UI: 設定やボタンの文字の見え方 0123456789</p>
+				<p className="font-preview-content">本文: 会話や Markdown の読みやすさを確認できます。The quick brown fox jumps over the lazy dog.</p>
+				<pre className="font-preview-code"><code>const greeting = "こんにちは 0O1lI != === -&gt;";</code></pre>
+			</div>
+
+			<div className="font-size-grid">
+				<label className="font-size-control">
+					<span className="font-size-label">
+						<span>画面の文字サイズ</span>
+						<output>{appearance.uiSize}px</output>
+					</span>
+					<div className="font-size-row">
+						<input
+							type="range"
+							min="11"
+							max="20"
+							aria-label="画面の文字サイズスライダー"
+							value={appearance.uiSize}
+							onChange={(event) => updateAppearance({ uiSize: Number(event.currentTarget.value) })}
+						/>
+						<input
+							type="number"
+							min="11"
+							max="20"
+							aria-label="画面の文字サイズ"
+							value={appearance.uiSize}
+							onChange={(event) => {
+								const value = event.currentTarget.valueAsNumber;
+								if (Number.isInteger(value) && value >= 11 && value <= 20) updateAppearance({ uiSize: value });
+							}}
+						/>
+					</div>
+				</label>
+				<label className="font-size-control">
+					<span className="font-size-label">
+						<span>コード・端末の文字サイズ</span>
+						<output>{appearance.codeSize}px</output>
+					</span>
+					<div className="font-size-row">
+						<input
+							type="range"
+							min="10"
+							max="24"
+							aria-label="コードの文字サイズスライダー"
+							value={appearance.codeSize}
+							onChange={(event) => updateAppearance({ codeSize: Number(event.currentTarget.value) })}
+						/>
+						<input
+							type="number"
+							min="10"
+							max="24"
+							aria-label="コードの文字サイズ"
+							value={appearance.codeSize}
+							onChange={(event) => {
+								const value = event.currentTarget.valueAsNumber;
+								if (Number.isInteger(value) && value >= 10 && value <= 24) updateAppearance({ codeSize: value });
+							}}
+						/>
+					</div>
+				</label>
 			</div>
 
 			<div className="font-field">
@@ -251,65 +317,7 @@ export function FontAppearance() {
 				</div>
 			</div>
 
-			<div className="font-size-grid">
-				<label className="font-size-control">
-					画面の文字サイズ（px）
-					<div className="font-size-row">
-						<input
-							type="range"
-							min="11"
-							max="20"
-							aria-label="画面の文字サイズスライダー"
-							value={appearance.uiSize}
-							onChange={(event) => updateAppearance({ uiSize: Number(event.currentTarget.value) })}
-						/>
-						<input
-							type="number"
-							min="11"
-							max="20"
-							aria-label="画面の文字サイズ"
-							value={appearance.uiSize}
-							onChange={(event) => {
-								const value = event.currentTarget.valueAsNumber;
-								if (Number.isInteger(value) && value >= 11 && value <= 20) updateAppearance({ uiSize: value });
-							}}
-						/>
-					</div>
-				</label>
-				<label className="font-size-control">
-					コード・端末の文字サイズ（px）
-					<div className="font-size-row">
-						<input
-							type="range"
-							min="10"
-							max="24"
-							aria-label="コードの文字サイズスライダー"
-							value={appearance.codeSize}
-							onChange={(event) => updateAppearance({ codeSize: Number(event.currentTarget.value) })}
-						/>
-						<input
-							type="number"
-							min="10"
-							max="24"
-							aria-label="コードの文字サイズ"
-							value={appearance.codeSize}
-							onChange={(event) => {
-								const value = event.currentTarget.valueAsNumber;
-								if (Number.isInteger(value) && value >= 10 && value <= 24) updateAppearance({ codeSize: value });
-							}}
-						/>
-					</div>
-				</label>
-			</div>
-
-			<div className="font-preview" aria-label="フォントのプレビュー">
-				<p className="font-preview-ui">画面 UI: 設定やボタンの文字の見え方 0123456789</p>
-				<p className="font-preview-content">本文: 会話や Markdown の読みやすさを確認できます。The quick brown fox jumps over the lazy dog.</p>
-				<pre className="font-preview-code"><code>const greeting = "こんにちは 0O1lI != === -&gt;";</code></pre>
-			</div>
-
-			{fontNotice && <p className="fine-print" role="status">{fontNotice}</p>}
-			<p className="fine-print">カンマ区切りで複数のフォント（フォールバック順）も指定できます。変更はすぐに反映・保存され、新しく開く端末にも適用されます。</p>
+			{fontNotice && <p className="appearance-status-msg" role="status">{fontNotice}</p>}
 		</section>
 	);
 }

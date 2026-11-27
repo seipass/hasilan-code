@@ -58,23 +58,78 @@ export function KeybindingSettings() {
 		} catch (reason) { setError(errorMessage(reason)); }
 	}
 
-	return <div className="settings-section">
-		<h3>キー割り当て</h3>
-		<p>入力欄で使うキーを変更できます。変更はWeb・デスクトップで共有されます。</p>
-		<ul className="keybinding-list">
-			{ACTIONS.map((action) => {
-				const current = bindings[action.id] ?? DEFAULT_APP_KEYBINDINGS[action.id];
-				return <li key={action.id} className="keybinding-row">
-					<div><strong>{action.label}</strong><span>{action.description}</span></div>
-					<div className="keybinding-controls">
-						{editing === action.id
-							? <><kbd aria-live="polite">{capture || "キーを押してください"}</kbd><button type="button" onClick={() => save(action.id)} disabled={!capture}>保存</button><button type="button" onClick={() => { setEditing(undefined); setCapture(""); }}>取消</button></>
-							: <><kbd>{current.join(" / ")}</kbd><button type="button" onClick={() => { setEditing(action.id); setCapture(""); setError(undefined); }}>変更</button><button type="button" disabled={JSON.stringify(current) === JSON.stringify(DEFAULT_APP_KEYBINDINGS[action.id])} onClick={() => setBindings({ ...bindings, [action.id]: [...DEFAULT_APP_KEYBINDINGS[action.id]] })}>既定に戻す</button></>}
-					</div>
-				</li>;
-			})}
-		</ul>
-		{error && <p className="error" role="alert">{error}</p>}
-		<p className="fine-print">Enter だけを割り当てると、改行は Shift + Enter になります。</p>
-	</div>;
+	return (
+		<section id="appearance-keys" className="appearance-card">
+			<div className="appearance-card-header">
+				<div>
+					<h3>キー割り当て</h3>
+					<p className="appearance-card-desc">入力欄で使うショートカットキーを変更できます（Web・デスクトップ共有）。</p>
+				</div>
+			</div>
+			<ul className="keybinding-list">
+				{ACTIONS.map((action) => {
+					const current = bindings[action.id] ?? DEFAULT_APP_KEYBINDINGS[action.id];
+					return (
+						<li key={action.id} className="keybinding-row">
+							<div>
+								<strong>{action.label}</strong>
+								<span>{action.description}</span>
+							</div>
+							<div className="keybinding-controls">
+								{editing === action.id ? (
+									<>
+										<kbd aria-live="polite">{capture || "キーを押してください"}</kbd>
+										<button type="button" className="appearance-primary-btn" onClick={() => save(action.id)} disabled={!capture}>
+											保存
+										</button>
+										<button
+											type="button"
+											className="appearance-ghost-btn"
+											onClick={() => {
+												setEditing(undefined);
+												setCapture("");
+											}}
+										>
+											取消
+										</button>
+									</>
+								) : (
+									<>
+										<kbd>{current.join(" / ")}</kbd>
+										<button
+											type="button"
+											className="appearance-ghost-btn"
+											onClick={() => {
+												setEditing(action.id);
+												setCapture("");
+												setError(undefined);
+											}}
+										>
+											変更
+										</button>
+										<button
+											type="button"
+											className="appearance-ghost-btn"
+											disabled={JSON.stringify(current) === JSON.stringify(DEFAULT_APP_KEYBINDINGS[action.id])}
+											onClick={() =>
+												setBindings({ ...bindings, [action.id]: [...DEFAULT_APP_KEYBINDINGS[action.id]] })
+											}
+										>
+											既定に戻す
+										</button>
+									</>
+								)}
+							</div>
+						</li>
+					);
+				})}
+			</ul>
+			{error && (
+				<p className="error" role="alert">
+					{error}
+				</p>
+			)}
+			<p className="fine-print">Enter だけを割り当てると、改行は Shift + Enter になります。</p>
+		</section>
+	);
 }

@@ -13,10 +13,34 @@ export function NotificationPreference() {
 		setEnabled(next);
 	}
 
-	return <div className="settings-section">
-		<h3>完了通知</h3>
-		<p>このタブを表示していない間に作業が完了または失敗したとき、デスクトップ通知を出します。</p>
-		<label className="settings-toggle"><input type="checkbox" checked={enabled} disabled={permission === "unsupported"} onChange={(event) => { void toggle(event.currentTarget.checked); }} /><span>デスクトップ通知を有効にする</span></label>
-		<p className="fine-print">{permission === "unsupported" ? "このブラウザーは通知に対応していません。" : permission === "denied" ? "ブラウザーの設定で通知がブロックされています。サイトの権限から許可してください。" : "通知の許可はこのボタンで初めて要求します。タブのタイトルとアイコンは、通知を有効にしなくても実行中・完了を示します。"}</p>
-	</div>;
+	return (
+		<section id="appearance-notify" className="appearance-card">
+			<div className="appearance-card-header">
+				<div>
+					<h3>完了通知</h3>
+					<p className="appearance-card-desc">バックグラウンド時に作業が完了または失敗したとき、デスクトップ通知を出します。</p>
+				</div>
+			</div>
+			<label className="settings-toggle appearance-toggle-row">
+				<span className="appearance-toggle-copy">
+					<strong>デスクトップ通知を有効にする</strong>
+					<span>
+						{permission === "unsupported"
+							? "このブラウザーは通知に対応していません。"
+							: permission === "denied"
+								? "ブラウザーの設定で通知がブロックされています。"
+								: "タブのタイトルとアイコンはオフでも実行中・完了を示します。"}
+					</span>
+				</span>
+				<input
+					type="checkbox"
+					checked={enabled}
+					disabled={permission === "unsupported"}
+					onChange={(event) => {
+						void toggle(event.currentTarget.checked);
+					}}
+				/>
+			</label>
+		</section>
+	);
 }

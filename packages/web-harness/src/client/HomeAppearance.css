@@ -26,12 +26,20 @@
 .home-backdrop::after { content: ""; position: absolute; inset: 0; backdrop-filter: blur(56px); mask-image: linear-gradient(to bottom, transparent 32%, rgb(0 0 0 / 18%) 48%, rgb(0 0 0 / 65%) 68%, #000 87%); }
 .home-appearance > h3 { margin: 0 0 5px; }
 .home-appearance > p { color: var(--on-surface-secondary); }
-.home-background-preview { position: relative; isolation: isolate; overflow: hidden; aspect-ratio: 16 / 8; max-height: 260px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface); display: grid; place-items: start center; }
-.home-background-preview > span { margin-top: 15%; color: var(--on-surface-muted); font-size: var(--text-sm); }
+.home-bg-layout {
+	display: grid;
+	grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+	gap: 14px;
+	align-items: center;
+}
+.home-bg-controls { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.home-background-preview { position: relative; isolation: isolate; overflow: hidden; aspect-ratio: 16 / 9; max-height: 150px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface); display: grid; place-items: start center; }
+.home-background-preview > span { margin-top: 14%; color: var(--on-surface-muted); font-size: var(--text-xs); }
 .home-background-preview > .home-backdrop { height: 94%; }
 .home-background-preview > .home-backdrop::after { backdrop-filter: blur(28px); }
-.home-background-preview-composer { position: absolute; width: 65%; left: 17.5%; top: 47%; }
-.home-background-preview-composer > span { display: block; margin: 0 4px 6px; font-size: var(--text-xs); color: var(--on-surface-secondary); }
-.home-background-preview-composer > i { display: block; height: 46px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-hover); box-shadow: 0 3px 13px #11111b40; }
-.home-background-name { overflow-wrap: anywhere; font-size: var(--text-sm); }
+.home-background-preview-composer { position: absolute; width: 70%; left: 15%; top: 48%; }
+.home-background-preview-composer > span { display: block; margin: 0 3px 4px; font-size: 10px; color: var(--on-surface-secondary); }
+.home-background-preview-composer > i { display: block; height: 30px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-hover); box-shadow: 0 3px 13px #11111b40; }
+.home-background-name { overflow-wrap: anywhere; font-size: var(--text-xs); color: var(--on-surface-secondary); }
 .home-background-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 600px) { .home-bg-layout { grid-template-columns: 1fr; } }

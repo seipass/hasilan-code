@@ -127,34 +127,276 @@ export function ApplicationTheme() {
 	return null;
 }
 
+const DARK_PRESETS = [
+	{ name: "Hasilan 標準", colors: standardTheme.dark },
+	{ name: "漆黒 OLED", colors: { background: "#000000", foreground: "#f2f2ef", accent: "#f2f2ef", contrast: 55 } },
+	{ name: "スレート", colors: { background: "#111318", foreground: "#e8ecf2", accent: "#e8ecf2", contrast: 50 } },
+	{ name: "ミッドナイト", colors: { background: "#0d1117", foreground: "#e6edf3", accent: "#4b8dff", contrast: 50 } },
+] as const;
+
+const LIGHT_PRESETS = [
+	{ name: "Hasilan ライト", colors: standardTheme.light },
+	{ name: "ピュアホワイト", colors: { background: "#ffffff", foreground: "#18181b", accent: "#18181b", contrast: 50 } },
+	{ name: "ウォームペーパー", colors: { background: "#f5f2eb", foreground: "#1f1d1a", accent: "#1f1d1a", contrast: 52 } },
+] as const;
+
 export function ThemeAppearance() {
 	const [settings, setSettings] = usePreferenceState(KEY, DEFAULT, readAppearance);
 	const { themes, selectedTheme } = useThemeSelection(settings.themeId);
-	const [selected, setSelected] = useState<Variant>(() => settings.mode === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : settings.mode);
+	const [systemVariant, setSystemVariant] = useState<Variant>(() =>
+		window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+	);
 	const [share, setShare] = useState("");
 	const [message, setMessage] = useState("");
 	const [showImport, setShowImport] = useState(false);
+	const selected: Variant = settings.mode === "system" ? systemVariant : settings.mode;
 	const update = (patch: Partial<Appearance>) => setSettings((old) => ({ ...old, ...patch }));
-	const updateVariant = (patch: Partial<Appearance[Variant]>) => setSettings((old) => ({ ...old, [selected]: { ...old[selected], ...patch } }));
+	const updateVariant = (patch: Partial<Appearance[Variant]>) =>
+		setSettings((old) => ({ ...old, [selected]: { ...old[selected], ...patch } }));
 	const variant = settings[selected];
-	return <section className="settings-section theme-appearance">
-		<h3>テーマ</h3>
-		{themes.some(({ customizable }) => !customizable) && <label>配色<Select aria-label="配色" value={selectedTheme?.id ?? ""} onChange={(value) => update({ themeId: value || undefined })}>
-			{!themes.some(({ id }) => id === DEFAULT_THEME_ID) && <option value="">標準</option>}
-			{themes.map(({ id, title }) => <option key={id} value={id}>{title}</option>)}
-		</Select></label>}
-		<div className="theme-modes" role="group" aria-label="テーマモード">{([ ["system", "システム"], ["light", "ライト"], ["dark", "ダーク"] ] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={settings.mode === value} onClick={() => { update({ mode: value }); setSelected(value === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : value); }}>{label}</button>)}</div>
-		{selectedTheme?.customizable && <>
-		<div className="theme-heading"><h4>{selected === "dark" ? "ダーク" : "ライト"}テーマ</h4><div><button type="button" onClick={() => { setMessage(""); setShowImport(!showImport); }}>読み込む</button><button type="button" onClick={() => { void navigator.clipboard.writeText(JSON.stringify({ format: "hasilan-theme-v1", variant: selected, colors: variant })).then(() => setMessage("テーマをコピーしました。"), () => setMessage("コピーできませんでした。")); }}>コピー</button></div></div>
-		<div className="theme-variants" role="group" aria-label="編集するテーマ">{(["light", "dark"] as const).map((value) => <button type="button" key={value} aria-pressed={selected === value} onClick={() => setSelected(value)}>{value === "light" ? "ライト" : "ダーク"}</button>)}</div>
-		{showImport && <div className="theme-import"><label>テーマの文字列<textarea value={share} onChange={(event) => setShare(event.currentTarget.value)} rows={3} /></label><button type="button" onClick={() => { try { const data: unknown = JSON.parse(share); if (!data || typeof data !== "object" || !("colors" in data) || !("format" in data) || data.format !== "hasilan-theme-v1") throw new Error(); const next = { ...settings, [selected]: data.colors }; if (!Check(appearanceSchema, next)) throw new Error(); setSettings(next); setMessage("テーマを読み込みました。"); setShowImport(false); } catch { setMessage("有効なテーマ文字列を入力してください。"); } }}>適用</button></div>}
-		<div className="theme-color-grid">{([ ["background", "背景"], ["foreground", "文字"], ["accent", "アクセント"] ] as const).map(([key, label]) => <label key={key}>{label}<span><input type="color" aria-label={`${label}の色`} value={variant[key]} onChange={(event) => updateVariant({ [key]: event.currentTarget.value })} /><code>{variant[key]}</code></span></label>)}</div>
-		<label className="theme-range">コントラスト <output>{variant.contrast}</output><input type="range" min="0" max="100" value={variant.contrast} style={{ "--theme-range-progress": `${variant.contrast}%` } as CSSProperties} onChange={(event) => updateVariant({ contrast: Number(event.currentTarget.value) })} /></label>
-		<button type="button" onClick={() => updateVariant(DEFAULT[selected])}>このテーマをリセット</button>
-		</>}
-		<label>コードのテーマ<Select aria-label="コードのテーマ" value={settings.codeTheme} onChange={(value) => update({ codeTheme: value as Appearance["codeTheme"] })}><option value="auto">画面に合わせる</option><option value="dark">ダーク</option><option value="light">ライト</option></Select></label>
-		<label className="settings-toggle"><input type="checkbox" checked={settings.translucentSidebar} onChange={(event) => update({ translucentSidebar: event.currentTarget.checked })} /><span>サイドバーを半透明にする</span></label>
-		<p className="fine-print">変更はすぐに反映・保存され、Web版とデスクトップ版で共有されます。テーマ文字列はHasilan Code間で共有できます。</p>
-		{message && <p role="status">{message}</p>}
-	</section>;
+	const presets = selected === "dark" ? DARK_PRESETS : LIGHT_PRESETS;
+
+	return (
+		<section id="appearance-theme" className="appearance-card theme-appearance">
+			<div className="appearance-card-header">
+				<div>
+					<h3>テーマ</h3>
+					<p className="appearance-card-desc">配色・コントラスト・コードブロックの見た目を調整します。</p>
+				</div>
+				{selectedTheme?.customizable && (
+					<div className="appearance-card-actions">
+						<button
+							type="button"
+							className="appearance-ghost-btn"
+							onClick={() => {
+								setMessage("");
+								setShowImport(!showImport);
+							}}
+						>
+							読み込む
+						</button>
+						<button
+							type="button"
+							className="appearance-ghost-btn"
+							onClick={() => {
+								void navigator.clipboard
+									.writeText(JSON.stringify({ format: "hasilan-theme-v1", variant: selected, colors: variant }))
+									.then(
+										() => setMessage("テーマをコピーしました。"),
+										() => setMessage("コピーできませんでした。"),
+									);
+							}}
+						>
+							コピー
+						</button>
+						<button
+							type="button"
+							className="appearance-ghost-btn"
+							onClick={() => {
+								updateVariant(DEFAULT[selected]);
+								setMessage("標準テーマに戻しました。");
+							}}
+						>
+							リセット
+						</button>
+					</div>
+				)}
+			</div>
+
+			{themes.some(({ customizable }) => !customizable) && (
+				<div className="appearance-setting-row">
+					<span className="appearance-row-label">配色</span>
+					<Select
+						aria-label="配色"
+						value={selectedTheme?.id ?? ""}
+						onChange={(value) => update({ themeId: value || undefined })}
+					>
+						{!themes.some(({ id }) => id === DEFAULT_THEME_ID) && <option value="">標準</option>}
+						{themes.map(({ id, title }) => (
+							<option key={id} value={id}>
+								{title}
+							</option>
+						))}
+					</Select>
+				</div>
+			)}
+
+			<div className="theme-mode-bar">
+				<div className="theme-modes" role="group" aria-label="テーマモード">
+					{(
+						[
+							["system", "システム"],
+							["light", "ライト"],
+							["dark", "ダーク"],
+						] as const
+					).map(([value, label]) => (
+						<button
+							type="button"
+							key={value}
+							aria-pressed={settings.mode === value}
+							onClick={() => {
+								update({ mode: value });
+								if (value === "system") {
+									setSystemVariant(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+								}
+							}}
+						>
+							{label}
+						</button>
+					))}
+				</div>
+				{selectedTheme?.customizable && settings.mode === "system" && (
+					<div className="theme-variants" role="group" aria-label="編集するテーマ">
+						{(["light", "dark"] as const).map((value) => (
+							<button
+								type="button"
+								key={value}
+								aria-pressed={selected === value}
+								onClick={() => setSystemVariant(value)}
+							>
+								{value === "light" ? "ライト編集" : "ダーク編集"}
+							</button>
+						))}
+					</div>
+				)}
+			</div>
+
+			{selectedTheme?.customizable && (
+				<>
+					{showImport && (
+						<div className="theme-import">
+							<label>
+								テーマの文字列（JSON）
+								<textarea value={share} onChange={(event) => setShare(event.currentTarget.value)} rows={3} />
+							</label>
+							<div className="theme-import-actions">
+								<button type="button" className="appearance-ghost-btn" onClick={() => setShowImport(false)}>
+									キャンセル
+								</button>
+								<button
+									type="button"
+									className="appearance-primary-btn"
+									onClick={() => {
+										try {
+											const data: unknown = JSON.parse(share);
+											if (
+												!data ||
+												typeof data !== "object" ||
+												!("colors" in data) ||
+												!("format" in data) ||
+												data.format !== "hasilan-theme-v1"
+											)
+												throw new Error();
+											const next = { ...settings, [selected]: data.colors };
+											if (!Check(appearanceSchema, next)) throw new Error();
+											setSettings(next);
+											setMessage("テーマを読み込みました。");
+											setShowImport(false);
+										} catch {
+											setMessage("有効なテーマ文字列を入力してください。");
+										}
+									}}
+								>
+									適用
+								</button>
+							</div>
+						</div>
+					)}
+
+					<div className="theme-presets" role="group" aria-label="配色プリセット">
+						{presets.map((preset) => {
+							const active =
+								variant.background.toLowerCase() === preset.colors.background.toLowerCase() &&
+								variant.foreground.toLowerCase() === preset.colors.foreground.toLowerCase() &&
+								variant.accent.toLowerCase() === preset.colors.accent.toLowerCase();
+							return (
+								<button
+									type="button"
+									key={preset.name}
+									className="theme-preset-chip"
+									aria-pressed={active}
+									onClick={() => updateVariant(preset.colors)}
+								>
+									<span className="theme-preset-dots" aria-hidden="true">
+										<i style={{ background: preset.colors.background }} />
+										<i style={{ background: preset.colors.accent }} />
+									</span>
+									<span>{preset.name}</span>
+								</button>
+							);
+						})}
+					</div>
+
+					<div className="theme-color-grid">
+						{(
+							[
+								["background", "背景"],
+								["foreground", "文字"],
+								["accent", "アクセント"],
+							] as const
+						).map(([key, label]) => (
+							<label key={key} className="theme-color-card">
+								<input
+									type="color"
+									aria-label={`${label}の色`}
+									value={variant[key]}
+									onChange={(event) => updateVariant({ [key]: event.currentTarget.value })}
+								/>
+								<span className="theme-color-meta">
+									<strong>{label}</strong>
+									<code>{variant[key]}</code>
+								</span>
+							</label>
+						))}
+					</div>
+
+					<label className="theme-range">
+						<span>コントラスト</span>
+						<output>{variant.contrast}</output>
+						<input
+							type="range"
+							min="0"
+							max="100"
+							value={variant.contrast}
+							style={{ "--theme-range-progress": `${variant.contrast}%` } as CSSProperties}
+							onChange={(event) => updateVariant({ contrast: Number(event.currentTarget.value) })}
+						/>
+					</label>
+				</>
+			)}
+
+			<div className="appearance-divider" />
+
+			<div className="appearance-setting-row">
+				<span className="appearance-row-label">コードのテーマ</span>
+				<Select
+					aria-label="コードのテーマ"
+					value={settings.codeTheme}
+					onChange={(value) => update({ codeTheme: value as Appearance["codeTheme"] })}
+				>
+					<option value="auto">画面に合わせる</option>
+					<option value="dark">ダーク</option>
+					<option value="light">ライト</option>
+				</Select>
+			</div>
+
+			<label className="settings-toggle appearance-toggle-row">
+				<span className="appearance-toggle-copy">
+					<strong>サイドバーを半透明にする</strong>
+					<span>背景をうっすら透過させて奥行きを出します</span>
+				</span>
+				<input
+					type="checkbox"
+					checked={settings.translucentSidebar}
+					onChange={(event) => update({ translucentSidebar: event.currentTarget.checked })}
+				/>
+			</label>
+
+			{message && (
+				<p className="appearance-status-msg" role="status">
+					{message}
+				</p>
+			)}
+		</section>
+	);
 }
