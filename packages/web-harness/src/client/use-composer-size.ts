@@ -10,7 +10,7 @@ export function useComposerSize(ref: RefObject<HTMLTextAreaElement | null>, text
 		let width = element.clientWidth;
 		const resize = () => {
 			element.style.height = "auto";
-			const height = Math.max(32, Math.min(element.scrollHeight, 220));
+			const height = Math.max(24, Math.min(element.scrollHeight, 220));
 			element.style.height = `${height}px`;
 		};
 		resize();

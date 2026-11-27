@@ -11,7 +11,7 @@ import { Icon } from "./Icon.tsx";
 import { userText } from "./MessageActions.tsx";
 import { ChatPane } from "./ChatPane.tsx";
 import { DetailPane, type DetailView } from "./DetailPane.tsx";
-import { FilePane, type FileTarget } from "./files/FilePane.tsx";
+import type { FileTarget } from "./files/FilePane.tsx";
 import { HomeBackdrop, useHomeBackground } from "./HomeAppearance.tsx";
 import { HomeDashboard } from "./HomeDashboard.tsx";
 import { nextClientId } from "./ids.ts";
@@ -29,7 +29,6 @@ import { pluginManagerPanel } from "./plugins/manager.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import type { WorkspacePanel } from "./plugins/workspace-panels.ts";
 import { SessionActions, type SessionActionTarget } from "./SessionActions.tsx";
-import { sessionRecency } from "./session-recency.ts";
 import { SessionImportDialog } from "./SessionImportDialog.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { useChannel } from "./subscriptions.ts";
@@ -118,12 +117,16 @@ export function App() {
 	const [bodyMatches, setBodyMatches] = useState<{ sessionId: string; snippet: string; role: string }[]>([]);
 	const [rightTab, setRightTab] = usePreferenceState<DetailView>("pi-web-right-tab", "tabs");
 	const [rightOpen, setRightOpen] = usePreferenceState("pi-web-right-open", false);
-	const [fileTreeOpen, setFileTreeOpen] = useState(false);
-	const [activeFilePath, setActiveFilePath] = useState<string>();
+	const [fileTreeOpen, setFileTreeOpen] = useState(true);
+	const [hasActiveFileTab, setHasActiveFileTab] = useState(false);
+	const [fileTabRequest, setFileTabRequest] = useState(0);
+	const [rightResizing, setRightResizing] = useState(false);
+	const [rightSettledClosed, setRightSettledClosed] = useState(() => !rightOpen);
 	const [notificationsEnabled, setNotificationsEnabled] = usePreferenceState("pi-web-notifications", false);
 	const [homeDashboardEnabled] = usePreferenceState("pi-web-home-dashboard", true);
 	const [rightWidth, setRightWidth] = usePreferenceState("pi-web-right-width", 660);
 	const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
+	const [mainWidth, setMainWidth] = useState(0);
 	const [fileTarget, setFileTarget] = useState<FileTarget>();
 	const [browserTarget, setBrowserTarget] = useState<{ id: string; url: string }>();
 	const [filesVersion, setFilesVersion] = useState(0);
@@ -133,6 +136,7 @@ export function App() {
 	const clearDraftInsertion = useCallback(() => setDraftInsertion(undefined), []);
 	const sidebarRef = useRef<HTMLElement>(null);
 	const sidebarOpener = useRef<HTMLButtonElement>(null);
+	const mainLayoutRef = useRef<HTMLDivElement>(null);
 	const rightPanelRef = useRef<HTMLElement>(null);
 	const rightPanelToggle = useRef<HTMLButtonElement>(null);
 	const workspaceChannel = useChannel<WorkspaceProjection>("workspace", workspaceId, () => setFilesVersion((value) => value + 1));
@@ -190,6 +194,19 @@ export function App() {
 		window.addEventListener("resize", resize);
 		return () => window.removeEventListener("resize", resize);
 	}, []);
+	useEffect(() => {
+		const element = mainLayoutRef.current;
+		if (!element) return;
+		const observer = new ResizeObserver(() => setMainWidth(element.clientWidth));
+		observer.observe(element);
+		setMainWidth(element.clientWidth);
+		return () => observer.disconnect();
+	}, []);
+	useEffect(() => {
+		if (rightOpen) { setRightSettledClosed(false); return; }
+		const timer = window.setTimeout(() => setRightSettledClosed(true), 260);
+		return () => window.clearTimeout(timer);
+	}, [rightOpen]);
 	useEffect(() => {
 		const open = (event: MessageEvent<unknown>) => {
 			if (!document.documentElement.dataset.desktopPlatform || event.source !== window || event.origin !== location.origin || !event.data || typeof event.data !== "object" || !("type" in event.data) || event.data.type !== "hasilan:open-browser" || !("url" in event.data) || typeof event.data.url !== "string") return;
@@ -277,7 +294,7 @@ export function App() {
 	// The entry is dropped again when the last overlay closes through the UI, so a normal
 	// back press still leaves the conversation exactly once.
 	const narrowViewport = viewport.width <= 900;
-	const overlayCount = (sessionAction ? 1 : 0) + (importOpen ? 1 : 0) + (settingsOpen ? 1 : 0) + (workOpen ? 1 : 0) + (modelOpen ? 1 : 0) + (narrowViewport && rightOpen ? 1 : 0) + (narrowViewport && sidebarOpen ? 1 : 0) + (narrowViewport && fileTreeOpen ? 1 : 0);
+	const overlayCount = (sessionAction ? 1 : 0) + (importOpen ? 1 : 0) + (settingsOpen ? 1 : 0) + (workOpen ? 1 : 0) + (modelOpen ? 1 : 0) + (narrowViewport && rightOpen ? 1 : 0) + (narrowViewport && sidebarOpen ? 1 : 0);
 	const backGuard = useRef(false);
 	const overlayOpen = useRef(false);
 	overlayOpen.current = overlayCount > 0;
@@ -600,10 +617,14 @@ export function App() {
 			<Icon name="chevronDown" className="model-trigger-chevron" size="inline" />
 		</button>
 	</div>;
-	const rightMaximum = Math.max(480, viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 260 : 0) - 320);
+	const fallbackMainWidth = viewport.width - (sidebarOpen ? viewport.width <= 1100 ? 230 : 300 : 0);
+	const effectiveMainWidth = mainWidth > 0 ? mainWidth : fallbackMainWidth;
+	const rightMaximum = Math.max(480, effectiveMainWidth - 320);
 	const actualRightWidth = Math.min(rightWidth, rightMaximum);
 	const panelWidth = `min(${rightWidth}px, max(480px, calc(100cqw - 320px)))`;
 	const canvasMode = mode === canvasPanel.id;
+	const pluginManagerMode = mode === pluginManagerPanel.id;
+	const hideComposer = canvasMode || pluginManagerMode;
 	const homeBackgroundVisible = !!background && !sessionId && mode === "chat";
 	const traySessions = useMemo(() => {
 		if (!sessionId || !workspaceId) return [];
@@ -651,12 +672,11 @@ export function App() {
 						<ul className="session-list"><MotionItems items={conversations} itemKey={(summary) => summary.sessionId}>{(summary) => {
 							const title = (summary.title ?? "新しい会話").replace(/\s+/g, " ").slice(0, 90);
 							const status = summary.availability === "missing" ? "missing" : summary.currentRun?.status ?? (summary.latestRun?.status === "failed" || summary.latestRun?.status === "interrupted" ? summary.latestRun.status : "idle");
-							const lastUsed = summary.currentRun?.startedAt ?? summary.latestRun?.settledAt ?? summary.latestRun?.startedAt;
 							const openActions = (button: HTMLButtonElement, x?: number, y?: number) => {
 								const bounds = button.getBoundingClientRect();
 								setSessionAction({ session: summary, opener: button, x: x ?? bounds.right - 8, y: y ?? bounds.bottom });
 							};
-							return <li key={summary.sessionId} className="history-session-row"><button className={`session-button ${mode === "chat" && summary.sessionId === sessionId ? "selected" : ""}`} aria-current={mode === "chat" && summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); openActions(event.currentTarget, event.clientX || undefined, event.clientY || undefined); }} onKeyDown={(event) => { if (event.key === "F10" && event.shiftKey) { event.preventDefault(); openActions(event.currentTarget); } }} title={title}><span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : status === "idle" ? "待機中" : RUN_LABELS[status]} /><span className="session-copy"><span className="session-title">{title}</span><time className="session-recency" dateTime={lastUsed} title={lastUsed ? new Date(lastUsed).toLocaleString("ja-JP") : undefined}>{sessionRecency(lastUsed)}</time></span></button><button type="button" className="session-menu-button" aria-label={`${title}の操作`} title="会話の操作" aria-haspopup="menu" aria-expanded={sessionAction?.session.sessionId === summary.sessionId} onClick={(event) => openActions(event.currentTarget)}><Icon name="more" size="control" /></button></li>;
+							return <li key={summary.sessionId} className="history-session-row"><button className={`session-button ${mode === "chat" && summary.sessionId === sessionId ? "selected" : ""}`} aria-current={mode === "chat" && summary.sessionId === sessionId ? "page" : undefined} onClick={() => selectSession(summary.sessionId)} onContextMenu={(event) => { event.preventDefault(); openActions(event.currentTarget, event.clientX || undefined, event.clientY || undefined); }} onKeyDown={(event) => { if (event.key === "F10" && event.shiftKey) { event.preventDefault(); openActions(event.currentTarget); } }} title={title}><span className={`status-dot status-${status}`} aria-label={status === "missing" ? "履歴が見つかりません" : status === "idle" ? "待機中" : RUN_LABELS[status]} /><span className="session-title">{title}</span></button><button type="button" className="session-menu-button" aria-label={`${title}の操作`} title="会話の操作" aria-haspopup="menu" aria-expanded={sessionAction?.session.sessionId === summary.sessionId} onClick={(event) => openActions(event.currentTarget)}><Icon name="more" size="control" /></button></li>;
 						}}</MotionItems></ul><Presence show={conversations.length === 0}><p className="history-empty">{historyQuery ? "一致する会話がありません" : "会話はありません。"}</p></Presence>
 						{bodyMatches.filter((match) => conversations.some((entry) => entry.sessionId === match.sessionId)).slice(0, 6).map((match, index) => <button key={`${match.sessionId}-${index}`} type="button" className="history-body-match" onClick={() => selectSession(match.sessionId)} title={match.snippet}><span className="history-body-role">{match.role === "user" ? "あなた" : "AI"}</span>{match.snippet}</button>)}
 					</details>;
@@ -664,27 +684,28 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}><Icon name="settings" size="control" />設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{canvasMode && <button type="button" className="quiet-button" onClick={() => setMode("chat")}><Icon name="chevronLeft" size="inline" />会話に戻る</button>}{!canvasMode && <button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button>}{!canvasMode && filesEnabled && <button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={fileTreeOpen} disabled={!workspaceId} onClick={() => setFileTreeOpen((value) => !value)}><Icon name="folder" size="control" /></button>}<button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{hideComposer && <button type="button" className="quiet-button" onClick={() => setMode("chat")}><Icon name="chevronLeft" size="inline" />会話に戻る</button>}{!canvasMode && <button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button>}{!canvasMode && filesEnabled && <button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={rightOpen && rightTab === "tabs" && hasActiveFileTab && fileTreeOpen} disabled={!workspaceId} onClick={() => {
+			if (!rightOpen || rightTab !== "tabs" || !hasActiveFileTab) { setRightTab("tabs"); setRightOpen(true); setFileTreeOpen(true); setFileTabRequest((value) => value + 1); }
+			else setFileTreeOpen((value) => !value);
+		}}><Icon name="folder" size="control" /></button>}<button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
 			<div className="home-backdrop-anchor"><HomeBackdrop background={homeBackgroundVisible ? background : undefined} /></div>
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
-			<FilePane enabled={filesEnabled} workspaceId={workspaceId ?? ""} activePath={activeFilePath} refreshToken={filesVersion} visible={!!workspaceId} treeVisible={!!workspaceId && fileTreeOpen && !canvasMode} onTreeClose={() => setFileTreeOpen(false)} onOpen={openFile}>
-			<div className="main-layout"><main className="chat-column" inert={(rightOpen || sidebarOpen) && viewport.width <= 900}><Presence show={!canvasMode && !!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
+			<div ref={mainLayoutRef} className="main-layout"><main className="chat-column" inert={(rightOpen || sidebarOpen) && viewport.width <= 900}><Presence show={!hideComposer && !!sessionId && sessionChannel.connection !== "connected"}><p className="connection-warning">{sessionChannel.connection === "connecting" ? "会話を読み込んでいます…" : "再接続中です。サーバーの実行は継続しています。"}</p></Presence>
 				{activePanels?.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
 					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={(dirty) => setDirtyPanels((previous) => dirty === previous.includes(id) ? previous : dirty ? [...previous, id] : previous.filter((entry) => entry !== id))} />
 				</div></Presence>)}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={canvasMode} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} gitRefreshToken={filesVersion} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onCreatePr={createPr} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
-				<Presence show={!canvasMode && modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
-			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} /></div>
-				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} style={{ width: viewport.width > 900 ? panelWidth : undefined }}>
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={hideComposer} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} team={team} surface={mode !== "chat"} gitRefreshToken={filesVersion} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onCreatePr={createPr} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
+				<Presence show={!hideComposer && modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
+			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} onResizingChange={setRightResizing} /></div>
+				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} data-resizing={rightResizing || undefined} data-settled-closed={(!rightOpen && rightSettledClosed) || undefined} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
 					<div className="right-panel-body detail-panel-body">
-						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} filesEnabled={filesEnabled} terminalEnabled={terminalEnabled} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab} onActiveFileChange={setActiveFilePath}
+						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} filesEnabled={filesEnabled} terminalEnabled={terminalEnabled} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab} fileTreeOpen={fileTreeOpen} onFileTreeOpenChange={setFileTreeOpen} fileTabRequest={fileTabRequest} onActiveFileTabChange={setHasActiveFileTab}
 							browserModel={model} team={<TeamPane snapshot={team} sessions={swarmEnabled ? summaries : summaries.map((summary) => summary.swarm ? { ...summary, swarm: undefined } : summary)} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>
 				</aside>
 			</div>
-			</FilePane>
 		</div>{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} onSessionRestored={async () => {
 			const [folders, sessions] = await Promise.all([api<Workspace[]>("/api/workspaces"), api<SessionSummary[]>("/api/sessions")]);
 			setWorkspaces(folders);

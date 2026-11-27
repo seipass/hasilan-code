@@ -63,7 +63,7 @@ export function SplitLayout({ mode, label, children, dragging = false, onEdgeDro
 		onDragEndCapture={() => setDropEdge(undefined)}
 		onKeyDownCapture={(event) => { if (dragging && event.key === "Escape") { event.stopPropagation(); setDropEdge(undefined); } }}>
 		{children}
-		{mode !== "single" && <div className="split-divider" role="separator" tabIndex={0} aria-label={`${label}の分割境界`} aria-orientation={mode === "columns" ? "vertical" : "horizontal"} aria-valuemin={15} aria-valuemax={85} aria-valuenow={Math.round(ratio)} onPointerDown={(event) => {
+		{mode !== "single" && <div className="split-divider" role="separator" tabIndex={0} aria-label={`${label}の分割境界`} aria-orientation={mode === "columns" ? "vertical" : "horizontal"} aria-valuemin={15} aria-valuemax={85} aria-valuenow={Math.round(ratio)} data-resizing={resizing || undefined} onPointerDown={(event) => {
 			if (event.button !== 0) return;
 			event.preventDefault(); pointer.current = event.pointerId; setResizing(true); event.currentTarget.setPointerCapture(event.pointerId);
 		}} onPointerMove={(event) => {

@@ -36,7 +36,7 @@ afterEach(() => { cleanup?.(); vi.unstubAllGlobals(); });
 
 it("resizes immediately without animation on edits", () => {
 	render();
-	expect(input.style.height).toBe("32px");
+	expect(input.style.height).toBe("24px");
 	expect(input.animate).not.toHaveBeenCalled();
 	input.scrollHeight = 96;
 	render("multiple\nlines");

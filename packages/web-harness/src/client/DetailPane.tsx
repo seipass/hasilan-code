@@ -7,7 +7,7 @@ import { type DetailTab, detailTabsReducer, emptyDetailTabs } from "./detail-tab
 import { restoreDetailTabs, saveDetailTabs } from "./detail-preferences.ts";
 import { useSyncExternalStore } from "react";
 import { discardDraft, draftKey, draftStatusVersion, isDraftDirty, subscribeDraftStatus } from "./files/file-drafts.ts";
-import type { FileTarget } from "./files/FilePane.tsx";
+import { FilePane, type FileTarget } from "./files/FilePane.tsx";
 import { FilePreview } from "./files/FilePreview.tsx";
 import { Icon } from "./Icon.tsx";
 import { Select } from "./Select.tsx";
@@ -26,7 +26,7 @@ import "./DetailPane.css";
 export type DetailView = "tabs" | "team" | "tools";
 
 
-export function DetailPane({ workspaceId, target, browserTarget, browserModel, refreshToken, visible, view, onViewChange, onActiveFileChange, team, tools, filesEnabled = true, terminalEnabled = true }: {
+export function DetailPane({ workspaceId, target, browserTarget, browserModel, refreshToken, visible, view, onViewChange, onActiveFileChange, onActiveFileTabChange, fileTreeOpen = true, onFileTreeOpenChange, fileTabRequest = 0, team, tools, filesEnabled = true, terminalEnabled = true }: {
 	workspaceId: string;
 	target?: FileTarget;
 	browserTarget?: { id: string; url: string };
@@ -36,6 +36,10 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 	view: DetailView;
 	onViewChange: (view: DetailView) => void;
 	onActiveFileChange?: (path: string | undefined) => void;
+	onActiveFileTabChange?: (active: boolean) => void;
+	fileTreeOpen?: boolean;
+	onFileTreeOpenChange?: (open: boolean) => void;
+	fileTabRequest?: number;
 	team: ReactNode;
 	tools: ReactNode;
 	filesEnabled?: boolean;
@@ -93,6 +97,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 	const terminalNumber = useRef(0);
 	const handledRequest = useRef<string | undefined>(undefined);
 	const handledBrowserRequest = useRef<string | undefined>(undefined);
+	const handledFileTabRequest = useRef(fileTabRequest);
 	const id = useId();
 	useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 	useEffect(() => {
@@ -248,7 +253,21 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 	const selectedFiles = layout.tabs.filter((tab) => tab.kind === "file" && layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single"));
 	const activeFile = selectedFiles.find((tab) => tab.pane === layout.focused) ?? selectedFiles[0];
 	const activePath = activeFile?.kind === "file" ? activeFile.file?.path : undefined;
+	const hasActiveFileTab = selectedFiles.length > 0;
 	useEffect(() => { onActiveFileChange?.(activePath); }, [activePath, onActiveFileChange]);
+	useEffect(() => { onActiveFileTabChange?.(hasActiveFileTab); }, [hasActiveFileTab, onActiveFileTabChange]);
+	useEffect(() => {
+		if (!filesEnabled || !restored || fileTabRequest === handledFileTabRequest.current) return;
+		handledFileTabRequest.current = fileTabRequest;
+		const current = layoutRef.current;
+		const visibleFile = current.tabs.some((tab) => tab.kind === "file" && current.selected[tab.pane] === tab.id && (tab.pane === 0 || current.mode !== "single"));
+		if (visibleFile) return;
+		const existing = current.tabs.find((tab) => tab.kind === "file");
+		if (existing) { dispatch({ type: "select", id: existing.id }); return; }
+		const focusedTab = current.tabs.find((tab) => tab.id === current.selected[current.focused]);
+		const next: DetailTab = { id: focusedTab?.kind === "new" ? focusedTab.id : nextClientId(), pane: current.focused, kind: "file" };
+		dispatch(focusedTab?.kind === "new" ? { type: "replace", tab: next } : { type: "add", tab: next });
+	}, [fileTabRequest, filesEnabled, restored]);
 	const bodyIdentity = layout.selected.map((id) => { const tab = layout.tabs.find((entry) => entry.id === id); return `${id}:${tab?.kind}:${tab?.kind === "file" ? tab.file?.path ?? "empty" : ""}`; }).join("|");
 	return <div className="detail-workspace">
 		<header className="detail-toolbar" inert={!restored}>
@@ -303,6 +322,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 		</header>
 		<Presence show={!!error}><div className="detail-error" role="alert">{error}{listFailed && <button type="button" onClick={() => { setError(undefined); setListAttempt((value) => value + 1); }}>端末一覧を再取得</button>}<button type="button" aria-label="エラーを閉じる" onClick={() => setError(undefined)}><Icon name="close" size="inline" /></button></div></Presence>
 		<div className="detail-views"><Presence show={view === "tabs"} keepMounted><div className="detail-resource-area">
+			<FilePane enabled={filesEnabled} workspaceId={workspaceId} activePath={activePath} refreshToken={refreshToken} visible={visible && view === "tabs"} treeVisible={filesEnabled && view === "tabs" && hasActiveFileTab && fileTreeOpen} onTreeClose={() => onFileTreeOpenChange?.(false)} onOpen={openFile}>
 			<MotionSwap identity={bodyIdentity} enabled={!dragging && !modeChanged} className="detail-tab-transition"><SplitLayout preferenceKey={`pi-web-split:${workspaceId}`} mode={layout.mode} label="作業タブ" dragging={!!dragging && layout.tabs.length > 1} onEdgeDrop={(edge) => { if (dragged.current) dispatch({ type: "edge", id: dragged.current, edge }); endDrag(); }}>
 				{layout.tabs.map((tab) => {
 					const selected = layout.selected[tab.pane] === tab.id && (tab.pane === 0 || layout.mode !== "single");
@@ -314,6 +334,7 @@ export function DetailPane({ workspaceId, target, browserTarget, browserModel, r
 				})}
 				{([0, 1] as const).map((pane) => !layout.tabs.some((tab) => tab.pane === pane) && <div key={`empty-${pane}`} className="detail-tab-body split-tab-body" data-pane={pane} hidden={pane === 1 && layout.mode === "single"} onPointerDownCapture={() => dispatch({ type: "focus", pane })} onDragOver={(event) => { if (dragged.current) event.preventDefault(); }} onDrop={(event) => { if (dragged.current) { event.preventDefault(); dropOnPane(pane); } }}>{choices(undefined, pane)}</div>)}
 			</SplitLayout></MotionSwap>
+			</FilePane>
 		</div></Presence>
 		<Presence show={view === "team"} keepMounted><div id={`${id}-team`} className="detail-auxiliary">{team}</div></Presence>
 		<Presence show={view === "tools"} keepMounted><div id={`${id}-tools`} className="detail-auxiliary detail-tools">{tools}</div></Presence></div>

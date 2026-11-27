@@ -1,6 +1,6 @@
 /* Quiet low-contrast composer: near-canvas surface, subtle hairline frame, borderless model selector. */
 html body .composer {
-	padding: 10px 12px 9px;
+	padding: 10px 12px 8px;
 	border: 1px solid var(--composer-border, var(--border-subtle));
 	border-radius: 12px;
 	box-shadow: var(--composer-shadow, none);
@@ -8,22 +8,22 @@ html body .composer {
 	animation: none;
 }
 html body .composer-home {
-	padding: 12px 12px 9px;
+	padding: 10px 12px 8px;
 }
 
 html body .composer-input-row {
 	display: block;
-	min-height: 36px;
+	min-height: 24px;
 }
 html body .composer-input-row.is-home {
-	min-height: 46px;
+	min-height: 24px;
 }
 html body .composer-input-row textarea {
 	display: block;
 	width: 100%;
 	min-width: 0;
-	min-height: 36px;
-	padding: 1px 2px 8px;
+	min-height: 24px;
+	padding: 1px 2px;
 	line-height: 22px;
 	transition: none;
 	animation: none;
@@ -32,7 +32,7 @@ html body .composer-input-row textarea::placeholder {
 	color: var(--on-surface-muted);
 }
 html body .composer-input-row.is-home textarea {
-	min-height: 46px;
+	min-height: 24px;
 }
 
 html body .composer-footer {
@@ -40,8 +40,8 @@ html body .composer-footer {
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
-	padding-top: 2px;
-	min-height: 28px;
+	padding-top: 6px;
+	min-height: 26px;
 	min-width: 0;
 }
 html body .composer-footer-left {
@@ -58,34 +58,6 @@ html body .composer-footer-right {
 	min-width: 0;
 	margin-inline-start: auto;
 	flex: none;
-}
-
-html body .composer-workspace-pill {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	height: 26px;
-	max-width: 168px;
-	padding: 0 9px;
-	border-radius: 999px;
-	border: 0;
-	background: color-mix(in srgb, var(--on-surface) 6%, transparent);
-	box-shadow: none;
-	color: var(--on-surface-secondary);
-	font-size: var(--text-xs);
-	line-height: 1;
-	min-width: 0;
-	user-select: none;
-}
-html body .composer-workspace-pill > svg {
-	flex: none;
-	color: var(--on-surface-muted);
-	opacity: 0.8;
-}
-html body .composer-workspace-pill > span {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 html body .composer-footer .model-control {
@@ -214,10 +186,6 @@ html body .composer-footer .send-button:disabled {
 }
 
 /* Compact widths keep the model name and chevron visible with tighter truncation. */
-html body .composer.is-compact .composer-workspace-pill {
-	max-width: 96px;
-	padding-inline: 8px;
-}
 html body .composer.is-compact .model-trigger-name {
 	max-width: 112px;
 }
@@ -229,11 +197,7 @@ html body .composer.is-compact .model-trigger-name {
 	}
 	html body .composer-input-row,
 	html body .composer-input-row textarea {
-		min-height: 36px;
-	}
-	html body .composer-workspace-pill {
-		max-width: 88px;
-		padding-inline: 8px;
+		min-height: 24px;
 	}
 	html body .composer-footer .model-trigger-name {
 		max-width: 100px;

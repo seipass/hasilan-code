@@ -342,7 +342,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 					</div>;
 				}}</MotionItems>
 			</div></Presence>
-			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span></div></Presence>
+			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath} aria-label={workspacePath}>{workspaceLabel(workspacePath, [])}</code>}</div></Presence>
 			<Presence show={!!goalControl}><div className="motion-contents">{goalControl}</div></Presence>
 			<form className={`composer command-picker-anchor${canRouteWorkspace ? " composer-home" : ""}${shownWidth <= 440 ? " is-compact" : ""}${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return;
@@ -358,7 +358,7 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 				<input ref={fileInput} type="file" multiple hidden aria-label="添付ファイルを選択" disabled={sending || reading} onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void attach(files); }} />
 				<label className="sr-only" htmlFor="message">メッセージ</label>
 				<div className={`composer-input-row${canRouteWorkspace ? " is-home" : ""}`}>
-					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={2} disabled={sending} onKeyDown={(event) => {
+					<textarea ref={input} id="message" role="combobox" aria-label="メッセージ" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded={pickerOpen || workspacePickerOpen} aria-controls={workspacePickerOpen ? workspacePickerId : pickerOpen ? pickerId : undefined} aria-activedescendant={workspacePickerOpen ? `${workspacePickerId}-${activeWorkspace}` : pickerOpen && suggestions.length ? `${pickerId}-${activeCommand}` : undefined} value={text} onChange={(event) => { setText(event.target.value); setWorkspaceCandidates(undefined); setCommandIndex(0); setPickerDismissed(false); }} placeholder="メッセージ、または / でコマンドを入力…" rows={1} disabled={sending} onKeyDown={(event) => {
 						if (event.nativeEvent.isComposing) return;
 						if (matchesAppKeybinding(event, "composer.routeWorkspace")) { event.preventDefault(); if (canRouteWorkspace && workspaceRouterEnabled && !event.repeat) void submit({ kind: "auto" }); return; }
 						if (matchesAppKeybinding(event, "composer.followUp")) { event.preventDefault(); if (busy && !event.repeat) void submit(undefined, "followUp"); return; }
@@ -392,7 +392,6 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 				</div>
 				<div className="composer-footer">
 					<div className="composer-footer-left">
-						{workspacePath && <span className="composer-workspace-pill" title={workspacePath} aria-label={workspacePath}><Icon name="folder" size="inline" /><span>{workspaceLabel(workspacePath, [])}</span></span>}
 						{modelControl}
 					</div>
 					<div className="composer-footer-right">

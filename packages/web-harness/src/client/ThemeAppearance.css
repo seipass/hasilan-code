@@ -369,10 +369,11 @@
 .theme-import-actions { display: flex; justify-content: flex-end; gap: 6px; }
 
 .message-content, .files-markdown { font-family: var(--font-content, inherit); }
-:root .file-editor-body .cm-editor, :root .files-source-lines, :root .message-content pre, :root .files-markdown pre { background: var(--code-surface, var(--surface-sunken)); color: var(--code-text, var(--on-surface)); }
+:root .file-editor-body .cm-editor, :root .files-source-lines { background: var(--editor-surface, var(--surface)); color: var(--code-text, var(--on-surface)); }
+:root .message-content pre, :root .files-markdown pre { background: var(--code-surface, var(--surface-panel)); color: var(--code-text, var(--on-surface)); }
 :root .file-editor-body .cm-content { caret-color: var(--code-text, var(--on-surface)); }
 :root .file-editor-body .cm-editor :is(.cm-cursor, .cm-dropCursor) { border-left-color: var(--code-text, var(--on-surface)); }
-:root .file-editor-body .cm-editor .cm-gutters { background: var(--code-surface, var(--surface-panel)); color: color-mix(in srgb, var(--code-text, var(--on-surface)) 65%, var(--code-surface, var(--surface-panel))); }
+:root .file-editor-body .cm-editor .cm-gutters { background: var(--editor-surface, var(--surface)); color: color-mix(in srgb, var(--code-text, var(--on-surface)) 55%, var(--editor-surface, var(--surface))); }
 :root[data-translucent-sidebar="true"] .sidebar { background: var(--glass-panel); backdrop-filter: var(--glass-filter); }
 
 @media (max-width: 560px) {

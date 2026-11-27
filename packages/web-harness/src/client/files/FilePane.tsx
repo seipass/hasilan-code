@@ -15,15 +15,15 @@ interface FilePaneProps {
 	enabled?: boolean;
 	workspaceId: string; activePath?: string; refreshToken: number; visible: boolean; treeVisible: boolean;
 	children: ReactNode;
-	onTreeClose: () => void;
+	onTreeClose?: () => void;
 	onOpen: (path: string, line?: number) => void;
 }
-const MIN_PREVIEW_WIDTH = 300;
-const MIN_TREE_WIDTH = 180;
+const MIN_PREVIEW_WIDTH = 260;
+const MIN_TREE_WIDTH = 160;
 const COMPACT_MIN_PREVIEW_WIDTH = 180;
 const COMPACT_MIN_TREE_WIDTH = 100;
-const MAX_TREE_WIDTH = 480;
-const SPLIT_WIDTH = 8;
+const MAX_TREE_WIDTH = 440;
+const SPLIT_WIDTH = 0;
 
 function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen, open, onToggle, filter = "" }: {
 	workspaceId: string; path: string; refreshKey: string; activePath?: string; visible: boolean; onOpen: (path: string) => void; open: string[]; onToggle: (path: string) => void; filter?: string;
@@ -59,11 +59,12 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen,
 export function FilePane({ enabled = true, workspaceId, activePath, refreshToken, visible, treeVisible, children, onTreeClose, onOpen }: FilePaneProps) {
 	const mobile = useMobileLayout();
 	const effectiveTreeVisible = enabled && treeVisible;
+	const [mobileTreeOpen, setMobileTreeOpen] = useState(false);
 	const [filter, setFilter] = useState("");
 	const [refreshing, setRefreshing] = useState(false);
 	const [localRefresh, setLocalRefresh] = useState(0);
 	const [quickOpen, setQuickOpen] = useState(false);
-	const [treePreferences, setTreePreferences] = usePreferenceState(`pi-web-tree:${workspaceId}`, { width: 240, open: [] as string[] });
+	const [treePreferences, setTreePreferences] = usePreferenceState(`pi-web-tree:${workspaceId}`, { width: 220, open: [] as string[] });
 	const treeWidth = treePreferences.width;
 	const [availableWidth, setAvailableWidth] = useState(0);
 	const [resizing, setResizing] = useState(false);
@@ -82,6 +83,7 @@ export function FilePane({ enabled = true, workspaceId, activePath, refreshToken
 	const minTreeWidth = Math.floor(treeMinimum * minimumScale);
 	const maxTreeWidth = Math.max(minTreeWidth, Math.min(MAX_TREE_WIDTH, contentWidth - minPreviewWidth));
 	const displayedTreeWidth = Math.max(minTreeWidth, Math.min(maxTreeWidth, treeWidth));
+	useEffect(() => { if (!mobile || !visible || !effectiveTreeVisible) setMobileTreeOpen(false); }, [mobile, visible, effectiveTreeVisible]);
 	useEffect(() => {
 		if (!enabled) return;
 		const openQuick = () => setQuickOpen(true);
@@ -116,10 +118,11 @@ export function FilePane({ enabled = true, workspaceId, activePath, refreshToken
 			<button type="button" className="files-tree-action" aria-label="ファイル一覧を更新" title="ファイル一覧を更新" disabled={refreshing} onClick={() => { void refreshTree(); }}>{refreshing ? "…" : <Icon name="refresh" size="inline" />}</button>
 			<button type="button" className="files-tree-action" aria-label="ファイル名から開く" title="ファイル名から開く（Ctrl / Cmd + P）" onClick={() => setQuickOpen(true)}><Icon name="search" size="inline" /></button>
 		</div>
-		<Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${localRefresh}`} activePath={activePath} visible={visible && effectiveTreeVisible} onOpen={(path) => { onOpen(path); if (mobile) onTreeClose(); }} open={treePreferences.open} filter={filter} onToggle={(path) => setTreePreferences((previous) => ({ ...previous, open: previous.open.includes(path) ? previous.open.filter((value) => value !== path) : [...previous.open, path] }))} />
+		<Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${localRefresh}`} activePath={activePath} visible={visible && effectiveTreeVisible && (!mobile || mobileTreeOpen)} onOpen={(path) => { onOpen(path); if (mobile) { setMobileTreeOpen(false); onTreeClose?.(); } }} open={treePreferences.open} filter={filter} onToggle={(path) => setTreePreferences((previous) => ({ ...previous, open: previous.open.includes(path) ? previous.open.filter((value) => value !== path) : [...previous.open, path] }))} />
 	</nav> : null;
 	return <section className="files-pane" ref={pane} aria-label="作業ビューア">
-		<div ref={layout} className="files-layout" style={{ gridTemplateColumns: mobile || !effectiveTreeVisible ? "minmax(0, 1fr)" : `minmax(0, 1fr) ${splitWidth}px minmax(0, ${displayedTreeWidth}px)` }}>
+		{mobile && effectiveTreeVisible && <button type="button" className="files-tree-toggle" aria-haspopup="dialog" aria-expanded={mobileTreeOpen} aria-controls={treeId} onClick={() => setMobileTreeOpen(true)}><Icon name="folder" size="control" />ファイル一覧を開く</button>}
+		<div ref={layout} className="files-layout" style={{ gridTemplateColumns: mobile || !effectiveTreeVisible ? "minmax(0, 1fr)" : `minmax(0, 1fr) minmax(0, ${displayedTreeWidth}px)` }}>
 			<div className="files-preview">{children}</div>
 			{!mobile && effectiveTreeVisible && <div className="files-splitter" role="separator" tabIndex={0} aria-label="ファイルツリーの幅" aria-orientation="vertical" aria-controls={treeId} aria-valuemin={minTreeWidth} aria-valuemax={maxTreeWidth} aria-valuenow={displayedTreeWidth} aria-valuetext={`${displayedTreeWidth} ピクセル`} data-resizing={resizing} onPointerDown={(event) => {
 				if (event.button !== 0) return;
@@ -133,7 +136,7 @@ export function FilePane({ enabled = true, workspaceId, activePath, refreshToken
 				event.preventDefault(); const step = event.shiftKey ? 48 : 16;
 				resizeTree(event.key === "Home" ? minTreeWidth : event.key === "End" ? maxTreeWidth : displayedTreeWidth + (event.key === "ArrowLeft" ? step : -step));
 			}} />}
-			{enabled && (mobile ? <MobileSheet open={visible && effectiveTreeVisible} side="right" title="ファイル一覧" onClose={onTreeClose}>{tree}</MobileSheet> : <Presence show={effectiveTreeVisible}>{tree}</Presence>)}
+			{enabled && (mobile ? <MobileSheet open={mobileTreeOpen && visible && effectiveTreeVisible} side="right" title="ファイル一覧" onClose={() => setMobileTreeOpen(false)}>{tree}</MobileSheet> : <Presence show={effectiveTreeVisible}>{tree}</Presence>)}
 		</div>
 		{enabled && <QuickOpen workspaceId={workspaceId} open={quickOpen} onClose={() => setQuickOpen(false)} onOpen={(path, line) => onOpen(path, line)} />}
 	</section>;

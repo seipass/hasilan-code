@@ -138,16 +138,13 @@ html body .session-action-buttons button[type="submit"]:not(.danger):hover:not(:
 	color: var(--on-primary);
 }
 
-/* Frosted monochrome selection pill in sidebar. */
-html body .history-session-row:has(.session-button.selected) {
-	box-shadow:
-		inset 0 1px 0 var(--glass-rim),
-		inset 0 0 0 1px var(--border);
-}
-
 .topbar {
-	background: color-mix(in srgb, var(--surface) 82%, transparent);
-	backdrop-filter: blur(16px) saturate(135%);
+	background: var(--surface);
+	border-bottom: 1px solid var(--border-subtle);
+}
+.app-shell[data-home-background="true"] .topbar {
+	background: transparent;
+	border-bottom-color: transparent;
 }
 
 /* Settings contents cross-fade directly so the dialog keeps blurring the live page. */
@@ -173,39 +170,21 @@ html body .history-session-row:has(.session-button.selected) {
 .app-shell[data-home-background="true"] :is(.page-title, .sidebar-toggle) { color: var(--on-surface); }
 .app-shell[data-home-background="true"] .topbar .quiet-button:hover { background: color-mix(in srgb, var(--surface-hover) 85%, transparent); }
 
-/* One shared boundary keeps the resize handle attached to the docked panel. */
-.right-panel { --detail-corner: 12px; border-left: 0; border-radius: var(--detail-corner) 0 0 var(--detail-corner); background: transparent; isolation: isolate; box-shadow: none; }
-.right-panel-body.detail-panel-body { border-radius: inherit; }
-/* A single background keeps every detail view at the same opacity. */
-.right-panel::before {
-	content: "";
-	position: absolute;
-	inset: 0;
-	z-index: -1;
-	border-radius: inherit;
-	pointer-events: none;
-	background: var(--glass-panel);
-	backdrop-filter: var(--glass-filter);
-	box-shadow: inset 1px 0 0 var(--glass-rim-soft);
-}
-.right-panel :is(.files-pane, .detail-toolbar, .detail-new-tab, .detail-file-empty, .files-tree, .files-view-mode, .files-viewer, .files-splitter, .detail-auxiliary, .team-pane, .team-graph, .team-graph-viewport) { background-color: transparent; }
-/* The independently toggled file tree uses the same glass as the detail panel. */
-.workspace-surface > .files-pane .files-layout > .files-tree {
-	background: var(--glass-panel);
-	backdrop-filter: var(--glass-filter);
-}
+/* Flat VS Code-style docked panel sharing the primary workbench surface and 1px hairline border. */
+.right-panel { --detail-corner: 0; border-left: 1px solid var(--border-subtle); border-radius: 0; background: var(--surface); box-shadow: none; }
+.right-panel-body.detail-panel-body { border-radius: 0; }
+.right-panel :is(.files-pane, .detail-toolbar, .detail-new-tab, .detail-file-empty, .files-tree, .files-view-mode, .files-viewer, .detail-auxiliary, .team-pane, .team-graph, .team-graph-viewport) { background-color: var(--surface); }
+.right-panel .files-splitter { background-color: transparent; }
 /* The containing detail view already handles entrance and exit. */
 .right-panel .team-pane { animation: none; }
-.right-panel .files-line-number { background: transparent; }
+.right-panel .files-line-number { background: var(--surface); }
 .right-panel .files-selected-line .files-line-number { background: var(--secondary-container); }
 @media (min-width: 901px) {
-	/* Continue the docked background behind the top bar instead of cutting off the image. */
-	.right-panel::before { top: -62px; }
 	.topbar { position: relative; z-index: 1; }
-	.app-shell .detail-resize-slot { position: relative; width: 0; overflow: visible; z-index: 2; }
+	.app-shell .detail-resize-slot { position: relative; width: 0; overflow: visible; z-index: 4; }
 	.app-shell:not(.inspector-open) .detail-resize-slot { visibility: hidden; }
 	.detail-resize-slot .panel-resize { position: absolute; inset: 0 auto 0 -4px; width: 8px; }
-	.detail-resize-slot .panel-resize::after { top: 12px; bottom: 12px; left: 3px; width: 1px; }
+	.detail-resize-slot .panel-resize::after { top: 0; bottom: 0; left: 3px; width: 2px; }
 }
 @media (max-width: 600px) {
 	html body .session-import-dialog.session-import-dialog,

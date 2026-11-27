@@ -116,7 +116,8 @@ export function ApplicationTheme() {
 			"--text-lg": `${settings.uiSize + 2}px`, "--text-xl": `${settings.uiSize + 4}px`,
 			"--text-2xl": `${settings.uiSize + 6}px`, "--text-3xl": `${settings.uiSize + 9}px`,
 			"--text-4xl": `${settings.uiSize + 15}px`,
-			"--code-surface": settings.codeTheme === "auto" ? "var(--surface-sunken)" : code === "dark" ? "#111111" : "#f5f5f5",
+			"--editor-surface": settings.codeTheme === "auto" ? "var(--surface)" : code === "dark" ? "#111111" : "#f5f5f5",
+			"--code-surface": settings.codeTheme === "auto" ? "var(--surface-panel)" : code === "dark" ? "#151515" : "#efefef",
 			"--code-text": settings.codeTheme === "auto" ? "var(--on-surface-secondary)" : code === "dark" ? "#bababa" : "#242424",
 		};
 		const syntax = code === "dark" ? ["#686868", "#c678dd", "#98c379", "#d19a66", "#61afef", "#e5c07b", "#56b6c2", "#e06c75"] : ["#7a7a7a", "#a626a4", "#50a14f", "#986801", "#4078f2", "#c18401", "#0184bc", "#e45649"];
