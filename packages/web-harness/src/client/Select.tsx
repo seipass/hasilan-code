@@ -36,11 +36,13 @@ export function Select({ children, value, onChange, disabled, id, "aria-label": 
 		const update = () => {
 			const rect = trigger.current?.getBoundingClientRect();
 			if (!rect) return;
-			const below = window.innerHeight - rect.bottom - 12;
+			const vw = window.visualViewport?.width ?? window.innerWidth;
+			const vh = window.visualViewport?.height ?? window.innerHeight;
+			const below = vh - rect.bottom - 12;
 			const above = rect.top - 12;
 			const height = Math.min(320, Math.max(below, above));
-			const width = Math.min(Math.max(rect.width, 220), window.innerWidth - 24);
-			setBounds({ left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), top: below >= Math.min(240, height) ? rect.bottom + 4 : Math.max(12, rect.top - height - 4), width, height });
+			const width = Math.min(Math.max(rect.width, 220), vw - 24);
+			setBounds({ left: Math.max(12, Math.min(rect.left, vw - width - 12)), top: below >= Math.min(240, height) ? rect.bottom + 4 : Math.max(12, rect.top - height - 4), width, height });
 		};
 		update();
 		window.addEventListener("resize", update);
@@ -49,7 +51,8 @@ export function Select({ children, value, onChange, disabled, id, "aria-label": 
 	}, [open]);
 	useEffect(() => {
 		if (!open) return;
-		(popup.current?.querySelector<HTMLInputElement>("input") ?? popup.current)?.focus();
+		const coarse = window.matchMedia("(pointer: coarse)").matches;
+		((!coarse ? popup.current?.querySelector<HTMLInputElement>("input") : null) ?? popup.current)?.focus();
 		const dismiss = (event: PointerEvent) => { if (!trigger.current?.contains(event.target as Node) && !popup.current?.contains(event.target as Node)) close(); };
 		document.addEventListener("pointerdown", dismiss, true);
 		return () => document.removeEventListener("pointerdown", dismiss, true);

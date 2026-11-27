@@ -37,7 +37,7 @@ export function WorkOverview({
 
 	useEffect(() => {
 		dialog.current?.showModal();
-		searchInput.current?.focus();
+		if (!window.matchMedia("(pointer: coarse)").matches) searchInput.current?.focus();
 	}, []);
 
 	useEffect(() => {

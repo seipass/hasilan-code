@@ -379,3 +379,10 @@
 @media (max-width: 560px) {
 	.theme-color-grid { grid-template-columns: 1fr; }
 }
+@media (pointer: coarse) {
+	.appearance-card .appearance-ghost-btn,
+	.appearance-card .appearance-primary-btn,
+	.theme-mode-switch button,
+	.theme-preset-chip,
+	.appearance-stack .appearance-jump-nav button { min-height: 38px; }
+}

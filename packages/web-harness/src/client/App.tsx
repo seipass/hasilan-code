@@ -2,7 +2,7 @@ import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AttachmentUpload } from "../shared/attachments.ts";
 import type { Goal, GoalAction } from "../shared/goals.ts";
-import { SESSION_IMPORT_ID, SESSION_SEARCH_ID, TERMINAL_ID, WORKSPACE_FILES_ID } from "../shared/plugin-profile.ts";
+import { GIT_REVIEW_ID, SESSION_IMPORT_ID, SESSION_SEARCH_ID, TERMINAL_ID, WORKSPACE_FILES_ID } from "../shared/plugin-profile.ts";
 import type { SurfaceAction } from "../shared/surfaces.ts";
 import type { ComposerDestination, ComposerSendResult } from "../shared/workspace-routing.ts";
 import { api, command, errorMessage } from "./api.ts";
@@ -75,6 +75,7 @@ export function App() {
 	const terminalEnabled = profile?.activeIds.includes(TERMINAL_ID) ?? false;
 	const searchEnabled = profile?.activeIds.includes(SESSION_SEARCH_ID) ?? false;
 	const importEnabled = !!profile?.persistentSessions && profile.activeIds.includes(SESSION_IMPORT_ID);
+	const gitReviewEnabled = profile?.activeIds.includes(GIT_REVIEW_ID) ?? true;
 	const activePanels = useMemo(() => {
 		if (!profile) return undefined;
 		const external = new Map(profile.panels.filter((entry) => entry.scope !== "application").map((entry) => [entry.id, externalPanel(entry)]));
@@ -113,17 +114,44 @@ export function App() {
 	const [addingWorkspace, setAddingWorkspace] = useState(false);
 	const [sessionOrder, setSessionOrder] = usePreferenceState<Record<string, string[]>>("pi-web-session-order", {});
 	const [expandedWorkspaces, setExpandedWorkspaces] = usePreferenceState<Record<string, boolean>>("pi-web-expanded-workspaces", {});
-	const [sidebarOpen, setSidebarOpen] = usePreferenceState("pi-web-sidebar-open", () => window.innerWidth >= 900);
+	const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
+	const narrowViewport = viewport.width <= 900;
+	const [desktopSidebarOpen, setDesktopSidebarOpen] = usePreferenceState("pi-web-sidebar-open", () => window.innerWidth >= 900);
+	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 	const [historyQuery, setHistoryQuery] = useState("");
 	const [bodyMatches, setBodyMatches] = useState<{ sessionId: string; snippet: string; role: string }[]>([]);
 	const [rightTab, setRightTab] = usePreferenceState<DetailView>("pi-web-right-tab", "tabs");
-	const [rightOpen, setRightOpen] = usePreferenceState("pi-web-right-open", false);
+	const [desktopRightOpen, setDesktopRightOpen] = usePreferenceState("pi-web-right-open", false);
+	const [mobileRightOpen, setMobileRightOpen] = useState(false);
+	const sidebarOpen = narrowViewport ? mobileSidebarOpen : desktopSidebarOpen;
+	const rightOpen = narrowViewport ? mobileRightOpen : desktopRightOpen;
+	const setSidebarOpen = useCallback((next: boolean | ((previous: boolean) => boolean)) => {
+		if (narrowViewport) {
+			setMobileSidebarOpen((previous) => {
+				const value = typeof next === "function" ? next(previous) : next;
+				if (value) setMobileRightOpen(false);
+				return value;
+			});
+			return;
+		}
+		setDesktopSidebarOpen(next);
+	}, [narrowViewport, setDesktopSidebarOpen]);
+	const setRightOpen = useCallback((next: boolean | ((previous: boolean) => boolean)) => {
+		if (narrowViewport) {
+			setMobileRightOpen((previous) => {
+				const value = typeof next === "function" ? next(previous) : next;
+				if (value) setMobileSidebarOpen(false);
+				return value;
+			});
+			return;
+		}
+		setDesktopRightOpen(next);
+	}, [narrowViewport, setDesktopRightOpen]);
 	const [rightResizing, setRightResizing] = useState(false);
 	const [rightSettledClosed, setRightSettledClosed] = useState(() => !rightOpen);
 	const [notificationsEnabled, setNotificationsEnabled] = usePreferenceState("pi-web-notifications", false);
 	const [homeDashboardEnabled] = usePreferenceState("pi-web-home-dashboard", true);
 	const [rightWidth, setRightWidth] = usePreferenceState("pi-web-right-width", 660);
-	const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
 	const [mainWidth, setMainWidth] = useState(0);
 	const [fileTarget, setFileTarget] = useState<FileTarget>();
 	const [browserTarget, setBrowserTarget] = useState<{ id: string; url: string }>();
@@ -291,7 +319,6 @@ export function App() {
 	// the top overlay (settings, a dialog, the model sheet, then the panel and the drawer).
 	// The entry is dropped again when the last overlay closes through the UI, so a normal
 	// back press still leaves the conversation exactly once.
-	const narrowViewport = viewport.width <= 900;
 	const overlayCount = (sessionAction ? 1 : 0) + (importOpen ? 1 : 0) + (settingsOpen ? 1 : 0) + (workOpen ? 1 : 0) + (modelOpen ? 1 : 0) + (narrowViewport && rightOpen ? 1 : 0) + (narrowViewport && sidebarOpen ? 1 : 0);
 	const backGuard = useRef(false);
 	const overlayOpen = useRef(false);
@@ -641,6 +668,7 @@ export function App() {
 	const composerDock = traySessions.length >= 2
 		? <MultiSessionTray sessions={traySessions} activeSessionId={sessionId} onSelect={selectSession} />
 		: undefined;
+	const activeConversationReady = mode === "chat" && !!session && session.availability === "ready" && (session.messages.length > 0 || (session.latestRun !== undefined && session.latestRun.inputKind !== "context"));
 	return <div className={`app-shell ${sidebarOpen ? "sidebar-open" : "sidebar-closed"} ${rightOpen ? "inspector-open" : ""}`} data-home-background={homeBackgroundVisible || undefined}>
 		{workspaces.filter((entry) => entry.workspaceId !== workspaceId && (expandedWorkspaces[entry.workspaceId] ?? false)).map((entry) => <WorkspaceFeed key={entry.workspaceId} id={entry.workspaceId} onUpdate={updateProjection} onFiles={filesChanged} />)}
 		<Tooltip label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"}><button ref={sidebarOpener} className="icon-button sidebar-toggle" aria-label={sidebarOpen ? "履歴を閉じる" : "履歴を開く"} aria-controls="conversation-history" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((value) => !value)}><Icon name={sidebarOpen ? "chevronLeft" : "menu"} size="chrome" /></button></Tooltip>
@@ -648,7 +676,7 @@ export function App() {
 		<aside ref={sidebarRef} id="conversation-history" className="sidebar" aria-label="会話の履歴" aria-hidden={!sidebarOpen} inert={!sidebarOpen}>
 			<div className="sidebar-brand"><button className="brand" aria-label="新しい会話" onClick={() => newConversation()}><img className="brand-symbol" src="/code-logo.svg" alt="" /></button></div>
 			<div className="sidebar-conversation-actions"><button className="new-conversation" onClick={() => newConversation()}><Icon name="plus" size="control" />新しい会話</button>
-			{importEnabled && <Tooltip label="セッションを引き継ぐ"><button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" disabled={!workspace} onClick={() => setImportOpen(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></Tooltip>}</div>
+			{importEnabled && <Tooltip label="セッションを引き継ぐ"><button type="button" className="session-import-trigger" aria-label="セッションを引き継ぐ" disabled={!workspace} onClick={() => { if (narrowViewport) setSidebarOpen(false); setImportOpen(true); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5M3 12h12m-4-4 4 4-4 4" /></svg></button></Tooltip>}</div>
 			{activePanels && activePanels.length > 0 && <nav className="sidebar-plugin-panels" aria-label="プラグイン">
 				{activePanels.map(({ id, title, icon, requiresWorkspace = true }) => <button type="button" key={id} aria-current={mode === id ? "page" : undefined} disabled={requiresWorkspace && !workspaceId} onClick={() => {
 					if (commandPending.current) return;
@@ -680,9 +708,9 @@ export function App() {
 					</details>;
 				}}</MotionItems>
 			</nav>
-			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}><Icon name="settings" size="control" />設定</button></div>
+			<div className="sidebar-bottom"><button onClick={() => { if (narrowViewport) setSidebarOpen(false); setSettingsOpen(true); }}><Icon name="settings" size="control" />設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{hideComposer && <button type="button" className="quiet-button" onClick={() => setMode("chat")}><Icon name="chevronLeft" size="inline" />会話に戻る</button>}{!canvasMode && <Tooltip label="作業一覧"><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button></Tooltip>}<Tooltip label={rightOpen ? "詳細パネルを閉じる" : "詳細パネルを開く"}><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></Tooltip></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{hideComposer && <button type="button" className="quiet-button" onClick={() => setMode("chat")}><Icon name="chevronLeft" size="inline" />会話に戻る</button>}{narrowViewport && activeConversationReady && !rightOpen && <><button type="button" className="quiet-button detail-toggle" aria-label="会話内を検索" onClick={() => window.dispatchEvent(new Event("hasilan:conversation-find"))}><Icon name="search" size="control" /></button>{gitReviewEnabled && <button type="button" className="quiet-button detail-toggle" aria-label="変更をレビュー" onClick={() => window.dispatchEvent(new Event("hasilan:git-review"))}><Icon name="pencil" size="control" /></button>}</>}{!canvasMode && <Tooltip label="作業一覧"><button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button></Tooltip>}<Tooltip label={rightOpen ? "詳細パネルを閉じる" : "詳細パネルを開く"}><button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></Tooltip></div></header>
 			<div className="home-backdrop-anchor"><HomeBackdrop background={homeBackgroundVisible ? background : undefined} /></div>
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
@@ -690,7 +718,7 @@ export function App() {
 				{activePanels?.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
 					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={(dirty) => setDirtyPanels((previous) => dirty === previous.includes(id) ? previous : dirty ? [...previous, id] : previous.filter((entry) => entry !== id))} />
 				</div></Presence>)}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={hideComposer} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} parentSessionTitle={session?.parentSessionId ? summaries.find((entry) => entry.sessionId === session.parentSessionId)?.title : undefined} team={team} surface={mode !== "chat"} gitRefreshToken={filesVersion} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onCreatePr={createPr} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={hideComposer} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} parentSessionTitle={session?.parentSessionId ? summaries.find((entry) => entry.sessionId === session.parentSessionId)?.title : undefined} team={team} surface={mode !== "chat"} suppressFloatingActions={narrowViewport} gitRefreshToken={filesVersion} draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onCreatePr={createPr} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={!hideComposer && modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} onResizingChange={setRightResizing} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} data-resizing={rightResizing || undefined} data-settled-closed={(!rightOpen && rightSettledClosed) || undefined} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>

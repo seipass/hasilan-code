@@ -35,7 +35,7 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, parentSessionTitle, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, gitRefreshToken = 0, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
+export function ChatPane({ session, parentSessionTitle, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, suppressFloatingActions = false, gitRefreshToken = 0, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
 	parentSessionTitle?: string;
 	team?: TeamSnapshot;
@@ -50,6 +50,7 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 	composerDock?: ReactNode;
 	homeDashboard?: ReactNode;
 	surface?: boolean;
+	suppressFloatingActions?: boolean;
 	gitRefreshToken?: number;
 	commands?: readonly (typeof COMPOSER_COMMANDS)[number][];
 	draftInsertion?: { id: string; text: string };
@@ -212,19 +213,34 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 			setFindOpen(true);
 			setFindFocusToken((value) => value + 1);
 		};
+		const onOpenFind = () => {
+			setFindOpen(true);
+			setFindFocusToken((value) => value + 1);
+		};
+		const onOpenReview = () => {
+			if (gitReviewEnabled) setReviewOpen(true);
+		};
 		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [canFind]);
+		window.addEventListener("hasilan:conversation-find", onOpenFind);
+		window.addEventListener("hasilan:git-review", onOpenReview);
+		return () => {
+			window.removeEventListener("keydown", onKeyDown);
+			window.removeEventListener("hasilan:conversation-find", onOpenFind);
+			window.removeEventListener("hasilan:git-review", onOpenReview);
+		};
+	}, [canFind, gitReviewEnabled]);
 	// A fresh conversation should be ready to type in; the sidebar button keeps focus otherwise.
+	// Skip auto-focus on touch devices while the home dashboard is visible so the keyboard does not cover it.
 	useEffect(() => {
 		if (loading || surface || !empty) return;
+		if (dashboardVisible && window.matchMedia("(pointer: coarse)").matches) return;
 		const frame = requestAnimationFrame(() => {
 			const active = document.activeElement;
 			if (active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) return;
 			input.current?.focus();
 		});
 		return () => cancelAnimationFrame(frame);
-	}, [draftKey, empty, loading, surface]);
+	}, [dashboardVisible, draftKey, empty, loading, surface]);
 	useComposerSize(input, text, canRouteWorkspace);
 	async function submit(destination?: ComposerDestination, mode: "steer" | "followUp" = "steer") {
 		if ((!text.trim() && !attachments.length && !browserAnnotations.length) || reading || submitting.current || attachmentError || !slashInput && (!connected || session?.availability === "missing")) return;
@@ -461,7 +477,10 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 			<Presence show={!!(error || attachmentError)} collapse><p className="composer-error" role="alert">{error ?? attachmentError}</p></Presence>
 		</div>
 		{dashboardVisible && homeDashboard}
-		{gitReviewEnabled && !surface && !empty && !(paneWidth >= 1100 && overviewWidth >= 160) && session?.availability === "ready" && <button type="button" className={`chat-review-trigger${gitSummary && gitSummary.filesChanged > 0 ? " has-changes" : ""}`} onClick={() => setReviewOpen(true)} title={gitSummary?.filesChanged ? `変更をレビュー（${gitSummary.filesChanged}件）` : "変更をレビュー"} aria-label="変更をレビュー"><Icon name="pencil" size="inline" />{gitSummary && gitSummary.filesChanged > 0 && <span className="chat-review-trigger-count">{gitSummary.filesChanged}</span>}</button>}
+		{!suppressFloatingActions && !surface && !empty && !(paneWidth >= 1100 && overviewWidth >= 160) && session?.availability === "ready" && !findOpen && (canFind || gitReviewEnabled) && <div className="chat-floating-actions">
+			{canFind && <button type="button" className="chat-find-trigger" onClick={() => { setFindOpen(true); setFindFocusToken((value) => value + 1); }} title="会話内を検索" aria-label="会話内を検索"><Icon name="search" size="inline" /></button>}
+			{gitReviewEnabled && <button type="button" className={`chat-review-trigger${gitSummary && gitSummary.filesChanged > 0 ? " has-changes" : ""}`} onClick={() => setReviewOpen(true)} title={gitSummary?.filesChanged ? `変更をレビュー（${gitSummary.filesChanged}件）` : "変更をレビュー"} aria-label="変更をレビュー"><Icon name="pencil" size="inline" />{gitSummary && gitSummary.filesChanged > 0 && <span className="chat-review-trigger-count">{gitSummary.filesChanged}</span>}</button>}
+		</div>}
 		{!surface && !empty && paneWidth >= 1100 && overviewWidth >= 160 && session?.availability === "ready" && <SessionOverview width={overviewWidth} session={session} team={team} gitSummary={gitSummary} onFile={onFile} onSession={onParent} onAttach={() => fileInput.current?.click()} attachDisabled={sending || reading} onReview={gitReviewEnabled ? () => setReviewOpen(true) : undefined} onFind={() => { setFindOpen(true); setFindFocusToken((value) => value + 1); }} />}
 		{gitReviewEnabled && reviewOpen && session && <GitReview sessionId={session.sessionId} turn={session.latestRun ? fileChanges(session.toolCalls, session.latestRun.runId) : []} onClose={() => setReviewOpen(false)} onDraft={(value) => { setText((current) => [current.trimEnd(), value].filter(Boolean).join("\n\n")); setReviewOpen(false); requestAnimationFrame(() => input.current?.focus()); }} />}
 	</section>;

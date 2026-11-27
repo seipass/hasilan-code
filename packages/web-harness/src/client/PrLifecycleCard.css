@@ -1,4 +1,5 @@
 .pr-card {
+	position: relative;
 	border: 1px solid var(--border);
 	border-radius: 12px;
 	background: var(--surface-raised);
@@ -432,6 +433,21 @@
 	font-weight: 600;
 }
 
+@media (max-width: 600px) {
+	.pr-conflict-chip-wrap,
+	.pr-check-pill-wrap { position: static; }
+	.pr-conflict-popover,
+	.pr-check-tooltip { left: 8px; right: 8px; width: auto; }
+}
+@media (pointer: coarse) {
+	.pr-icon-btn { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
+	.pr-ext-link,
+	.pr-conflict-chip,
+	.pr-check-pill,
+	.pr-waterfall-btn,
+	.pr-cta-btn,
+	.pr-inline-fix-btn { min-height: 38px; }
+}
 @media (prefers-reduced-motion: reduce) {
 	.pr-status-icon.is-busy, .pr-inline-spinner, .pr-check-glyph.is-running { animation: none !important; }
 }

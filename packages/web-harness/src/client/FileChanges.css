@@ -117,3 +117,8 @@
 .file-changes-patches pre > span { display: block; padding: 0 12px; white-space: pre; }
 .file-changes-patches [data-kind="add"] { color: var(--diff-add-fg, var(--success)); background: var(--diff-add-bg); }
 .file-changes-patches [data-kind="remove"] { color: var(--diff-remove-fg, var(--danger)); background: var(--diff-remove-bg); }
+@media (pointer: coarse) {
+	.file-changes > summary,
+	.file-changes-file > summary { min-height: 42px; padding: 8px 10px; }
+	.file-changes-open { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
+}

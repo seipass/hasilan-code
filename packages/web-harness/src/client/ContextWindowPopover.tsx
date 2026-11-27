@@ -72,7 +72,7 @@ export function ContextWindowPopover({
 	const popoverRef = useRef<HTMLDivElement>(null);
 	const popoverId = useId();
 	const [open, setOpen] = useState(false);
-	const [position, setPosition] = useState<{ left: number; bottom: number; maxHeight: number; flyoutSide: "right" | "left" }>();
+	const [position, setPosition] = useState<{ left: number; bottom: number; maxHeight: number; flyoutSide: "right" | "left" | "inline" }>();
 	const [hoveredCategory, setHoveredCategory] = useState<ContextCategory | null>(null);
 	const [hoveredLimit, setHoveredLimit] = useState<"session" | "weekly" | null>(null);
 	const [rateLimits, setRateLimits] = useState<{ session?: AccountUsageMetric; weekly?: AccountUsageMetric }>({});
@@ -141,13 +141,15 @@ export function ContextWindowPopover({
 		if (!trigger) return;
 		function updatePosition() {
 			const bounds = trigger!.getBoundingClientRect();
-			const width = Math.min(352, window.innerWidth - 32);
-			const left = Math.max(16, Math.min(bounds.right - width, window.innerWidth - width - 16));
-			const flyoutSide = left + width + 228 <= window.innerWidth ? "right" : "left";
+			const vw = window.visualViewport?.width ?? window.innerWidth;
+			const vh = window.visualViewport?.height ?? window.innerHeight;
+			const width = Math.min(352, vw - 24);
+			const left = Math.max(12, Math.min(bounds.right - width, vw - width - 12));
+			const flyoutSide = left + width + 228 <= vw ? "right" : left - 228 >= 8 ? "left" : "inline";
 			setPosition({
 				left,
 				bottom: window.innerHeight - bounds.top + 10,
-				maxHeight: Math.max(220, Math.min(580, window.innerHeight * 0.72, bounds.top - 24)),
+				maxHeight: Math.max(220, Math.min(580, vh * 0.72, bounds.top - 20)),
 				flyoutSide,
 			});
 		}
@@ -344,7 +346,7 @@ export function ContextWindowPopover({
 					<div
 						ref={popoverRef}
 						id={popoverId}
-						className="cw-popover"
+						className={`cw-popover${position?.flyoutSide === "inline" ? " is-compact" : ""}`}
 						role="dialog"
 						aria-label="コンテキストウィンドウ"
 						style={
@@ -432,15 +434,36 @@ export function ContextWindowPopover({
 									/>
 								)}
 							</div>
-							<div className="cw-legend-grid" onPointerLeave={() => setHoveredCategory(null)}>
+							<div
+								className="cw-legend-grid"
+								onPointerLeave={(event) => {
+									if (event.pointerType !== "touch" && position?.flyoutSide !== "inline") setHoveredCategory(null);
+								}}
+							>
 								{categories.map((category) => (
 									<button
 										key={category.key}
 										type="button"
 										className={`cw-legend-item${hoveredCategory && hoveredCategory !== category.key ? " is-dimmed" : ""}`}
-										onPointerEnter={() => setHoveredCategory(category.key)}
-										onFocus={() => setHoveredCategory(category.key)}
-										onBlur={() => setHoveredCategory((current) => (current === category.key ? null : current))}
+										aria-pressed={position?.flyoutSide === "inline" ? hoveredCategory === category.key : undefined}
+										onPointerEnter={(event) => {
+											if (event.pointerType !== "touch" && position?.flyoutSide !== "inline") setHoveredCategory(category.key);
+										}}
+										onClick={() => {
+											if (position?.flyoutSide === "inline") {
+												setHoveredCategory((current) => (current === category.key ? null : category.key));
+											}
+										}}
+										onFocus={(event) => {
+											if (position?.flyoutSide !== "inline" && event.currentTarget.matches(":focus-visible")) {
+												setHoveredCategory(category.key);
+											}
+										}}
+										onBlur={() => {
+											if (position?.flyoutSide !== "inline") {
+												setHoveredCategory((current) => (current === category.key ? null : current));
+											}
+										}}
 									>
 										<span><i className={`cw-dot is-${category.key}`} />{category.label}</span>
 										<span>{formatTokens(category.tokens)}</span>

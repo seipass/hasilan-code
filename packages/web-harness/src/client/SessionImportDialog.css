@@ -86,7 +86,22 @@
 .session-import-actions > button:hover:not(:disabled) { background: color-mix(in srgb, var(--on-surface) 90%, var(--surface)); color: var(--surface); }
 .session-import-actions > button:active:not(:disabled) { background: color-mix(in srgb, var(--on-surface) 80%, var(--surface)); color: var(--surface); }
 @media (max-width: 600px) {
-	.session-import-dialog.session-import-dialog { border-radius: 0; }
+	.session-import-dialog.session-import-dialog {
+		width: 100%;
+		max-width: none;
+		height: var(--visual-viewport-height, 100dvh);
+		max-height: var(--visual-viewport-height, 100dvh);
+		margin: 0;
+		border: 0;
+		border-radius: 0;
+		padding-top: env(safe-area-inset-top, 0px);
+	}
+	.session-import-dialog .session-import-heading { padding: 12px 14px; }
+	.session-import-heading > button { width: 40px; height: 40px; min-width: 40px; min-height: 40px; }
 	.session-import-dialog .session-import-source { grid-template-columns: minmax(0, 1fr) auto; padding: 12px; }
+	.session-import-dialog :is(input, .select-trigger) { min-height: 42px; height: auto; font-size: 16px; }
+	.session-import-dialog .session-import-source > button { min-height: 42px; height: auto; }
 	.session-import-dialog .session-import-list { border-right: 0; }
+	.session-import-dialog .session-import-actions { padding: 12px 14px max(12px, env(safe-area-inset-bottom, 0px)); }
+	.session-import-actions > button { min-height: 44px; }
 }

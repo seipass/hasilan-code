@@ -20,7 +20,7 @@
 .cw-popover {
 	position: fixed;
 	z-index: 30;
-	width: min(352px, calc(100vw - 32px));
+	width: min(352px, calc(100vw - 24px));
 	overflow: visible;
 	border: 1px solid var(--border);
 	border-radius: 14px;
@@ -29,6 +29,11 @@
 	font-size: var(--text-xs);
 	color: var(--on-surface);
 	font-variant-numeric: tabular-nums;
+}
+.cw-popover.is-compact {
+	overflow-y: auto;
+	overflow-x: hidden;
+	overscroll-behavior: contain;
 }
 .cw-popover[hidden] { display: none; }
 .cw-section { position: relative; padding: 12px 14px; border-bottom: 1px solid var(--border-subtle); }
@@ -123,6 +128,13 @@
 }
 .cw-flyout.is-right { left: calc(100% + 10px); }
 .cw-flyout.is-left { right: calc(100% + 10px); }
+.cw-flyout.is-inline {
+	position: static;
+	width: auto;
+	margin-top: 10px;
+	box-shadow: none;
+	pointer-events: auto;
+}
 .cw-flyout > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: var(--text-xs); }
 .cw-flyout > header > span:first-child { display: inline-flex; align-items: center; gap: 6px; color: var(--on-surface); font-weight: 600; }
 .cw-flyout-nums { display: inline-flex; align-items: baseline; gap: 5px; }
@@ -167,3 +179,13 @@
 
 .cw-billing-section { padding-block: 6px 8px; max-height: 200px; overflow: auto; }
 .cw-billing-section .usage-panel { margin: 0; }
+
+@media (hover: none) {
+	.cw-trigger .context-usage-tooltip { display: none !important; }
+}
+@media (pointer: coarse) {
+	.cw-close { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
+	.cw-legend-item { min-height: 38px; padding: 6px 8px; }
+	.cw-compact-button { min-height: 38px; padding: 6px 14px; }
+	.cw-billing-section .usage-panel > summary { min-height: 40px; }
+}

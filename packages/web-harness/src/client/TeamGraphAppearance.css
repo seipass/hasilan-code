@@ -147,3 +147,8 @@
 	.team-pane .team-inspector { order: 0; flex: none; width: 100%; height: auto; max-height: 40%; border-left: 0; }
 	.team-pane .team-graph-controls { display: none; }
 }
+@media (pointer: coarse) {
+	.team-pane .team-view-switch button { min-height: 38px; padding: 6px 14px; font-size: var(--text-xs); }
+	.team-pane .team-focus-close { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
+	.team-pane .usage-panel > summary { min-height: 40px; align-items: center; }
+}

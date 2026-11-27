@@ -10,9 +10,9 @@ import { preferences } from "./preferences.ts";
 import { trackVisualViewport } from "./visual-viewport.ts";
 import "./styles.css";
 import "./CornerRadius.css";
-import "./Mobile.css";
 import "./CleanAppearance.css";
 import "./GlassSurfaces.css";
+import "./Mobile.css";
 import "./NoMotion.css";
 
 const root = document.getElementById("root");

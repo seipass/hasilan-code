@@ -111,3 +111,11 @@
 	font-weight: 600;
 	background: var(--tint-subtle, var(--surface-raised));
 }
+@media (pointer: coarse) {
+	.markdown-toc button {
+		min-height: 38px;
+		padding: 6px 8px;
+		font-size: var(--text-xs);
+		line-height: 18px;
+	}
+}

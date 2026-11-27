@@ -101,7 +101,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 	const [spaceHeld, setSpaceHeld] = useState(false);
 	const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number }>();
 	const [editingElementId, setEditingElementId] = useState<string>();
-	const [styleOpen, setStyleOpen] = useState(true);
+	const [styleOpen, setStyleOpen] = useState(() => !window.matchMedia("(max-width: 700px)").matches);
 	const { view, setView, animateView } = useAnimatedView({ x: 240, y: 80, zoom: 1 });
 	const [moving, setMoving] = useState(false);
 	const [editingNode, setEditingNode] = useState<string>();

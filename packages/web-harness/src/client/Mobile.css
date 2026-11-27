@@ -1,13 +1,25 @@
 /*
- * Phone and touch behaviour. Everything here is additive: the desktop layout is
- * untouched, and the rules only apply when the pointer is coarse or the viewport is
- * phone sized.
+ * Phone and touch behaviour. Loaded after CleanAppearance.css and GlassSurfaces.css so
+ * touch hit areas, 16px input sizing, and mobile layout rules always take precedence
+ * without affecting fine-pointer desktop views.
  */
 
+html, body { overscroll-behavior-y: contain; }
 html {
 	-webkit-text-size-adjust: 100%;
 	text-size-adjust: 100%;
 }
+
+/* Keep scrolling inside the panel that was touched instead of chaining to the page. */
+.conversation,
+.sidebar,
+.right-panel-body,
+.detail-tab-body,
+.settings-dialog,
+.settings-panels,
+.command-picker,
+.model-picker-results,
+.quick-open-results { overscroll-behavior: contain; }
 
 /* Taps should feel immediate: no 300 ms double-tap wait, no grey flash, and a
    visible press state instead of a hover state that a finger can never produce. */
@@ -20,30 +32,26 @@ html {
 	[role="button"]:active,
 	a:active { opacity: .78; }
 
-	/* 44 px is the smallest target that a thumb hits reliably. Applying it here keeps
-	   the visual density of the desktop layout while giving touch real hit areas. */
+	/* Long-pressing a control should not start a text selection on a phone. Message
+	   text, code and links keep the native selection and callout menus. */
+	html body button,
+	html body summary,
+	html body [role="tab"] { -webkit-user-select: none; user-select: none; }
+
+	/* Comfortable touch targets across navigation, chrome, forms, and popovers. */
 	html body .topbar button,
 	html body .topbar a,
 	html body .sidebar-toggle,
 	html body .quiet-button,
 	html body .message-actions button,
 	html body .message-actions a,
-	html body .composer-attach-button,
-	html body .send-button,
-	html body .stop-button,
 	html body .composer-chip,
-	html body .model-trigger,
 	html body .usage-popover-trigger,
-	html body .detail-tab-strip .detail-tab,
-	html body .detail-tab-strip .detail-tab-close,
-	html body .detail-tab-strip .detail-tab-new,
-	html body .detail-tab-strip .detail-panel-icon,
 	html body .detail-toolbar button,
 	html body .file-editor-toolbar button,
 	html body .files-view-mode button,
 	html body .files-tree-entry,
 	html body .files-tree-action,
-	html body .files-tree-marker,
 	html body .files-tree-toggle,
 	html body .files-tab,
 	html body .files-tab-close,
@@ -54,14 +62,15 @@ html {
 	html body .settings-content button,
 	html body .settings-content summary,
 	html body .session-button,
-	html body .session-menu-button,
+	html body .history-session-row,
+	html body .history-session-row > .session-button,
 	html body .workspace-accordion > summary,
-	html body .workspace-new-conversation,
-	html body .workspace-remove,
 	html body .history-control,
 	html body .history-heading-actions button,
 	html body .model-picker-option,
 	html body .command-picker button,
+	html body .command-picker-option,
+	html body .command-picker-option[class*=" command-"],
 	html body .tool-card > summary,
 	html body .detail-file-empty button,
 	html body .brand,
@@ -69,7 +78,7 @@ html {
 	html body .session-import-trigger,
 	html body .sidebar-bottom button,
 	html body .settings-content select,
-	html body .settings-content input,
+	html body .settings-content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
 	html body .files-tree-filter,
 	html body .history-search input,
 	html body .quick-open-input,
@@ -79,15 +88,7 @@ html {
 
 	html body .sidebar-toggle,
 	html body .quiet-button,
-	html body .composer-attach-button,
-	html body .send-button,
-	html body .stop-button,
 	html body .message-actions button,
-	html body .session-menu-button,
-	html body .workspace-new-conversation,
-	html body .workspace-remove,
-	html body .detail-tab-strip .detail-tab-close,
-	html body .detail-tab-strip .detail-tab-new,
 	html body .files-tree-action,
 	html body .files-tab-close,
 	html body .image-viewer-toolbar button,
@@ -95,33 +96,98 @@ html {
 	html body .brand,
 	html body .new-conversation,
 	html body .session-import-trigger,
-	html body .detail-tab-new,
-	html body .detail-panel-icon,
 	html body .split-actions button,
 	html body .file-editor-toolbar button { min-width: 44px; }
+
+	/* Harmonized composer footer controls: large enough for thumbs without looking lopsided. */
+	html body .composer-input-row textarea { min-height: 30px; line-height: 22px; }
+	html body .composer-footer .model-trigger { height: auto; min-height: 38px; padding: 4px 8px; }
+	html body .composer-footer .composer-attach-button,
+	html body .composer-footer .cw-trigger,
+	html body .composer-footer .send-button,
+	html body .composer-footer .stop-button { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
 
 	html body .message-actions button,
 	html body .message-actions a { justify-content: center; padding: 0 8px; }
 	html body .sidebar-toggle { display: grid; place-items: center; }
-	/* Split controls only appeared on hover; touch has no hover at all. */
 	html body .split-actions { opacity: 1; }
 	html body .split-actions button { min-height: 44px; }
+
+	/* Secondary & dynamic controls. */
+	html body .composer-notice > button,
+	html body .pending-input-actions button,
+	html body .browser-toolbar button,
+	html body .team-graph-toolbar button { min-width: 40px; min-height: 40px; }
+	html body .composer-notice > button { width: 40px; height: 40px; }
+	html body .home-card-action { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
+	html body .home-usage .usage-popover-trigger { min-height: 38px; }
+	html body .back-to-bottom { width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; }
+	html body .history-control { height: auto; min-height: 44px; }
+	html body .history-control button { min-height: 44px; padding: 0 12px; }
+	html body .command-picker-option[class*=" command-"] { padding-block: 6px; }
 }
 
-/* Keep scrolling inside the panel that was touched instead of chaining to the page. */
-.conversation,
-.sidebar,
-.right-panel-body,
-.detail-tab-body,
-.settings-dialog,
-.command-picker,
-.model-picker-results,
-.quick-open-results { overscroll-behavior: contain; }
+/* Touch devices have no hover: lay sidebar row actions inline in flex flow so they never
+   overlap the row title or adjacent rows, and hide desktop keyboard shortcut hints. */
+@media (hover: none), (pointer: coarse) {
+	html body .sidebar .history-search kbd { display: none; }
+	html body .sidebar .history-search input { padding-right: 9px; }
+	html body .workspace-accordion > summary { min-height: 44px; padding: 4px 4px 4px 8px; }
+	html body .workspace-accordion > summary::before { opacity: .75; }
+	html body .workspace-accordion .workspace-name {
+		mask-image: none;
+		-webkit-mask-image: none;
+		text-overflow: ellipsis;
+	}
+	html body .workspace-accordion > summary :is(.workspace-remove, .workspace-new-conversation) {
+		position: static;
+		top: auto;
+		right: auto;
+		transform: none;
+		opacity: 1;
+		pointer-events: auto;
+		width: 38px;
+		height: 38px;
+		min-width: 38px;
+		min-height: 38px;
+	}
+	html body .history-session-row { min-height: 44px; padding-right: 2px; }
+	html body .history-session-row > .session-button { min-height: 44px; padding: 6px 4px 6px 8px; }
+	html body .history-session-row .session-title {
+		mask-image: none;
+		-webkit-mask-image: none;
+		text-overflow: ellipsis;
+	}
+	html body .history-session-row .session-menu-button {
+		position: static;
+		top: auto;
+		right: auto;
+		transform: none;
+		opacity: 1;
+		pointer-events: auto;
+		width: 40px;
+		height: 40px;
+		min-width: 40px;
+		min-height: 40px;
+	}
+}
+
+/* Prevent iOS Safari auto-zoom on focus: every editable input, textarea, and select
+   must compute to at least 16px on phones and touch devices. */
+@media (max-width: 900px), (pointer: coarse) {
+	html body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+	html body textarea,
+	html body select { font-size: 16px; }
+}
 
 /* iOS shows the page behind the keyboard unless the layout viewport is resized. The
    app shell follows the visual viewport while a field is focused. */
 @media (max-width: 900px) {
-	.app-shell { height: var(--visual-viewport-height, 100dvh); }
+	.app-shell {
+		height: var(--visual-viewport-height, 100dvh);
+		--sidebar-width: min(280px, 82vw);
+	}
+	.right-panel { inset: 0 0 0 auto; }
 }
 
 /* Notches and the home indicator. */
@@ -130,8 +196,10 @@ html {
 		.topbar { height: calc(56px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
 		.sidebar { padding-top: calc(18px + env(safe-area-inset-top)); padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
 		.sidebar-toggle { top: calc(12px + env(safe-area-inset-top)); }
-		.right-panel { inset: calc(56px + env(safe-area-inset-top)) 0 env(safe-area-inset-bottom); }
-		.composer-area { padding-bottom: max(16px, calc(10px + env(safe-area-inset-bottom))); }
+		.right-panel { inset: 0 0 0 auto; }
+		.detail-workspace { padding-bottom: env(safe-area-inset-bottom); }
+		.composer-area { padding-bottom: max(14px, calc(8px + env(safe-area-inset-bottom))); }
+		html[data-keyboard="open"] .composer-area { padding-bottom: 8px; }
 		.dialog-backdrop { padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 		.files-viewer,
 		.right-panel-body { scroll-padding-bottom: env(safe-area-inset-bottom); }
@@ -141,94 +209,46 @@ html {
 /* Phones in landscape have very little height; give the conversation the pixels back. */
 @media (max-width: 900px) and (max-height: 500px) {
 	.topbar { height: 48px; }
-	.sidebar-toggle { top: 8px; }
+	.sidebar-toggle { top: 6px; }
 	.composer-area { padding-top: 6px; padding-bottom: 8px; }
-	.composer { padding-top: 10px; padding-bottom: 8px; }
-	.composer textarea { min-height: 38px; }
+	html body .composer { padding-top: 8px; padding-bottom: 6px; }
 	.detail-tab-strip { min-height: 40px; }
 }
 
-/* Settings becomes a real sheet on phones: fixed header, scrolling body, no rounded
-   dialog floating over a keyboard. */
-@media (max-width: 520px) {
-	html body .dialog-backdrop { padding: 0; }
-	html body .settings-dialog {
-		display: flex;
-		flex-direction: column;
-		width: 100%;
-		height: 100dvh;
-		max-height: 100dvh;
-		overflow: hidden;
-		border: 0;
-		border-radius: 0;
-		padding: env(safe-area-inset-top) 0 0;
-	}
-	html body .settings-dialog .panel-heading { flex: none; padding: 10px 16px 6px; }
-	html body .settings-dialog .panel-heading button { min-width: 64px; min-height: 44px; }
-	html body .settings-tabs { flex: none; padding: 0 24px 6px 12px; border-bottom: 1px solid var(--border-subtle); scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent); }
-	html body .settings-tabs::-webkit-scrollbar { display: none; }
-	html body .settings-tabs button { min-height: 44px; scroll-margin-inline: 24px; }
-	html body .settings-panels { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 16px calc(20px + env(safe-area-inset-bottom)); }
-	html body .settings-content { padding-top: 14px; }
-	html body .settings-dialog > .error,
-	html body .settings-dialog > .settings-notice,
-	html body .settings-dialog > p[role="status"] { flex: none; margin: 8px 16px; }
+/* Detail panel toolbar & subagent breadcrumb on narrow phones:
+   keep tab titles readable with zero button overlap and stack breadcrumb cleanly. */
+@media (max-width: 640px) {
+	html body .detail-toolbar { min-height: 44px; padding: 0 4px 0 0; gap: 2px; }
+	html body .detail-tab-strip { flex: 1 1 0; height: 44px; }
+	html body .detail-tab { min-height: 44px; max-width: 220px; }
+	html body .detail-tab > [role="tab"] { min-height: 44px; padding: 6px 4px 6px 10px; }
+	html body .detail-tab-close { width: 34px; min-width: 34px; height: 44px; min-height: 44px; margin: 0; }
+	html body .detail-tab-overflow > button { display: none; }
+	html body .detail-tab-overflow .select-trigger { width: 36px; min-width: 36px; height: 40px; min-height: 40px; }
+	html body .detail-tab-new { width: 40px; min-width: 40px; height: 44px; min-height: 44px; margin: 0; }
+	html body .detail-toolbar > .detail-panel-actions { height: 44px; margin-left: 0; padding-inline: 0; gap: 0; }
+	html body .detail-panel-icon { width: 40px; min-width: 40px; height: 44px; min-height: 44px; padding: 0; }
+
+	html body .subagent-breadcrumb { flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 12px; }
+	html body .subagent-breadcrumb-trail { min-height: 36px; }
+	html body .subagent-breadcrumb-parent { max-width: 55%; min-height: 36px; padding: 4px 8px 4px 4px; }
+	html body .subagent-breadcrumb-siblings { padding-bottom: 2px; }
+	html body .subagent-breadcrumb-chip { min-height: 34px; padding: 4px 10px; font-size: var(--text-xs); }
+	html body .back-to-bottom { bottom: 118px; }
+	html[data-keyboard="open"] body .back-to-bottom { bottom: 92px; }
 }
 
-
-
-/* The composer is the most used control on a phone, so it gets one toolbar row and
-   less empty chrome instead of wrapping the model chip onto a second line. */
+/* Phone-width refinements for composer, conversation reading measure, and code gutters. */
 @media (max-width: 520px) {
-	html body .composer-area { padding: 10px 14px max(14px, calc(8px + env(safe-area-inset-bottom))); }
-	html body .composer { padding: 12px 9px 9px; }
-	html body .composer-toolbar { flex-wrap: nowrap; gap: 6px; padding-top: 6px; }
-	html body .composer-chip { max-width: 118px; }
-	html body .composer-delivery { flex: none; gap: 4px; }
-	html body .composer-usage { max-width: 120px; }
-}
-
-/* Long-pressing a control should not start a text selection on a phone. Message
-   text, code and links keep the native selection and callout menus. */
-@media (pointer: coarse) {
-	html body button,
-	html body summary,
-	html body [role="tab"] { -webkit-user-select: none; user-select: none; }
-}
-
-/* Code keeps more of the 390 px for itself: the line-number gutter shrinks. */
-@media (max-width: 520px) {
+	.right-panel { inset: 0; width: 100%; }
+	html body .topbar .detail-toggle { width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+	html body .conversation { padding-left: 14px; padding-right: 14px; }
+	html body .composer-area { padding: 8px 12px max(14px, calc(8px + env(safe-area-inset-bottom))); }
+	html[data-keyboard="open"] body .composer-area { padding-bottom: 8px; }
+	html body .composer { padding: 10px 10px 8px; }
+	html body .composer-footer { gap: 6px; padding-top: 6px; }
+	html body .composer-footer .model-trigger-name { max-width: 132px; }
+	html body .chat-pane.is-empty:not(.has-home-dashboard) .composer-area { margin-top: auto; margin-bottom: 0; }
 	html body .file-editor-body .cm-lineNumbers .cm-gutterElement { min-width: 2.6rem; padding: 0 7px 0 6px; }
-}
-
-/* App-like shell: a phone must not reload the page on an accidental pull, and
-   iOS must not inflate text when the device turns to landscape. */
-html, body { overscroll-behavior-y: contain; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-
-/* An empty conversation centres its composer on a tall desktop window. On a phone
-   that puts the field under the middle of the screen and away from the thumb, so
-   the empty state keeps the bottom position every other state uses. */
-@media (max-width: 520px) {
-	html body .chat-pane.is-empty .composer-area { margin-top: auto; margin-bottom: 0; }
-}
-
-/* Controls that only appear while a run is busy, or inside tool previews, were
-   still 22-30 px squares. */
-@media (pointer: coarse) {
-	html body .composer-notice > button,
-	html body .pending-input-actions button,
-	html body .browser-toolbar button,
-	html body .team-graph-toolbar button,
-	html body .canvas-view-controls button { min-width: 44px; min-height: 44px; }
-	html body .composer-notice > button { width: 44px; height: 44px; }
-	html body .pending-input-edit { font-size: 16px; }
-}
-
-/* The jump-to-latest pill and the load-older button appear only after scrolling,
-   so they were missed by the fixed-control sweep. */
-@media (pointer: coarse) {
-	html body .back-to-bottom { min-height: 44px; padding: 0 18px; }
-	html body .history-control { height: auto; min-height: 44px; }
-	html body .history-control button { min-height: 44px; padding: 0 12px; }
+	html body .files-markdown { padding: 16px 14px 28px; }
 }

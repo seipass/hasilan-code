@@ -27,6 +27,8 @@ export function trackVisualViewport(): () => void {
 		if (viewport.scale > 1.01) return;
 		const height = Math.round(viewport.height);
 		root.style.setProperty("--visual-viewport-height", `${height}px`);
+		if (height < window.innerHeight - 100) root.dataset.keyboard = "open";
+		else delete root.dataset.keyboard;
 	};
 
 	const schedule = () => {

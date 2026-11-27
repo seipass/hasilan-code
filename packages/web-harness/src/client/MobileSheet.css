@@ -25,7 +25,7 @@
 .mobile-sheet[open] { --sheet-duration: 240ms; --sheet-ease: cubic-bezier(.22, 1, .36, 1); display: flex; transform: translate(0, 0); pointer-events: auto; }
 .mobile-sheet::backdrop { background: #11111b99; opacity: 0; transition: opacity 170ms ease, display 170ms allow-discrete, overlay 170ms allow-discrete; }
 .mobile-sheet[open]::backdrop { opacity: 1; }
-.mobile-sheet.is-right { --sheet-offset-x: 100%; --sheet-offset-y: 0px; inset: auto 0 var(--sheet-bottom, 0px) auto; width: min(360px, 90vw); height: var(--sheet-viewport-height, 100dvh); max-height: var(--sheet-viewport-height, 100dvh); border-radius: 16px 0 0 16px; }
+.mobile-sheet.is-right { --sheet-offset-x: 100%; --sheet-offset-y: 0px; inset: auto 0 var(--sheet-bottom, 0px) auto; width: min(360px, 90vw); height: var(--sheet-viewport-height, 100dvh); max-height: var(--sheet-viewport-height, 100dvh); padding-top: env(safe-area-inset-top, 0px); border-radius: 16px 0 0 16px; }
 @starting-style {
 	.mobile-sheet[open] { transform: translate(var(--sheet-offset-x), var(--sheet-offset-y)); }
 	.mobile-sheet[open]::backdrop { opacity: 0; }

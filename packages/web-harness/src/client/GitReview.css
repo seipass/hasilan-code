@@ -196,25 +196,62 @@
 	color: var(--on-surface-muted);
 	cursor: not-allowed;
 }
-.chat-review-trigger {
+.chat-floating-actions {
 	position: absolute;
 	inset: 8px 12px auto auto;
-	z-index: 2;
+	z-index: 3;
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	min-height: 24px;
+}
+.chat-find-trigger,
+.chat-review-trigger {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	min-height: 26px;
 	padding: 3px 7px;
 	border: 1px solid var(--border-subtle);
 	border-radius: 6px;
-	background: var(--surface-panel);
+	background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+	backdrop-filter: blur(12px);
 	color: var(--on-surface-secondary);
 	font-size: 11px;
 }
+.chat-find-trigger { width: 26px; padding: 0; }
+.chat-find-trigger:hover,
 .chat-review-trigger:hover { background: var(--list-hover-bg, var(--surface-hover)); border-color: var(--border); color: var(--on-surface); }
 .chat-review-trigger.has-changes { border-color: var(--border); color: var(--on-surface); }
 .chat-review-trigger-count { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--on-surface-muted); }
 
 @media (max-width: 600px) {
-	.git-review[open] { width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; }
+	.git-review[open] {
+		width: 100%;
+		max-width: none;
+		height: var(--visual-viewport-height, 100dvh);
+		max-height: var(--visual-viewport-height, 100dvh);
+		margin: 0;
+		border: 0;
+		border-radius: 0;
+		padding-top: env(safe-area-inset-top, 0px);
+	}
+	.git-review header { padding: 10px 14px; }
+	.git-review-modes { padding: 10px 14px 8px; }
+	.git-review-refresh { padding: 0 14px 10px; }
+	.git-review-files { padding: 4px 12px 14px; }
+	.git-review-lines :is(button, span) { width: 52px; }
+	.git-review footer { padding: 10px 14px max(12px, env(safe-area-inset-bottom, 0px)); }
+	.git-review-refresh input,
+	.git-review-comment textarea { font-size: 16px; }
+}
+@media (pointer: coarse) {
+	.chat-find-trigger { width: 38px; min-width: 38px; min-height: 38px; }
+	.chat-review-trigger { min-width: 44px; min-height: 38px; padding: 4px 10px; }
+	.git-review header button,
+	.git-review-modes button,
+	.git-review-refresh button,
+	.git-review-comment button,
+	.git-review footer button { min-height: 40px; }
+	.git-review-files summary { min-height: 42px; display: flex; align-items: center; }
 }

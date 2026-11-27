@@ -386,7 +386,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .subagent-breadcrumb-chip > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subagent-breadcrumb-chip:hover { background: var(--list-hover-bg, var(--surface-hover)); color: var(--on-surface); }
 .subagent-breadcrumb-chip[aria-current="page"] { border-color: var(--stroke-secondary); background: var(--surface-raised); color: var(--on-surface); font-weight: 600; }
-.chat-pane:has(.subagent-breadcrumb, .split-child-bar) > :is(.session-overview, .chat-review-trigger, .conversation-find-bar) { inset-block-start: 46px; }
+.chat-pane:has(.subagent-breadcrumb, .split-child-bar) > :is(.session-overview, .chat-floating-actions, .chat-review-trigger, .conversation-find-bar) { inset-block-start: 46px; }
 .conversation { flex: 1; min-height: 0; overflow: auto; scroll-behavior: auto; padding: 24px 28px 8px; }
 .conversation-content { width: min(100%, 744px); margin: auto; }
 .message { margin-bottom: 32px; min-width: 0; overflow-wrap: break-word; }
@@ -797,7 +797,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 	.sidebar-closed .sidebar { margin-left: 0; transform: translateX(-100%); }
 	.navigation-scrim { display: block; position: fixed; inset: 0; z-index: 11; background: #11111b99; border: 0; border-radius: 0; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--sidebar-motion) var(--motion-ease), visibility 0s var(--sidebar-motion); }
 	.sidebar-open .navigation-scrim { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
-	.right-panel { position: absolute; inset: 56px 0 0 auto; width: min(720px, 100%); min-width: 0; z-index: 8; box-shadow: -8px 0 30px #11111b66; }
+	.right-panel { position: absolute; inset: 0 0 0 auto; width: min(720px, 100%); min-width: 0; z-index: 8; box-shadow: -8px 0 30px #11111b66; }
 	.app-shell:not(.inspector-open) .right-panel { margin-right: 0 !important; transform: translateX(100%); }
 	.detail-resize-slot { display: none; }
 	.topbar { height: 56px; padding: 0 18px; }
@@ -819,7 +819,7 @@ legend { font-weight: 600; padding: 0 .4rem; }
 	.model-menu-thinking { padding-left: 10px; }
 	.model-trigger { max-width: min(100%, 280px); }
 	.conversation { padding-left: 18px; padding-right: 18px; }
-	.right-panel { inset: 56px 0 0; width: 100%; }
+	.right-panel { inset: 0; width: 100%; }
 	.right-panel-body { padding: 12px; }
 	.team-overview { padding: 12px; }
 	.team-child-group { padding-left: 8px; margin-left: 6px; }

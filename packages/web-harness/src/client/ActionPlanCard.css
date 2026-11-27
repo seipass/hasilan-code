@@ -1,5 +1,6 @@
 .ap-wrap { margin: 10px 0 12px; display: grid; gap: 8px; }
 .ap-card {
+	position: relative;
 	border: 1px solid var(--border);
 	border-radius: 14px;
 	background: var(--surface-raised);
@@ -322,6 +323,23 @@
 @keyframes ap-matrix-pulse {
 	0%, 100% { opacity: 0.25; }
 	50% { opacity: 1; }
+}
+@media (hover: none) {
+	.ap-step-controls { opacity: 1; }
+}
+@media (pointer: coarse) {
+	.ap-drag-handle,
+	.ap-step-remove { width: 36px; height: 36px; min-width: 36px; min-height: 36px; }
+	.ap-chip,
+	.ap-add-button,
+	.ap-cancel-button,
+	.ap-approve-button { min-height: 38px; }
+	.ap-step-edit-input,
+	.ap-add-input { font-size: 16px; min-height: 40px; }
+}
+@media (max-width: 600px) {
+	.ap-chip-anchor { position: static; }
+	.ap-popover { left: 8px; right: 8px; width: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
 	.ap-spinner, .ap-matrix.is-active i { animation: none !important; }

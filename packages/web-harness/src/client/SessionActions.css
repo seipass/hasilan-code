@@ -96,3 +96,8 @@
 	border-color: var(--danger);
 	color: #ffffff;
 }
+@media (pointer: coarse) {
+	:is(.session-context-menu, .detail-context-menu) button { min-height: 42px; padding: 9px 12px; }
+	.session-action-dialog input { height: 44px; font-size: 16px; }
+	.session-action-buttons button { min-height: 42px; padding: 8px 16px; }
+}
