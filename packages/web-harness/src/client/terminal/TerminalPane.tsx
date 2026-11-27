@@ -63,9 +63,9 @@ export function TerminalView({ summary, pane, visible, selected, focusRequest, o
 		if (!element) return;
 		const colors = getComputedStyle(document.documentElement);
 		const emulator = new Terminal({ cols: summary.cols, rows: summary.rows, allowTransparency: true, ...(summary.windowsPty ? { windowsPty: summary.windowsPty } : {}), theme: {
-			background: "#00000000", foreground: colors.getPropertyValue("--on-surface").trim(), cursor: colors.getPropertyValue("--primary").trim(), selectionBackground: "#cba6f740",
-			black: "#45475a", red: "#f38ba8", green: "#a6e3a1", yellow: "#f9e2af", blue: "#89b4fa", magenta: "#f5c2e7", cyan: "#94e2d5", white: "#bac2de",
-			brightBlack: "#585b70", brightRed: "#f38ba8", brightGreen: "#a6e3a1", brightYellow: "#f9e2af", brightBlue: "#89b4fa", brightMagenta: "#f5c2e7", brightCyan: "#94e2d5", brightWhite: "#cdd6f4",
+			background: "#00000000", foreground: colors.getPropertyValue("--on-surface").trim() || "#cccccc", cursor: colors.getPropertyValue("--primary").trim() || "#e6e6e6", selectionBackground: "#3a3a3a99",
+			black: "#000000", red: "#cd3131", green: "#0dbc79", yellow: "#e5e510", blue: "#2472c8", magenta: "#bc3fbc", cyan: "#11a8cd", white: "#e5e5e5",
+			brightBlack: "#666666", brightRed: "#f14c4c", brightGreen: "#23d18b", brightYellow: "#f5f543", brightBlue: "#3b8eea", brightMagenta: "#d670d6", brightCyan: "#29b8db", brightWhite: "#e5e5e5",
 		}, fontFamily: colors.getPropertyValue("--font-code").trim() || '"UDEV Gothic", ui-monospace, monospace', fontSize: Number.parseFloat(colors.getPropertyValue("--text-code")) || 13, scrollback: 2000, cursorBlink: false, disableStdin: true, logLevel: "off", linkHandler: {
 			activate: (event, text) => {
 				if (!event.isTrusted) return;

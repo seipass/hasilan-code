@@ -47,39 +47,39 @@
 	--leading-normal: 1.6;
 	--leading-prose: 1.8;
 	--measure-code: 100%;
-	--primary: #cba6f7;
-	--primary-hover: #b4befe;
-	--primary-container: color-mix(in srgb, #cba6f7 18%, #1e1e2e);
-	--on-primary: #1e1e2e;
-	--on-primary-container: #cdd6f4;
-	--secondary: #89b4fa;
-	--secondary-hover: #b4befe;
-	--secondary-container: color-mix(in srgb, #89b4fa 18%, #1e1e2e);
-	--on-secondary-container: #cdd6f4;
-	--success: #a6e3a1;
-	--success-container: color-mix(in srgb, #a6e3a1 15%, #1e1e2e);
-	--on-success-container: #a6e3a1;
-	--warning: #f9e2af;
-	--warning-container: color-mix(in srgb, #f9e2af 15%, #1e1e2e);
-	--on-warning-container: #f9e2af;
-	--danger: #f38ba8;
-	--danger-container: color-mix(in srgb, #f38ba8 15%, #1e1e2e);
-	--on-danger-container: #f38ba8;
-	--surface: #1e1e2e;
-	--surface-sunken: #11111b;
-	--surface-panel: #181825;
-	--surface-raised: #1e1e2e;
-	--surface-hover: #313244;
-	--surface-inverse: #cdd6f4;
-	--on-surface: #cdd6f4;
-	--on-surface-secondary: #bac2de;
-	--on-surface-muted: #a6adc8;
-	--on-surface-inverse: #1e1e2e;
-	--border-subtle: #313244;
-	--border: #45475a;
-	--border-strong: #585b70;
+	--primary: #e2e2e2;
+	--primary-hover: #ffffff;
+	--primary-container: color-mix(in srgb, #e2e2e2 16%, #111111);
+	--on-primary: #111111;
+	--on-primary-container: #e2e2e2;
+	--secondary: #75beff;
+	--secondary-hover: #9ad0ff;
+	--secondary-container: color-mix(in srgb, #75beff 16%, #111111);
+	--on-secondary-container: #e2e2e2;
+	--success: #73c991;
+	--success-container: color-mix(in srgb, #73c991 15%, #111111);
+	--on-success-container: #73c991;
+	--warning: #cca700;
+	--warning-container: color-mix(in srgb, #cca700 15%, #111111);
+	--on-warning-container: #cca700;
+	--danger: #f48771;
+	--danger-container: color-mix(in srgb, #f48771 15%, #111111);
+	--on-danger-container: #f48771;
+	--surface: #111111;
+	--surface-sunken: #0b0b0b;
+	--surface-panel: #161616;
+	--surface-raised: #191919;
+	--surface-hover: #252525;
+	--surface-inverse: #e2e2e2;
+	--on-surface: #e2e2e2;
+	--on-surface-secondary: #bababa;
+	--on-surface-muted: #8a8a8a;
+	--on-surface-inverse: #111111;
+	--border-subtle: #212121;
+	--border: #2c2c2c;
+	--border-strong: #3f3f3f;
 	--chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E");
-	--scroll-thumb: #45475a;
+	--scroll-thumb: #47474766;
 	/* Code surfaces share one family, size, rhythm and tab width. JetBrains covers
 	   Latin in 92 KB; UDEV takes over only for the Japanese glyphs it alone has. */
 	--font-code: "JetBrains Mono", "UDEV Gothic", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -88,15 +88,15 @@
 	--leading-diff: 1.7;
 	--tab-code: 2;
 	--code-gutter: 4.2rem;
-	--syntax-comment: #7f849c;
-	--syntax-keyword: #cba6f7;
-	--syntax-string: #a6e3a1;
-	--syntax-number: #fab387;
-	--syntax-function: #89b4fa;
-	--syntax-type: #f9e2af;
-	--syntax-property: #94e2d5;
-	--syntax-meta: #f38ba8;
-	--scroll-thumb-hover: #6c7086;
+	--syntax-comment: #686868;
+	--syntax-keyword: #c678dd;
+	--syntax-string: #98c379;
+	--syntax-number: #d19a66;
+	--syntax-function: #61afef;
+	--syntax-type: #e5c07b;
+	--syntax-property: #56b6c2;
+	--syntax-meta: #e06c75;
+	--scroll-thumb-hover: #47474787;
 	color: var(--on-surface); background: var(--surface);
 	--panel: var(--surface-panel); --muted: var(--on-surface-muted); --accent: var(--primary);
 }
@@ -461,9 +461,9 @@ legend { font-weight: 600; padding: 0 .4rem; }
 .tool-kind-edit { --tool-accent: var(--primary); --tool-tint: var(--primary-container); }
 .tool-kind-write { --tool-accent: var(--success); --tool-tint: var(--success-container); }
 .tool-kind-terminal { --tool-accent: var(--warning); --tool-tint: var(--warning-container); }
-.tool-kind-browser { --tool-accent: #94e2d5; --tool-tint: color-mix(in srgb, #94e2d5 15%, #1e1e2e); }
-.tool-kind-search { --tool-accent: #cba6f7; --tool-tint: var(--primary-container); }
-.tool-kind-team { --tool-accent: #fab387; --tool-tint: color-mix(in srgb, #fab387 15%, #1e1e2e); }
+.tool-kind-browser { --tool-accent: #56b6c2; --tool-tint: color-mix(in srgb, #56b6c2 15%, var(--surface)); }
+.tool-kind-search { --tool-accent: #c678dd; --tool-tint: color-mix(in srgb, #c678dd 15%, var(--surface)); }
+.tool-kind-team { --tool-accent: #d19a66; --tool-tint: color-mix(in srgb, #d19a66 15%, var(--surface)); }
 .tool-card > summary { display: flex; align-items: center; gap: 8px; padding: 8px 10px; min-width: 0; list-style: none; font-size: var(--text-xs); color: var(--muted); }
 .tool-card > summary::-webkit-details-marker { display: none; }
 .tool-card > summary::after {

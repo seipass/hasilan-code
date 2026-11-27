@@ -4,8 +4,8 @@
 	--glass-popup: var(--surface-raised);
 	--glass-card: var(--surface-raised);
 	--glass-pill: var(--surface-hover);
-	--glass-rim: rgba(255, 255, 255, 0.11);
-	--glass-rim-soft: rgba(255, 255, 255, 0.06);
+	--glass-rim: rgba(255, 255, 255, 0.08);
+	--glass-rim-soft: rgba(255, 255, 255, 0.05);
 	--glass-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.72);
 	--glass-shadow-sm: 0 4px 14px -6px rgba(0, 0, 0, 0.54);
 	--glass-dialog-shadow: 0 24px 70px -16px rgba(0, 0, 0, 0.84);

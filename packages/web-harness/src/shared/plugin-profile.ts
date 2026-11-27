@@ -78,8 +78,9 @@ export const themePluginSchema = Type.Object(
 );
 export type ThemePlugin = Static<typeof themePluginSchema>;
 
+// Default dark palette adapted from 111-theme (https://github.com/ri0n-dev/111-theme, Copyright (c) 2025 Rion, MIT License).
 export const standardTheme: ThemePlugin = {
 	title: "標準",
-	dark: { background: "#050507", foreground: "#f2f2ef", accent: "#f2f2ef", contrast: 50 },
-	light: { background: "#f7f7f5", foreground: "#141412", accent: "#141412", contrast: 50 },
+	dark: { background: "#111111", foreground: "#e2e2e2", accent: "#e2e2e2", contrast: 50 },
+	light: { background: "#f5f5f5", foreground: "#1a1a1a", accent: "#1a1a1a", contrast: 50 },
 };

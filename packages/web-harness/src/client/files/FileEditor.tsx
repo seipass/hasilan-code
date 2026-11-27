@@ -15,15 +15,15 @@ import "./FileEditor.css";
 // diff can never drift apart, and the tag mapping mirrors the `.hljs-*` rules:
 // standard names and type names are the same yellow, doc comments are comments.
 const highlight = syntaxHighlighting(HighlightStyle.define([
-	{ tag: [tags.keyword, tags.operatorKeyword, tags.modifier], color: "var(--syntax-keyword, #cba6f7)" },
-	{ tag: [tags.string, tags.special(tags.string), tags.regexp, tags.attributeValue], color: "var(--syntax-string, #a6e3a1)" },
-	{ tag: [tags.number, tags.bool, tags.null], color: "var(--syntax-number, #fab387)" },
-	{ tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: "var(--syntax-function, #89b4fa)" },
-	{ tag: [tags.typeName, tags.className, tags.standard(tags.name), tags.labelName], color: "var(--syntax-type, #f9e2af)" },
-	{ tag: [tags.propertyName, tags.attributeName, tags.tagName, tags.variableName], color: "var(--syntax-property, #94e2d5)" },
-	{ tag: [tags.comment, tags.blockComment, tags.lineComment, tags.docComment], color: "var(--syntax-comment, #7f849c)", fontStyle: "italic" },
-	{ tag: [tags.meta, tags.processingInstruction], color: "var(--syntax-meta, #f38ba8)" },
-	{ tag: [tags.invalid], color: "var(--syntax-meta, #f38ba8)", textDecoration: "underline" },
+	{ tag: [tags.keyword, tags.operatorKeyword, tags.modifier], color: "var(--syntax-keyword, #c678dd)" },
+	{ tag: [tags.string, tags.special(tags.string), tags.regexp, tags.attributeValue], color: "var(--syntax-string, #98c379)" },
+	{ tag: [tags.number, tags.bool, tags.null], color: "var(--syntax-number, #d19a66)" },
+	{ tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: "var(--syntax-function, #61afef)" },
+	{ tag: [tags.typeName, tags.className, tags.standard(tags.name), tags.labelName], color: "var(--syntax-type, #e5c07b)" },
+	{ tag: [tags.propertyName, tags.attributeName, tags.tagName, tags.variableName], color: "var(--syntax-property, #56b6c2)" },
+	{ tag: [tags.comment, tags.blockComment, tags.lineComment, tags.docComment], color: "var(--syntax-comment, #686868)", fontStyle: "italic" },
+	{ tag: [tags.meta, tags.processingInstruction], color: "var(--syntax-meta, #e06c75)" },
+	{ tag: [tags.invalid], color: "var(--syntax-meta, #e06c75)", textDecoration: "underline" },
 ]));
 
 export function FileEditor({ workspaceId, path, line, visible = true }: { workspaceId: string; path: string; line?: number; visible?: boolean }) {
