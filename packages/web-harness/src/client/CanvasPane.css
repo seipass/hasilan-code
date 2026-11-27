@@ -1,4 +1,5 @@
-.canvas-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; height: 100%; overflow: auto; padding: 8px; }
+.canvas-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; height: 100%; overflow: auto; padding: 8px; user-select: none; -webkit-user-select: none; }
+.canvas-pane input:not([type="range"]):not([type="color"]):not([type="checkbox"]):not([type="radio"]), .canvas-pane textarea { user-select: text; -webkit-user-select: text; }
 .canvas-pane summary { cursor: pointer; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--on-surface-muted); }
 .canvas-pane summary:hover { color: var(--on-surface); }
 .canvas-pane summary:focus-visible, .canvas-node:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
@@ -52,7 +53,7 @@
 .canvas-style-buttons button:hover { background: var(--surface-hover); color: var(--on-surface); }
 .canvas-style-buttons button[aria-pressed="true"] { background: var(--primary-container); border-color: var(--primary); color: var(--on-primary-container); }
 
-.canvas-viewport { position: relative; flex: 1; min-height: 240px; overflow: hidden; border-radius: 0 0 10px 10px; isolation: isolate; touch-action: none; cursor: default; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 24px 24px; }
+.canvas-viewport { position: relative; flex: 1; min-height: 240px; overflow: hidden; border-radius: 0 0 10px 10px; isolation: isolate; touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 24px 24px; }
 .canvas-viewport[data-tool="hand"], .canvas-viewport[data-space="true"] { cursor: grab; }
 .canvas-viewport[data-dragging="true"][data-tool="hand"], .canvas-viewport[data-dragging="true"][data-space="true"] { cursor: grabbing; }
 .canvas-viewport[data-tool="rectangle"],

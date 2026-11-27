@@ -428,13 +428,14 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		const middlePan = event.button === 1;
 		if (event.button !== 0 && !middlePan) return;
 		event.stopPropagation();
+		window.getSelection()?.removeAllRanges();
 		if (connectingFrom) return;
 		setEditingNode(undefined);
 		setEditingElementId(undefined);
 		event.currentTarget.focus();
-		event.currentTarget.setPointerCapture(event.pointerId);
 
 		if (middlePan || spaceHeld || tool === "hand") {
+			event.currentTarget.setPointerCapture(event.pointerId);
 			setMoving(true);
 			pointerSession.current = { mode: "pan", pointer: event.pointerId, clientX: event.clientX, clientY: event.clientY, x: view.x, y: view.y };
 			return;
@@ -442,6 +443,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 
 		const world = toWorld(event.clientX, event.clientY);
 		if (tool === "select") {
+			event.currentTarget.setPointerCapture(event.pointerId);
 			setSelection(undefined);
 			setMoving(true);
 			pointerSession.current = { mode: "marquee", pointer: event.pointerId, startX: world.x, startY: world.y };
@@ -471,6 +473,8 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 			setTool("select");
 			return;
 		}
+
+		event.currentTarget.setPointerCapture(event.pointerId);
 
 		const isSticky = tool === "sticky";
 		const isPath = tool === "freedraw" || tool === "line" || tool === "arrow";
@@ -509,10 +513,11 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		if (event.button !== 0 || busyRef.current || !ready) return;
 		if (spaceHeld || tool === "hand" || tool !== "select") return;
 		event.stopPropagation();
+		window.getSelection()?.removeAllRanges();
 		setEditingNode(undefined);
 		setEditingElementId(undefined);
 		viewport.current?.focus();
-		viewport.current?.setPointerCapture(event.pointerId);
+		event.currentTarget.setPointerCapture(event.pointerId);
 		const alreadySelected = selectedElementIds.has(element.id);
 		const nextIds = event.shiftKey
 			? alreadySelected
@@ -535,7 +540,9 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 	function startResizePointer(event: ReactPointerEvent<SVGRectElement>, element: CanvasElement, handle: ResizeHandle) {
 		if (event.button !== 0 || busyRef.current || !ready) return;
 		event.stopPropagation();
-		viewport.current?.setPointerCapture(event.pointerId);
+		window.getSelection()?.removeAllRanges();
+		viewport.current?.focus();
+		event.currentTarget.setPointerCapture(event.pointerId);
 		const world = toWorld(event.clientX, event.clientY);
 		pushHistory(design);
 		setMoving(true);
@@ -547,6 +554,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 		if (event.target instanceof Element && event.target.closest("button, input, textarea, select, a")) return;
 		if (spaceHeld || tool !== "select") return;
 		event.stopPropagation();
+		window.getSelection()?.removeAllRanges();
 		if (connectingFrom || editingNode === item.id) return;
 		setMoving(true);
 		setEditingNode(undefined);
@@ -925,6 +933,14 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 							const world = toWorld(event.clientX, event.clientY);
 							addNode({ x: clampCoord(world.x - CARD_WIDTH / 2), y: clampCoord(world.y - CARD_HEIGHT / 2) }, connectingFrom);
 						}}
+						onMouseDown={(event) => {
+							if (event.target instanceof Element && event.target.closest("button, input, textarea, select, a, label")) return;
+							event.preventDefault();
+						}}
+						onDragStart={(event) => {
+							if (event.target instanceof Element && event.target.closest("input, textarea")) return;
+							event.preventDefault();
+						}}
 						onPointerDown={startViewportPointer}
 						onPointerMove={movePointer}
 						onPointerUp={finishPointer}
@@ -1111,7 +1127,9 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 											onPointerDown={(event) => startElementPointer(event, el)}
 											onDoubleClick={(event) => {
 												if (!canHaveText || disabled) return;
+												event.preventDefault();
 												event.stopPropagation();
+												window.getSelection()?.removeAllRanges();
 												setSelection({ kind: "elements", ids: [el.id] });
 												setEditingElementId(el.id);
 											}}
@@ -1253,7 +1271,7 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 									const path = self ? `M ${x1} ${y1} C ${x1 + 100} ${y1 - 220}, ${x2 - 100} ${y2 - 220}, ${x2} ${y2}` : `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
 									return <g key={item.id} className={edge?.id === item.id ? "selected" : ""}>
 										<path d={path} markerEnd={`url(#${id}-arrow)`} />
-										<path className="canvas-edge-hit" d={path} onPointerDown={(event) => { event.stopPropagation(); if (!disabled) { cancelConnection(); setEditingNode(undefined); setSelection({ kind: "edge", id: item.id }); } }} />
+										<path className="canvas-edge-hit" d={path} onPointerDown={(event) => { event.stopPropagation(); window.getSelection()?.removeAllRanges(); if (!disabled) { cancelConnection(); setEditingNode(undefined); setSelection({ kind: "edge", id: item.id }); } }} />
 										<text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - (self ? 165 : 10)} textAnchor="middle">{item.label.length > 32 ? `${item.label.slice(0, 32)}…` : item.label}</text>
 									</g>;
 								}}</MotionItems>
@@ -1266,6 +1284,9 @@ function CanvasWorkspace({ workspaceId, destinationControl, onComposeDesign, onD
 								else setSelection({ kind: "node", id: item.id });
 							}} onDoubleClick={(event) => {
 								if (event.target instanceof Element && event.target.closest("button, input, textarea")) return;
+								event.preventDefault();
+								event.stopPropagation();
+								window.getSelection()?.removeAllRanges();
 								editOnBoard(item);
 							}} onFocus={(event) => {
 								if (event.target === event.currentTarget) setSelection({ kind: "node", id: item.id });
