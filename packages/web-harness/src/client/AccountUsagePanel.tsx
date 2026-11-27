@@ -14,12 +14,13 @@ function amount(value: number, unit?: string): string {
 
 function Metric({ metric }: { metric: AccountUsageMetric }) {
 	const percent = metric.usedPercent !== undefined && Number.isFinite(metric.usedPercent) ? metric.usedPercent : undefined;
+	const level = percent === undefined ? undefined : percent >= 95 ? "danger" : percent >= 80 ? "warn" : undefined;
 	const reset = metric.resetsAt === undefined ? undefined : new Date(metric.resetsAt);
 	return <div className="account-usage-metric">
 		<dt>{metric.label}</dt>
 		<dd>
 			{metric.unlimited ? <strong>無制限</strong> : <>
-				{percent !== undefined && <><span className="account-usage-percent">{percent.toLocaleString("ja-JP", { maximumFractionDigits: 1 })}% 使用</span><progress aria-label={`${metric.label}の使用率`} max={100} value={Math.max(0, Math.min(100, percent))} /></>}
+				{percent !== undefined && <><span className="account-usage-percent" data-level={level}>{percent.toLocaleString("ja-JP", { maximumFractionDigits: 1 })}% 使用</span><progress data-level={level} aria-label={`${metric.label}の使用率`} max={100} value={Math.max(0, Math.min(100, percent))} /></>}
 				<div className="account-usage-amounts">
 					{metric.used !== undefined && <span>使用 {amount(metric.used, metric.unit)}</span>}
 					{metric.limit !== undefined && <span>上限 {amount(metric.limit, metric.unit)}</span>}

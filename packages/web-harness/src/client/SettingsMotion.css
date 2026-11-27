@@ -1,9 +1,13 @@
 .dialog-backdrop:has(> .settings-dialog) {
 	background-color: var(--dialog-scrim);
 	animation: none;
-	transition: background-color 170ms ease;
+	transition: background-color 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.dialog-backdrop[data-closing="true"]:has(> .settings-dialog) { background-color: var(--dialog-scrim-clear); animation: none; }
+.dialog-backdrop[data-closing="true"]:has(> .settings-dialog) {
+	background-color: var(--dialog-scrim-clear);
+	animation: none;
+	transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
 .settings-dialog.settings-dialog {
 	display: flex;
 	flex-direction: column;
@@ -12,12 +16,13 @@
 	opacity: 1;
 	transform: translateY(0) scale(1);
 	animation: none;
-	transition: opacity 170ms ease, transform 170ms var(--motion-ease);
+	transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1), transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .dialog-backdrop[data-closing="true"] .settings-dialog.settings-dialog {
 	opacity: 0;
-	transform: translateY(6px) scale(.99);
+	transform: translateY(5px) scale(0.985);
 	animation: none;
+	transition: opacity 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .settings-dialog > .panel-heading { flex: none; }
 .settings-layout { display: flex; flex: 1; min-height: 0; gap: clamp(8px, 2vw, 20px); margin-top: 14px; }

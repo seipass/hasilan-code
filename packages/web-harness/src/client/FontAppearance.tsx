@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { type CSSProperties, useEffect, useId, useState } from "react";
 import { Check } from "typebox/value";
 import { standardTheme } from "../shared/plugin-profile.ts";
 import { type Appearance, appearanceSchema } from "../shared/ui-preferences.ts";
@@ -185,6 +185,7 @@ export function FontAppearance() {
 							max="20"
 							aria-label="画面の文字サイズスライダー"
 							value={appearance.uiSize}
+							style={{ "--font-range-progress": `${((appearance.uiSize - 11) / 9) * 100}%` } as CSSProperties}
 							onChange={(event) => updateAppearance({ uiSize: Number(event.currentTarget.value) })}
 						/>
 						<input
@@ -212,6 +213,7 @@ export function FontAppearance() {
 							max="24"
 							aria-label="コードの文字サイズスライダー"
 							value={appearance.codeSize}
+							style={{ "--font-range-progress": `${((appearance.codeSize - 10) / 14) * 100}%` } as CSSProperties}
 							onChange={(event) => updateAppearance({ codeSize: Number(event.currentTarget.value) })}
 						/>
 						<input

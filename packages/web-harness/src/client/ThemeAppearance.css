@@ -184,22 +184,30 @@
 	padding: 3px;
 	border: 1px solid var(--border-subtle);
 	border-radius: 10px;
-	background: var(--surface-sunken);
+	background: var(--settings-input-bg, var(--surface-sunken));
 	gap: 2px;
 	flex: 1 1 220px;
+	width: 100%;
 	max-width: 300px;
 }
 .appearance-card .theme-modes button {
 	border: 0;
 	border-radius: 7px;
-	padding: 5px 10px;
+	padding: 5px 8px;
 	min-height: 28px;
 	background: transparent;
 	color: var(--on-surface-secondary);
 	font-size: var(--text-xs);
+	white-space: nowrap;
+}
+.appearance-card .theme-modes button:hover:not([aria-pressed="true"]) {
+	background: var(--surface-hover);
+	border-color: transparent;
+	color: var(--on-surface);
 }
 .appearance-card .theme-modes button[aria-pressed="true"] {
 	background: var(--primary);
+	border-color: transparent;
 	color: var(--on-primary);
 	font-weight: 600;
 }
@@ -275,8 +283,9 @@
 	padding: 8px 10px;
 	border: 1px solid var(--border-subtle);
 	border-radius: 10px;
-	background: color-mix(in srgb, var(--surface-sunken) 65%, transparent);
+	background: var(--settings-input-bg, color-mix(in srgb, var(--surface-sunken) 65%, transparent));
 	cursor: pointer;
+	transition: border-color 120ms ease, background-color 120ms ease;
 }
 .theme-color-card:hover { border-color: var(--border); background: var(--surface-hover); }
 .theme-color-card input[type="color"] {

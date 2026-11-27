@@ -52,16 +52,18 @@ export function SessionArchivePanel({ onRestored }: { onRestored?: () => Promise
 		{loading && <p role="status">アーカイブを読み込み中…</p>}
 		{notice && <p role="status">{notice}</p>}
 		{error && <p className="error" role="alert">{error}</p>}
-		{!loading && !error && !entries.length && <p>アーカイブは空です。</p>}
+		{!loading && !error && !entries.length && <div className="session-archive-empty"><p>アーカイブは空です。</p></div>}
 		<ul className="session-archive-list" aria-busy={busy}>
 			{entries.map((entry) => <li className="settings-section" key={entry.file}>
-				<strong>{entry.title || entry.sessionId}</strong>
-				<small title={entry.cwd}>{entry.cwd}</small>
-				<small><time dateTime={new Date(entry.modifiedAt).toISOString()}>{dates.format(entry.modifiedAt)}</time> · {(entry.bytes / (1024 * 1024)).toLocaleString("ja-JP", { maximumFractionDigits: 1 })} MB</small>
-				<div className="session-archive-actions">
-					<button type="button" disabled={busy} onClick={() => { void change([entry], "POST"); }}>復元</button>
-					<button type="button" className="danger" disabled={busy} onClick={() => { void change([entry], "DELETE"); }}>完全に削除</button>
+				<div className="session-archive-item-head">
+					<strong>{entry.title || entry.sessionId}</strong>
+					<div className="session-archive-actions">
+						<button type="button" disabled={busy} onClick={() => { void change([entry], "POST"); }}>復元</button>
+						<button type="button" className="danger" disabled={busy} onClick={() => { void change([entry], "DELETE"); }}>完全に削除</button>
+					</div>
 				</div>
+				<small className="session-archive-path" title={entry.cwd}>{entry.cwd}</small>
+				<small className="session-archive-meta"><time dateTime={new Date(entry.modifiedAt).toISOString()}>{dates.format(entry.modifiedAt)}</time> · {(entry.bytes / (1024 * 1024)).toLocaleString("ja-JP", { maximumFractionDigits: 1 })} MB</small>
 			</li>)}
 		</ul>
 	</>;

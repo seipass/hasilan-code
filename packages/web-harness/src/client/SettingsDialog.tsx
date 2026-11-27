@@ -15,6 +15,7 @@ import { Presence } from "./Motion.tsx";
 import { MotionSwap } from "./MotionSwap.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import "./SettingsMotion.css";
+import "./SettingsDialog.css";
 import { OAuthLogin } from "./OAuthLogin.tsx";
 import { Icon } from "./Icon.tsx";
 import type { ModelCatalog, Settings } from "./types.ts";
@@ -42,13 +43,27 @@ const SEARCH_PROVIDERS = [...SEARCH_KEY_PROVIDERS, { id: "rustxng", label: "Rust
 type SearchProviderId = Settings["search"]["defaultProvider"];
 type SearchKeyProviderId = (typeof SEARCH_KEY_PROVIDERS)[number]["id"];
 
+const APPEARANCE_SECTIONS = [
+	["appearance-theme", "テーマ"],
+	["appearance-font", "フォント"],
+	["appearance-home", "ホーム画面"],
+	["appearance-notify", "通知"],
+	["appearance-keys", "キー割り当て"],
+] as const;
+
 function BetaSettings() {
 	const [enabled, setEnabled] = usePreferenceState("pi-web-beta-turn-activity", false);
 	return <>
 		<h3>ベータ機能</h3>
+		<p className="settings-description">開発中の実験的な表示機能を先行して試せます。</p>
 		<div className="settings-section">
-			<label className="settings-toggle"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.currentTarget.checked)} /><span>チャットに AI の作業状況を表示する</span></label>
-			<p className="fine-print">AI が今している操作を表示します。作業の区切りで思考とツールの履歴をまとめ、開いて確認できます。</p>
+			<label className="settings-toggle appearance-toggle-row">
+				<span className="appearance-toggle-copy">
+					<strong>チャットに AI の作業状況を表示する</strong>
+					<span>AI が今している操作を表示し、作業の区切りで思考とツールの履歴をまとめて確認できます。</span>
+				</span>
+				<input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.currentTarget.checked)} />
+			</label>
 		</div>
 	</>;
 }
@@ -78,7 +93,9 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 	const [llmProvider, setLlmProvider] = useState("");
 	const [providerQuery, setProviderQuery] = useState("");
 	const [llmKeys, setLlmKeys] = useState<Record<string, string>>({});
+	const [activeAppearanceSection, setActiveAppearanceSection] = useState<string>(APPEARANCE_SECTIONS[0][0]);
 	const dialog = useRef<HTMLElement>(null);
+	const appearancePanel = useRef<HTMLElement>(null);
 	const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 	const titleId = useId();
 	const tabsId = useId();
@@ -169,9 +186,8 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			setLlmKeys((keys) => ({ ...keys, [selectedProvider.id]: event.target.value }));
 			setNotice(undefined);
 		}} /></label>
-		<p className="settings-inline-status" role="status">{hasLlmKey ? "入力中 · 未保存" : selectedProvider.configured ? "認証設定あり" : "キー未設定"}</p>
 		<p className="fine-print">サーバーに保存され、再起動後も利用できます。</p>
-		<div className="settings-actions"><button type="submit" disabled={busy || loginActive || !hasLlmKey}>{busy ? "保存中…" : "API キーを保存"}</button></div>
+		<div className="settings-form-footer"><p className="settings-inline-status" role="status">{hasLlmKey ? "入力中 · 未保存" : selectedProvider.configured ? "認証設定あり" : "キー未設定"}</p><div className="settings-actions"><button type="submit" disabled={busy || loginActive || !hasLlmKey}>{busy ? "保存中…" : "API キーを保存"}</button></div></div>
 	</form>;
 
 	// On a phone the tab list scrolls; keep the selected category visible when it changes.
@@ -179,6 +195,31 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 		const index = tabs.findIndex((entry) => entry.id === tab);
 		tabRefs.current[index]?.scrollIntoView({ block: "nearest", inline: "nearest" });
 	}, [tab, tabs]);
+
+	// Track which Appearance card is closest to the top so the sticky jump-nav reflects scroll position.
+	useEffect(() => {
+		if (tab !== "appearance") return;
+		const root = appearancePanel.current;
+		if (!root) return;
+		const onScroll = () => {
+			if (root.scrollTop + root.clientHeight >= root.scrollHeight - 8) {
+				setActiveAppearanceSection(APPEARANCE_SECTIONS[APPEARANCE_SECTIONS.length - 1][0]);
+				return;
+			}
+			const top = root.getBoundingClientRect().top + 96;
+			let current: string = APPEARANCE_SECTIONS[0][0];
+			for (const [id] of APPEARANCE_SECTIONS) {
+				const element = document.getElementById(id);
+				if (element && element.getBoundingClientRect().top <= top) current = id;
+			}
+			setActiveAppearanceSection(current);
+		};
+		root.addEventListener("scroll", onScroll, { passive: true });
+		onScroll();
+		return () => root.removeEventListener("scroll", onScroll);
+	}, [tab]);
+
+	const activeTabLabel = tabs.find((entry) => entry.id === tab)?.label ?? "";
 
 	return <div className="dialog-backdrop" data-closing={closing} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
 		<section ref={dialog} className="settings-dialog" inert={closing} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} onTransitionEnd={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity") finishClose(); }} onTransitionCancel={(event) => { if (closing && event.target === event.currentTarget && event.propertyName === "opacity" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) finishClose(); }} onKeyDown={(event) => {
@@ -190,7 +231,16 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
 			if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
 		}}>
-			<header className="panel-heading"><h2 id={titleId}>設定</h2><button type="button" disabled={busy || closing} onClick={requestClose} aria-label="設定を閉じる">閉じる</button></header>
+			<header className="panel-heading">
+				<div className="settings-header-title">
+					<h2 id={titleId}>設定</h2>
+					{activeTabLabel && <span className="settings-header-crumb" aria-hidden="true">/ {activeTabLabel}</span>}
+				</div>
+				<div className="settings-header-actions">
+					<kbd className="settings-esc-hint" aria-hidden="true">Esc</kbd>
+					<button type="button" className="settings-close-btn" disabled={busy || closing} onClick={requestClose} aria-label="設定を閉じる"><Icon name="close" size="inline" /><span>閉じる</span></button>
+				</div>
+			</header>
 			<div className="settings-layout">
 			<div className="settings-tabs" role="tablist" aria-label="設定のカテゴリ" aria-orientation="vertical" onKeyDown={(event) => {
 				const index = tabs.findIndex((entry) => entry.id === tab);
@@ -215,21 +265,17 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			{archiveEnabled && <Presence show={tab === "archive"}><section className="settings-content" role="tabpanel" id={`${tabsId}-archive-panel`} aria-labelledby={`${tabsId}-archive-tab`}>
 				<SessionArchivePanel onRestored={onSessionRestored} />
 			</section></Presence>}
-			<Presence show={tab === "appearance"} keepMounted><section className="settings-content appearance-stack" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
+			<Presence show={tab === "appearance"} keepMounted><section ref={appearancePanel} className="settings-content appearance-stack" role="tabpanel" id={`${tabsId}-appearance-panel`} aria-labelledby={`${tabsId}-appearance-tab`}>
 				<nav className="appearance-jump-nav" aria-label="外観セクションへ移動">
-					{(
-						[
-							["appearance-theme", "テーマ"],
-							["appearance-font", "フォント"],
-							["appearance-home", "ホーム画面"],
-							["appearance-notify", "通知"],
-							["appearance-keys", "キー割り当て"],
-						] as const
-					).map(([targetId, label]) => (
+					{APPEARANCE_SECTIONS.map(([targetId, label]) => (
 						<button
 							key={targetId}
 							type="button"
-							onClick={() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+							aria-current={activeAppearanceSection === targetId ? "true" : undefined}
+							onClick={() => {
+								setActiveAppearanceSection(targetId);
+								document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+							}}
 						>
 							{label}
 						</button>
@@ -242,23 +288,29 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 			{settings && <>
 				<Presence show={tab === "translation"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-translation-panel`} aria-labelledby={`${tabsId}-translation-tab`}>
 					<h3>翻訳・要約</h3>
+					<p className="settings-description">テキスト選択時の翻訳・要約で使う言語とモデルを設定します。</p>
 					<form onSubmit={(event) => { event.preventDefault(); if (!translationChanged) return; void perform(async () => {
 						const saved = await command<Settings>("/api/settings", { translation: { language: settings.translation.language, model: settings.translation.model ?? null } }, "PATCH");
 						setSettings((current) => current && ({ ...current, translation: saved.translation }));
 						setSavedSettings((current) => current && ({ ...current, translation: saved.translation }));
 					}, "翻訳・要約の設定を保存しました。", "設定を保存できませんでした。"); }}>
 						<fieldset disabled={busy} className="settings-section"><legend>出力の設定</legend>
-							<label>母国語<input required maxLength={80} value={settings.translation.language} onChange={(event) => { setSettings({ ...settings, translation: { ...settings.translation, language: event.target.value } }); setNotice(undefined); }} /></label>
-							<label>翻訳・要約モデル<Select value={translationModelAvailable && translationModel ? JSON.stringify([translationModel.provider, translationModel.id]) : ""} onChange={(value) => {
-								const model = catalog?.models.find((entry) => catalog.providers.some((provider) => provider.id === entry.provider && provider.configured === true) && JSON.stringify([entry.provider, entry.id]) === value);
-								setSettings({ ...settings, translation: { ...settings.translation, model: model ? { provider: model.provider, id: model.id } : undefined } }); setNotice(undefined);
-							}}><option value="">選択してください</option>{catalog?.providers.filter((provider) => provider.configured === true).map((provider) => {
-								const models = catalog.models.filter((model) => model.provider === provider.id);
-								return models.length ? <optgroup key={provider.id} label={provider.name}>{models.map((model) => <option key={`${model.provider}/${model.id}`} value={JSON.stringify([model.provider, model.id])}>{model.name ?? model.id}</option>)}</optgroup> : null;
-							})}</Select></label>
-							{translationModel && !translationModelAvailable && <p className="settings-inline-status">保存済みのモデルは利用できません。プロバイダーの認証を確認するか、別のモデルを選択してください。</p>}
+							<div className="settings-field-grid">
+								<label>母国語<input required maxLength={80} value={settings.translation.language} onChange={(event) => { setSettings({ ...settings, translation: { ...settings.translation, language: event.target.value } }); setNotice(undefined); }} /></label>
+								<label>翻訳・要約モデル<Select value={translationModelAvailable && translationModel ? JSON.stringify([translationModel.provider, translationModel.id]) : ""} onChange={(value) => {
+									const model = catalog?.models.find((entry) => catalog.providers.some((provider) => provider.id === entry.provider && provider.configured === true) && JSON.stringify([entry.provider, entry.id]) === value);
+									setSettings({ ...settings, translation: { ...settings.translation, model: model ? { provider: model.provider, id: model.id } : undefined } }); setNotice(undefined);
+								}}><option value="">選択してください</option>{catalog?.providers.filter((provider) => provider.configured === true).map((provider) => {
+									const models = catalog.models.filter((model) => model.provider === provider.id);
+									return models.length ? <optgroup key={provider.id} label={provider.name}>{models.map((model) => <option key={`${model.provider}/${model.id}`} value={JSON.stringify([model.provider, model.id])}>{model.name ?? model.id}</option>)}</optgroup> : null;
+								})}</Select></label>
+							</div>
+							{translationModel && !translationModelAvailable && <p className="settings-next-action">保存済みのモデルは利用できません。プロバイダーの認証を確認するか、別のモデルを選択してください。</p>}
 							<p className="fine-print">翻訳・要約を押したときに対象の内容を選択したモデルへ送信します。ファイルや会話の原文は変更しません。</p>
-							<button type="submit" disabled={!translationChanged || !settings.translation.language.trim()}>設定を保存</button>
+							<div className="settings-form-footer">
+								<p className="settings-inline-status" role="status">{translationChanged ? "変更は未保存です。" : "変更なし"}</p>
+								<div className="settings-actions"><button type="submit" disabled={!translationChanged || !settings.translation.language.trim()}>設定を保存</button></div>
+							</div>
 						</fieldset>
 					</form>
 				</section></Presence>
@@ -273,8 +325,10 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 						{catalog?.providers.length === 0 && <p className="settings-next-action">利用できるプロバイダーがありません。サーバーのモデル設定を確認してください。</p>}
 					</div>
 					<MotionSwap identity={llmProvider} animateHeight>{selectedProvider && <div className="settings-section settings-provider-section">
-						<h4>{selectedProvider.name}</h4>
-						<p className="credential-status" data-configured={selectedProvider.configured}>{selectedProvider.configured === true ? "認証設定あり" : selectedProvider.configured === false ? "認証未設定" : "認証状態は不明"}</p>
+						<div className="settings-provider-header">
+							<h4>{selectedProvider.name}</h4>
+							<p className="credential-status" data-configured={selectedProvider.configured}>{selectedProvider.configured === true ? "認証設定あり" : selectedProvider.configured === false ? "認証未設定" : "認証状態は不明"}</p>
+						</div>
 						{!selectedProvider.oauth && !selectedProvider.apiKey && <p className="settings-next-action">auth.json / models.json または環境変数で認証を設定し、設定画面を開き直してください。</p>}
 						{selectedProvider.oauth && tab === "providers" && (selectedProvider.configured === true ? <details className="settings-reconnect"><summary>アカウントを再接続</summary><OAuthLogin key={llmProvider} provider={llmProvider} label={selectedProvider.oauth.label} disabled={busy} onActiveChange={setLoginActive} onComplete={accountConnected} /></details> : <OAuthLogin key={llmProvider} provider={llmProvider} label={selectedProvider.oauth.label} disabled={busy} onActiveChange={setLoginActive} onComplete={accountConnected} />)}
 						{selectedProvider.apiKey && (selectedProvider.configured === true ? <details className="settings-reconnect"><summary>API キーを変更{hasLlmKey ? " · 入力中（未反映）" : ""}</summary>{keyForm}</details> : <>
@@ -298,8 +352,10 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 						<fieldset disabled={busy} className="settings-section"><legend>既定の検索サービス</legend>
 							<label>プロバイダー<Select value={settings.search.defaultProvider} onChange={(value) => { setSettings({ ...settings, search: { ...settings.search, defaultProvider: value as SearchProviderId } }); setNotice(undefined); }}>{SEARCH_PROVIDERS.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</Select></label>
 							{settings.search.defaultProvider === "rustxng" && <><label>RustXNGの接続先URL<input type="url" required maxLength={2048} value={settings.search.rustxngUrl} onChange={(event) => { setSettings({ ...settings, search: { ...settings.search, rustxngUrl: event.target.value } }); setNotice(undefined); }} /></label><p className="fine-print">RustXNGは別途インストールして起動してください。APIキーは不要です。</p><p className="settings-next-action">RustXNGは複数の検索サイトに並列アクセスします。利用状況によっては、RustXNGを動かすサーバーのIPアドレスが検索サイトから一時的または長期にブロックされる可能性があります。</p></>}
-							<p className="settings-inline-status" role="status">{searchChanged ? "変更は未保存です。" : "変更なし"} {settings.search.defaultProvider === "rustxng" ? "APIキー不要" : settings.search.configured[settings.search.defaultProvider] ? "キー設定済み" : "検索するには下でキーを保存してください。"}</p>
-							<button type="submit" disabled={!searchChanged}>既定の検索サービスを保存</button>
+							<div className="settings-form-footer">
+								<p className="settings-inline-status" role="status">{searchChanged ? "変更は未保存です。" : "変更なし"} {settings.search.defaultProvider === "rustxng" ? "APIキー不要" : settings.search.configured[settings.search.defaultProvider] ? "キー設定済み" : "検索するには下でキーを保存してください。"}</p>
+								<div className="settings-actions"><button type="submit" disabled={!searchChanged}>既定の検索サービスを保存</button></div>
+							</div>
 						</fieldset>
 					</form>
 					<fieldset disabled={busy} className="settings-section"><legend>検索 API キー（サーバーに保存）</legend>
@@ -339,21 +395,25 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 					}}>
 						<fieldset disabled={busy} className="settings-section"><legend>判断モデルの接続先</legend>
 							<p>ホームで Ctrl / Cmd + Shift + Enter を押すと、作業内容からワークスペースと新規・既存の会話を選びます。曖昧な場合は入力欄の下に候補を表示します。既存の会話は履歴とモデル設定を引き継いで続行します。</p>
-							<label>判断モデルのプロバイダー<Select value={selectedJev?.provider ?? ""} onChange={(value) => {
-								const provider = value;
-								const first = catalog?.classifiers?.find((model) => model.provider === provider);
-								setSettings((current) => current && ({ ...current, jev: { configured: !!catalog?.providers.find((entry) => entry.id === provider)?.configured, ...(first ? { model: { provider, id: first.id } } : {}) } }));
-								setNotice(undefined);
-							}}><option value="">選択してください</option>{selectedJev && !jevProviders.some((provider) => provider.id === selectedJev.provider) && <option value={selectedJev.provider}>{selectedJev.provider}（利用不可）</option>}{jevProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.configured ? "認証設定あり" : "未認証"}</option>)}</Select></label>
-							<label>判断モデル<Select value={selectedJev?.id ?? ""} disabled={!jevModels.length} onChange={(value) => {
-								if (!selectedJev) return;
-								setSettings({ ...settings, jev: { ...settings.jev, configured: !!jevProvider?.configured, model: { provider: selectedJev.provider, id: value } } });
-								setNotice(undefined);
-							}}>{!selectedJev && <option value="">プロバイダーを選択してください</option>}{selectedJev && !jevModels.some((model) => model.id === selectedJev.id) && <option value={selectedJev.id}>{selectedJev.id}（利用不可）</option>}{jevModels.map((model) => <option key={model.id} value={model.id}>{model.name ?? model.id} · {model.id}</option>)}</Select></label>
-							<p className="settings-inline-status" role="status">{jevChanged ? "未保存 · " : ""}{selectedJev ? jevProvider?.configured ? "認証設定あり" : "プロバイダーの認証が必要です。" : "モデル未選択"}</p>
+							<div className="settings-field-grid">
+								<label>判断モデルのプロバイダー<Select value={selectedJev?.provider ?? ""} onChange={(value) => {
+									const provider = value;
+									const first = catalog?.classifiers?.find((model) => model.provider === provider);
+									setSettings((current) => current && ({ ...current, jev: { configured: !!catalog?.providers.find((entry) => entry.id === provider)?.configured, ...(first ? { model: { provider, id: first.id } } : {}) } }));
+									setNotice(undefined);
+								}}><option value="">選択してください</option>{selectedJev && !jevProviders.some((provider) => provider.id === selectedJev.provider) && <option value={selectedJev.provider}>{selectedJev.provider}（利用不可）</option>}{jevProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.configured ? "認証設定あり" : "未認証"}</option>)}</Select></label>
+								<label>判断モデル<Select value={selectedJev?.id ?? ""} disabled={!jevModels.length} onChange={(value) => {
+									if (!selectedJev) return;
+									setSettings({ ...settings, jev: { ...settings.jev, configured: !!jevProvider?.configured, model: { provider: selectedJev.provider, id: value } } });
+									setNotice(undefined);
+								}}>{!selectedJev && <option value="">プロバイダーを選択してください</option>}{selectedJev && !jevModels.some((model) => model.id === selectedJev.id) && <option value={selectedJev.id}>{selectedJev.id}（利用不可）</option>}{jevModels.map((model) => <option key={model.id} value={model.id}>{model.name ?? model.id} · {model.id}</option>)}</Select></label>
+							</div>
 							<p className="fine-print">「プロバイダー」で設定した認証を共用します。</p>
 							<p className="fine-print">本文・添付の名前と種類・登録フォルダーの概要・会話タイトルと直近の依頼・結果の抜粋を選択した判断モデルに送信します。添付ファイル本体は送信しません。</p>
-							<div className="settings-actions"><button type="submit" disabled={!jevChanged || !!selectedJev && !jevModels.some((model) => model.id === selectedJev.id)}>接続先を保存</button>{selectedJev && <button type="button" onClick={() => { setLlmProvider(selectedJev.provider); setProviderQuery(""); setTab("providers"); }}>プロバイダーの認証設定</button>}</div>
+							<div className="settings-form-footer">
+								<p className="settings-inline-status" role="status">{jevChanged ? "未保存 · " : ""}{selectedJev ? jevProvider?.configured ? "認証設定あり" : "プロバイダーの認証が必要です。" : "モデル未選択"}</p>
+								<div className="settings-actions">{selectedJev && <button type="button" onClick={() => { setLlmProvider(selectedJev.provider); setProviderQuery(""); setTab("providers"); }}>プロバイダーの認証設定</button>}<button type="submit" disabled={!jevChanged || !!selectedJev && !jevModels.some((model) => model.id === selectedJev.id)}>接続先を保存</button></div>
+							</div>
 						</fieldset>
 					</form>
 					<h3>判断モデルによる Computer Use</h3>
@@ -377,8 +437,10 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 								const models = catalog.models.filter((model) => model.provider === provider.id);
 								return models.length ? <optgroup key={provider.id} label={provider.name}>{models.map((model) => <option key={`${model.provider}/${model.id}`} value={JSON.stringify([model.provider, model.id])}>{model.name ?? model.id}</option>)}</optgroup> : null;
 							})}</Select></label>
-							<p className="settings-inline-status">{textModelChanged ? "未保存 · " : ""}{textModel ? catalog?.providers.find((provider) => provider.id === textModel.provider)?.configured ? "認証設定あり" : "プロバイダーの認証が必要です。" : "文章生成モデル未選択"}</p>
-							<button type="submit" disabled={!textModelChanged}>文章生成モデルを保存</button>
+							<div className="settings-form-footer">
+								<p className="settings-inline-status">{textModelChanged ? "未保存 · " : ""}{textModel ? catalog?.providers.find((provider) => provider.id === textModel.provider)?.configured ? "認証設定あり" : "プロバイダーの認証が必要です。" : "文章生成モデル未選択"}</p>
+								<div className="settings-actions"><button type="submit" disabled={!textModelChanged}>文章生成モデルを保存</button></div>
+							</div>
 						</fieldset>
 					</form>
 					<h3>エージェントチーム</h3>
@@ -388,22 +450,37 @@ export function SettingsDialog({ onClose, onSaved, homeBackground, onHomeBackgro
 						setSavedSettings((current) => current && ({ ...current, teams }));
 					}, "エージェントチームの上限を保存しました。実行中のチームにも適用されます。", "エージェントチームの上限を保存できませんでした。"); }}>
 						<fieldset disabled={busy} className="settings-section"><legend>実行の上限</legend>
-							<label>チームごとの同時実行数<input type="number" min={1} max={32} step={1} required value={Number.isNaN(settings.teams.maxConcurrentAgents) ? "" : settings.teams.maxConcurrentAgents} onChange={(event) => { setSettings({ ...settings, teams: { ...settings.teams, maxConcurrentAgents: event.target.valueAsNumber } }); setNotice(undefined); }} /></label>
-							<label>子エージェントの最大深さ<input type="number" min={1} max={8} step={1} required value={Number.isNaN(settings.teams.maxDepth) ? "" : settings.teams.maxDepth} onChange={(event) => { setSettings({ ...settings, teams: { ...settings.teams, maxDepth: event.target.valueAsNumber } }); setNotice(undefined); }} /></label>
+							<div className="settings-field-grid">
+								<label>チームごとの同時実行数<input type="number" min={1} max={32} step={1} required value={Number.isNaN(settings.teams.maxConcurrentAgents) ? "" : settings.teams.maxConcurrentAgents} onChange={(event) => { setSettings({ ...settings, teams: { ...settings.teams, maxConcurrentAgents: event.target.valueAsNumber } }); setNotice(undefined); }} /></label>
+								<label>子エージェントの最大深さ<input type="number" min={1} max={8} step={1} required value={Number.isNaN(settings.teams.maxDepth) ? "" : settings.teams.maxDepth} onChange={(event) => { setSettings({ ...settings, teams: { ...settings.teams, maxDepth: event.target.valueAsNumber } }); setNotice(undefined); }} /></label>
+							</div>
 							<p className="fine-print">1–8。深さ 1 は直下の子まで、深さ 2 は孫まで。</p>
-							<p className="settings-inline-status" role="status">{teamsChanged ? "変更は未保存です。" : "変更なし"}</p>
-							<button type="submit" disabled={!teamsChanged || !Number.isInteger(settings.teams.maxConcurrentAgents) || settings.teams.maxConcurrentAgents < 1 || settings.teams.maxConcurrentAgents > 32 || !Number.isInteger(settings.teams.maxDepth) || settings.teams.maxDepth < 1 || settings.teams.maxDepth > 8}>エージェント設定を保存</button>
+							<div className="settings-form-footer">
+								<p className="settings-inline-status" role="status">{teamsChanged ? "変更は未保存です。" : "変更なし"}</p>
+								<div className="settings-actions"><button type="submit" disabled={!teamsChanged || !Number.isInteger(settings.teams.maxConcurrentAgents) || settings.teams.maxConcurrentAgents < 1 || settings.teams.maxConcurrentAgents > 32 || !Number.isInteger(settings.teams.maxDepth) || settings.teams.maxDepth < 1 || settings.teams.maxDepth > 8}>エージェント設定を保存</button></div>
+							</div>
 						</fieldset>
 					</form>
 				</section></Presence>
 				<Presence show={tab === "environment"} keepMounted><section className="settings-content" role="tabpanel" id={`${tabsId}-environment-panel`} aria-labelledby={`${tabsId}-environment-tab`}>
 					<h3>実行環境</h3>
-					<section className="settings-section"><h4>Browser use · Playwright</h4><p className="credential-status" data-configured={settings.browser?.ready}>{settings.browser?.ready ? "Chromium を利用できます。" : "Chromium の準備が必要です。"}</p>{settings.browser?.error && <p className="error">{settings.browser.error}</p>}{!settings.browser?.ready && <><p>サーバーを起動する環境で、次のコマンドを実行してください。</p><code>npx playwright install --no-shell chromium</code><p className="fine-print">インストール後、この設定を開き直して状態を確認してください。</p></>}</section>
-					<section className="settings-section"><h4>Computer use · デスクトップ操作</h4>
-						<p className="credential-status" data-configured={settings.computer?.ready}>{settings.computer?.ready ? "デスクトップを操作できます。" : "デスクトップ操作の準備が必要です。"}</p>
+					<p className="settings-description">ブラウザー操作およびデスクトップ操作ツールの準備状況を確認できます。</p>
+					<section className="settings-section">
+						<div className="settings-env-header">
+							<h4>Browser use · Playwright</h4>
+							<p className="credential-status" data-configured={settings.browser?.ready}>{settings.browser?.ready ? "Chromium を利用できます。" : "Chromium の準備が必要です。"}</p>
+						</div>
+						{settings.browser?.error && <p className="error">{settings.browser.error}</p>}
+						{!settings.browser?.ready && <><p>サーバーを起動する環境で、次のコマンドを実行してください。</p><p><code className="settings-cmd-block">npx playwright install --no-shell chromium</code></p><p className="fine-print">インストール後、この設定を開き直して状態を確認してください。</p></>}
+					</section>
+					<section className="settings-section">
+						<div className="settings-env-header">
+							<h4>Computer use · デスクトップ操作</h4>
+							<p className="credential-status" data-configured={settings.computer?.ready}>{settings.computer?.ready ? "デスクトップを操作できます。" : "デスクトップ操作の準備が必要です。"}</p>
+						</div>
 						<p>画面取得・クリック・ドラッグ・スクロール・文字入力・キー操作に対応します。操作対象はサーバーを実行しているPCです。</p>
 						{settings.computer?.error && <p className="error">{settings.computer.error}</p>}
-						{!settings.computer?.ready && settings.computer?.setup.map((instruction) => <p key={instruction}><code>{instruction}</code></p>)}
+						{!settings.computer?.ready && settings.computer?.setup.map((instruction) => <p key={instruction}><code className="settings-cmd-block">{instruction}</code></p>)}
 						<p className="fine-print">macOSは画面収録・アクセシビリティの許可が必要です。LinuxはX11に対応し、Waylandには対応していません。準備後、設定を開き直してください。</p>
 					</section>
 				</section></Presence>

@@ -1,0 +1,929 @@
+/* Unified Settings dialog design system: cohesive cards, controls, status pills, and responsive chrome. */
+.settings-dialog {
+	--settings-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+	--settings-card-bg: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+	--settings-card-shadow: none;
+	--settings-input-bg: var(--surface-sunken);
+	--settings-rail-bg: color-mix(in srgb, var(--surface-sunken) 58%, transparent);
+}
+:root[data-theme="light"] .settings-dialog {
+	--settings-card-bg: #ffffff;
+	--settings-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.035);
+	--settings-input-bg: #fafafa;
+	--settings-rail-bg: color-mix(in srgb, #000000 3.5%, var(--surface));
+}
+
+/* Modal shell & header */
+html body .settings-dialog.settings-dialog {
+	width: min(940px, calc(100vw - 48px));
+	height: min(720px, calc(100dvh - 48px));
+	padding: 0;
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	background: color-mix(in srgb, var(--surface) 94%, transparent);
+	backdrop-filter: blur(24px) saturate(130%);
+	box-shadow: inset 0 1px 0 var(--glass-rim), var(--glass-dialog-shadow);
+	color: var(--on-surface);
+}
+html body .settings-dialog > .panel-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 54px;
+	padding: 0 16px 0 22px;
+	border-bottom: 1px solid var(--border-subtle);
+}
+.settings-header-title {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+html body .settings-dialog > .panel-heading h2 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 22px;
+	letter-spacing: -0.015em;
+	color: var(--on-surface);
+}
+.settings-header-crumb {
+	font-size: var(--text-xs);
+	color: var(--on-surface-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.settings-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: none;
+}
+.settings-esc-hint {
+	padding: 2px 6px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 5px;
+	background: var(--settings-input-bg);
+	box-shadow: inset 0 -1px 0 var(--border);
+	color: var(--on-surface-muted);
+	font-family: var(--font-code);
+	font-size: var(--text-2xs);
+	line-height: 1.3;
+	user-select: none;
+}
+html body .settings-dialog > .panel-heading .settings-close-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	height: 28px;
+	min-height: 28px;
+	padding: 0 9px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms var(--settings-ease-out);
+}
+html body .settings-dialog > .panel-heading .settings-close-btn:hover:not(:disabled) {
+	background: var(--surface-hover);
+	border-color: var(--border);
+	color: var(--on-surface);
+}
+html body .settings-dialog > .panel-heading .settings-close-btn:active:not(:disabled) {
+	transform: scale(0.97);
+}
+
+/* Body layout & left tab rail */
+html body .settings-dialog .settings-layout {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	gap: 0;
+	margin-top: 0;
+}
+html body .settings-dialog .settings-layout .settings-tabs {
+	width: 196px;
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 12px 10px;
+	border-right: 1px solid var(--border-subtle);
+	border-bottom: 0;
+	background: var(--settings-rail-bg);
+	overflow-y: auto;
+	overflow-x: hidden;
+	mask-image: none;
+}
+html body .settings-dialog .settings-tabs button {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	width: 100%;
+	min-height: 32px;
+	padding: 6px 10px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--on-surface-muted);
+	font-size: var(--text-sm);
+	line-height: 18px;
+	text-align: left;
+	transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms var(--settings-ease-out);
+}
+html body .settings-dialog .settings-tabs button:hover {
+	background: color-mix(in srgb, var(--on-surface) 5%, transparent);
+	color: var(--on-surface);
+}
+html body .settings-dialog .settings-tabs button:active {
+	transform: scale(0.985);
+}
+html body .settings-dialog .settings-tabs button svg {
+	width: 15px;
+	height: 15px;
+	flex: none;
+	color: var(--on-surface-muted);
+	opacity: 0.78;
+	transition: color 120ms ease, opacity 120ms ease;
+}
+html body .settings-dialog .settings-tabs button:hover svg {
+	color: var(--on-surface-secondary);
+	opacity: 1;
+}
+html body .settings-dialog .settings-tabs [aria-selected="true"] {
+	background: var(--selection-fill);
+	border-color: color-mix(in srgb, var(--on-surface) 11%, transparent);
+	color: var(--on-surface);
+	font-weight: 600;
+}
+html body .settings-dialog .settings-tabs [aria-selected="true"] svg {
+	color: var(--on-surface);
+	opacity: 1;
+}
+
+/* Main panel: edge-to-edge scrolling with clean internal padding */
+html body .settings-dialog .settings-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+}
+html body .settings-dialog .settings-main > .error,
+html body .settings-dialog .settings-main > .settings-notice,
+html body .settings-dialog .settings-main > p[role="status"] {
+	flex: none;
+	margin: 14px 28px 0;
+}
+html body .settings-dialog .settings-notice {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 13px;
+	border: 1px solid color-mix(in srgb, var(--success) 32%, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--success-container) 72%, var(--surface-panel));
+	color: var(--success);
+	font-size: var(--text-xs);
+	line-height: 1.45;
+}
+html body .settings-dialog .settings-main > .error {
+	display: grid;
+	gap: 8px;
+	padding: 10px 13px;
+	border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--danger-container) 78%, var(--surface-panel));
+	color: var(--danger);
+	font-size: var(--text-xs);
+}
+html body .settings-dialog .settings-main > .error p { margin: 0; }
+html body .settings-dialog .settings-main > .error button { justify-self: start; }
+
+html body .settings-dialog .settings-panels > .settings-content {
+	padding: 22px 28px 32px;
+	font-size: var(--text-sm);
+	line-height: 1.5;
+}
+
+/* Unified tab headings & descriptions */
+html body .settings-content > h3 {
+	margin: 0 0 6px;
+	font-size: 18px;
+	font-weight: 600;
+	line-height: 1.35;
+	letter-spacing: -0.015em;
+	color: var(--on-surface);
+}
+html body .settings-content > h3:not(:first-child) {
+	margin-top: 26px;
+	font-size: 15px;
+}
+html body .settings-content > p.settings-description {
+	margin: 0 0 18px;
+	font-size: var(--text-xs);
+	line-height: 1.55;
+	color: var(--on-surface-muted);
+}
+html body .settings-content .settings-state {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0 0 14px;
+	padding: 4px 10px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 999px;
+	background: var(--settings-card-bg);
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Unified Settings card primitive (matches Appearance cards across all 9 tabs) */
+html body .settings-dialog .settings-section,
+html body .settings-dialog .appearance-card {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+	margin: 0 0 14px;
+	padding: 16px 18px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 12px;
+	background: var(--settings-card-bg);
+	box-shadow: var(--settings-card-shadow);
+}
+html body .settings-dialog .appearance-card { margin: 0; }
+html body .settings-dialog .settings-section:last-child { margin-bottom: 0; }
+html body .settings-dialog fieldset.settings-section > legend {
+	display: block;
+	float: left;
+	width: 100%;
+	padding: 0 0 10px;
+	margin: 0;
+	border-bottom: 1px solid var(--border-subtle);
+	font-size: var(--text-sm);
+	font-weight: 600;
+	line-height: 1.35;
+	color: var(--on-surface);
+}
+html body .settings-dialog fieldset.settings-section > legend + * { clear: both; }
+html body .settings-dialog .settings-section > h4 {
+	margin: 0;
+	font-size: var(--text-sm);
+	font-weight: 600;
+	line-height: 1.35;
+	color: var(--on-surface);
+}
+html body .settings-dialog .settings-section > p {
+	margin: 0;
+	font-size: var(--text-xs);
+	line-height: 1.55;
+	color: var(--on-surface-secondary);
+}
+html body .settings-dialog .settings-section > p.fine-print {
+	color: var(--on-surface-muted);
+}
+
+/* Form layout helpers */
+.settings-field-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+.settings-form-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	padding-top: 10px;
+	border-top: 1px solid var(--border-subtle);
+}
+.settings-form-footer > .settings-inline-status { margin: 0; }
+.settings-form-footer > .settings-actions { margin-inline-start: auto; }
+
+/* Unified form labels & inputs */
+html body .settings-content label:not(.settings-toggle):not(.theme-color-card):not(.theme-range):not(.font-size-control) {
+	display: grid;
+	gap: 6px;
+	min-width: 0;
+	font-size: var(--text-xs);
+	color: var(--on-surface-secondary);
+}
+html body .settings-dialog :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea) {
+	width: 100%;
+	min-width: 0;
+	min-height: 34px;
+	padding: 6px 11px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--settings-input-bg);
+	color: var(--on-surface);
+	font-size: var(--text-sm);
+	line-height: 1.4;
+	transition: border-color 120ms ease, background-color 120ms ease;
+}
+html body .settings-dialog :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea):hover:not(:disabled) {
+	border-color: var(--border-strong);
+}
+html body .settings-dialog :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea):focus-visible {
+	outline: none;
+	border-color: color-mix(in srgb, var(--on-surface) 44%, transparent);
+}
+html body .settings-dialog :is(input, textarea)::placeholder {
+	color: var(--on-surface-muted);
+	opacity: 0.72;
+}
+html body .settings-dialog .select-control .select-trigger {
+	background: var(--settings-input-bg);
+}
+
+/* Base button styling uses :where() so specialized controls (segmented tabs, chips, provider list) override cleanly. */
+html body .settings-content :where(button:not([role="option"]):not(.select-trigger)) {
+	min-height: 30px;
+	padding: 5px 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+	line-height: 1.35;
+	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms var(--settings-ease-out);
+}
+html body .settings-content :where(button:not([role="option"]):not(.select-trigger)):hover:not(:disabled) {
+	background: var(--surface-hover);
+	border-color: var(--border-strong);
+	color: var(--on-surface);
+}
+html body .settings-content :where(button:not([role="option"]):not(.select-trigger)):active:not(:disabled) {
+	transform: scale(0.98);
+}
+html body .settings-content button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+/* Primary CTAs across all Settings tabs: clean matte Inverse */
+html body .settings-content button[type="submit"],
+html body .settings-content .oauth-login-start,
+html body .settings-content .appearance-primary-btn {
+	min-height: 32px;
+	padding: 5px 14px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: var(--primary);
+	color: var(--on-primary);
+	font-weight: 600;
+	box-shadow: none;
+}
+html body .settings-content button[type="submit"]:hover:not(:disabled),
+html body .settings-content .oauth-login-start:hover:not(:disabled),
+html body .settings-content .appearance-primary-btn:hover:not(:disabled) {
+	background: var(--primary-hover);
+	border-color: transparent;
+	color: var(--on-primary);
+}
+html body .settings-content button[type="submit"]:disabled,
+html body .settings-content .oauth-login-start:disabled,
+html body .settings-content .appearance-primary-btn:disabled {
+	background: color-mix(in srgb, var(--on-surface) 9%, transparent);
+	color: var(--on-surface-muted);
+	border-color: transparent;
+	opacity: 0.65;
+}
+
+/* Danger actions: quiet at rest, semantic red only on hover */
+html body .settings-content button.danger {
+	border-color: var(--border);
+	background: transparent;
+	color: var(--on-surface-secondary);
+}
+html body .settings-content button.danger:hover:not(:disabled) {
+	border-color: color-mix(in srgb, var(--danger) 36%, transparent);
+	background: var(--danger-container);
+	color: var(--danger);
+}
+
+/* Unified pill toggle switch across Appearance & Beta tabs */
+html body .settings-dialog .settings-toggle input[type="checkbox"] {
+	appearance: none;
+	position: relative;
+	width: 36px;
+	height: 20px;
+	min-height: 0;
+	padding: 0;
+	margin: 0;
+	flex: none;
+	border-radius: 999px;
+	border: 1px solid var(--border);
+	background: var(--settings-input-bg);
+	cursor: pointer;
+	transition: background-color 140ms ease, border-color 140ms ease;
+}
+html body .settings-dialog .settings-toggle input[type="checkbox"]::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 14px;
+	height: 14px;
+	border-radius: 999px;
+	background: var(--on-surface-muted);
+	transition: transform 160ms var(--settings-ease-out), background-color 140ms ease;
+}
+html body .settings-dialog .settings-toggle input[type="checkbox"]:checked {
+	background: var(--primary);
+	border-color: transparent;
+}
+html body .settings-dialog .settings-toggle input[type="checkbox"]:checked::after {
+	transform: translateX(16px);
+	background: var(--on-primary);
+}
+
+/* Status pills, callouts, and inline/block code snippets */
+html body .settings-content .credential-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	width: fit-content;
+	margin: 0;
+	padding: 3px 9px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 999px;
+	background: var(--settings-input-bg);
+	color: var(--on-surface-muted);
+	font-size: var(--text-xs);
+	line-height: 1.3;
+}
+html body .settings-content .credential-status::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--on-surface-muted);
+	opacity: 0.6;
+	flex: none;
+}
+html body .settings-content .credential-status[data-configured="true"] {
+	border-color: color-mix(in srgb, var(--success) 32%, transparent);
+	background: color-mix(in srgb, var(--success-container) 78%, transparent);
+	color: var(--success);
+}
+html body .settings-content .credential-status[data-configured="true"]::before {
+	background: var(--success);
+	opacity: 1;
+}
+html body .settings-content .settings-inline-status {
+	margin: 0;
+	font-size: var(--text-xs);
+	color: var(--on-surface-muted);
+}
+html body .settings-content .settings-next-action {
+	margin: 0;
+	padding: 10px 12px;
+	border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent);
+	border-radius: 9px;
+	background: color-mix(in srgb, var(--warning-container) 45%, var(--settings-input-bg));
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+	line-height: 1.55;
+}
+html body .settings-content :where(code:not(.oauth-device-code)) {
+	padding: 1px 6px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 5px;
+	background: var(--settings-input-bg);
+	font-family: var(--font-code);
+	font-size: var(--text-xs);
+	color: var(--on-surface);
+}
+html body .settings-content .settings-cmd-block {
+	display: block;
+	padding: 9px 12px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	background: var(--settings-input-bg);
+	font-family: var(--font-code);
+	font-size: var(--text-xs);
+	color: var(--on-surface);
+	overflow-x: auto;
+	user-select: all;
+}
+
+/* Tab 1: Providers split layout */
+html body .settings-provider-layout {
+	display: grid;
+	grid-template-columns: minmax(176px, 218px) minmax(0, 1fr);
+	gap: 20px;
+	align-items: start;
+}
+html body .settings-dialog .settings-provider-selector {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	gap: 10px;
+}
+.settings-provider-count {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	width: fit-content;
+	margin: 0;
+	padding: 3px 9px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 999px;
+	background: var(--settings-card-bg);
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+}
+.settings-provider-count::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--success);
+}
+.settings-provider-options {
+	display: grid;
+	gap: 2px;
+	max-height: 410px;
+	overflow-y: auto;
+	margin-top: 2px;
+	padding-right: 4px;
+	scrollbar-gutter: stable;
+}
+html body .settings-content .settings-provider-options button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 32px;
+	padding: 5px 9px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--on-surface-secondary);
+	text-align: left;
+}
+html body .settings-content .settings-provider-options button:hover {
+	background: color-mix(in srgb, var(--on-surface) 5%, transparent);
+	border-color: transparent;
+	color: var(--on-surface);
+}
+html body .settings-content .settings-provider-options button[aria-pressed="true"] {
+	background: var(--selection-fill);
+	border-color: color-mix(in srgb, var(--on-surface) 11%, transparent);
+	color: var(--on-surface);
+	font-weight: 600;
+}
+.settings-provider-dot {
+	flex: none;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--on-surface-muted);
+	opacity: 0.36;
+}
+.settings-provider-dot[data-configured="true"] {
+	background: var(--success);
+	opacity: 1;
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 20%, transparent);
+}
+.settings-provider-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--border-subtle);
+}
+.settings-provider-header h4 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--on-surface);
+}
+html body .settings-dialog .settings-provider-layout .settings-provider-section {
+	margin: 0;
+	padding: 18px 20px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 12px;
+	background: var(--settings-card-bg);
+	box-shadow: var(--settings-card-shadow);
+	gap: 12px;
+}
+html body .settings-dialog .settings-key-entry,
+html body .settings-dialog .oauth-login {
+	padding: 14px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 10px;
+	background: var(--settings-input-bg);
+}
+html body .settings-dialog .settings-reconnect {
+	margin-top: 0;
+	padding-top: 10px;
+	border-top: 1px solid var(--border-subtle);
+}
+html body .settings-dialog .settings-provider-header + .settings-reconnect {
+	border-top: 0;
+	padding-top: 0;
+}
+html body .settings-dialog .settings-reconnect > summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 7px 9px;
+	margin: 0 -9px;
+	border-radius: 8px;
+	list-style: none;
+	cursor: pointer;
+	font-size: var(--text-xs);
+	font-weight: 600;
+	color: var(--on-surface-secondary);
+	transition: background-color 120ms ease, color 120ms ease;
+}
+html body .settings-dialog .settings-reconnect[open] > summary {
+	margin-bottom: 10px;
+}
+html body .settings-dialog .settings-reconnect > summary::-webkit-details-marker { display: none; }
+html body .settings-dialog .settings-reconnect > summary:hover {
+	background: var(--surface-hover);
+	color: var(--on-surface);
+}
+html body .settings-dialog .settings-reconnect > summary::after {
+	content: "";
+	width: 12px;
+	height: 12px;
+	background-color: var(--on-surface-muted);
+	mask: var(--chevron) center / contain no-repeat;
+	transition: transform 150ms var(--settings-ease-out);
+}
+html body .settings-dialog .settings-reconnect[open] > summary::after {
+	transform: rotate(90deg);
+}
+.auth-method-divider {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 2px 0;
+	padding: 0;
+	font-size: var(--text-xs);
+	color: var(--on-surface-muted);
+}
+.auth-method-divider::before,
+.auth-method-divider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--border-subtle);
+}
+
+/* Tab 4: Search API keys rows */
+html body .settings-content .credential-row {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding-top: 12px;
+	border-top: 1px solid var(--border-subtle);
+}
+html body .settings-content .credential-row:first-of-type {
+	padding-top: 0;
+	border-top: 0;
+}
+html body .settings-content .credential-row label {
+	flex: 1 1 200px;
+	min-width: 180px;
+}
+html body .settings-content .credential-row button {
+	height: 34px;
+}
+
+/* Tab 2, 3, 8: Headers & storage table */
+.settings-env-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--border-subtle);
+}
+.settings-env-header h4 { margin: 0; font-size: var(--text-sm); font-weight: 600; }
+html body .settings-content .storage-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+html body .settings-content .storage-heading h3 {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+}
+html body .settings-content .storage-table {
+	display: grid;
+	gap: 1px;
+	margin: 2px 0;
+	border: 1px solid var(--border-subtle);
+	border-radius: 9px;
+	overflow: hidden;
+	background: var(--border-subtle);
+}
+html body .settings-content .storage-table > div {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 12px;
+	border-radius: 0;
+	background: var(--settings-input-bg);
+}
+html body .settings-content .storage-table dt {
+	font-size: var(--text-xs);
+	color: var(--on-surface-secondary);
+}
+html body .settings-content .storage-table dd {
+	margin: 0;
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--on-surface);
+	font-variant-numeric: tabular-nums;
+}
+html body .settings-content .storage-table small {
+	margin-left: 8px;
+	font-weight: 400;
+	color: var(--on-surface-muted);
+	font-size: var(--text-xs);
+}
+
+/* Sticky Appearance jump-nav flush with edge-to-edge scrolling */
+html body .settings-dialog .settings-panels > .settings-content.appearance-stack {
+	padding-top: 0;
+}
+html body .settings-dialog .appearance-stack .appearance-jump-nav {
+	position: sticky;
+	top: 0;
+	z-index: 4;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	margin: 0 -28px 4px;
+	padding: 12px 28px;
+	border-bottom: 1px solid var(--border-subtle);
+	background: color-mix(in srgb, var(--surface) 90%, transparent);
+	backdrop-filter: blur(16px);
+}
+html body .settings-dialog .appearance-stack .appearance-jump-nav button {
+	min-height: 27px;
+	padding: 3px 11px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--on-surface-muted);
+	font-size: var(--text-xs);
+	white-space: nowrap;
+}
+html body .settings-dialog .appearance-stack .appearance-jump-nav button:hover {
+	background: var(--surface-hover);
+	border-color: var(--border);
+	color: var(--on-surface);
+}
+html body .settings-dialog .appearance-stack .appearance-jump-nav button[aria-current="true"] {
+	background: var(--primary);
+	border-color: transparent;
+	color: var(--on-primary);
+	font-weight: 600;
+}
+html body .settings-dialog .appearance-card {
+	scroll-margin-top: 64px;
+}
+
+/* Clean swatch hex label and code preview without nested chip borders */
+html body .settings-dialog .theme-color-meta code,
+html body .settings-dialog .font-preview-code code {
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+html body .settings-dialog .theme-color-meta code {
+	color: var(--on-surface-muted);
+	font-size: var(--text-2xs);
+}
+html body .settings-dialog .font-preview-code code {
+	color: inherit;
+	font-size: inherit;
+}
+
+/* Tactile keycaps in KeybindingSettings */
+html body .settings-content .keybinding-list {
+	margin: 0;
+	gap: 8px;
+}
+html body .settings-content .keybinding-row {
+	padding: 11px 13px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 10px;
+	background: var(--settings-input-bg);
+}
+html body .settings-content .keybinding-controls kbd {
+	padding: 3px 8px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--settings-card-bg);
+	box-shadow: inset 0 -1px 0 var(--border-strong);
+	color: var(--on-surface);
+	font-family: var(--font-code);
+	font-size: var(--text-xs);
+}
+
+/* Responsive breakpoints */
+@media (max-width: 820px) {
+	html body .settings-dialog .settings-layout .settings-tabs { width: 156px; }
+	html body .settings-dialog .settings-panels > .settings-content { padding: 18px 20px 26px; }
+	html body .settings-dialog .settings-panels > .settings-content.appearance-stack { padding-top: 0; }
+	html body .settings-dialog .appearance-stack .appearance-jump-nav { margin: 0 -20px 4px; padding: 10px 20px; top: 0; }
+	html body .settings-provider-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+	.settings-provider-options { max-height: 170px; }
+}
+@media (max-width: 640px) {
+	.settings-esc-hint { display: none; }
+	.settings-field-grid { grid-template-columns: 1fr; }
+	html body .settings-dialog .settings-layout { flex-direction: column; }
+	html body .settings-dialog .settings-layout .settings-tabs {
+		width: 100%;
+		flex-direction: row;
+		flex-wrap: nowrap;
+		gap: 4px;
+		padding: 8px 12px;
+		border-right: 0;
+		border-bottom: 1px solid var(--border-subtle);
+		overflow-x: auto;
+		overflow-y: hidden;
+		scrollbar-width: none;
+	}
+	html body .settings-dialog .settings-tabs button {
+		width: auto;
+		flex: none;
+		padding: 6px 10px;
+		min-height: 34px;
+	}
+}
+@media (max-width: 520px) {
+	html body .dialog-backdrop { padding: 0; }
+	html body .settings-dialog.settings-dialog {
+		width: 100%;
+		height: 100dvh;
+		max-height: 100dvh;
+		border: 0;
+		border-radius: 0;
+		padding-top: env(safe-area-inset-top);
+	}
+	html body .settings-dialog > .panel-heading {
+		min-height: 50px;
+		padding: 0 12px 0 16px;
+	}
+	html body .settings-dialog > .panel-heading .settings-close-btn {
+		min-height: 32px;
+		height: 32px;
+	}
+	html body .settings-dialog .settings-panels {
+		overflow: visible;
+		padding: 0;
+	}
+	html body .settings-dialog .settings-panels > .settings-content {
+		padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+	}
+	html body .settings-dialog .settings-panels > .settings-content.appearance-stack {
+		padding-top: 0;
+	}
+	html body .settings-dialog .appearance-stack .appearance-jump-nav {
+		top: 0;
+		min-height: 48px;
+		margin: 0 -16px 4px;
+		padding: 10px 16px;
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	html body .settings-dialog button,
+	html body .settings-dialog input,
+	html body .settings-dialog .settings-reconnect > summary::after {
+		transition: none !important;
+	}
+}
