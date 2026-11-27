@@ -23,14 +23,16 @@ try {
 			if (option !== "--build-pty" && option !== "--skip-browser")
 				throw new Error(`Unknown setup option: ${option}`);
 		}
+		const require = createRequire(import.meta.url);
+		const ptyRoot = dirname(require.resolve("node-pty/package.json"));
 		if (args.includes("--build-pty")) {
 			console.log("Building node-pty only; this explicitly runs its reviewed install scripts.");
 			const command = process.platform === "win32" ? "cmd.exe" : "npm";
 			const prefix = process.platform === "win32" ? ["/d", "/s", "/c", "npm"] : [];
 			const result = spawnSync(
 				command,
-				[...prefix, "rebuild", "node-pty", "--ignore-scripts=false", "--foreground-scripts"],
-				{ cwd: root, stdio: "inherit" },
+				[...prefix, "rebuild", "--prefix", ".", "--ignore-scripts=false", "--foreground-scripts"],
+				{ cwd: ptyRoot, stdio: "inherit" },
 			);
 			if (result.error) throw result.error;
 			if (result.status !== 0)
@@ -38,13 +40,15 @@ try {
 					"node-pty build failed. Install your platform's C++ build tools and Python before retrying.",
 				);
 		}
-		const require = createRequire(import.meta.url);
 		if (process.platform === "darwin") {
-			const ptyRoot = dirname(require.resolve("node-pty/package.json"));
 			for (const directory of [`prebuilds/darwin-${process.arch}`, "build/Release"]) {
 				const helper = join(ptyRoot, directory, "spawn-helper");
 				if (existsSync(helper)) chmodSync(helper, 0o755);
 			}
+		}
+		if (args.includes("--build-pty")) {
+			const failure = terminalModuleFailure();
+			if (failure) throw failure;
 		}
 		if (!args.includes("--skip-browser")) {
 			const { chromium } = require("playwright");
