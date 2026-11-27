@@ -133,6 +133,7 @@ export function uiPreferenceLimit(key: string): number | undefined {
 			"pi-web-right-tab",
 			"pi-web-right-width",
 			"pi-web-chat-width",
+			"pi-web-session-overview-collapsed",
 			"pi-web-notifications",
 			"pi-web-beta-turn-activity",
 			"pi-web-home-dashboard",
@@ -177,6 +178,7 @@ export function validUiPreference(key: string, value: unknown): value is string 
 		if (
 			key === "pi-web-sidebar-open" ||
 			key === "pi-web-right-open" ||
+			key === "pi-web-session-overview-collapsed" ||
 			key === "pi-web-notifications" ||
 			key === "pi-web-home-dashboard" ||
 			key === "pi-web-beta-turn-activity"

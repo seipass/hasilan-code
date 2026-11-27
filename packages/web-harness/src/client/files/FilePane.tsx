@@ -15,7 +15,6 @@ interface FilePaneProps {
 	enabled?: boolean;
 	workspaceId: string; activePath?: string; refreshToken: number; visible: boolean; treeVisible: boolean;
 	children: ReactNode;
-	onTreeClose?: () => void;
 	onOpen: (path: string, line?: number) => void;
 }
 const MIN_PREVIEW_WIDTH = 260;
@@ -56,7 +55,7 @@ function Directory({ workspaceId, path, refreshKey, activePath, visible, onOpen,
 	</ul>;
 }
 
-export function FilePane({ enabled = true, workspaceId, activePath, refreshToken, visible, treeVisible, children, onTreeClose, onOpen }: FilePaneProps) {
+export function FilePane({ enabled = true, workspaceId, activePath, refreshToken, visible, treeVisible, children, onOpen }: FilePaneProps) {
 	const mobile = useMobileLayout();
 	const effectiveTreeVisible = enabled && treeVisible;
 	const [mobileTreeOpen, setMobileTreeOpen] = useState(false);
@@ -118,7 +117,7 @@ export function FilePane({ enabled = true, workspaceId, activePath, refreshToken
 			<button type="button" className="files-tree-action" aria-label="ファイル一覧を更新" title="ファイル一覧を更新" disabled={refreshing} onClick={() => { void refreshTree(); }}>{refreshing ? "…" : <Icon name="refresh" size="inline" />}</button>
 			<button type="button" className="files-tree-action" aria-label="ファイル名から開く" title="ファイル名から開く（Ctrl / Cmd + P）" onClick={() => setQuickOpen(true)}><Icon name="search" size="inline" /></button>
 		</div>
-		<Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${localRefresh}`} activePath={activePath} visible={visible && effectiveTreeVisible && (!mobile || mobileTreeOpen)} onOpen={(path) => { onOpen(path); if (mobile) { setMobileTreeOpen(false); onTreeClose?.(); } }} open={treePreferences.open} filter={filter} onToggle={(path) => setTreePreferences((previous) => ({ ...previous, open: previous.open.includes(path) ? previous.open.filter((value) => value !== path) : [...previous.open, path] }))} />
+		<Directory workspaceId={workspaceId} path="" refreshKey={`${refreshToken}:${localRefresh}`} activePath={activePath} visible={visible && effectiveTreeVisible && (!mobile || mobileTreeOpen)} onOpen={(path) => { onOpen(path); if (mobile) setMobileTreeOpen(false); }} open={treePreferences.open} filter={filter} onToggle={(path) => setTreePreferences((previous) => ({ ...previous, open: previous.open.includes(path) ? previous.open.filter((value) => value !== path) : [...previous.open, path] }))} />
 	</nav> : null;
 	return <section className="files-pane" ref={pane} aria-label="作業ビューア">
 		{mobile && effectiveTreeVisible && <button type="button" className="files-tree-toggle" aria-haspopup="dialog" aria-expanded={mobileTreeOpen} aria-controls={treeId} onClick={() => setMobileTreeOpen(true)}><Icon name="folder" size="control" />ファイル一覧を開く</button>}

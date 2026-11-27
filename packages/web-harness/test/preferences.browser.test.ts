@@ -95,7 +95,12 @@ async function start(activeIds = ["canvas"]) {
 					models: [{ provider: "fixture", id: "fixture", name: "Fixture model", contextWindow: 10000 }],
 					providers: [{ id: "fixture", name: "Fixture", configured: true }],
 				});
-			else if (url.pathname === "/api/sessions" || url.pathname === "/api/terminals") sendJson(response, 200, []);
+			else if (
+				url.pathname === "/api/sessions" ||
+				url.pathname === "/api/terminals" ||
+				url.pathname === "/api/workspaces/workspace/files"
+			)
+				sendJson(response, 200, []);
 			else return false;
 			return true;
 		},
@@ -312,11 +317,15 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 			const canvas = page.getByRole("region", { name: "プロジェクト設計キャンバス" });
 			const search = page.getByRole("textbox", { name: "会話を検索" });
 			const importSession = page.getByRole("button", { name: "セッションを引き継ぐ" });
-			const fileTree = page.getByRole("button", { name: "ファイルツリー", exact: true });
+			const detailToggle = page.getByRole("button", { name: "詳細", exact: true });
+			const fileTree = page.getByRole("navigation", { name: "作業フォルダーのファイル", exact: true });
+			expect(await page.getByRole("button", { name: "ファイルツリー", exact: true }).count()).toBe(0);
 			if (enabled) {
 				await search.waitFor();
 				await importSession.waitFor();
+				await detailToggle.click();
 				await fileTree.waitFor();
+				await detailToggle.click();
 				await panelButton.waitFor();
 				expect(
 					await panelButton.evaluate((button) => button.parentElement?.previousElementSibling?.className),
@@ -327,7 +336,6 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				await canvas.waitFor();
 				expect(await panelButton.getAttribute("aria-current")).toBe("page");
 				await input.waitFor({ state: "hidden" });
-				await fileTree.waitFor({ state: "hidden" });
 				expect(await page.getByRole("button", { name: "作業一覧", exact: true }).count()).toBe(0);
 				expect(page.url()).toBe(currentUrl);
 				await page.getByRole("button", { name: "会話に戻る", exact: true }).click();
@@ -357,7 +365,9 @@ it("opens built-in and external panels from the sidebar and preserves composer n
 				expect(await panelButton.count()).toBe(0);
 				expect(await search.count()).toBe(0);
 				expect(await importSession.count()).toBe(0);
+				await detailToggle.click();
 				expect(await fileTree.count()).toBe(0);
+				await detailToggle.click();
 			}
 			await page.getByRole("button", { name: "設定", exact: true }).click();
 			const settings = page.getByRole("dialog", { name: "設定" });

@@ -117,9 +117,6 @@ export function App() {
 	const [bodyMatches, setBodyMatches] = useState<{ sessionId: string; snippet: string; role: string }[]>([]);
 	const [rightTab, setRightTab] = usePreferenceState<DetailView>("pi-web-right-tab", "tabs");
 	const [rightOpen, setRightOpen] = usePreferenceState("pi-web-right-open", false);
-	const [fileTreeOpen, setFileTreeOpen] = useState(true);
-	const [hasActiveFileTab, setHasActiveFileTab] = useState(false);
-	const [fileTabRequest, setFileTabRequest] = useState(0);
 	const [rightResizing, setRightResizing] = useState(false);
 	const [rightSettledClosed, setRightSettledClosed] = useState(() => !rightOpen);
 	const [notificationsEnabled, setNotificationsEnabled] = usePreferenceState("pi-web-notifications", false);
@@ -684,10 +681,7 @@ export function App() {
 			</nav>
 			<div className="sidebar-bottom"><button onClick={() => setSettingsOpen(true)}><Icon name="settings" size="control" />設定</button></div>
 		</aside>
-		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{hideComposer && <button type="button" className="quiet-button" onClick={() => setMode("chat")}><Icon name="chevronLeft" size="inline" />会話に戻る</button>}{!canvasMode && <button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button>}{!canvasMode && filesEnabled && <button type="button" className="quiet-button detail-toggle file-tree-toggle" aria-label="ファイルツリー" title="ファイルツリー" aria-expanded={rightOpen && rightTab === "tabs" && hasActiveFileTab && fileTreeOpen} disabled={!workspaceId} onClick={() => {
-			if (!rightOpen || rightTab !== "tabs" || !hasActiveFileTab) { setRightTab("tabs"); setRightOpen(true); setFileTreeOpen(true); setFileTabRequest((value) => value + 1); }
-			else setFileTreeOpen((value) => !value);
-		}}><Icon name="folder" size="control" /></button>}<button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
+		<div className="workspace-surface"><header className="topbar"><div className="topbar-leading"><span className="page-title">{activePanel ? activePanel.title : selectedAgent && workspaceTeam?.teamId === selectedAgent.teamId ? selectedAgent.parentAgentId ? selectedAgent.name : "マネージャー" : session?.parentSessionId ? "エージェントの会話" : session?.title?.replace(/\s+/g, " ").slice(0, 70) ?? "新しい会話"}</span></div><div className="topbar-actions">{hideComposer && <button type="button" className="quiet-button" onClick={() => setMode("chat")}><Icon name="chevronLeft" size="inline" />会話に戻る</button>}{!canvasMode && <button type="button" className="quiet-button detail-toggle" aria-label="作業一覧" title="作業一覧" onClick={() => setWorkOpen(true)}><Icon name="list" size="control" /></button>}<button ref={rightPanelToggle} className="quiet-button detail-toggle" aria-label="詳細" title="詳細" aria-controls="detail-sidebar" aria-expanded={rightOpen} onClick={() => setRightOpen((value) => !value)}><Icon name="panel" size="control" /></button></div></header>
 			<div className="home-backdrop-anchor"><HomeBackdrop background={homeBackgroundVisible ? background : undefined} /></div>
 			<PreferenceStatus />
 			<Presence show={!!(error || workspaceChannel.error || sessionChannel.error)} collapse><div className="global-error" role="alert"><span>{error ?? workspaceChannel.error ?? sessionChannel.error}</span><button onClick={() => { setError(undefined); workspaceChannel.dismissError(); sessionChannel.dismissError(); }}>閉じる</button></div></Presence>
@@ -700,7 +694,7 @@ export function App() {
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} onResizingChange={setRightResizing} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} data-resizing={rightResizing || undefined} data-settled-closed={(!rightOpen && rightSettledClosed) || undefined} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
 					<div className="right-panel-body detail-panel-body">
-						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} filesEnabled={filesEnabled} terminalEnabled={terminalEnabled} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab} fileTreeOpen={fileTreeOpen} onFileTreeOpenChange={setFileTreeOpen} fileTabRequest={fileTabRequest} onActiveFileTabChange={setHasActiveFileTab}
+						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} filesEnabled={filesEnabled} terminalEnabled={terminalEnabled} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
 							browserModel={model} team={<TeamPane snapshot={team} sessions={swarmEnabled ? summaries : summaries.map((summary) => summary.swarm ? { ...summary, swarm: undefined } : summary)} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>
