@@ -217,7 +217,7 @@ it.each(["steer", "followUp"] as const)(
 	async (mode) => {
 		const requests: string[] = [];
 		const capture: FauxResponseStep = (context) => {
-			requests.push(JSON.stringify(context.messages));
+			requests.push(JSON.stringify(context.messages.filter((message) => message.role !== "system")));
 			return fauxAssistantMessage("done");
 		};
 		const f = await fixture([

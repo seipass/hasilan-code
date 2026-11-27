@@ -48,7 +48,7 @@ createRoot(document.getElementById("root")).render(<><FilePreview workspaceId="w
 		await page.goto("http://fixture.test/");
 		const editorCss = await readFile(new URL("../src/client/files/FileEditor.css", import.meta.url), "utf8");
 		await page.addStyleTag({
-			content: `:root { --on-surface: #cdd6f4; --surface-sunken: #11111b; } body { background: #11111b; } ${editorCss}`,
+			content: `:root { --editor-cursor: #cdd6f4; --on-surface: #cdd6f4; --surface-sunken: #11111b; } body { background: #11111b; } ${editorCss}`,
 		});
 		await page.addScriptTag({ content: bundle.outputFiles[0].text });
 		const editors = page.getByRole("textbox", { name: "a.js を編集" });
@@ -70,7 +70,7 @@ createRoot(document.getElementById("root")).render(<><FilePreview workspaceId="w
 					.locator(".cm-line span")
 					.evaluateAll((spans) =>
 						spans.some(
-							(span) => span.textContent === "const" && getComputedStyle(span).color === "rgb(203, 166, 247)",
+							(span) => span.textContent === "const" && getComputedStyle(span).color === "rgb(198, 120, 221)",
 						),
 					),
 			)
