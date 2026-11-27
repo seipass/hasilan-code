@@ -1,29 +1,29 @@
-/* Antigravity Desktop-inspired composer: crisp matte-elevated surface, calm toolbar, structured model selector. */
+/* Quiet low-contrast composer: near-canvas surface, subtle hairline frame, borderless model selector. */
 html body .composer {
-	padding: 12px 14px 10px;
-	border: 1px solid var(--composer-border, var(--border));
-	border-radius: 16px;
-	box-shadow: var(--composer-shadow, var(--glass-shadow-sm));
+	padding: 10px 12px 9px;
+	border: 1px solid var(--composer-border, var(--border-subtle));
+	border-radius: 12px;
+	box-shadow: var(--composer-shadow, none);
 	transition: none;
 	animation: none;
 }
 html body .composer-home {
-	padding: 14px 14px 10px;
+	padding: 12px 12px 9px;
 }
 
 html body .composer-input-row {
 	display: block;
-	min-height: 40px;
+	min-height: 36px;
 }
 html body .composer-input-row.is-home {
-	min-height: 50px;
+	min-height: 46px;
 }
 html body .composer-input-row textarea {
 	display: block;
 	width: 100%;
 	min-width: 0;
-	min-height: 40px;
-	padding: 2px 2px 8px;
+	min-height: 36px;
+	padding: 1px 2px 8px;
 	line-height: 22px;
 	transition: none;
 	animation: none;
@@ -32,65 +32,46 @@ html body .composer-input-row textarea::placeholder {
 	color: var(--on-surface-muted);
 }
 html body .composer-input-row.is-home textarea {
-	min-height: 50px;
+	min-height: 46px;
 }
 
 html body .composer-footer {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 6px;
-	padding-top: 4px;
-	min-height: 30px;
+	gap: 8px;
+	padding-top: 2px;
+	min-height: 28px;
 	min-width: 0;
 }
 html body .composer-footer-left {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: 6px;
 	min-width: 0;
-	flex: 0 1 auto;
+	flex: 1 1 auto;
 }
 html body .composer-footer-right {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
 	min-width: 0;
 	margin-inline-start: auto;
-	flex: 0 1 auto;
-}
-
-html body .composer-footer .composer-attach-button {
-	display: grid;
-	place-items: center;
-	width: 28px;
-	height: 28px;
-	padding: 0;
-	border-radius: 8px;
-	border: 0;
-	background: transparent;
-	box-shadow: none;
-	color: var(--on-surface-muted);
 	flex: none;
-	transition: background-color 120ms ease, color 120ms ease;
-}
-html body .composer-footer .composer-attach-button:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--on-surface) 8%, transparent);
-	color: var(--on-surface);
 }
 
 html body .composer-workspace-pill {
 	display: inline-flex;
 	align-items: center;
 	gap: 5px;
-	height: 28px;
-	max-width: 184px;
-	padding: 0 8px;
-	border-radius: 8px;
+	height: 26px;
+	max-width: 168px;
+	padding: 0 9px;
+	border-radius: 999px;
 	border: 0;
-	background: transparent;
+	background: color-mix(in srgb, var(--on-surface) 6%, transparent);
 	box-shadow: none;
-	color: var(--on-surface-muted);
+	color: var(--on-surface-secondary);
 	font-size: var(--text-xs);
 	line-height: 1;
 	min-width: 0;
@@ -99,7 +80,7 @@ html body .composer-workspace-pill {
 html body .composer-workspace-pill > svg {
 	flex: none;
 	color: var(--on-surface-muted);
-	opacity: 0.78;
+	opacity: 0.8;
 }
 html body .composer-workspace-pill > span {
 	overflow: hidden;
@@ -107,141 +88,154 @@ html body .composer-workspace-pill > span {
 	white-space: nowrap;
 }
 
-html body .composer-footer-right .model-control {
+html body .composer-footer .model-control {
 	min-width: 0;
 	flex: 0 1 auto;
 }
-html body .composer-footer-right .model-trigger {
+html body .composer-footer .model-trigger {
 	display: inline-flex;
 	align-items: center;
-	height: 28px;
-	min-height: 28px;
-	padding: 0 7px 0 9px;
-	gap: 6px;
-	border: 1px solid color-mix(in srgb, var(--on-surface) 9%, transparent);
-	border-radius: 8px;
-	background: color-mix(in srgb, var(--on-surface) 4.5%, transparent);
-	color: var(--on-surface);
+	height: 26px;
+	min-height: 26px;
+	padding: 0 6px;
+	gap: 4px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--on-surface-muted);
 	font-size: var(--text-xs);
 	line-height: 1;
 	max-width: 100%;
-	transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+	transition: background-color 120ms ease, color 120ms ease;
 }
-html body .composer-footer-right .model-trigger:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--on-surface) 9%, transparent);
-	border-color: color-mix(in srgb, var(--on-surface) 15%, transparent);
-	color: var(--on-surface);
+html body .composer-footer .model-trigger:hover:not(:disabled),
+html body .composer-footer .model-trigger[aria-expanded="true"] {
+	background: color-mix(in srgb, var(--on-surface) 6%, transparent);
+	color: var(--on-surface-secondary);
 }
-html body .composer-footer-right .model-trigger[aria-expanded="true"] {
-	background: color-mix(in srgb, var(--on-surface) 10%, transparent);
-	border-color: var(--border-strong);
-	color: var(--on-surface);
-}
-html body .composer-footer-right .model-trigger:disabled {
-	opacity: 0.55;
+html body .composer-footer .model-trigger:disabled {
+	opacity: 0.5;
 	cursor: default;
 }
-html body .composer-footer-right .model-trigger-name {
+html body .composer-footer .model-trigger-name {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	max-width: 176px;
-	color: var(--on-surface);
-	font-weight: 500;
+	max-width: 180px;
+	color: inherit;
+	font-weight: 400;
 }
-html body .composer-footer-right .model-trigger-thinking {
+html body .composer-footer .model-trigger-thinking {
 	display: inline-flex;
 	align-items: center;
-	padding-left: 6px;
-	border-left: 1px solid color-mix(in srgb, var(--on-surface) 14%, transparent);
 	color: var(--on-surface-muted);
 	font-size: var(--text-2xs);
-	font-weight: 500;
-	line-height: 1.1;
-	letter-spacing: 0.01em;
+	font-weight: 400;
+	line-height: 1;
+	opacity: 0.78;
 	flex: none;
 }
-html body .composer-footer-right .model-trigger-chevron {
+html body .composer-footer .model-trigger-thinking::before {
+	content: "·";
+	margin-inline: 1px 4px;
+	opacity: 0.65;
+}
+html body .composer-footer .model-trigger-chevron {
 	color: var(--on-surface-muted);
-	opacity: 0.85;
+	opacity: 0.72;
 	flex: none;
 	transition: transform 140ms ease, color 120ms ease;
 }
-html body .composer-footer-right .model-trigger[aria-expanded="true"] .model-trigger-chevron {
+html body .composer-footer .model-trigger[aria-expanded="true"] .model-trigger-chevron {
 	transform: rotate(180deg);
+	color: var(--on-surface-secondary);
+}
+
+html body .composer-footer .composer-attach-button {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	border-radius: 999px;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: var(--on-surface-muted);
+	flex: none;
+	transition: background-color 120ms ease, color 120ms ease;
+}
+html body .composer-footer .composer-attach-button svg {
+	width: 15px;
+	height: 15px;
+}
+html body .composer-footer .composer-attach-button:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--on-surface) 7%, transparent);
 	color: var(--on-surface);
 }
 
-html body .composer-footer-right .composer-usage-slot {
+html body .composer-footer .composer-usage-slot {
 	display: flex;
 	align-items: center;
 	flex: none;
 }
-html body .composer-footer-right .cw-trigger {
-	width: 28px;
-	height: 28px;
-	min-height: 28px;
-	border-radius: 8px;
+html body .composer-footer .cw-trigger {
+	width: 26px;
+	height: 26px;
+	min-height: 26px;
+	border-radius: 999px;
 }
 
-html body .composer-footer-right .composer-delivery {
+html body .composer-footer .composer-delivery {
 	display: flex;
 	align-items: center;
-	gap: 5px;
+	gap: 4px;
 	margin: 0;
 	flex: none;
 }
-html body .composer-footer-right .send-button,
-html body .composer-footer-right .stop-button {
-	width: 28px;
-	height: 28px;
+html body .composer-footer .send-button,
+html body .composer-footer .stop-button {
+	width: 26px;
+	height: 26px;
 	border-radius: 999px;
 	box-shadow: none;
 }
-html body .composer-footer-right .send-button:not(:disabled) {
+html body .composer-footer .send-button:not(:disabled) {
 	background: var(--primary);
 	color: var(--on-primary);
 }
-html body .composer-footer-right .send-button:hover:not(:disabled) {
+html body .composer-footer .send-button:hover:not(:disabled) {
 	background: var(--primary-hover);
 	color: var(--on-primary);
 }
-html body .composer-footer-right .send-button:disabled {
-	background: color-mix(in srgb, var(--on-surface) 10%, transparent);
+html body .composer-footer .send-button:disabled {
+	background: color-mix(in srgb, var(--on-surface) 8%, transparent);
 	color: var(--on-surface-muted);
 }
 
 /* Compact widths keep the model name and chevron visible with tighter truncation. */
 html body .composer.is-compact .composer-workspace-pill {
 	max-width: 96px;
-	padding-inline: 6px;
-}
-html body .composer.is-compact .model-trigger {
-	padding: 0 6px 0 8px;
-	gap: 5px;
+	padding-inline: 8px;
 }
 html body .composer.is-compact .model-trigger-name {
-	max-width: 110px;
+	max-width: 112px;
 }
 
 @media (max-width: 520px) {
 	html body .composer {
-		padding: 11px 11px 9px;
-		border-radius: 14px;
+		padding: 10px 10px 8px;
+		border-radius: 12px;
 	}
 	html body .composer-input-row,
 	html body .composer-input-row textarea {
-		min-height: 38px;
+		min-height: 36px;
 	}
 	html body .composer-workspace-pill {
 		max-width: 88px;
-		padding-inline: 6px;
+		padding-inline: 8px;
 	}
-	html body .composer-footer-right .model-trigger {
-		padding: 0 6px 0 8px;
-		gap: 5px;
-	}
-	html body .composer-footer-right .model-trigger-name {
-		max-width: 96px;
+	html body .composer-footer .model-trigger-name {
+		max-width: 100px;
 	}
 }

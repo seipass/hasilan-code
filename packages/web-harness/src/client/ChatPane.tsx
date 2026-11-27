@@ -392,11 +392,11 @@ export function ChatPane({ session, team, loading = false, workspacePath, contex
 				</div>
 				<div className="composer-footer">
 					<div className="composer-footer-left">
-						<button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}><Icon name="plus" size="control" /></button>
 						{workspacePath && <span className="composer-workspace-pill" title={workspacePath} aria-label={workspacePath}><Icon name="folder" size="inline" /><span>{workspaceLabel(workspacePath, [])}</span></span>}
+						{modelControl}
 					</div>
 					<div className="composer-footer-right">
-						{modelControl}
+						<button type="button" className="composer-attach-button" aria-label={reading ? "添付を読み込み中" : "ファイルを添付"} title="ファイルを添付（1ファイル10 MB、合計20 MBまで）" disabled={sending || reading} onClick={() => fileInput.current?.click()}><Icon name="plus" size="control" /></button>
 						{!canRouteWorkspace && <Presence show={hasContextLimit} collapse axis="width"><div className="composer-usage-slot"><ContextWindowPopover session={session} contextWindow={contextLimit} /></div></Presence>}
 						<div className="composer-delivery">
 							{busy && <button className="stop-button" type="button" aria-label="実行を停止" title="実行を停止" onClick={onStop}><Icon name="stop" size="control" /></button>}
