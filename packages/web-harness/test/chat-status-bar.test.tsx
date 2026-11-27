@@ -155,21 +155,18 @@ const baseSession: SessionDetail = {
 };
 
 describe("ChatStatusBar rendering", () => {
-	it("shows git, PR, context, usage, and model without a run timer when idle", () => {
+	it("shows git, PR, and usage without context, model, or run timer when idle", () => {
 		const html = renderToStaticMarkup(
 			<ChatStatusBar
 				session={baseSession}
 				summaries={[]}
 				workspaceId="ws-1"
 				gitSummary={sampleGit}
-				model={{ provider: "anthropic", id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }}
-				thinkingLabel="medium"
-				contextWindow={200_000}
+				preferredProvider="anthropic"
 				connection="connected"
 				canOpenReview
 				onOpenReview={() => undefined}
 				onOpenWorkOverview={() => undefined}
-				onOpenModelMenu={() => undefined}
 				onOpenSettings={() => undefined}
 			/>,
 		);
@@ -178,10 +175,10 @@ describe("ChatStatusBar rendering", () => {
 		expect(html).toContain("+42");
 		expect(html).toContain("-12");
 		expect(html).toContain("#42");
-		expect(html).toContain("21%");
 		expect(html).toContain("16.9k tok");
 		expect(html).toContain("$0.042");
-		expect(html).toContain("Claude Sonnet 4.5");
+		expect(html).not.toContain("コンテキスト");
+		expect(html).not.toContain("chat-status-model");
 		expect(html).not.toContain("chat-status-running");
 	});
 
@@ -202,13 +199,11 @@ describe("ChatStatusBar rendering", () => {
 				summaries={[]}
 				workspaceId="ws-1"
 				gitSummary={sampleGit}
-				model={{ provider: "anthropic", id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }}
-				contextWindow={200_000}
+				preferredProvider="anthropic"
 				connection="connected"
 				canOpenReview
 				onOpenReview={() => undefined}
 				onOpenWorkOverview={() => undefined}
-				onOpenModelMenu={() => undefined}
 				onOpenSettings={() => undefined}
 			/>,
 		);
@@ -251,7 +246,6 @@ describe("ChatStatusBar rendering", () => {
 				canOpenReview={false}
 				onOpenReview={() => undefined}
 				onOpenWorkOverview={() => undefined}
-				onOpenModelMenu={() => undefined}
 				onOpenSettings={() => undefined}
 			/>,
 		);

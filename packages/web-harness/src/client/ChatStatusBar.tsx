@@ -18,7 +18,7 @@ import { api } from "./api.ts";
 import { Icon } from "./Icon.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import { sessionRecency } from "./session-recency.ts";
-import type { Model, RunStatus, SessionDetail, SessionSummary } from "./types.ts";
+import type { RunStatus, SessionDetail, SessionSummary } from "./types.ts";
 import { UsagePanel } from "./UsagePanel.tsx";
 import "./ChatStatusBar.css";
 
@@ -109,28 +109,22 @@ export function ChatStatusBar({
 	summaries,
 	workspaceId,
 	gitSummary,
-	model,
-	thinkingLabel,
-	contextWindow,
+	preferredProvider,
 	connection,
 	canOpenReview,
 	onOpenReview,
 	onOpenWorkOverview,
-	onOpenModelMenu,
 	onOpenSettings,
 }: {
 	session?: SessionDetail;
 	summaries: readonly SessionSummary[];
 	workspaceId?: string;
 	gitSummary?: WorkspaceGitSummary;
-	model?: Model;
-	thinkingLabel?: string;
-	contextWindow?: number;
+	preferredProvider?: string;
 	connection: "connecting" | "connected" | "disconnected";
 	canOpenReview: boolean;
 	onOpenReview: () => void;
 	onOpenWorkOverview: () => void;
-	onOpenModelMenu: () => void;
 	onOpenSettings: () => void;
 }) {
 	const profile = usePluginProfile();
@@ -303,19 +297,9 @@ export function ChatStatusBar({
 		[sessionHasUsage, session, usageRows],
 	);
 
-	const contextLimit = session?.contextUsage?.contextWindow ?? session?.contextBreakdown?.contextWindow ?? contextWindow ?? 0;
-	const contextTokens = session?.contextUsage?.tokens ?? session?.contextBreakdown?.totalTokens ?? null;
-	const hasContextLimit = !!session && contextLimit > 0;
-	const contextPercent =
-		hasContextLimit && contextTokens !== null
-			? Math.min(100, Math.max(0, Math.round((contextTokens / contextLimit) * 100)))
-			: undefined;
-	const contextTone =
-		contextPercent === undefined ? undefined : contextPercent >= 95 ? "danger" : contextPercent >= 80 ? "warning" : undefined;
-
 	const rateLimits = useMemo(
-		() => pickRateLimitMetrics(accountViews, model?.provider),
-		[accountViews, model?.provider],
+		() => pickRateLimitMetrics(accountViews, preferredProvider),
+		[accountViews, preferredProvider],
 	);
 	const sessionQuotaPct = rateLimits.session?.usedPercent !== undefined ? Math.round(rateLimits.session.usedPercent) : undefined;
 	const weeklyQuotaPct = rateLimits.weekly?.usedPercent !== undefined ? Math.round(rateLimits.weekly.usedPercent) : undefined;
@@ -339,7 +323,6 @@ export function ChatStatusBar({
 	const runTone = activeRun?.status === "waiting" || activeRun?.status === "cancelling" ? "warning" : "active";
 	const githubReady = githubEnabled && github?.state === "ready";
 	const todayCount = todayContributions(github);
-	const modelDisplay = model?.name ?? model?.id;
 
 	return (
 		<footer className="chat-status-bar" aria-label="ステータスバー">
@@ -501,29 +484,6 @@ export function ChatStatusBar({
 					</span>
 				)}
 
-				{hasContextLimit && (
-					<button
-						type="button"
-						className={`chat-status-item${contextTone ? ` is-${contextTone}` : ""}`}
-						data-context-popover-toggle="true"
-						aria-label={
-							contextPercent !== undefined
-								? `コンテキスト ${contextPercent}%`
-								: `コンテキスト 未計測 / ${formatStatusTokens(contextLimit)}`
-						}
-						title={
-							contextTokens !== null
-								? `コンテキスト ${contextPercent}% (${formatStatusTokens(contextTokens)} / ${formatStatusTokens(contextLimit)}) · クリックで内訳を表示`
-								: `コンテキスト上限 ${formatStatusTokens(contextLimit)} · クリックで内訳を表示`
-						}
-						onClick={() => window.dispatchEvent(new Event("hasilan:toggle-context-popover"))}
-					>
-						<Icon name="gauge" size="inline" />
-						<span className="chat-status-hide-narrow">コンテキスト</span>
-						<span>{contextPercent !== undefined ? `${contextPercent}%` : "—"}</span>
-					</button>
-				)}
-
 				{usageRows.length > 0 && (
 					<UsagePanel
 						title={sessionHasUsage ? "この会話の使用量" : "全体の使用量"}
@@ -560,21 +520,6 @@ export function ChatStatusBar({
 						<span>
 							枠 {sessionQuotaPct}%{weeklyQuotaPct !== undefined ? ` · 週 ${weeklyQuotaPct}%` : ""}
 						</span>
-					</button>
-				)}
-
-				{modelDisplay && (
-					<button
-						type="button"
-						className="chat-status-item chat-status-model chat-status-hide-medium"
-						onClick={onOpenModelMenu}
-						disabled={!!activeRun}
-						title={`モデル: ${modelDisplay}${thinkingLabel ? ` (${thinkingLabel})` : ""} · クリックで変更`}
-					>
-						<span className="chat-status-model-name">{modelDisplay}</span>
-						{thinkingLabel && thinkingLabel !== "自動" && (
-							<span className="chat-status-muted">{thinkingLabel}</span>
-						)}
 					</button>
 				)}
 			</div>

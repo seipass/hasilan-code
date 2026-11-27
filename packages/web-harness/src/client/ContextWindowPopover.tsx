@@ -132,19 +132,9 @@ export function ContextWindowPopover({
 	}, [open]);
 
 	useEffect(() => {
-		function onToggle() {
-			setOpen((value) => !value);
-		}
-		window.addEventListener("hasilan:toggle-context-popover", onToggle);
-		return () => window.removeEventListener("hasilan:toggle-context-popover", onToggle);
-	}, []);
-
-	useEffect(() => {
 		if (!open) return;
 		function onPointerDown(event: PointerEvent) {
-			const target = event.target as Element | null;
-			if (target?.closest("[data-context-popover-toggle]")) return;
-			if (!rootRef.current?.contains(target) && !popoverRef.current?.contains(target)) {
+			if (!rootRef.current?.contains(event.target as Node | null) && !popoverRef.current?.contains(event.target as Node | null)) {
 				setOpen(false);
 				setHoveredCategory(null);
 				setHoveredLimit(null);

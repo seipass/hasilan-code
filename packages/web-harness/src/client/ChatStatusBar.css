@@ -107,17 +107,6 @@ a.chat-status-item:focus-visible,
 	text-overflow: ellipsis;
 }
 
-.chat-status-model {
-	flex: 0 1 auto;
-	min-width: 0;
-}
-
-.chat-status-model-name {
-	max-width: 160px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
 .chat-status-usage-label {
 	display: inline-flex;
 	align-items: center;

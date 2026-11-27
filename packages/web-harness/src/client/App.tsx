@@ -767,14 +767,11 @@ export function App() {
 			summaries={summaries}
 			workspaceId={workspaceId}
 			gitSummary={gitSummary}
-			model={selectedModel}
-			thinkingLabel={thinkingLabel}
-			contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow}
+			preferredProvider={model?.provider}
 			connection={sessionId ? sessionChannel.connection : workspaceChannel.connection}
 			canOpenReview={gitReviewEnabled && activeConversationReady}
 			onOpenReview={() => window.dispatchEvent(new Event("hasilan:git-review"))}
 			onOpenWorkOverview={() => setWorkOpen(true)}
-			onOpenModelMenu={() => setModelOpen((value) => !value)}
 			onOpenSettings={() => setSettingsOpen(true)}
 		/>}
 		{settingsOpen && <SettingsDialog homeBackground={background} onHomeBackgroundChange={changeBackground} onClose={() => setSettingsOpen(false)} onSaved={() => { setCatalogVersion((value) => value + 1); }} onSessionRestored={async () => {
