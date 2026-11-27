@@ -9,8 +9,8 @@
 	padding: 6px 10px;
 	border: 1px solid var(--border);
 	border-radius: 8px;
-	background: var(--surface-sunken);
-	color: var(--on-surface);
+	background: var(--input-surface);
+	color: var(--input-fg);
 	font: inherit;
 	font-size: var(--text-sm);
 	text-align: left;
@@ -95,7 +95,7 @@
 .select-options [role='option'] > svg { flex: none; color: var(--on-surface); }
 .select-options [role='option'][aria-selected='true'] { color: var(--on-surface); font-weight: 600; }
 .select-options [data-highlighted='true']:not(:disabled) {
-	background: var(--selection-fill);
+	background: var(--menu-hover);
 	color: var(--on-surface);
 }
 .select-group {

@@ -140,7 +140,7 @@ html body .session-action-buttons button[type="submit"]:not(.danger):hover:not(:
 
 .topbar {
 	background: var(--surface);
-	border-bottom: 1px solid var(--border-subtle);
+	border-bottom: 1px solid var(--border-topbar);
 }
 .app-shell[data-home-background="true"] .topbar {
 	background: transparent;
@@ -170,14 +170,14 @@ html body .session-action-buttons button[type="submit"]:not(.danger):hover:not(:
 .app-shell[data-home-background="true"] :is(.page-title, .sidebar-toggle) { color: var(--on-surface); }
 .app-shell[data-home-background="true"] .topbar .quiet-button:hover { background: color-mix(in srgb, var(--surface-hover) 85%, transparent); }
 
-/* Flat VS Code-style docked panel sharing the primary workbench surface and 1px hairline border. */
-.right-panel { --detail-corner: 0; border-left: 1px solid var(--border-subtle); border-radius: 0; background: var(--surface); box-shadow: none; }
+/* 111-theme docked panel: #111111 surface with #2a2a2a panel.border left edge. */
+.right-panel { --detail-corner: 0; border-left: 1px solid var(--border-panel); border-radius: 0; background: var(--surface); box-shadow: none; }
 .right-panel-body.detail-panel-body { border-radius: 0; }
 .right-panel :is(.files-pane, .detail-toolbar, .detail-new-tab, .detail-file-empty, .files-tree, .files-view-mode, .files-viewer, .detail-auxiliary, .team-pane, .team-graph, .team-graph-viewport) { background-color: var(--surface); }
 .right-panel .files-splitter { background-color: transparent; }
 /* The containing detail view already handles entrance and exit. */
 .right-panel .team-pane { animation: none; }
-.right-panel .files-line-number { background: var(--surface); }
+.right-panel .files-line-number { background: var(--editor-gutter, var(--surface-raised)); }
 .right-panel .files-selected-line .files-line-number { background: var(--secondary-container); }
 @media (min-width: 901px) {
 	.topbar { position: relative; z-index: 1; }

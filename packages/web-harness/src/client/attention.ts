@@ -134,10 +134,10 @@ function setFaviconState(state: "idle" | "running" | "done"): void {
 		if (state !== "idle") {
 			context.beginPath();
 			context.arc(48, 16, 14, 0, Math.PI * 2);
-			context.fillStyle = state === "running" ? "#89b4fa" : "#a6e3a1";
+			context.fillStyle = state === "running" ? "#75beff" : "#73c991";
 			context.fill();
 			context.lineWidth = 5;
-			context.strokeStyle = "#1e1e2e";
+			context.strokeStyle = "#111111";
 			context.stroke();
 		}
 		const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement("link");

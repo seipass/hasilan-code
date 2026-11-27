@@ -70,7 +70,7 @@
 .files-source-lines { min-width: 100%; width: max-content; padding: 14px 0; font-family: var(--font-code); font-size: var(--text-code); line-height: var(--leading-code); tab-size: var(--tab-code); }
 .files-source-lines > div { display: flex; min-width: max-content; }
 .files-source-lines code { white-space: pre; font-family: inherit; font-size: inherit; padding-right: 20px; }
-.files-line-number { position: sticky; left: 0; flex-shrink: 0; min-width: var(--code-gutter); padding: 0 14px 0 8px; text-align: right; color: var(--on-surface-muted); background: var(--surface); user-select: none; font-size: inherit; }
+.files-line-number { position: sticky; left: 0; flex-shrink: 0; min-width: var(--code-gutter); padding: 0 14px 0 8px; text-align: right; color: var(--editor-line-number, #a3a3a3); background: var(--editor-gutter, #191919); user-select: none; font-size: inherit; }
 .files-selected-line, .files-selected-line .files-line-number { background: var(--secondary-container); }
 .files-source-lines > div, .files-line-number { transition: background-color var(--motion-quick) ease; }
 /* Image viewer: fit first, then zoom/pan without ever scrolling the pane itself. */
@@ -87,7 +87,7 @@
 .image-viewer-stage[data-interactable] { cursor: grab; }
 .image-viewer-stage[data-panning] { cursor: grabbing; }
 .image-viewer-stage:focus-visible { box-shadow: inset 0 0 0 2px var(--primary); }
-.image-viewer-stage[data-checker] { background-image: conic-gradient(#2a2a3c 25%, transparent 0 50%, #2a2a3c 0 75%, transparent 0); background-size: 16px 16px; }
+.image-viewer-stage[data-checker] { background-image: conic-gradient(#252525 25%, transparent 0 50%, #252525 0 75%, transparent 0); background-size: 16px 16px; }
 /* The image always lays out at its fit size; zoom is a transform from there, so
    stepping past 100% never snaps the element to its natural pixel size first. */
 .image-viewer-image { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; user-select: none; transition: opacity 160ms ease; will-change: transform; }
@@ -129,16 +129,16 @@
 .files-splitter::before { content: ""; position: absolute; inset: 0 3px; width: 2px; background: var(--primary); opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
 .files-splitter:hover::before, .files-splitter:focus-visible::before, .files-splitter[data-resizing="true"]::before { opacity: .65; }
 .files-splitter:focus-visible { outline: none; }
-.files-tree { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px 4px; background: var(--surface); border-left: 1px solid var(--border-subtle); }
+.files-tree { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px 4px; background: var(--surface); border-left: 1px solid var(--border-panel); }
 .files-layout > .files-tree[data-motion-exit="true"] { position: absolute; right: 0; top: 0; bottom: 0; }
 .files-tree-list { position: relative; list-style: none; padding: 0; margin: 0; min-width: 0; font-size: 12px; }
-.files-tree-list .files-tree-list { padding-left: 12px; }
+.files-tree-list .files-tree-list { padding-left: 11px; margin-left: 7px; border-left: 1px solid color-mix(in srgb, var(--tree-indent-guide) 24%, transparent); }
 .files-tree-children { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 260ms var(--motion-ease), opacity 180ms ease; }
 .files-tree-children[data-open="true"] { grid-template-rows: 1fr; opacity: 1; }
 .files-tree-children > div { min-height: 0; overflow: hidden; }
-.files-tree-entry { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; min-height: 22px; text-align: left; padding: 2px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--on-surface-secondary); font-size: 12px; line-height: 18px; }
-.files-tree-entry:hover { background: var(--surface-hover); color: var(--on-surface); }
-.files-tree-entry[aria-current="true"] { background: var(--surface-raised); color: var(--on-surface); }
+.files-tree-entry { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; min-height: 22px; text-align: left; padding: 2px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--on-surface-sidebar); font-size: 12px; line-height: 18px; }
+.files-tree-entry:hover { background: var(--list-hover-bg); color: var(--list-hover-fg); }
+.files-tree-entry[aria-current="true"] { background: var(--list-active-bg); color: var(--list-active-fg); }
 .files-tree-marker { width: 12px; flex-shrink: 0; color: var(--on-surface-muted); font-size: 10px; line-height: 1; text-align: center; }
 .files-tree-marker { transition: transform 180ms var(--motion-ease); }
 .files-type-icon { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; color: var(--on-surface-muted); }
@@ -182,7 +182,8 @@
 }
 .files-tree-dirty { flex: none; margin-left: auto; color: var(--warning); font-size: var(--text-2xs); line-height: 1; }
 .files-tree-toolbar { display: flex; align-items: center; gap: 3px; padding: 0 2px 6px; }
-.files-tree-filter { flex: 1; min-width: 0; height: 24px; padding: 2px 7px; border-color: var(--border-subtle); border-radius: 4px; background: var(--surface-raised); font-size: 12px; line-height: 18px; }
+.files-tree-filter { flex: 1; min-width: 0; height: 24px; padding: 2px 7px; border-color: transparent; border-radius: 4px; background: var(--input-filter-surface); color: var(--input-fg); font-size: 12px; line-height: 18px; }
+.files-tree-filter::placeholder { color: var(--input-placeholder); }
 .files-tree-action { display: grid; place-items: center; flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--on-surface-muted); font-size: var(--text-sm); }
 .files-tree-action:hover:not(:disabled) { background: var(--surface-hover); color: var(--on-surface); }
 @media (max-width: 900px) { .files-tree-filter { height: auto; font-size: var(--text-lg); } .files-tree-action { width: 40px; height: 40px; } }

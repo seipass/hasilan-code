@@ -1,10 +1,10 @@
 /* Unified Settings dialog design system: cohesive cards, controls, status pills, and responsive chrome. */
 .settings-dialog {
 	--settings-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-	--settings-card-bg: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+	--settings-card-bg: var(--surface-panel);
 	--settings-card-shadow: none;
-	--settings-input-bg: var(--surface-sunken);
-	--settings-rail-bg: color-mix(in srgb, var(--surface-sunken) 58%, transparent);
+	--settings-input-bg: var(--input-surface);
+	--settings-rail-bg: var(--surface);
 }
 :root[data-theme="light"] .settings-dialog {
 	--settings-card-bg: #ffffff;
@@ -332,8 +332,8 @@ html body .settings-dialog :where(input:not([type="checkbox"]):not([type="radio"
 	border-color: color-mix(in srgb, var(--on-surface) 44%, transparent);
 }
 html body .settings-dialog :is(input, textarea)::placeholder {
-	color: var(--on-surface-muted);
-	opacity: 0.72;
+	color: var(--input-placeholder);
+	opacity: 1;
 }
 html body .settings-dialog .select-control .select-trigger {
 	background: var(--settings-input-bg);

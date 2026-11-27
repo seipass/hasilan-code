@@ -29,7 +29,7 @@ html body .composer-input-row textarea {
 	animation: none;
 }
 html body .composer-input-row textarea::placeholder {
-	color: var(--on-surface-muted);
+	color: var(--input-placeholder, #5e5e5e);
 }
 html body .composer-input-row.is-home textarea {
 	min-height: 24px;

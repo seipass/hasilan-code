@@ -11,19 +11,19 @@ import { api, errorMessage } from "../api.ts";
 import { discardDraft, draftKey, type FileDraft, getDraft, isDraftDirty, setDraft as updateDraft, subscribeDraft } from "./file-drafts.ts";
 import "./FileEditor.css";
 
-// Colors come from the syntax tokens in styles.css so the editor, the read card and a
-// diff can never drift apart, and the tag mapping mirrors the `.hljs-*` rules:
-// standard names and type names are the same yellow, doc comments are comments.
+// Syntax highlighting mapped directly to ri0n-dev/111-theme tokenColors (themes/111-theme.json).
 const highlight = syntaxHighlighting(HighlightStyle.define([
-	{ tag: [tags.keyword, tags.operatorKeyword, tags.modifier], color: "var(--syntax-keyword, #c678dd)" },
-	{ tag: [tags.string, tags.special(tags.string), tags.regexp, tags.attributeValue], color: "var(--syntax-string, #98c379)" },
-	{ tag: [tags.number, tags.bool, tags.null], color: "var(--syntax-number, #d19a66)" },
-	{ tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: "var(--syntax-function, #61afef)" },
-	{ tag: [tags.typeName, tags.className, tags.standard(tags.name), tags.labelName], color: "var(--syntax-type, #e5c07b)" },
-	{ tag: [tags.propertyName, tags.attributeName, tags.tagName, tags.variableName], color: "var(--syntax-property, #56b6c2)" },
+	{ tag: [tags.keyword, tags.operatorKeyword, tags.modifier, tags.controlKeyword, tags.moduleKeyword, tags.definitionKeyword], color: "var(--syntax-keyword, #c678dd)" },
+	{ tag: [tags.string, tags.special(tags.string), tags.attributeValue], color: "var(--syntax-string, #98c379)" },
+	{ tag: [tags.regexp, tags.escape, tags.operator, tags.compareOperator, tags.logicOperator, tags.arithmeticOperator, tags.bitwiseOperator, tags.definitionOperator, tags.updateOperator], color: "var(--syntax-property, #56b6c2)" },
+	{ tag: [tags.number, tags.bool, tags.null, tags.atom, tags.constant(tags.variableName), tags.attributeName, tags.strong], color: "var(--syntax-number, #d19a66)" },
+	{ tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.definition(tags.function(tags.variableName))], color: "var(--syntax-function, #61afef)" },
+	{ tag: [tags.typeName, tags.className, tags.namespace, tags.self, tags.standard(tags.name), tags.labelName], color: "var(--syntax-type, #e5c07b)" },
+	{ tag: [tags.variableName, tags.propertyName, tags.tagName, tags.heading, tags.meta, tags.processingInstruction], color: "var(--syntax-meta, #e06c75)" },
+	{ tag: [tags.punctuation, tags.bracket, tags.separator, tags.angleBracket], color: "var(--syntax-punctuation, #bababa)" },
 	{ tag: [tags.comment, tags.blockComment, tags.lineComment, tags.docComment], color: "var(--syntax-comment, #686868)", fontStyle: "italic" },
-	{ tag: [tags.meta, tags.processingInstruction], color: "var(--syntax-meta, #e06c75)" },
-	{ tag: [tags.invalid], color: "var(--syntax-meta, #e06c75)", textDecoration: "underline" },
+	{ tag: [tags.emphasis], color: "var(--syntax-keyword, #c678dd)", fontStyle: "italic" },
+	{ tag: [tags.invalid], color: "var(--syntax-invalid, #f44747)", textDecoration: "underline" },
 ]));
 
 export function FileEditor({ workspaceId, path, line, visible = true }: { workspaceId: string; path: string; line?: number; visible?: boolean }) {

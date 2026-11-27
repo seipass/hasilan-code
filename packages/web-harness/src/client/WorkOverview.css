@@ -341,9 +341,9 @@
 	line-height: 1.55;
 }
 .work-overview-diff .diff-line { display: block; padding: 0 12px; white-space: pre; }
-.work-overview-diff .diff-line.is-add { background: color-mix(in srgb, var(--success) 13%, transparent); color: var(--success); }
-.work-overview-diff .diff-line.is-del { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
-.work-overview-diff .diff-line.is-hunk { color: var(--secondary); }
+.work-overview-diff .diff-line.is-add { background: var(--diff-add-bg); color: var(--diff-add-fg); }
+.work-overview-diff .diff-line.is-del { background: var(--diff-remove-bg); color: var(--diff-remove-fg); }
+.work-overview-diff .diff-line.is-hunk { color: var(--diff-hunk-fg); }
 
 .work-overview-placeholder {
 	display: grid;

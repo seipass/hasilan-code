@@ -131,8 +131,8 @@
 }
 .git-review-lines button:hover { background: var(--surface-hover); color: var(--on-surface); }
 .git-review-lines code { white-space: pre; padding-right: 12px; }
-.git-review-lines [data-kind="add"] { background: color-mix(in srgb, var(--success) 13%, transparent); }
-.git-review-lines [data-kind="remove"] { background: color-mix(in srgb, var(--danger) 13%, transparent); }
+.git-review-lines [data-kind="add"] { background: var(--diff-add-bg); color: var(--diff-add-fg); }
+.git-review-lines [data-kind="remove"] { background: var(--diff-remove-bg); color: var(--diff-remove-fg); }
 
 .git-review-comment {
 	padding: 12px 18px;
