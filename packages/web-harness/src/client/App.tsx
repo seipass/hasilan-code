@@ -27,6 +27,7 @@ import { PreferenceStatus } from "./PreferenceStatus.tsx";
 import { canvasPanel } from "./plugins/canvas.tsx";
 import { externalPanel } from "./plugins/external-panel.tsx";
 import { GoalControl } from "./plugins/goal.tsx";
+import { HyakkiControl } from "./plugins/hyakki.tsx";
 import { pluginManagerPanel } from "./plugins/manager.tsx";
 import { usePluginProfile } from "./plugins/profile.tsx";
 import type { WorkspacePanel } from "./plugins/workspace-panels.ts";
@@ -157,6 +158,7 @@ export function App() {
 	const [mainWidth, setMainWidth] = useState(0);
 	const [fileTarget, setFileTarget] = useState<FileTarget>();
 	const [browserTarget, setBrowserTarget] = useState<{ id: string; url: string }>();
+	const [teamBoardRequest, setTeamBoardRequest] = useState(0);
 	const [filesVersion, setFilesVersion] = useState(0);
 	const [gitSummary, setGitSummary] = useState<WorkspaceGitSummary>();
 	const draftSession = useRef<string | undefined>(undefined);
@@ -492,7 +494,12 @@ export function App() {
 			const parsed = parseComposerCommand(text);
 			if (destination && (sessionId || mode !== "chat" || parsed.kind !== "prompt")) throw new Error("判断モデルによる選択はホームの通常メッセージで利用できます。");
 			if (attachments.length && parsed.kind !== "prompt") throw new Error("添付ファイルは通常のメッセージとして送信してください。");
-			if (parsed.kind === "hyakki" || parsed.kind === "hyakki-continue") {
+			if (
+				parsed.kind === "hyakki" ||
+				parsed.kind === "hyakki-continue" ||
+				parsed.kind === "hyakki-pause" ||
+				parsed.kind === "hyakki-status"
+			) {
 				if (!profile) throw new Error("プラグインの読み込みが完了してから操作してください。");
 				if (!swarmEnabled) throw new Error("Hyakki-Yako が無効です。");
 			}
@@ -533,9 +540,24 @@ export function App() {
 				const manager = team?.agents.find((agent) => agent.agentId === workspaceTeam?.rootAgentId);
 				const target = manager?.sessionId ?? sessionId;
 				if (!target) throw new Error("再開するスウォームがありません。");
-				await command(`/api/sessions/${encodeURIComponent(target)}/swarm/continue`, {});
+				await continueSwarm(target);
 				setSessionId(target); setMode("chat"); setRightTab("team"); setRightOpen(true);
 				result = { notice: "スウォームを再開しました。" };
+			} else if (parsed.kind === "hyakki-pause") {
+				const manager = team?.agents.find((agent) => agent.agentId === workspaceTeam?.rootAgentId);
+				const target = manager?.sessionId ?? sessionId;
+				if (!target) throw new Error("一時停止するスウォームがありません。");
+				await pauseSwarm(target);
+				result = { notice: "スウォームを一時停止しました。" };
+			} else if (parsed.kind === "hyakki-status") {
+				const manager = team?.agents.find((agent) => agent.agentId === workspaceTeam?.rootAgentId);
+				const target = manager?.sessionId ?? sessionId;
+				if (target && target !== sessionId) setSessionId(target);
+				setMode("chat");
+				setRightTab("team");
+				setRightOpen(true);
+				setTeamBoardRequest((value) => value + 1);
+				result = { notice: "Hyakki-Yako の状況を開きました。" };
 			} else if (parsed.kind === "goal") {
 				const goal = await goalAction(parsed.action);
 				result = { notice: goal ? `Goal: ${goal.objective}` : "Goal は設定されていません。" };
@@ -589,6 +611,16 @@ export function App() {
 		const result = await command<Goal | null>(`/api/sessions/${encodeURIComponent(target)}/goal`, action);
 		if (action.op === "create") setSessionId(target);
 		return result;
+	}
+	async function pauseSwarm(targetSessionId: string): Promise<void> {
+		if (!profile) throw new Error("プラグインの読み込みが完了してから操作してください。");
+		if (!swarmEnabled) throw new Error("Hyakki-Yako が無効です。");
+		await command(`/api/sessions/${encodeURIComponent(targetSessionId)}/swarm/pause`, {});
+	}
+	async function continueSwarm(targetSessionId: string): Promise<void> {
+		if (!profile) throw new Error("プラグインの読み込みが完了してから操作してください。");
+		if (!swarmEnabled) throw new Error("Hyakki-Yako が無効です。");
+		await command(`/api/sessions/${encodeURIComponent(targetSessionId)}/swarm/continue`, {});
 	}
 	async function startSwarm(objective: string): Promise<void> {
 		if (!workspaceId) throw new Error("ワークスペースを選択してください。");
@@ -749,13 +781,13 @@ export function App() {
 				{activePanels?.map(({ id, View }) => <Presence key={id} show={mode === id} keepMounted><div className="mode-page" inert={mode !== id}>
 					<View workspaceId={workspaceId} opened={openedPanels.includes(id)} onDraft={insertPanelDraft} onDirtyChange={(dirty) => setDirtyPanels((previous) => dirty === previous.includes(id) ? previous : dirty ? [...previous, id] : previous.filter((entry) => entry !== id))} />
 				</div></Presence>)}
-				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={hideComposer} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} parentSessionTitle={session?.parentSessionId ? summaries.find((entry) => entry.sessionId === session.parentSessionId)?.title : undefined} team={team} surface={mode !== "chat"} suppressFloatingActions={narrowViewport} gitRefreshToken={filesVersion} gitSummary={gitSummary} gitSummaryManaged draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onCreatePr={createPr} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
+				<MotionSwap identity={`${workspaceId}:${sessionId ?? "new"}:${mode}`} ready={!sessionId || !!session} hidden={hideComposer} className={`chat-page-transition${activePanel ? " is-surface" : ""}`}><ChatPane commands={commands} loading={!!sessionId && !session} key={sessionId ?? `new:${workspaceId ?? "loading"}`} draftKey={sessionId ?? `new:${workspaceId ?? "loading"}`} workspacePath={workspace?.path} session={session} parentSessionTitle={session?.parentSessionId ? summaries.find((entry) => entry.sessionId === session.parentSessionId)?.title : undefined} team={team} surface={mode !== "chat"} suppressFloatingActions={narrowViewport} gitRefreshToken={filesVersion} gitSummary={gitSummary} gitSummaryManaged draftInsertion={draftInsertion} onDraftInserted={clearDraftInsertion} contextWindow={catalog?.models.find((entry) => entry.provider === model?.provider && entry.id === model.id)?.contextWindow} connected={sessionId ? sessionChannel.connection === "connected" : workspaceChannel.connection === "connected"} modelSetup={modelSetup} modelControl={modelControl} composerDock={composerDock} homeDashboard={homeDashboardEnabled && !sessionId && mode === "chat" ? <HomeDashboard sessions={summaries} workspaces={workspaces} onSession={selectSession} /> : undefined} goalControl={goalEnabled && session?.goal && !session.parentSessionId && <GoalControl session={session} connected={sessionChannel.connection === "connected"} onAction={async (action) => { await goalAction(action); }} />} swarmControl={swarmEnabled && session?.swarm && !session.parentSessionId && <HyakkiControl session={session} team={team} connected={sessionChannel.connection === "connected"} onPause={() => pauseSwarm(session.sessionId)} onContinue={() => continueSwarm(session.sessionId)} onOpenBoard={() => { setRightTab("team"); setRightOpen(true); setTeamBoardRequest((value) => value + 1); }} />} onSend={send} onPendingInputAction={mutatePendingInput} onSurfaceAction={actOnSurface} onCreatePr={createPr} onFile={openFile} onStop={() => { if (sessionId) void stop(sessionId); }} onParent={selectSession} onModelSelect={() => setModelOpen(true)} onProviderSettings={() => setSettingsOpen(true)} onLoadOlder={sessionChannel.loadOlder} historyLoading={sessionChannel.historyLoading} historyError={sessionChannel.historyError} onRetry={() => { void retryLast().catch((reason: unknown) => setError(errorMessage(reason))); }} /></MotionSwap>
 				<Presence show={!hideComposer && modelOpen}><div className="motion-contents"><ModelMenu catalog={catalog} value={model} thinkingLevel={session?.thinkingLevel ?? draftThinking} onChange={changeModel} onThinkingChange={changeThinking} onSettings={() => { setModelOpen(false); setSettingsOpen(true); }} onClose={() => setModelOpen(false)} disabled={!!session?.currentRun} /></div></Presence>
 			</main><div className="detail-resize-slot" aria-hidden={!rightOpen} inert={!rightOpen}><PanelResize value={actualRightWidth} minimum={480} maximum={rightMaximum} label="詳細パネルの幅" onChange={setRightWidth} onResizingChange={setRightResizing} /></div>
 				<aside ref={rightPanelRef} id="detail-sidebar" className="right-panel" aria-hidden={!rightOpen} inert={!rightOpen} data-resizing={rightResizing || undefined} data-settled-closed={(!rightOpen && rightSettledClosed) || undefined} style={{ width: viewport.width > 900 ? panelWidth : undefined, marginRight: viewport.width > 900 ? rightOpen ? 0 : `calc(-1 * ${panelWidth})` : undefined }}>
 					<div className="right-panel-body detail-panel-body">
 						<MotionSwap identity={workspaceId ?? "loading"} className="detail-content-transition">{workspaceId && <DetailPane key={workspaceId} workspaceId={workspaceId} filesEnabled={filesEnabled} terminalEnabled={terminalEnabled} target={fileTarget} browserTarget={browserTarget} refreshToken={filesVersion} visible={rightOpen} view={rightTab} onViewChange={setRightTab}
-							browserModel={model} team={<TeamPane snapshot={team} sessions={swarmEnabled ? summaries : summaries.map((summary) => summary.swarm ? { ...summary, swarm: undefined } : summary)} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} />}
+							browserModel={model} team={<TeamPane snapshot={team} sessions={swarmEnabled ? summaries : summaries.map((summary) => summary.swarm ? { ...summary, swarm: undefined } : summary)} selectedSessionId={sessionId} visible={rightOpen && rightTab === "team"} onSelect={selectSession} onStop={(id) => { void stop(id); }} onFile={openFile} onPauseSwarm={swarmEnabled ? pauseSwarm : undefined} onContinueSwarm={swarmEnabled ? continueSwarm : undefined} boardRequest={teamBoardRequest} />}
 							tools={<ToolInspector tools={session?.toolCalls ?? []} onFile={openFile} />} />}</MotionSwap>
 					</div>
 				</aside>

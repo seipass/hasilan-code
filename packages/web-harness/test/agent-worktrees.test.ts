@@ -149,4 +149,59 @@ describe("agent Git worktrees", () => {
 			await rm(realRoot, { recursive: true, force: true });
 		}
 	}, 30_000);
+
+	it("syncs clean and non-conflicting worktrees after adoption while rolling back conflicting local edits safely", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "hasilan-agent-sync-"));
+		try {
+			const source = join(directory, "source");
+			await mkdir(source);
+			git(source, "init", "-q");
+			await writeFile(join(source, "shared.txt"), "v1\n");
+			const service = new AgentWorktrees(directory);
+			const alpha = await service.create(source);
+			const beta = await service.create(source);
+			const gamma = await service.create(source);
+			if (!alpha || !beta || !gamma) throw new Error("Worktrees were not created");
+			const alphaCwd = await service.cwd(alpha, source);
+			const betaCwd = await service.cwd(beta, source);
+			const gammaCwd = await service.cwd(gamma, source);
+
+			// Alpha edits shared.txt and adds auth.txt, then adopts into source.
+			await writeFile(join(alphaCwd, "shared.txt"), "v2-from-alpha\n");
+			await writeFile(join(alphaCwd, "auth.txt"), "auth-impl\n");
+			const adopted = await service.changes(alpha, source);
+			expect(adopted.changed).toBe(true);
+			alpha.baseline = adopted.baseline;
+
+			// Beta edits an independent file and syncs: onlyIfClean skips, full sync merges cleanly.
+			await writeFile(join(betaCwd, "ui.txt"), "ui-impl\n");
+			const skipped = await service.sync(beta, source, { onlyIfClean: true });
+			expect(skipped).toMatchObject({ updated: false, hadLocalChanges: true });
+			const syncedBeta = await service.sync(beta, source);
+			expect(syncedBeta).toMatchObject({ updated: true, hadLocalChanges: true });
+			beta.baseline = syncedBeta.baseline;
+			expect(await readFile(join(betaCwd, "auth.txt"), "utf8")).toMatch(/^auth-impl\r?\n$/);
+			expect(await readFile(join(betaCwd, "ui.txt"), "utf8")).toMatch(/^ui-impl\r?\n$/);
+			const betaDiff = await service.changes(beta);
+			expect(betaDiff.changed).toBe(true);
+			expect(betaDiff.diff).toContain("+ui-impl");
+			expect(betaDiff.diff).not.toContain("+auth-impl");
+
+			// Clean gamma syncs directly and sees alpha's adopted files with zero local diff.
+			const syncedGamma = await service.sync(gamma, source, { onlyIfClean: true });
+			expect(syncedGamma).toMatchObject({ updated: true, hadLocalChanges: false });
+			gamma.baseline = syncedGamma.baseline;
+			expect(await readFile(join(gammaCwd, "auth.txt"), "utf8")).toMatch(/^auth-impl\r?\n$/);
+			expect((await service.changes(gamma)).changed).toBe(false);
+
+			// Conflicting local change on gamma is rolled back cleanly when sync conflicts with source.
+			await writeFile(join(source, "shared.txt"), "v3-source\n");
+			await writeFile(join(gammaCwd, "shared.txt"), "v3-gamma-conflict\n");
+			await expect(service.sync(gamma, source)).rejects.toThrow("conflicting local changes");
+			expect(await readFile(join(gammaCwd, "shared.txt"), "utf8")).toMatch(/^v3-gamma-conflict\r?\n$/);
+			expect((await service.changes(gamma)).diff).toContain("+v3-gamma-conflict");
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	}, 30_000);
 });

@@ -94,8 +94,12 @@ export class AgentWorktrees {
 		return join(checkout, relative(repository, canonicalSource));
 	}
 
-	private async snapshot(repository: string, scratch: string): Promise<{ head: string; tree: string }> {
-		const index = join(scratch, "index");
+	private async snapshot(
+		repository: string,
+		scratch: string,
+		indexName = "index",
+	): Promise<{ head: string; tree: string }> {
+		const index = join(scratch, indexName);
 		const head = (
 			await this.git(repository, ["rev-parse", "--verify", "--quiet", "HEAD"]).catch((error: unknown) => {
 				if (error && typeof error === "object" && "code" in error && error.code === 1) return "";
@@ -226,6 +230,97 @@ export class AgentWorktrees {
 			}
 		} finally {
 			await Promise.all([rm(join(scratch, "index"), { force: true }), rm(patch, { force: true })]);
+			await rmdir(scratch).catch(() => undefined);
+		}
+	}
+
+	async sync(
+		worktree: AgentWorktree,
+		source: string,
+		options?: { onlyIfClean?: boolean },
+	): Promise<{ baseline: string; updated: boolean; hadLocalChanges: boolean }> {
+		const checkout = await this.canonical(this.checkout(worktree));
+		if ((await this.repository(checkout)) !== checkout) throw new Error("Agent worktree is unavailable");
+		const repository = await this.repository(source);
+		if (!repository) throw new Error("The source workspace is no longer a Git repository");
+		const commonDir = ["rev-parse", "--path-format=absolute", "--git-common-dir"];
+		const [repoCommon, checkoutCommon] = await Promise.all([
+			this.git(repository, commonDir).then((value) => this.canonical(value.trimEnd())),
+			this.git(checkout, commonDir).then((value) => this.canonical(value.trimEnd())),
+		]);
+		if (repoCommon !== checkoutCommon) throw new Error("The source workspace belongs to a different repository");
+		const scratch = await mkdtemp(join(this.directory, "sync-"));
+		const patch = join(scratch, "local.patch");
+		try {
+			const { head, tree: sourceTree } = await this.snapshot(repository, scratch, "source-index");
+			const { tree: localTree } = await this.snapshot(checkout, scratch, "local-index");
+			const hadLocalChanges = localTree !== worktree.baseline;
+			if (sourceTree === worktree.baseline) {
+				return { baseline: sourceTree, updated: false, hadLocalChanges };
+			}
+			if (hadLocalChanges && options?.onlyIfClean) {
+				return { baseline: worktree.baseline, updated: false, hadLocalChanges: true };
+			}
+			const nextCommit = (
+				await this.git(repository, [
+					"-c",
+					"user.name=Hasilan Code",
+					"-c",
+					"user.email=worktree@hasilan.invalid",
+					"commit-tree",
+					sourceTree,
+					...(head ? ["-p", head] : []),
+					"-m",
+					"Agent worktree sync",
+				])
+			).trim();
+			if (!hadLocalChanges) {
+				await this.git(checkout, ["reset", "--hard", nextCommit]);
+				await this.git(checkout, ["clean", "-fd"]);
+				return { baseline: sourceTree, updated: true, hadLocalChanges: false };
+			}
+			await this.git(checkout, [
+				"diff",
+				"--binary",
+				"--no-ext-diff",
+				"--no-textconv",
+				"--no-color",
+				"--src-prefix=a/",
+				"--dst-prefix=b/",
+				`--output=${patch}`,
+				worktree.baseline,
+				localTree,
+			]);
+			const backupCommit = (
+				await this.git(checkout, [
+					"-c",
+					"user.name=Hasilan Code",
+					"-c",
+					"user.email=worktree@hasilan.invalid",
+					"commit-tree",
+					localTree,
+					"-m",
+					"Agent worktree pre-sync backup",
+				])
+			).trim();
+			await this.git(checkout, ["reset", "--hard", nextCommit]);
+			await this.git(checkout, ["clean", "-fd"]);
+			try {
+				await this.git(checkout, ["apply", "--whitespace=nowarn", "--", patch]);
+			} catch {
+				await this.git(checkout, ["reset", "--hard", backupCommit]);
+				await this.git(checkout, ["clean", "-fd"]);
+				throw new Error(
+					"Worktree has conflicting local changes against the updated workspace; inspect, adopt, or discard them before syncing",
+				);
+			}
+			return { baseline: sourceTree, updated: true, hadLocalChanges: true };
+		} finally {
+			await Promise.all([
+				rm(join(scratch, "source-index"), { force: true }),
+				rm(join(scratch, "local-index"), { force: true }),
+				rm(patch, { force: true }),
+			]);
 			await rmdir(scratch).catch(() => undefined);
 		}
 	}

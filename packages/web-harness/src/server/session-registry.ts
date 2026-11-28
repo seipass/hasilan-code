@@ -45,7 +45,15 @@ import {
 	SESSION_IMPORT_SOURCES,
 } from "../shared/session-import.ts";
 import type { SessionSurface } from "../shared/surfaces.ts";
-import { SWARM_OBJECTIVE_MAX_LENGTH, type Swarm } from "../shared/swarm.ts";
+import {
+	SWARM_CHECK_STATUSES,
+	SWARM_EVENT_KINDS,
+	SWARM_NOTE_KINDS,
+	SWARM_OBJECTIVE_MAX_LENGTH,
+	SWARM_REVIEW_VERDICTS,
+	SWARM_TASK_STATUSES,
+	type Swarm,
+} from "../shared/swarm.ts";
 import { aggregateDailyUsage, type DailyUsagePoint, type ModelUsage, type UsageAttribution } from "../shared/usage.ts";
 import type { AgentWorktree, AgentWorktrees } from "./agent-worktrees.ts";
 import { createHarnessSettings } from "./config.ts";
@@ -246,6 +254,116 @@ function messageText(message: AgentMessage): string {
 		.map((part) => part.text)
 		.join("\n");
 }
+function isStringArray(value: unknown): value is string[] {
+	return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function validateSwarmBoard(swarm: Swarm): boolean {
+	if (swarm.tasks !== undefined) {
+		if (!Array.isArray(swarm.tasks)) return false;
+		for (const task of swarm.tasks) {
+			if (
+				!task ||
+				typeof task !== "object" ||
+				typeof task.id !== "string" ||
+				!task.id ||
+				typeof task.title !== "string" ||
+				!task.title.trim() ||
+				!SWARM_TASK_STATUSES.includes(task.status) ||
+				typeof task.updatedAt !== "string" ||
+				(task.description !== undefined && typeof task.description !== "string") ||
+				(task.ownerAgentId !== undefined && typeof task.ownerAgentId !== "string") ||
+				(task.ownerName !== undefined && typeof task.ownerName !== "string") ||
+				(task.dependsOn !== undefined && !isStringArray(task.dependsOn)) ||
+				(task.ownedPaths !== undefined && !isStringArray(task.ownedPaths)) ||
+				(task.acceptanceCriteria !== undefined && !isStringArray(task.acceptanceCriteria)) ||
+				(task.needsReview !== undefined && typeof task.needsReview !== "boolean") ||
+				(task.resultSummary !== undefined && typeof task.resultSummary !== "string")
+			)
+				return false;
+			if (task.reviews !== undefined) {
+				if (!Array.isArray(task.reviews)) return false;
+				for (const review of task.reviews) {
+					if (
+						!review ||
+						typeof review !== "object" ||
+						typeof review.id !== "string" ||
+						!review.id ||
+						typeof review.reviewerAgentId !== "string" ||
+						!review.reviewerAgentId ||
+						typeof review.reviewerName !== "string" ||
+						!SWARM_REVIEW_VERDICTS.includes(review.verdict) ||
+						typeof review.summary !== "string" ||
+						typeof review.createdAt !== "string"
+					)
+						return false;
+				}
+			}
+		}
+	}
+	if (swarm.notes !== undefined) {
+		if (!Array.isArray(swarm.notes)) return false;
+		for (const note of swarm.notes) {
+			if (
+				!note ||
+				typeof note !== "object" ||
+				typeof note.id !== "string" ||
+				!note.id ||
+				!SWARM_NOTE_KINDS.includes(note.kind) ||
+				typeof note.authorAgentId !== "string" ||
+				typeof note.authorName !== "string" ||
+				typeof note.title !== "string" ||
+				typeof note.body !== "string" ||
+				typeof note.createdAt !== "string" ||
+				(note.paths !== undefined && !isStringArray(note.paths)) ||
+				(note.taskId !== undefined && typeof note.taskId !== "string")
+			)
+				return false;
+		}
+	}
+	if (swarm.checks !== undefined) {
+		if (!Array.isArray(swarm.checks)) return false;
+		for (const check of swarm.checks) {
+			if (
+				!check ||
+				typeof check !== "object" ||
+				typeof check.id !== "string" ||
+				!check.id ||
+				typeof check.name !== "string" ||
+				!check.name.trim() ||
+				typeof check.command !== "string" ||
+				!check.command.trim() ||
+				!SWARM_CHECK_STATUSES.includes(check.status) ||
+				typeof check.updatedAt !== "string" ||
+				(check.exitCode !== undefined && typeof check.exitCode !== "number") ||
+				(check.summary !== undefined && typeof check.summary !== "string") ||
+				(check.runByAgentId !== undefined && typeof check.runByAgentId !== "string") ||
+				(check.runByName !== undefined && typeof check.runByName !== "string")
+			)
+				return false;
+		}
+	}
+	if (swarm.events !== undefined) {
+		if (!Array.isArray(swarm.events)) return false;
+		for (const event of swarm.events) {
+			if (
+				!event ||
+				typeof event !== "object" ||
+				typeof event.id !== "string" ||
+				!event.id ||
+				!SWARM_EVENT_KINDS.includes(event.kind) ||
+				typeof event.summary !== "string" ||
+				typeof event.createdAt !== "string" ||
+				(event.actorAgentId !== undefined && typeof event.actorAgentId !== "string") ||
+				(event.actorName !== undefined && typeof event.actorName !== "string") ||
+				(event.taskId !== undefined && typeof event.taskId !== "string")
+			)
+				return false;
+		}
+	}
+	return true;
+}
+
 export function validateState(value: unknown): asserts value is HarnessState {
 	if (!value || typeof value !== "object") throw new Error("Invalid web-harness state");
 	const state = value as Partial<HarnessState>;
@@ -319,7 +437,8 @@ export function validateState(value: unknown): asserts value is HarnessState {
 				!swarm.rootRunId ||
 				(!legacy && !["active", "paused", "blocked", "complete"].includes(swarm.status)) ||
 				(!legacy && typeof swarm.updatedAt !== "string") ||
-				(swarm.reason !== undefined && typeof swarm.reason !== "string")
+				(swarm.reason !== undefined && typeof swarm.reason !== "string") ||
+				!validateSwarmBoard(swarm)
 			)
 				throw new Error("Invalid session swarm state");
 			if (legacy) {

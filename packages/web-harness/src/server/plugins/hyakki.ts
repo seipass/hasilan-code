@@ -3,7 +3,9 @@ import { readJson, sendJson } from "../http-host.ts";
 import type { TeamManager } from "../team-manager.ts";
 import type { ServerPlugin } from "./server-profile.ts";
 
-export function hyakkiPlugin(getTeams: () => Pick<TeamManager, "startWorkspaceSwarm" | "continueSwarm">): ServerPlugin {
+export function hyakkiPlugin(
+	getTeams: () => Pick<TeamManager, "startWorkspaceSwarm" | "continueSwarm" | "pauseSwarm">,
+): ServerPlugin {
 	return {
 		apiVersion: 1,
 		requires: ["team-tools"],
@@ -20,6 +22,10 @@ export function hyakkiPlugin(getTeams: () => Pick<TeamManager, "startWorkspaceSw
 			}
 			if (section === "sessions" && parts.length === 5 && action === "continue") {
 				sendJson(response, 202, await getTeams().continueSwarm(id));
+				return true;
+			}
+			if (section === "sessions" && parts.length === 5 && action === "pause") {
+				sendJson(response, 200, await getTeams().pauseSwarm(id));
 				return true;
 			}
 			return false;

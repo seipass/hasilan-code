@@ -1,0 +1,130 @@
+.hyakki-panel-slot { position: relative; display: flow-root; }
+.hyakki-panel {
+	margin: 0 0 10px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 12px;
+	background: var(--surface-panel);
+	font-size: var(--text-sm);
+	min-width: 0;
+}
+.hyakki-panel > summary {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 12px;
+	border-radius: inherit;
+	list-style: none;
+	cursor: pointer;
+	min-width: 0;
+}
+.hyakki-panel-slot:has(> .hyakki-dismiss) > .hyakki-panel > summary { padding-inline-end: 42px; }
+.hyakki-panel > summary::-webkit-details-marker { display: none; }
+.hyakki-panel > summary::before {
+	content: "";
+	flex: none;
+	width: 12px;
+	height: 12px;
+	background-color: currentColor;
+	mask: var(--chevron) center / contain no-repeat;
+	transition: transform var(--motion-base) var(--motion-ease);
+}
+.hyakki-panel[open] > summary::before { transform: rotate(90deg); }
+.hyakki-summary-title { font-weight: 600; color: var(--on-surface); white-space: nowrap; }
+.hyakki-summary-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.hyakki-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 1px 7px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 999px;
+	background: var(--surface-raised);
+	color: var(--on-surface-secondary);
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.hyakki-chip.is-ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 38%, transparent); }
+.hyakki-chip.is-fail { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.hyakki-chip.is-active { color: var(--secondary); border-color: color-mix(in srgb, var(--secondary) 40%, transparent); }
+.hyakki-status { margin-left: auto; font-size: var(--text-xs); color: var(--on-surface-muted); white-space: nowrap; }
+.hyakki-status-active { color: var(--secondary); }
+.hyakki-status-complete { color: var(--success); }
+.hyakki-status-blocked, .hyakki-status-paused { color: var(--warning); }
+.hyakki-dismiss {
+	position: absolute;
+	inset-block-start: 3px;
+	inset-inline-end: 6px;
+	display: grid;
+	place-items: center;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--on-surface-muted);
+}
+.hyakki-dismiss:hover { color: var(--on-surface); background: var(--surface-hover); }
+.hyakki-panel-body {
+	display: grid;
+	gap: 10px;
+	padding: 0 12px 12px;
+	max-height: min(360px, 44dvh);
+	overflow: auto;
+}
+.hyakki-panel-body p { margin: 0; }
+.hyakki-objective { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--on-surface); }
+.hyakki-reason { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--on-surface-muted); font-size: var(--text-xs); }
+.hyakki-section { display: grid; gap: 6px; }
+.hyakki-section-title { font-size: var(--text-xs); color: var(--on-surface-muted); font-weight: 500; }
+.hyakki-task-list, .hyakki-check-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 5px;
+}
+.hyakki-task-row, .hyakki-check-row {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 6px 8px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 8px;
+	background: var(--surface-raised);
+	font-size: var(--text-xs);
+}
+.hyakki-task-id { color: var(--on-surface-muted); font-family: var(--font-mono); font-size: 11px; }
+.hyakki-task-title { color: var(--on-surface); font-weight: 500; flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+.hyakki-task-owner { color: var(--on-surface-secondary); }
+.hyakki-task-state { font-size: 11px; white-space: nowrap; }
+.hyakki-task-state.is-done { color: var(--success); }
+.hyakki-task-state.is-in_progress { color: var(--secondary); }
+.hyakki-task-state.is-in_review, .hyakki-task-state.is-blocked { color: var(--warning); }
+.hyakki-task-state.is-todo, .hyakki-task-state.is-cancelled { color: var(--on-surface-muted); }
+.hyakki-paths { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
+.hyakki-path {
+	padding: 1px 5px;
+	border-radius: 4px;
+	background: var(--surface-sunken);
+	color: var(--on-surface-muted);
+	font-family: var(--font-mono);
+	font-size: 10px;
+}
+.hyakki-check-command {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--on-surface-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1 1 120px;
+}
+.hyakki-check-state { font-size: 11px; font-weight: 500; white-space: nowrap; }
+.hyakki-check-state.is-passed { color: var(--success); }
+.hyakki-check-state.is-failed { color: var(--danger); }
+.hyakki-check-state.is-pending { color: var(--on-surface-muted); }
+.hyakki-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hyakki-actions button { font-size: var(--text-xs); }
+@media (prefers-reduced-motion: reduce) { .hyakki-panel > summary::before { transition: none; } }

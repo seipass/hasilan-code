@@ -10,13 +10,15 @@ export type ComposerCommand =
 	| { kind: "canvas" }
 	| { kind: "hyakki"; objective: string }
 	| { kind: "hyakki-continue" }
+	| { kind: "hyakki-pause" }
+	| { kind: "hyakki-status" }
 	| { kind: "goal"; action: GoalAction };
 
 export const COMPOSER_COMMANDS = [
 	{ command: "/plan", syntax: "/plan 作業内容", description: "編集・承認できる実行プランを作成して開始" },
 	{ command: "/split", syntax: "/split 作業内容", description: "独立した Worktree ブランチで並列セッションを開始" },
 	{ command: "/pr", syntax: "/pr [タイトル]", description: "現在の変更から Pull Request を作成・監視" },
-	{ command: "/hyakki", syntax: "/hyakki 目的", description: "スウォームを開始 · continue で再開" },
+	{ command: "/hyakki", syntax: "/hyakki 目的", description: "スウォームを開始 · pause / continue / status" },
 	{ command: "/canvas", syntax: "/canvas", description: "設計エディターを開く（モデル不要）" },
 	{ command: "/chat", syntax: "/chat", description: "会話に戻る" },
 	{
@@ -52,8 +54,10 @@ export function parseComposerCommand(text: string): ComposerCommand {
 		return { kind: name === "/canvas" ? "canvas" : "chat" };
 	}
 	if (name === "/hyakki") {
-		if (!args) throw new Error("使い方: /hyakki 達成したい目的");
-		if (args === "continue") return { kind: "hyakki-continue" };
+		if (!args) throw new Error("使い方: /hyakki 達成したい目的（または pause / continue / status）");
+		if (args === "continue" || args === "resume") return { kind: "hyakki-continue" };
+		if (args === "pause" || args === "stop") return { kind: "hyakki-pause" };
+		if (args === "status") return { kind: "hyakki-status" };
 		if (args.length > SWARM_OBJECTIVE_MAX_LENGTH)
 			throw new Error(`目的は ${SWARM_OBJECTIVE_MAX_LENGTH.toLocaleString("ja-JP")} 文字以内にしてください。`);
 		return { kind: "hyakki", objective: args };

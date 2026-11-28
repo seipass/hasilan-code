@@ -1,5 +1,5 @@
 import type { ThinkingLevel } from "@hasilan-code/pi-agent-core";
-import type { AgentModels } from "../shared/agent-categories.ts";
+import type { AgentCategory, AgentModels } from "../shared/agent-categories.ts";
 import type { PromptAttachment } from "../shared/attachments.ts";
 import type { ComputerStatus } from "../shared/computer.ts";
 import type { ContextBreakdown } from "../shared/context-window.ts";
@@ -103,6 +103,8 @@ export interface TeamAgent {
 	name: string;
 	role: string;
 	responsibility?: string;
+	category?: AgentCategory;
+	worktree?: "active" | "adopted" | "discarded";
 	currentRun?: Run;
 	latestRun?: Run;
 }

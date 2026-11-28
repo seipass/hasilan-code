@@ -35,7 +35,7 @@ function destinationKey(candidate: ConversationCandidate): string {
 
 const annotationDrafts = new Map<string, BrowserAnnotation[]>();
 
-export function ChatPane({ session, parentSessionTitle, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, composerDock, homeDashboard, surface, suppressFloatingActions = false, gitRefreshToken = 0, gitSummary: externalGitSummary, gitSummaryManaged = false, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
+export function ChatPane({ session, parentSessionTitle, team, loading = false, workspacePath, contextWindow, connected, modelSetup, draftKey, modelControl, goalControl, swarmControl, composerDock, homeDashboard, surface, suppressFloatingActions = false, gitRefreshToken = 0, gitSummary: externalGitSummary, gitSummaryManaged = false, commands = COMPOSER_COMMANDS, draftInsertion, onDraftInserted, onSend, onPendingInputAction, onSurfaceAction, onCreatePr, onFile, onStop, onParent, onModelSelect, onProviderSettings, onLoadOlder, historyLoading, historyError, onRetry }: {
 	session?: SessionDetail;
 	parentSessionTitle?: string;
 	team?: TeamSnapshot;
@@ -47,6 +47,7 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 	draftKey: string;
 	modelControl: ReactNode;
 	goalControl: ReactNode;
+	swarmControl?: ReactNode;
 	composerDock?: ReactNode;
 	homeDashboard?: ReactNode;
 	surface?: boolean;
@@ -417,6 +418,7 @@ export function ChatPane({ session, parentSessionTitle, team, loading = false, w
 			</div></Presence>
 			<Presence show={!surface && empty} collapse><div className="composer-heading"><span className="composer-identity"><img src="/icon.svg" alt="" />Hasilan Code</span>{workspacePath && <code className="composer-workspace" title={workspacePath} aria-label={workspacePath}>{workspaceLabel(workspacePath, [])}</code>}</div></Presence>
 			<Presence show={!!goalControl}><div className="motion-contents">{goalControl}</div></Presence>
+			<Presence show={!!swarmControl}><div className="motion-contents">{swarmControl}</div></Presence>
 			<form className={`composer command-picker-anchor${canRouteWorkspace ? " composer-home" : ""}${shownWidth <= 440 ? " is-compact" : ""}${dragging ? " is-dragging" : ""}`} aria-busy={sending || reading} onSubmit={(event) => { event.preventDefault(); void submit(); }} onDragOver={(event) => {
 				if (!event.dataTransfer.types.includes("Files")) return;
 				event.preventDefault(); event.dataTransfer.dropEffect = sending || reading ? "none" : "copy"; setDragging(!sending && !reading);

@@ -13,15 +13,27 @@ import type { PendingInputAction } from "../shared/contracts.ts";
 import type { Goal, GoalAction, GoalStatus } from "../shared/goals.ts";
 import { nextId } from "../shared/ids.ts";
 import {
+	findOwnedPathConflicts,
+	normalizeOwnedPath,
 	SWARM_OBJECTIVE_MAX_LENGTH,
 	type Swarm,
+	type SwarmBoardNote,
+	type SwarmCheck,
+	type SwarmEvent,
+	type SwarmEventKind,
+	type SwarmNoteKind,
+	type SwarmReview,
+	type SwarmReviewVerdict,
 	type SwarmStart,
 	type SwarmStatus,
+	type SwarmTask,
+	type SwarmTaskStatus,
 	type WorkspaceSwarmStart,
 } from "../shared/swarm.ts";
 import type { WorkOverviewItem } from "../shared/work-overview.ts";
 import type { AgentWorktrees } from "./agent-worktrees.ts";
 import { HarnessError, type ModelSelection, type SessionRegistry } from "./session-registry.ts";
+import { runSwarmVerification } from "./swarm-verify.ts";
 import { loadTeamProfiles } from "./team-profiles.ts";
 import { validateWorkflow, type WorkflowTask } from "./team-workflow.ts";
 
@@ -97,6 +109,7 @@ export interface AdmissionResult {
 export interface AgentSummary extends AgentRecord {
 	currentRun?: RunRecord;
 	latestRun?: RunRecord;
+	worktree?: "active" | "adopted" | "discarded";
 }
 export interface TeamSnapshot {
 	teams: TeamRecord[];
@@ -180,6 +193,35 @@ const taskSchema = Type.Object({
 	model: Type.Optional(Type.Object({ provider: Type.String(), id: Type.String() })),
 	tools: Type.Optional(Type.Array(Type.String())),
 });
+const swarmTaskStatusSchema = Type.Union([
+	Type.Literal("todo"),
+	Type.Literal("in_progress"),
+	Type.Literal("in_review"),
+	Type.Literal("done"),
+	Type.Literal("blocked"),
+	Type.Literal("cancelled"),
+]);
+const swarmNoteKindSchema = Type.Union([
+	Type.Literal("decision"),
+	Type.Literal("finding"),
+	Type.Literal("contract"),
+	Type.Literal("blocker"),
+	Type.Literal("handoff"),
+]);
+const swarmTaskPlanSchema = Type.Object({
+	id: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+	title: Type.String({ minLength: 1, maxLength: 240 }),
+	description: Type.Optional(Type.String({ maxLength: 8192 })),
+	dependsOn: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 32 })),
+	ownedPaths: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 512 }), { maxItems: 64 })),
+	acceptanceCriteria: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 1024 }), { maxItems: 32 })),
+	needsReview: Type.Optional(Type.Boolean()),
+});
+const swarmCheckPlanSchema = Type.Object({
+	id: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+	name: Type.String({ minLength: 1, maxLength: 160 }),
+	command: Type.String({ minLength: 1, maxLength: 4096 }),
+});
 const teamCommonParameters = [
 	Type.Object({ action: Type.Literal("spawn"), tasks: Type.Array(taskSchema, { minItems: 1, maxItems: 32 }) }),
 	Type.Object({
@@ -202,7 +244,13 @@ const teamCommonParameters = [
 	Type.Object({
 		action: Type.Literal("work"),
 		agentId: Type.String(),
-		op: Type.Union([Type.Literal("diff"), Type.Literal("adopt"), Type.Literal("discard"), Type.Literal("restore")]),
+		op: Type.Union([
+			Type.Literal("diff"),
+			Type.Literal("adopt"),
+			Type.Literal("discard"),
+			Type.Literal("restore"),
+			Type.Literal("sync"),
+		]),
 	}),
 	Type.Object({ action: Type.Literal("send"), agentId: Type.String(), message: Type.String({ minLength: 1 }) }),
 	Type.Object({
@@ -226,6 +274,62 @@ const teamParameters = Type.Union([
 			action: Type.Literal("swarm"),
 			op: Type.Union([Type.Literal("complete"), Type.Literal("block")]),
 			reason: Type.String({ minLength: 1, maxLength: 16384 }),
+		},
+		{ additionalProperties: false },
+	),
+	Type.Object({ action: Type.Literal("board"), op: Type.Literal("read") }, { additionalProperties: false }),
+	Type.Object(
+		{
+			action: Type.Literal("board"),
+			op: Type.Literal("plan"),
+			tasks: Type.Optional(Type.Array(swarmTaskPlanSchema, { maxItems: 64 })),
+			checks: Type.Optional(Type.Array(swarmCheckPlanSchema, { maxItems: 32 })),
+			replace: Type.Optional(Type.Boolean()),
+		},
+		{ additionalProperties: false },
+	),
+	Type.Object(
+		{
+			action: Type.Literal("board"),
+			op: Type.Literal("task"),
+			taskId: Type.String({ minLength: 1, maxLength: 64 }),
+			status: Type.Optional(swarmTaskStatusSchema),
+			ownerAgentId: Type.Optional(Type.String({ minLength: 1 })),
+			ownedPaths: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 512 }), { maxItems: 64 })),
+			resultSummary: Type.Optional(Type.String({ maxLength: 4096 })),
+		},
+		{ additionalProperties: false },
+	),
+	Type.Object(
+		{
+			action: Type.Literal("board"),
+			op: Type.Literal("post"),
+			kind: swarmNoteKindSchema,
+			title: Type.String({ minLength: 1, maxLength: 200 }),
+			body: Type.String({ minLength: 1, maxLength: 8192 }),
+			paths: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 512 }), { maxItems: 32 })),
+			taskId: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+		},
+		{ additionalProperties: false },
+	),
+	Type.Object(
+		{
+			action: Type.Literal("board"),
+			op: Type.Literal("review"),
+			taskId: Type.String({ minLength: 1, maxLength: 64 }),
+			verdict: Type.Union([Type.Literal("approved"), Type.Literal("changes_requested")]),
+			summary: Type.String({ minLength: 1, maxLength: 4096 }),
+		},
+		{ additionalProperties: false },
+	),
+	Type.Object(
+		{
+			action: Type.Literal("board"),
+			op: Type.Literal("verify"),
+			checkId: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+			name: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+			command: Type.Optional(Type.String({ minLength: 1, maxLength: 4096 })),
+			timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 300000 })),
 		},
 		{ additionalProperties: false },
 	),
@@ -578,12 +682,107 @@ export class TeamManager {
 			}, 0),
 		);
 	}
+	private workspaceSwarm(agent: AgentRecord): { manager: AgentRecord; swarm: Swarm } | undefined {
+		if (!this.registry.swarmEnabled) return undefined;
+		const team = this.registry.state.teams.find((entry) => entry.teamId === agent.teamId);
+		if (!team) return undefined;
+		const manager = this.agentById(team.rootAgentId);
+		const swarm = this.registry.runtimeSwarm(this.registry.descriptor(manager.sessionId));
+		return swarm ? { manager, swarm } : undefined;
+	}
+	private recordSwarmEvent(
+		swarm: Swarm,
+		kind: SwarmEventKind,
+		summary: string,
+		actor?: AgentRecord,
+		taskId?: string,
+	): void {
+		const trimmed = summary.trim().slice(0, 320);
+		if (!trimmed) return;
+		const now = new Date().toISOString();
+		const event: SwarmEvent = {
+			id: randomBytes(6).toString("hex"),
+			kind,
+			...(actor ? { actorAgentId: actor.agentId, actorName: actor.name } : {}),
+			summary: trimmed,
+			...(taskId ? { taskId } : {}),
+			createdAt: now,
+		};
+		swarm.events ??= [];
+		swarm.events.push(event);
+		if (swarm.events.length > 120) swarm.events.splice(0, swarm.events.length - 120);
+		swarm.updatedAt = now;
+	}
+	private assertSwarmTaskDag(tasks: readonly SwarmTask[]): void {
+		const byId = new Map(tasks.map((task) => [task.id, task]));
+		for (const task of tasks) {
+			for (const dep of task.dependsOn ?? []) {
+				if (dep === task.id) throw new HarnessError(`Task ${task.id} cannot depend on itself`, 400);
+				if (!byId.has(dep)) throw new HarnessError(`Task ${task.id} depends on unknown task ${dep}`, 400);
+			}
+		}
+		const state = new Map<string, 1 | 2>();
+		const visit = (id: string) => {
+			if (state.get(id) === 2) return;
+			if (state.get(id) === 1) throw new HarnessError(`Dependency cycle detected involving task ${id}`, 400);
+			state.set(id, 1);
+			for (const dep of byId.get(id)?.dependsOn ?? []) visit(dep);
+			state.set(id, 2);
+		};
+		for (const task of tasks) visit(task.id);
+	}
+	private async syncWorktreeIfClean(agent: AgentRecord, parentSessionId: string): Promise<void> {
+		const service = this.options.agentWorktrees;
+		if (!service) return;
+		const descriptor = this.registry.descriptor(agent.sessionId);
+		const worktree = descriptor.worktree;
+		if (!worktree || worktree.status === "discarded" || descriptor.availability !== "ready") return;
+		const parentDescriptor = this.registry.descriptor(parentSessionId);
+		if (parentDescriptor.availability !== "ready" || parentDescriptor.worktree?.status === "discarded") return;
+		try {
+			const synced = await service.sync(worktree, parentDescriptor.cwd, { onlyIfClean: true });
+			if (synced.updated) {
+				worktree.baseline = synced.baseline;
+				const active = this.workspaceSwarm(agent);
+				if (active?.swarm.status === "active") {
+					this.recordSwarmEvent(
+						active.swarm,
+						"worktree",
+						`${agent.name} の作業ツリーを最新ワークスペースへ自動同期`,
+						agent,
+					);
+				}
+			}
+		} catch {
+			// Best-effort auto-sync must not block dispatching work if repository state is unusual.
+		}
+	}
 	private updateSwarm(sessionId: string, status: SwarmStatus, reason?: string): void {
 		const swarm = this.registry.runtimeSwarm(this.registry.descriptor(sessionId));
 		if (!swarm) return;
+		const previous = swarm.status;
 		swarm.status = status;
 		swarm.reason = reason;
 		swarm.updatedAt = new Date().toISOString();
+		if (status !== previous) {
+			const kind: SwarmEventKind =
+				status === "complete"
+					? "completed"
+					: status === "blocked"
+						? "blocked"
+						: status === "paused"
+							? "paused"
+							: "resumed";
+			const label =
+				status === "complete"
+					? `完了: ${reason ?? ""}`
+					: status === "blocked"
+						? `判断待ち: ${reason ?? ""}`
+						: status === "paused"
+							? `一時停止${reason ? `: ${reason}` : ""}`
+							: "スウォームを再開";
+			this.recordSwarmEvent(swarm, kind, label.trim());
+		}
 		if (status !== "active") {
 			clearTimeout(this.swarmTimers.get(sessionId));
 			this.swarmTimers.delete(sessionId);
@@ -732,14 +931,16 @@ export class TeamManager {
 			for (const member of this.registry.state.agents)
 				if (member.parentAgentId === agent.agentId) member.responsibility ??= member.role;
 			const run = this.newRun(agent, objective);
+			const now = new Date().toISOString();
 			descriptor.swarm = {
 				id: randomBytes(8).toString("hex"),
 				objective,
-				createdAt: new Date().toISOString(),
+				createdAt: now,
 				rootRunId: run.runId,
-				updatedAt: new Date().toISOString(),
+				updatedAt: now,
 				status: "active",
 			};
+			this.recordSwarmEvent(descriptor.swarm, "started", `スウォーム開始: ${objective.slice(0, 140)}`, agent);
 			this.runtime.get(run.runId)!.swarmId = descriptor.swarm.id;
 			run.swarmId = descriptor.swarm.id;
 			await this.registry.persist();
@@ -793,6 +994,488 @@ export class TeamManager {
 				runId: run.runId,
 				disposition: run.status === "running" ? "started" : "queued",
 				swarm: structuredClone(swarm),
+			};
+		});
+	}
+	async pauseSwarm(sessionId: string): Promise<Swarm> {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
+		await this.registry.mutate(() => {
+			const agent = this.agentForSession(sessionId);
+			const descriptor = this.registry.descriptor(sessionId);
+			const swarm = this.registry.runtimeSwarm(descriptor);
+			if (agent.parentAgentId || descriptor.parentSessionId || swarm?.status !== "active")
+				throw new HarnessError("No active Hyakki-Yako swarm to pause", 409);
+		});
+		await this.stopSubtree(sessionId, undefined, undefined, "Paused by user");
+		return structuredClone(this.registry.descriptor(sessionId).swarm!);
+	}
+	async boardRead(sessionId: string) {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
+		return this.registry.mutate(() => {
+			const caller = this.agentForSession(sessionId);
+			const active = this.workspaceSwarm(caller);
+			if (!active) throw new HarnessError("No Hyakki-Yako swarm exists for this team", 409);
+			const { swarm } = active;
+			return structuredClone({
+				swarmId: swarm.id,
+				objective: swarm.objective,
+				status: swarm.status,
+				...(swarm.reason ? { reason: swarm.reason } : {}),
+				tasks: swarm.tasks ?? [],
+				checks: swarm.checks ?? [],
+				notes: swarm.notes ?? [],
+				events: (swarm.events ?? []).slice(-25),
+			});
+		});
+	}
+	async boardPlan(
+		sessionId: string,
+		input: {
+			tasks?: {
+				id?: string;
+				title: string;
+				description?: string;
+				dependsOn?: string[];
+				ownedPaths?: string[];
+				acceptanceCriteria?: string[];
+				needsReview?: boolean;
+			}[];
+			checks?: { id?: string; name: string; command: string }[];
+			replace?: boolean;
+		},
+	) {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
+		return this.registry.mutate(async () => {
+			const caller = this.agentForSession(sessionId);
+			const active = this.workspaceSwarm(caller);
+			if (!active || active.swarm.status !== "active") throw new HarnessError("No active Hyakki-Yako swarm", 409);
+			if (caller.agentId !== active.manager.agentId)
+				throw new HarnessError("Only the workspace manager can plan swarm tasks and checks", 403);
+			if (!input.tasks?.length && !input.checks?.length)
+				throw new HarnessError("Board plan requires at least one task or check", 400);
+			const { manager, swarm } = active;
+			const now = new Date().toISOString();
+			const existingTasks = input.replace
+				? (swarm.tasks ?? []).filter((task) => task.status !== "todo")
+				: [...(swarm.tasks ?? [])];
+			const tasksById = new Map(existingTasks.map((task) => [task.id, { ...task }]));
+			const nextTaskId = () => {
+				let n = 1;
+				while (tasksById.has(`t${n}`)) n++;
+				return `t${n}`;
+			};
+			if (input.tasks) {
+				for (const item of input.tasks) {
+					const title = item.title.trim();
+					if (!title) throw new HarnessError("Task title must not be empty", 400);
+					let normalizedPaths: string[] | undefined;
+					if (item.ownedPaths !== undefined) {
+						try {
+							normalizedPaths = [...new Set(item.ownedPaths.map((entry) => normalizeOwnedPath(entry)))];
+						} catch (error) {
+							throw new HarnessError(error instanceof Error ? error.message : String(error), 400);
+						}
+					}
+					const id = item.id?.trim() || nextTaskId();
+					const existing = tasksById.get(id);
+					const updated: SwarmTask = existing
+						? {
+								...existing,
+								title,
+								...(item.description !== undefined
+									? { description: item.description.trim() || undefined }
+									: {}),
+								...(item.dependsOn !== undefined ? { dependsOn: [...new Set(item.dependsOn)] } : {}),
+								...(normalizedPaths !== undefined ? { ownedPaths: normalizedPaths } : {}),
+								...(item.acceptanceCriteria !== undefined
+									? {
+											acceptanceCriteria: item.acceptanceCriteria
+												.map((entry) => entry.trim())
+												.filter(Boolean),
+										}
+									: {}),
+								...(item.needsReview !== undefined ? { needsReview: item.needsReview } : {}),
+								updatedAt: now,
+							}
+						: {
+								id,
+								title,
+								...(item.description?.trim() ? { description: item.description.trim() } : {}),
+								status: "todo",
+								...(item.dependsOn?.length ? { dependsOn: [...new Set(item.dependsOn)] } : {}),
+								...(normalizedPaths?.length ? { ownedPaths: normalizedPaths } : {}),
+								...(item.acceptanceCriteria?.length
+									? {
+											acceptanceCriteria: item.acceptanceCriteria
+												.map((entry) => entry.trim())
+												.filter(Boolean),
+										}
+									: {}),
+								needsReview: item.needsReview ?? true,
+								updatedAt: now,
+							};
+					tasksById.set(id, updated);
+				}
+			}
+			const nextTasks = [...tasksById.values()];
+			this.assertSwarmTaskDag(nextTasks);
+			const activeInProgress = nextTasks.filter((task) => task.status === "in_progress");
+			for (let i = 0; i < activeInProgress.length; i++) {
+				const currentTask = activeInProgress[i]!;
+				const conflicts = findOwnedPathConflicts(currentTask.ownedPaths ?? [], activeInProgress.slice(i + 1));
+				if (conflicts.length > 0) {
+					const first = conflicts[0]!;
+					throw new HarnessError(
+						`Owned path conflict between active tasks ${currentTask.id} (${first.requestedPath}) and ${first.taskId} (${first.existingPath})`,
+						409,
+					);
+				}
+			}
+			const dependsReachable = (fromId: string, targetId: string, visited = new Set<string>()): boolean => {
+				if (fromId === targetId) return true;
+				if (visited.has(fromId)) return false;
+				visited.add(fromId);
+				return (tasksById.get(fromId)?.dependsOn ?? []).some((dep) => dependsReachable(dep, targetId, visited));
+			};
+			const overlapWarnings: { taskA: string; taskB: string; pathA: string; pathB: string }[] = [];
+			const openTasks = nextTasks.filter((task) => task.status !== "done" && task.status !== "cancelled");
+			for (let i = 0; i < openTasks.length; i++) {
+				const taskA = openTasks[i]!;
+				if (!taskA.ownedPaths?.length) continue;
+				for (let j = i + 1; j < openTasks.length; j++) {
+					const taskB = openTasks[j]!;
+					if (!taskB.ownedPaths?.length) continue;
+					if (dependsReachable(taskA.id, taskB.id) || dependsReachable(taskB.id, taskA.id)) continue;
+					for (const conflict of findOwnedPathConflicts(taskA.ownedPaths, [taskB])) {
+						overlapWarnings.push({
+							taskA: taskA.id,
+							taskB: taskB.id,
+							pathA: conflict.requestedPath,
+							pathB: conflict.existingPath,
+						});
+					}
+				}
+			}
+			const existingChecks = [...(swarm.checks ?? [])];
+			const checksById = new Map(existingChecks.map((check) => [check.id, { ...check }]));
+			const nextCheckId = () => {
+				let n = 1;
+				while (checksById.has(`c${n}`)) n++;
+				return `c${n}`;
+			};
+			if (input.checks) {
+				for (const item of input.checks) {
+					const name = item.name.trim();
+					const command = item.command.trim();
+					if (!name || !command) throw new HarnessError("Check name and command must not be empty", 400);
+					const matchedByName = [...checksById.values()].find(
+						(entry) => entry.name.toLowerCase() === name.toLowerCase(),
+					);
+					const id = item.id?.trim() || matchedByName?.id || nextCheckId();
+					const existing = checksById.get(id);
+					checksById.set(
+						id,
+						existing
+							? {
+									...existing,
+									name,
+									command,
+									...(existing.command !== command
+										? { status: "pending", exitCode: undefined, summary: undefined }
+										: {}),
+									updatedAt: now,
+								}
+							: { id, name, command, status: "pending", updatedAt: now },
+					);
+				}
+			}
+			swarm.tasks = nextTasks;
+			swarm.checks = [...checksById.values()];
+			this.recordSwarmEvent(
+				swarm,
+				"plan",
+				`ボード計画を更新（タスク ${swarm.tasks.length}件・検証 ${swarm.checks.length}件）`,
+				caller,
+			);
+			await this.registry.persist();
+			this.changed(manager);
+			return structuredClone({
+				tasks: swarm.tasks,
+				checks: swarm.checks,
+				...(overlapWarnings.length ? { overlapWarnings } : {}),
+			});
+		});
+	}
+	async boardUpdateTask(
+		sessionId: string,
+		input: {
+			taskId: string;
+			status?: SwarmTaskStatus;
+			ownerAgentId?: string;
+			ownedPaths?: string[];
+			resultSummary?: string;
+		},
+	): Promise<SwarmTask> {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
+		return this.registry.mutate(async () => {
+			const caller = this.agentForSession(sessionId);
+			const active = this.workspaceSwarm(caller);
+			if (!active || active.swarm.status !== "active") throw new HarnessError("No active Hyakki-Yako swarm", 409);
+			const { manager, swarm } = active;
+			const task = (swarm.tasks ?? []).find((entry) => entry.id === input.taskId);
+			if (!task) throw new HarnessError(`Board task not found: ${input.taskId}`, 404);
+			const isManager = caller.agentId === manager.agentId;
+			if (!isManager) {
+				if (input.ownedPaths !== undefined)
+					throw new HarnessError("Only the workspace manager can modify ownedPaths", 403);
+				if (input.ownerAgentId !== undefined) {
+					if (input.ownerAgentId !== caller.agentId || (task.ownerAgentId && task.ownerAgentId !== caller.agentId))
+						throw new HarnessError("Specialists can only claim an unassigned task for themselves", 403);
+				}
+				if (task.ownerAgentId && task.ownerAgentId !== caller.agentId)
+					throw new HarnessError("Only the task owner or manager can update this task", 403);
+			}
+			let nextOwnerAgentId = task.ownerAgentId;
+			let nextOwnerName = task.ownerName;
+			if (input.ownerAgentId !== undefined) {
+				const owner = this.agentById(input.ownerAgentId);
+				this.assertTarget(caller, owner);
+				nextOwnerAgentId = owner.agentId;
+				nextOwnerName = owner.name;
+			}
+			let nextOwnedPaths = task.ownedPaths;
+			if (input.ownedPaths !== undefined) {
+				try {
+					nextOwnedPaths = [...new Set(input.ownedPaths.map((entry) => normalizeOwnedPath(entry)))];
+				} catch (error) {
+					throw new HarnessError(error instanceof Error ? error.message : String(error), 400);
+				}
+			}
+			const nextStatus = input.status ?? task.status;
+			if (nextStatus === "in_progress") {
+				const unfinishedDeps = (task.dependsOn ?? []).filter((depId) => {
+					const dep = (swarm.tasks ?? []).find((entry) => entry.id === depId);
+					return dep && dep.status !== "done";
+				});
+				if (unfinishedDeps.length > 0)
+					throw new HarnessError(
+						`Task ${task.id} cannot start until dependencies finish: ${unfinishedDeps.join(", ")}`,
+						409,
+					);
+				const otherActive = (swarm.tasks ?? []).filter(
+					(entry) => entry.id !== task.id && entry.status === "in_progress",
+				);
+				const conflicts = findOwnedPathConflicts(nextOwnedPaths ?? [], otherActive);
+				if (conflicts.length > 0) {
+					const first = conflicts[0]!;
+					throw new HarnessError(
+						`Owned path conflict: ${first.requestedPath} overlaps active task ${first.taskId} (${first.existingPath}${first.ownerName ? `, owned by ${first.ownerName}` : ""})`,
+						409,
+					);
+				}
+			}
+			if (nextStatus === "done" && task.needsReview) {
+				const approved = (task.reviews ?? []).some(
+					(review) => review.verdict === "approved" && review.reviewerAgentId !== nextOwnerAgentId,
+				);
+				if (!approved)
+					throw new HarnessError(
+						`Task ${task.id} requires independent approval via team action=board op=review before marking done`,
+						409,
+					);
+			}
+			task.ownerAgentId = nextOwnerAgentId;
+			task.ownerName = nextOwnerName;
+			task.ownedPaths = nextOwnedPaths;
+			task.status = nextStatus;
+			if (input.resultSummary !== undefined) task.resultSummary = input.resultSummary.trim() || undefined;
+			task.updatedAt = new Date().toISOString();
+			this.recordSwarmEvent(
+				swarm,
+				"task",
+				`${task.id} (${task.title}) → ${task.status}${task.ownerName ? ` [${task.ownerName}]` : ""}`,
+				caller,
+				task.id,
+			);
+			await this.registry.persist();
+			this.changed(manager);
+			return structuredClone(task);
+		});
+	}
+	async boardPostNote(
+		sessionId: string,
+		input: { kind: SwarmNoteKind; title: string; body: string; paths?: string[]; taskId?: string },
+	): Promise<SwarmBoardNote> {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
+		return this.registry.mutate(async () => {
+			const caller = this.agentForSession(sessionId);
+			const active = this.workspaceSwarm(caller);
+			if (!active || active.swarm.status !== "active") throw new HarnessError("No active Hyakki-Yako swarm", 409);
+			const { manager, swarm } = active;
+			const title = input.title.trim();
+			const body = input.body.trim();
+			if (!title || !body) throw new HarnessError("Board note requires non-empty title and body", 400);
+			if (input.taskId && !(swarm.tasks ?? []).some((entry) => entry.id === input.taskId))
+				throw new HarnessError(`Board task not found: ${input.taskId}`, 404);
+			const paths = input.paths?.map((entry) => entry.trim()).filter(Boolean);
+			const note: SwarmBoardNote = {
+				id: `n${(swarm.notes?.length ?? 0) + 1}-${randomBytes(3).toString("hex")}`,
+				kind: input.kind,
+				authorAgentId: caller.agentId,
+				authorName: caller.name,
+				title,
+				body,
+				...(paths?.length ? { paths: [...new Set(paths)] } : {}),
+				...(input.taskId ? { taskId: input.taskId } : {}),
+				createdAt: new Date().toISOString(),
+			};
+			swarm.notes ??= [];
+			swarm.notes.push(note);
+			if (swarm.notes.length > 100) swarm.notes.splice(0, swarm.notes.length - 100);
+			this.recordSwarmEvent(swarm, "note", `[${note.kind}] ${note.title}`, caller, note.taskId);
+			await this.registry.persist();
+			this.changed(manager);
+			return structuredClone(note);
+		});
+	}
+	async boardReviewTask(
+		sessionId: string,
+		input: { taskId: string; verdict: SwarmReviewVerdict; summary: string },
+	): Promise<{ task: SwarmTask; review: SwarmReview }> {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
+		return this.registry.mutate(async () => {
+			const caller = this.agentForSession(sessionId);
+			const active = this.workspaceSwarm(caller);
+			if (!active || active.swarm.status !== "active") throw new HarnessError("No active Hyakki-Yako swarm", 409);
+			const { manager, swarm } = active;
+			const task = (swarm.tasks ?? []).find((entry) => entry.id === input.taskId);
+			if (!task) throw new HarnessError(`Board task not found: ${input.taskId}`, 404);
+			if (task.ownerAgentId && task.ownerAgentId === caller.agentId)
+				throw new HarnessError(
+					"An agent cannot review or approve its own task; assign a different specialist or have the manager review it",
+					403,
+				);
+			const summary = input.summary.trim();
+			if (!summary) throw new HarnessError("Review requires a concrete summary", 400);
+			const now = new Date().toISOString();
+			const review: SwarmReview = {
+				id: randomBytes(6).toString("hex"),
+				reviewerAgentId: caller.agentId,
+				reviewerName: caller.name,
+				verdict: input.verdict,
+				summary,
+				createdAt: now,
+			};
+			task.reviews ??= [];
+			task.reviews.push(review);
+			task.status = input.verdict === "approved" ? "done" : "in_progress";
+			task.updatedAt = now;
+			this.recordSwarmEvent(
+				swarm,
+				"review",
+				`${caller.name} が ${task.id} を${input.verdict === "approved" ? "承認" : "修正依頼"}: ${summary.slice(0, 120)}`,
+				caller,
+				task.id,
+			);
+			await this.registry.persist();
+			this.changed(manager);
+			return structuredClone({ task, review });
+		});
+	}
+	async boardVerify(
+		sessionId: string,
+		input: { checkId?: string; name?: string; command?: string; timeoutMs?: number },
+		signal?: AbortSignal,
+	): Promise<{ check: SwarmCheck; output: string; truncated: boolean; timedOut: boolean }> {
+		if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
+		if (!this.registry.activeTools(sessionId).includes("bash"))
+			throw new HarnessError("Verification command execution requires bash tool permission", 403);
+		const prepared = await this.registry.mutate(async () => {
+			const caller = this.agentForSession(sessionId);
+			const active = this.workspaceSwarm(caller);
+			if (!active || active.swarm.status !== "active") throw new HarnessError("No active Hyakki-Yako swarm", 409);
+			const { manager, swarm } = active;
+			swarm.checks ??= [];
+			let check = input.checkId ? swarm.checks.find((entry) => entry.id === input.checkId) : undefined;
+			if (input.checkId && !check) throw new HarnessError(`Verification check not found: ${input.checkId}`, 404);
+			if (!check) {
+				const name = input.name?.trim();
+				const command = input.command?.trim();
+				if (!name || !command) throw new HarnessError("Provide an existing checkId or both name and command", 400);
+				check = swarm.checks.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
+				const now = new Date().toISOString();
+				if (check) {
+					check.command = command;
+					check.updatedAt = now;
+				} else {
+					let n = 1;
+					while (swarm.checks.some((entry) => entry.id === `c${n}`)) n++;
+					check = { id: `c${n}`, name, command, status: "pending", updatedAt: now };
+					swarm.checks.push(check);
+				}
+				await this.registry.persist();
+				this.changed(manager);
+			}
+			return {
+				swarmId: swarm.id,
+				managerSessionId: manager.sessionId,
+				callerAgentId: caller.agentId,
+				callerName: caller.name,
+				cwd: this.registry.descriptor(sessionId).cwd,
+				checkId: check.id,
+				checkName: check.name,
+				command: check.command,
+			};
+		});
+		const outcome = await runSwarmVerification(prepared.command, prepared.cwd, {
+			agentDir: this.options.agentDir,
+			timeoutMs: input.timeoutMs ?? 120_000,
+			signal,
+		});
+		return this.registry.mutate(async () => {
+			const manager = this.agentForSession(prepared.managerSessionId);
+			const swarm = this.registry.runtimeSwarm(this.registry.descriptor(manager.sessionId));
+			const check =
+				swarm?.id === prepared.swarmId ? swarm.checks?.find((entry) => entry.id === prepared.checkId) : undefined;
+			const now = new Date().toISOString();
+			const status = outcome.exitCode === 0 && !outcome.timedOut ? "passed" : "failed";
+			const rawSummary = outcome.output.length > 2000 ? outcome.output.slice(-2000) : outcome.output;
+			const summary =
+				`${outcome.timedOut ? "[Timed out] " : ""}${rawSummary}`.trim() ||
+				(status === "passed" ? "OK" : `exit ${outcome.exitCode}`);
+			if (swarm && check) {
+				check.status = status;
+				check.exitCode = outcome.exitCode;
+				check.summary = summary;
+				check.runByAgentId = prepared.callerAgentId;
+				check.runByName = prepared.callerName;
+				check.updatedAt = now;
+				this.recordSwarmEvent(
+					swarm,
+					"verify",
+					`検証 ${check.name}: ${status === "passed" ? "合格" : `失敗 (exit ${outcome.exitCode})`}`,
+					this.registry.state.agents.find((entry) => entry.agentId === prepared.callerAgentId),
+				);
+				await this.registry.persist();
+				this.changed(manager);
+			}
+			return {
+				check: structuredClone(
+					check ?? {
+						id: prepared.checkId,
+						name: prepared.checkName,
+						command: prepared.command,
+						status,
+						exitCode: outcome.exitCode,
+						summary,
+						runByAgentId: prepared.callerAgentId,
+						runByName: prepared.callerName,
+						updatedAt: now,
+					},
+				),
+				output: outcome.output,
+				truncated: outcome.truncated,
+				timedOut: outcome.timedOut,
 			};
 		});
 	}
@@ -1029,12 +1712,19 @@ export class TeamManager {
 						if (tool.runId !== runId || tool.status !== "success") return false;
 						if (tool.name !== "team") return true;
 						const input = tool.input;
+						if (
+							input === null ||
+							typeof input !== "object" ||
+							!("action" in input) ||
+							typeof input.action !== "string"
+						)
+							return false;
+						if (["spawn", "workflow", "send", "profiles", "work"].includes(input.action)) return true;
 						return (
-							input !== null &&
-							typeof input === "object" &&
-							"action" in input &&
-							typeof input.action === "string" &&
-							["spawn", "workflow", "send", "profiles", "work"].includes(input.action)
+							input.action === "board" &&
+							"op" in input &&
+							typeof input.op === "string" &&
+							["plan", "task", "post", "review", "verify"].includes(input.op)
 						);
 					});
 					const rootIndex = this.registry.state.runs.indexOf(run);
@@ -1374,8 +2064,11 @@ export class TeamManager {
 						...(task.responsibility ? { responsibility: task.responsibility.trim() } : {}),
 					};
 					this.registry.state.agents.push(agent);
-				} else if (configured && model) {
-					await this.registry.setModelWithinMutation(agent.sessionId, model, configured.thinkingLevel);
+				} else {
+					if (configured && model) {
+						await this.registry.setModelWithinMutation(agent.sessionId, model, configured.thinkingLevel);
+					}
+					await this.syncWorktreeIfClean(agent, sessionId);
 				}
 				agent.category = category;
 				const run = this.newRun(
@@ -1385,6 +2078,15 @@ export class TeamManager {
 					parent.agentId,
 				);
 				admitted.push({ agent, run });
+			}
+			const activeSwarm = this.workspaceSwarm(parent);
+			if (activeSwarm?.swarm.status === "active") {
+				this.recordSwarmEvent(
+					activeSwarm.swarm,
+					"task",
+					`作業を割り当て: ${admitted.map(({ agent }) => agent.name).join(", ")}`,
+					parent,
+				);
 			}
 			await this.registry.persist();
 			for (const { run } of admitted) this.enqueue(parent.teamId, { runId: run.runId });
@@ -1528,8 +2230,20 @@ export class TeamManager {
 				current.replyToAgentIds ??= [];
 				if (caller.agentId !== recipient.agentId && !current.replyToAgentIds.includes(caller.agentId))
 					current.replyToAgentIds.push(caller.agentId);
+			} else if (recipient.parentAgentId) {
+				await this.syncWorktreeIfClean(recipient, this.agentById(recipient.parentAgentId).sessionId);
 			}
 			const run = current ?? this.newRun(recipient, `Team message: ${caller.name}`, "context", caller.agentId);
+			const activeSwarm = this.workspaceSwarm(caller);
+			if (activeSwarm?.swarm.status === "active") {
+				const snippet = message.replace(/\s+/g, " ").trim().slice(0, 90);
+				this.recordSwarmEvent(
+					activeSwarm.swarm,
+					"message",
+					`${caller.name} → ${recipient.name}: ${snippet}`,
+					caller,
+				);
+			}
 			const pending: PendingInput = {
 				inputId,
 				sessionId: recipient.sessionId,
@@ -1598,6 +2312,9 @@ export class TeamManager {
 				throw new HarnessError("Handoff requires a running assignment that still belongs to you", 409);
 			if (this.current(target))
 				throw new HarnessError("Handoff target is busy; use send to coordinate readiness first", 409);
+			if (target.parentAgentId) {
+				await this.syncWorktreeIfClean(target, this.agentById(target.parentAgentId).sessionId);
+			}
 			const run = this.newRun(
 				target,
 				`[Team handoff from=${caller.agentId} run=${source.runId}]\n${task.trim()}`,
@@ -1607,6 +2324,10 @@ export class TeamManager {
 			if (source.replyToAgentIds) run.replyToAgentIds = [...source.replyToAgentIds];
 			run.handoffFromRunId = source.runId;
 			source.handoffToRunId = run.runId;
+			const activeSwarm = this.workspaceSwarm(caller);
+			if (activeSwarm?.swarm.status === "active") {
+				this.recordSwarmEvent(activeSwarm.swarm, "handoff", `${caller.name} が ${target.name} へ引き継ぎ`, caller);
+			}
 			for (const waiter of this.waiters)
 				this.runById(waiter.callerRunId).waitingOnRunIds = waiter.targets.map(
 					(id) => this.assignmentOwner(this.runById(id)).runId,
@@ -1877,6 +2598,7 @@ export class TeamManager {
 		sessionId: string,
 		callerSessionId?: string,
 		goalAction?: "pause" | "drop",
+		swarmReason = "Stopped by user",
 	): Promise<{ status: "cancelled" }> {
 		let affected: AgentRecord[] = [];
 		const idle: Promise<void>[] = [];
@@ -1904,7 +2626,7 @@ export class TeamManager {
 				);
 			} else if (goal?.status === "active") this.updateGoal(sessionId, "paused", "Stopped by user");
 			const swarm = this.registry.runtimeSwarm(this.registry.descriptor(sessionId));
-			if (swarm?.status === "active") this.updateSwarm(sessionId, "paused", "Stopped by user");
+			if (swarm?.status === "active") this.updateSwarm(sessionId, "paused", swarmReason);
 			// Persist lifecycle transitions before aborting: settlement must never requeue them.
 			if (goal || swarm) await this.registry.persist();
 			affected = this.registry.state.agents.filter(
@@ -1964,7 +2686,15 @@ export class TeamManager {
 		const agentIds = new Set(agents.map((agent) => agent.agentId));
 		return structuredClone({
 			teams,
-			agents: agents.map((agent) => ({ ...agent, currentRun: this.current(agent), latestRun: this.latest(agent) })),
+			agents: agents.map((agent) => {
+				const worktree = this.registry.descriptor(agent.sessionId).worktree?.status;
+				return {
+					...agent,
+					currentRun: this.current(agent),
+					latestRun: this.latest(agent),
+					...(worktree ? { worktree } : {}),
+				};
+			}),
 			runs: this.registry.state.runs.filter((run) => agentIds.has(run.agentId)),
 		});
 	}
@@ -2005,7 +2735,7 @@ export class TeamManager {
 			.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 	}
 
-	async agentWork(sessionId: string, op: "diff" | "adopt" | "discard" | "restore", callerSessionId?: string) {
+	async agentWork(sessionId: string, op: "diff" | "adopt" | "discard" | "restore" | "sync", callerSessionId?: string) {
 		return this.registry.mutate(async () => {
 			const target = this.agentForSession(sessionId);
 			const caller = callerSessionId ? this.agentForSession(callerSessionId) : undefined;
@@ -2030,6 +2760,15 @@ export class TeamManager {
 					throw new HarnessError("Only discarded work can be restored", 409);
 				const previous = worktree.status;
 				worktree.status = op === "discard" ? "discarded" : "active";
+				const activeSwarm = caller ? this.workspaceSwarm(caller) : undefined;
+				if (activeSwarm?.swarm.status === "active") {
+					this.recordSwarmEvent(
+						activeSwarm.swarm,
+						"worktree",
+						`${target.name} の変更を${op === "discard" ? "破棄" : "復元"}`,
+						caller,
+					);
+				}
 				try {
 					await this.registry.persist();
 				} catch (error) {
@@ -2037,7 +2776,35 @@ export class TeamManager {
 					throw error;
 				}
 				this.changed(target);
+				if (activeSwarm?.swarm.status === "active") this.changed(activeSwarm.manager);
 				return { status: worktree.status };
+			}
+			if (op === "sync") {
+				if (worktree.status === "discarded")
+					throw new HarnessError("Restore discarded work before syncing it", 409);
+				if (!caller) throw new HarnessError("Only the assigning agent can sync this worktree", 403);
+				const receiving = this.registry.descriptor(caller.sessionId);
+				if (receiving.availability !== "ready" || receiving.worktree?.status === "discarded")
+					throw new HarnessError("The source workspace is unavailable", 409);
+				let synced: Awaited<ReturnType<AgentWorktrees["sync"]>>;
+				try {
+					synced = await service.sync(worktree, receiving.cwd);
+				} catch (error) {
+					throw new HarnessError(
+						`Could not sync the worktree: ${error instanceof Error ? error.message : String(error)}`,
+						409,
+					);
+				}
+				worktree.baseline = synced.baseline;
+				if (synced.hadLocalChanges) worktree.status = "active";
+				const activeSwarm = this.workspaceSwarm(caller);
+				if (synced.updated && activeSwarm?.swarm.status === "active") {
+					this.recordSwarmEvent(activeSwarm.swarm, "worktree", `${target.name} の作業ツリーを最新へ同期`, caller);
+				}
+				await this.registry.persist();
+				this.changed(target);
+				if (activeSwarm?.swarm.status === "active") this.changed(activeSwarm.manager);
+				return { status: worktree.status, updated: synced.updated, hadLocalChanges: synced.hadLocalChanges };
 			}
 			if (worktree.status === "discarded") throw new HarnessError("Restore discarded work before adopting it", 409);
 			if (!caller) throw new HarnessError("Only the assigning agent can adopt this worktree", 403);
@@ -2055,32 +2822,115 @@ export class TeamManager {
 			}
 			worktree.baseline = result.baseline;
 			worktree.status = "adopted";
+			const activeSwarm = this.workspaceSwarm(caller);
+			if (result.changed && activeSwarm?.swarm.status === "active") {
+				const now = new Date().toISOString();
+				for (const check of activeSwarm.swarm.checks ?? []) {
+					if (check.status === "passed") {
+						check.status = "pending";
+						check.summary = "新たな変更を採用したため再検証が必要です";
+						check.updatedAt = now;
+					}
+				}
+				this.recordSwarmEvent(activeSwarm.swarm, "worktree", `${target.name} の変更をワークスペースへ採用`, caller);
+			}
+			const staleAgents = result.changed
+				? this.registry.state.agents
+						.filter((entry) => {
+							if (entry.agentId === target.agentId || entry.parentAgentId !== caller.agentId) return false;
+							const entryWorktree = this.registry.descriptor(entry.sessionId).worktree;
+							return !!entryWorktree && entryWorktree.status !== "discarded";
+						})
+						.map((entry) => ({
+							agentId: entry.agentId,
+							name: entry.name,
+							worktree: this.registry.descriptor(entry.sessionId).worktree?.status,
+						}))
+				: [];
 			await this.registry.persist();
 			this.changed(target);
-			return { status: worktree.status, changed: result.changed };
+			if (activeSwarm?.swarm.status === "active") this.changed(activeSwarm.manager);
+			return {
+				status: worktree.status,
+				changed: result.changed,
+				...(staleAgents.length ? { staleAgents } : {}),
+			};
 		});
 	}
 	createTool(sessionId: string): ToolDefinition<typeof teamParameters | typeof teamParametersWithoutSwarm> {
 		return {
 			name: "team",
 			label: "Agent team",
-			description: `Manage workspace specialists and bounded helpers. Spawn/workflow reuse a manager's existing idle specialist by name across objectives. New specialists require a continuing responsibility separate from task; profiles supply their description. Send consults or assigns work to an existing member and returns results to requesters, including queued senders. Handoff transfers a specialist's current assignment to an idle peer, preserving the original requester; waits follow the new owner. Describe deliberately changes an idle specialist's responsibility as manager. Workflow passes successful prerequisite results and skips dependents of failure. Cannot wait on or stop self or ancestors.${
+			description: `Manage workspace specialists and bounded helpers. Spawn/workflow reuse a manager's existing idle specialist by name across objectives. New specialists require a continuing responsibility separate from task; profiles supply their description. Send consults or assigns work to an existing member and returns results to requesters, including queued senders. Handoff transfers a specialist's current assignment to an idle peer, preserving the original requester; waits follow the new owner. Describe deliberately changes an idle specialist's responsibility as manager. Workflow passes successful prerequisite results and skips dependents of failure. Worktree ops include diff, adopt, discard, restore, and sync. Cannot wait on or stop self or ancestors.${
 				this.registry.swarmEnabled
-					? " An active Hyakki-Yako manager must explicitly complete or block with evidence; complete requires successful delegated work and an idle subtree."
+					? " In Hyakki-Yako, use action=board (plan, read, task, post, review, verify) to manage shared tasks with ownedPaths conflict guards, blackboard notes, independent reviews, and real command verification. Complete requires settled worktrees, completed/reviewed board tasks, and passing verification checks."
 					: ""
 			}`,
 			promptSnippet:
-				"Manage a durable workspace roster, not task-shaped agents. New specialists need a responsibility describing continuing ownership, separate from task. Inspect list before creating anyone; send work or questions directly to existing members. Specialists choose their own execution and may spawn bounded helpers. Use handoff to transfer your current assignment to an idle specialist, including context, deliverable, and acceptance; after transfer, finish your turn without duplicating their work. Wait follows ownership transfers. Use describe as manager to deliberately change an idle specialist's responsibility. The workspace manager owns priorities and final acceptance, handles coordination and integration, and delegates substantial implementation and verification.",
+				"Manage a durable workspace roster, not task-shaped agents. New specialists need a responsibility describing continuing ownership, separate from task. Inspect list before creating anyone; send work or questions directly to existing members. Specialists choose their own execution and may spawn bounded helpers. Use action=board in Hyakki-Yako to plan tasks with non-overlapping ownedPaths, post shared notes/contracts, record independent reviews, and execute verification checks. Use handoff to transfer your current assignment to an idle specialist. Wait follows ownership transfers.",
 			executionMode: "sequential",
 			parameters: this.registry.swarmEnabled ? teamParameters : teamParametersWithoutSwarm,
 			promptGuidelines: [
 				"Completion notices, wait, and workflow give short previews. Use team action result with the runId to read a report, list tool logs (view logs), or read a log by logIndex (view log). Follow nextOffset to read more only when needed.",
-				"Each newly spawned agent in a Git workspace works in its own checkout. After it settles, inspect its patch with team action work, op diff, and the agentId. Use op adopt to apply accepted changes to your checkout, discard to park rejected changes, or restore to reconsider a parked patch. Decide and perform these operations yourself. Never ask the user to click a review button for routine acceptance. Adopt prerequisite code before assigning work that must build on it. Apply failures leave the patch available for review.",
+				"Each newly spawned agent in a Git workspace works in its own checkout. After it settles, inspect its patch with team action work, op diff, and the agentId. Use op adopt to apply accepted changes to your checkout, op sync to bring another specialist's checkout up to date with adopted changes, discard to park rejected changes, or restore to reconsider a parked patch. Decide and perform these operations yourself. Never ask the user to click a review button for routine acceptance. Adopt prerequisite code before assigning work that must build on it.",
+				"In Hyakki-Yako, use action=board op=plan to declare tasks (with ownedPaths, dependsOn, acceptanceCriteria, needsReview) and verification checks, op=task to assign/update progress, op=post to share decisions/contracts/findings, op=review for independent non-author sign-off, and op=verify to execute real verification commands.",
 				"Set each spawn/workflow task's category according to its work: orchestration, coding, design, writing, research, strategy, advisor, or other. The category selects the user's configured model and thinking level.",
 			],
 			execute: async (_callId, params: Static<typeof teamParameters>, signal) => {
 				let result: unknown;
 				switch (params.action) {
+					case "board":
+						if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
+						switch (params.op) {
+							case "read":
+								result = await this.boardRead(sessionId);
+								break;
+							case "plan":
+								result = await this.boardPlan(sessionId, {
+									tasks: params.tasks,
+									checks: params.checks,
+									replace: params.replace,
+								});
+								break;
+							case "task":
+								result = await this.boardUpdateTask(sessionId, {
+									taskId: params.taskId,
+									status: params.status,
+									ownerAgentId: params.ownerAgentId,
+									ownedPaths: params.ownedPaths,
+									resultSummary: params.resultSummary,
+								});
+								break;
+							case "post":
+								result = await this.boardPostNote(sessionId, {
+									kind: params.kind,
+									title: params.title,
+									body: params.body,
+									paths: params.paths,
+									taskId: params.taskId,
+								});
+								break;
+							case "review":
+								result = await this.boardReviewTask(sessionId, {
+									taskId: params.taskId,
+									verdict: params.verdict,
+									summary: params.summary,
+								});
+								break;
+							case "verify":
+								result = await this.boardVerify(
+									sessionId,
+									{
+										checkId: params.checkId,
+										name: params.name,
+										command: params.command,
+										timeoutMs: params.timeoutMs,
+									},
+									signal,
+								);
+								break;
+						}
+						break;
 					case "swarm":
 						if (!this.registry.swarmEnabled) throw new HarnessError("Hyakki-Yako plugin is disabled", 404);
 						result = await this.registry.mutate(async () => {
@@ -2125,6 +2975,40 @@ export class TeamManager {
 									)
 								)
 									throw new HarnessError("Hyakki-Yako completion requires successful delegated work", 409);
+								const tasks = swarm.tasks ?? [];
+								if (tasks.length > 0) {
+									const unfinished = tasks.filter(
+										(task) => task.status !== "done" && task.status !== "cancelled",
+									);
+									if (unfinished.length > 0)
+										throw new HarnessError(
+											`Complete or cancel all board tasks before completing Hyakki-Yako: ${unfinished.map((task) => `${task.id} (${task.status})`).join(", ")}`,
+											409,
+										);
+									const unreviewed = tasks.filter(
+										(task) =>
+											task.status === "done" &&
+											task.needsReview &&
+											!(task.reviews ?? []).some(
+												(review) =>
+													review.verdict === "approved" && review.reviewerAgentId !== task.ownerAgentId,
+											),
+									);
+									if (unreviewed.length > 0)
+										throw new HarnessError(
+											`Tasks require independent approval before completing Hyakki-Yako: ${unreviewed.map((task) => task.id).join(", ")}`,
+											409,
+										);
+								}
+								const checks = swarm.checks ?? [];
+								if (checks.length > 0) {
+									const unpassed = checks.filter((check) => check.status !== "passed");
+									if (unpassed.length > 0)
+										throw new HarnessError(
+											`Run and pass all verification checks before completing Hyakki-Yako: ${unpassed.map((check) => `${check.name} (${check.status})`).join(", ")}`,
+											409,
+										);
+								}
 							}
 							this.updateSwarm(
 								sessionId,

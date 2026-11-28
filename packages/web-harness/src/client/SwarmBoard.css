@@ -1,0 +1,316 @@
+.team-board-layout {
+	position: absolute;
+	inset: var(--team-view-switch-height) 0 0;
+	overflow-y: auto;
+	padding: 12px 14px 20px;
+	display: grid;
+	align-content: start;
+	gap: 14px;
+	scrollbar-width: thin;
+}
+
+.swarm-board-header {
+	display: grid;
+	gap: 8px;
+	padding: 12px 14px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 10px;
+	background: var(--surface-panel);
+}
+
+.swarm-board-header-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.swarm-board-title {
+	margin: 0;
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--on-surface);
+}
+
+.swarm-board-objective {
+	margin: 0;
+	font-size: var(--text-sm);
+	line-height: var(--leading-normal);
+	color: var(--on-surface);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.swarm-board-reason {
+	margin: 0;
+	font-size: var(--text-xs);
+	color: var(--on-surface-muted);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.swarm-board-stats {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.swarm-board-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 2px 8px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 999px;
+	background: var(--surface-raised);
+	color: var(--on-surface-secondary);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.swarm-board-pill.is-ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 38%, transparent); }
+.swarm-board-pill.is-fail { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.swarm-board-pill.is-warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+.swarm-board-pill.is-active { color: var(--secondary); border-color: color-mix(in srgb, var(--secondary) 40%, transparent); }
+
+.swarm-board-controls {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.swarm-board-controls button {
+	min-height: 28px;
+	padding: 4px 10px;
+	font-size: var(--text-xs);
+}
+
+.swarm-board-section {
+	display: grid;
+	gap: 8px;
+}
+
+.swarm-board-section > h3 {
+	margin: 0;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--on-surface-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.swarm-board-empty {
+	margin: 0;
+	padding: 10px 12px;
+	border: 1px dashed var(--border-subtle);
+	border-radius: 8px;
+	color: var(--on-surface-muted);
+	font-size: var(--text-xs);
+}
+
+.swarm-board-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 8px;
+}
+
+.swarm-board-card {
+	display: grid;
+	gap: 6px;
+	padding: 10px 12px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 9px;
+	background: var(--surface-panel);
+	font-size: var(--text-xs);
+}
+
+.swarm-board-card-head {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.swarm-board-card-id {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--on-surface-muted);
+}
+
+.swarm-board-card-title {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--on-surface);
+	flex: 1 1 140px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.swarm-board-card-desc {
+	margin: 0;
+	color: var(--on-surface-secondary);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	line-height: var(--leading-normal);
+}
+
+.swarm-board-meta-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	color: var(--on-surface-muted);
+}
+
+.swarm-board-path {
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: var(--surface-sunken);
+	color: var(--on-surface-secondary);
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+button.swarm-board-path {
+	border: 0;
+	cursor: pointer;
+}
+
+button.swarm-board-path:hover {
+	background: var(--surface-hover);
+	color: var(--on-surface);
+}
+
+.swarm-board-criteria {
+	margin: 0;
+	padding-left: 16px;
+	display: grid;
+	gap: 2px;
+	color: var(--on-surface-secondary);
+}
+
+.swarm-board-reviews {
+	display: grid;
+	gap: 4px;
+	padding-top: 6px;
+	border-top: 1px solid var(--border-subtle);
+}
+
+.swarm-board-review {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.swarm-board-check-cmd {
+	display: block;
+	padding: 5px 8px;
+	border-radius: 6px;
+	background: var(--surface-sunken);
+	color: var(--on-surface-secondary);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	overflow-x: auto;
+	white-space: pre;
+}
+
+.swarm-board-check-output {
+	margin: 6px 0 0;
+	padding: 8px;
+	border-radius: 6px;
+	background: var(--surface-sunken);
+	color: var(--on-surface-secondary);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	max-height: 180px;
+	overflow: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.swarm-board-timeline {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 4px;
+}
+
+.swarm-board-event {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 5px 8px;
+	border-radius: 6px;
+	background: var(--surface-panel);
+	font-size: 11px;
+	color: var(--on-surface-secondary);
+}
+
+.swarm-board-event-time {
+	flex: none;
+	color: var(--on-surface-muted);
+	font-variant-numeric: tabular-nums;
+	font-family: var(--font-mono);
+	font-size: 10px;
+}
+
+.swarm-board-event-summary {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.team-worktree-section {
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border-subtle);
+	display: grid;
+	gap: 8px;
+	font-size: var(--text-xs);
+}
+
+.team-worktree-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.team-worktree-diff summary {
+	cursor: pointer;
+	color: var(--on-surface-secondary);
+	font-size: 11px;
+}
+
+.team-worktree-diff-pre {
+	margin: 6px 0 0;
+	padding: 8px;
+	border-radius: 6px;
+	background: var(--surface-sunken);
+	color: var(--on-surface-secondary);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	max-height: 220px;
+	overflow: auto;
+	white-space: pre;
+}
+
+.team-swarm-controls {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+	margin-top: 10px;
+}
+
+.team-swarm-controls button {
+	min-height: 26px;
+	padding: 3px 9px;
+	font-size: 11px;
+}
