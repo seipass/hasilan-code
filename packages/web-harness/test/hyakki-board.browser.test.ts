@@ -156,9 +156,11 @@ it("renders HyakkiPanel progress and opens the interactive SwarmBoard inside Tea
 		expect(await page.locator(".team-focus").textContent()).toContain("Backend");
 		expect(await page.locator(".team-worktree-section").textContent()).toContain("採用済み");
 
-		// Pause button updates swarm status live.
+		// Pause button updates swarm status live without bouncing TeamPane back to the board view.
 		await page.locator(".hyakki-panel").getByRole("button", { name: "一時停止" }).click();
 		await expect.poll(() => page.locator(".hyakki-panel > summary").textContent()).toContain("一時停止");
+		expect(await page.locator(".team-board-layout").count()).toBe(0);
+		expect(await page.locator(".team-focus").isVisible()).toBe(true);
 	} finally {
 		await page.close();
 	}

@@ -287,8 +287,12 @@ export function TeamPane({ snapshot, sessions, selectedSessionId, visible = true
 	const roots = agents.filter((agent) => !agent.parentAgentId || !agents.some((parent) => parent.agentId === agent.parentAgentId));
 	const rootSessionId = roots[0]?.sessionId;
 	const swarm = sessions.find((session) => session.sessionId === rootSessionId)?.swarm;
+	const handledBoardRequest = useRef(boardRequest);
 	useEffect(() => {
-		if (boardRequest > 0 && swarm) setGraphView("board");
+		if (boardRequest !== handledBoardRequest.current) {
+			handledBoardRequest.current = boardRequest;
+			if (boardRequest > 0 && swarm) setGraphView("board");
+		}
 	}, [boardRequest, swarm]);
 	useEffect(() => {
 		if (graphView === "board" && !swarm) setGraphView(mobile ? "list" : "graph");
